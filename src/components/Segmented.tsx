@@ -19,7 +19,7 @@ export function Segmented<T extends string>({
       aria-label={label}
       value={value}
       onValueChange={(v) => onChange(v as T)}
-      className="grid rounded-xl bg-muted p-1"
+      className="grid rounded-md bg-muted p-1"
       style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
     >
       {options.map((o) => (
@@ -27,8 +27,8 @@ export function Segmented<T extends string>({
           key={o.value}
           value={o.value}
           className={cn(
-            "flex h-11 touch-manipulation items-center justify-center gap-1.5 rounded-lg text-[0.95rem] font-semibold text-muted-foreground outline-none transition-all",
-            "focus-visible:ring-3 focus-visible:ring-ring/50 data-[state=checked]:bg-card data-[state=checked]:text-foreground data-[state=checked]:shadow-sm",
+            "flex h-11 touch-manipulation items-center justify-center gap-1.5 rounded-sm text-callout font-semibold text-muted-foreground outline-none transition-colors",
+            "focus-visible:ring-3 focus-visible:ring-ring/50 data-[state=checked]:bg-card data-[state=checked]:text-foreground data-[state=checked]:shadow-sm dark:data-[state=checked]:bg-foreground/15",
             "[&_svg]:size-[18px]",
           )}
         >

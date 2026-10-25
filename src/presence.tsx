@@ -67,8 +67,20 @@ export function usePresence() {
   }, [rows, now]);
 }
 
+// A steady green dot for someone with the app open. Offline shows nothing: red would read as an error.
 export function OnlineDot({ online }: { online: boolean }) {
-  return <span className="online-dot block" data-online={online} role="img" aria-label={online ? "Online" : "Offline"} />;
+  if (!online) return null;
+  return <span className="online-dot block" role="img" aria-label="Online" />;
+}
+
+export function lastSeenText(online: boolean, lastSeen: number | undefined) {
+  if (online) return "On now";
+  if (!lastSeen) return "Hasn't opened the app yet";
+  const mins = Math.round((Date.now() - lastSeen) / 60_000);
+  if (mins < 60) return `Last on ${Math.max(1, mins)}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `Last on ${hours}h ago`;
+  return `Last on ${Math.round(hours / 24)}d ago`;
 }
 
 type Ripple = { key: string; x: number; y: number; userId: Id<"users"> };
@@ -130,7 +142,7 @@ export function TapLayer({ meId }: { meId: Id<"users"> | undefined }) {
                 <PlayerAvatar name={p.name} image={p.image} frame={p.frame === "none" ? "solid" : p.frame} frameColor={p.frameColor} size={36} />
               </motion.span>
               <motion.span
-                className="absolute left-5 top-3 whitespace-nowrap rounded-full bg-foreground px-2 py-0.5 text-[11px] font-semibold text-background shadow-md"
+                className="absolute left-5 top-3 whitespace-nowrap rounded-full bg-foreground px-2 py-0.5 text-caption font-semibold text-background shadow-md"
                 initial={{ opacity: 0, x: -4 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.08 }}
@@ -207,10 +219,10 @@ export function ArrivalPills() {
             className="flex items-center gap-2.5 rounded-full bg-foreground py-1.5 pl-1.5 pr-4 text-background shadow-xl shadow-black/25"
           >
             <PlayerAvatar name={a.name} image={a.image} frame={a.frame} frameColor={a.frameColor} size={28} />
-            <span className="text-sm font-semibold">
+            <span className="text-callout font-semibold">
               {a.name} <span className="font-medium opacity-70">hopped on</span>
             </span>
-            <span className="size-2 rounded-full bg-[#34d058]" />
+            <span className="size-2 rounded-full bg-online" />
           </motion.div>
         ))}
       </AnimatePresence>

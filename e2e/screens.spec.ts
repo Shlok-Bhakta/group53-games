@@ -28,15 +28,20 @@ for (const scheme of ["dark", "light"] as const) {
     };
 
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Games", exact: true })).toBeVisible();
-    await shot("games");
+    await expect(page.getByRole("heading", { name: "Play", exact: true })).toBeVisible();
+    await shot("play");
+    if (scheme === "light") {
+      await page.getByRole("button", { name: "New game" }).click();
+      await shot("new-game");
+      await page.keyboard.press("Escape");
+    }
     await page.goto("/crew");
     await expect(page.getByRole("heading", { name: "Crew" })).toBeVisible();
     await chrisPage.mouse.click(250, 520);
     await page.waitForTimeout(250);
     await page.screenshot({ path: `e2e/.state/screens/${scheme}-crew-tap.png` });
     await shot("crew");
-    await page.getByRole("button", { name: /chrisis14/ }).click();
+    await page.getByRole("button", { name: /Never lost a duel/ }).click();
     await shot("crew-sheet");
     await page.keyboard.press("Escape");
     await page.goto("/you");

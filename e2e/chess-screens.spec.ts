@@ -38,23 +38,17 @@ test("chess screens", async ({ browser }) => {
   await enablePush(b);
 
   await a.goto("/");
-  await a.getByRole("img", { name: "Chess" }).waitFor();
-  for (const ms of [120, 450, 850]) {
-    await a.waitForTimeout(ms === 120 ? 120 : ms === 450 ? 330 : 400);
-    await a.getByRole("img", { name: "Chess" }).screenshot({ path: `e2e/.state/screens/chess-banner-${ms}.png` });
-  }
-  await shot(a, "home");
-  await a.goto("/chess");
-  await shot(a, "chess-modes", true);
-  await a.goto("/chess/mode/classic");
-  await a.getByRole("button", { name: "Find a game" }).click();
+  await shot(a, "play-empty");
+  await a.goto("/?new=classic");
+  await shot(a, "new-game");
+  await a.getByRole("button", { name: /^Anyone/ }).click();
   await a.waitForURL(/\/chess\/[a-z0-9]+$/);
   await shot(a, "lobby");
   const id = a.url().split("/chess/")[1];
 
-  await b.goto("/chess/mode/classic");
-  await shot(b, "hub-light", true);
-  await b.getByRole("button", { name: "Join a game" }).click();
+  await b.goto("/?new=classic");
+  await shot(b, "new-game-join-light");
+  await b.getByRole("button", { name: /^Join/ }).click();
   await expect(b.getByRole("grid")).toBeVisible();
   const m = await admin().query(anyApi.testing.getMatch, { id });
   const white = m.players.find((p: { color: string }) => p.color === "w").userId === shlok.userId ? a : b;
@@ -68,9 +62,9 @@ test("chess screens", async ({ browser }) => {
   await shot(white, "classic-waiting");
 
   // Real-time
-  await a.goto("/chess/mode/realtime");
-  await shot(a, "hub-realtime", true);
-  await a.getByRole("button", { name: "Find a game" }).click();
+  await a.goto("/?new=realtime");
+  await shot(a, "new-game-realtime");
+  await a.getByRole("button", { name: /^Anyone/ }).click();
   await a.waitForURL(/\/chess\/[a-z0-9]+$/);
   const rid = a.url().split("/chess/")[1];
   await b.goto(`/chess/${rid}`);
@@ -114,18 +108,14 @@ test("four-player screens", async ({ browser }) => {
 
   // A challenge waiting in the home inbox, alongside a classic game where it's your move.
   await admin().action(anyApi.testing.startMatch, { mode: "chess:classic", a: people[1].userId, b: people[0].userId });
-  await a.goto("/chess/mode/four");
-  await shot(a, "four-mode", true);
-  await a.getByRole("button", { name: "Challenge" }).click();
-  for (const n of ["chrisis14", "samwise"]) await a.getByRole("dialog").getByRole("button", { name: new RegExp(n) }).click();
+  await a.goto("/?new=four");
+  for (const n of ["chrisis14", "samwise"]) await a.getByRole("dialog").getByRole("button", { name: n, exact: true }).click();
   await shot(a, "four-challenge-sheet");
   await a.getByRole("dialog").getByRole("button", { name: /Challenge 2/ }).click();
   await a.waitForURL(/\/chess\/[a-z0-9]+$/);
   await shot(a, "four-lobby");
   await b.goto("/");
-  await shot(b, "home-inbox-light", true);
-  await b.goto("/chess");
-  await shot(b, "modes-light", true);
+  await shot(b, "play-inbox-light", true);
 
   // A game in progress, from each side.
   const id = await admin().action(anyApi.testing.startFour, { mode: "chess:four", players: people.map((p) => p.userId) });

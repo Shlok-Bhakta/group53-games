@@ -1,5 +1,14 @@
 import AxeBuilder from "@axe-core/playwright";
-import { createPlayer, expect, phone, test } from "./fixtures";
+import type { Page } from "@playwright/test";
+import { anyApi } from "convex/server";
+import { admin, createPlayer, expect, phone, test } from "./fixtures";
+
+// Turns push on the way a player would; game screens stay locked until it's on.
+async function enablePush(page: Page) {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Turn on notifications" }).click();
+  await expect(page.getByText("Turn on notifications to play")).toHaveCount(0);
+}
 
 const ANDROID_UA =
   "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36";
@@ -51,11 +60,16 @@ test.describe("signed in", () => {
     const me = await createPlayer("Shlok");
     const page = await phone(context, { player: me });
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Games" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Locked" })).toBeDisabled();
-    await page.getByRole("button", { name: "Turn on notifications" }).click();
-    await expect(page.getByRole("link", { name: "Play" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Play", level: 1 })).toBeVisible();
+    // The New game sheet asks for notifications too, instead of offering games.
+    await page.getByRole("button", { name: "New game" }).click();
+    await expect(page.getByRole("dialog").getByText("Turn on notifications to play")).toBeVisible();
+    await expect(page.getByRole("dialog").getByRole("button", { name: /^Anyone/ })).toHaveCount(0);
+    await page.getByRole("dialog").getByRole("button", { name: "Turn on notifications" }).click();
+    await expect(page.getByRole("dialog").getByRole("button", { name: /^Anyone/ })).toBeVisible();
+    await page.getByRole("button", { name: "Close" }).click();
     await expect(page.getByText("Turn on notifications to play")).toHaveCount(0);
+    await expect(page.getByText("Nothing needs you right now")).toBeVisible();
   });
 
   test("the tab bar reaches every tab and sits at native height", async ({ context }) => {
@@ -63,15 +77,17 @@ test.describe("signed in", () => {
     const page = await phone(context, { player: me });
     await page.goto("/");
     const nav = page.getByRole("navigation", { name: "Main" });
-    for (const [tab, heading] of [["Crew", "Crew"], ["You", "You"], ["Games", "Games"]] as const) {
+    for (const [tab, heading] of [["Crew", "Crew"], ["You", "You"], ["Play", "Play"]] as const) {
       await nav.getByRole("link", { name: tab }).click();
       await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
       // iOS misplaces fixed bottom bars on pages shorter than the screen, so every tab fills it.
       const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
       expect(pageHeight, `${tab} page height`).toBeGreaterThanOrEqual(page.viewportSize()!.height);
     }
+    // A floating capsule of native tab height, sitting just above the home indicator.
+    const bar = await nav.getByRole("list").boundingBox();
+    expect(bar!.height).toBeCloseTo(62, 0);
     const box = await nav.boundingBox();
-    expect(box!.height).toBeLessThanOrEqual(84);
     expect(box!.y + box!.height).toBeCloseTo(page.viewportSize()!.height, 0);
   });
 
@@ -100,10 +116,10 @@ test.describe("signed in", () => {
     const chris = await createPlayer("Chris", { tagline: "Certified word guesser", badge: "🐐" });
     const page = await phone(context, { player: me });
     await page.goto("/crew");
-    const chrisCard = page.getByRole("button", { name: /Chris/ });
+    const chrisCard = page.getByRole("button", { name: /Certified word guesser/ });
     await expect(chrisCard).toBeVisible();
-    await expect(chrisCard.getByText("Certified word guesser")).toBeVisible();
-    await expect(chrisCard.getByRole("img", { name: "Offline" })).toBeVisible();
+    // Offline shows no dot at all.
+    await expect(chrisCard.getByRole("img", { name: "Online" })).toHaveCount(0);
 
     // Chris opens the app on another phone; Shlok sees him come online without reloading.
     const other = await browser.newContext({ viewport: { width: 393, height: 852 }, isMobile: true, hasTouch: true });
@@ -130,19 +146,86 @@ test.describe("signed in", () => {
     await other.close();
   });
 
-  test("the game card only counts people who are in the game", async ({ context, browser }) => {
+  test("a game shows when the other player has it open right now", async ({ context, browser }) => {
     const me = await createPlayer("Shlok");
     const chris = await createPlayer("Chris");
-    const page = await phone(context, { player: me });
-    await page.goto("/");
+    const id = await admin().action(anyApi.testing.startMatch, { mode: "chess:classic", a: me.userId, b: chris.userId });
+    const page = await phone(context, { player: me, notifications: "granted" });
+    await enablePush(page);
+    await page.goto(`/chess/${id}`);
+    await expect(page.getByText("Black", { exact: true })).toBeVisible();
     const other = await browser.newContext({ viewport: { width: 393, height: 852 }, isMobile: true, hasTouch: true });
-    const chrisPage = await phone(other, { player: chris });
-    await chrisPage.goto("/");
-    await expect(page.getByLabel("1 online")).toBeVisible();
-    await expect(page.getByText("Chris is playing")).toHaveCount(0);
-    await chrisPage.goto("/chess");
-    await expect(page.getByText("Chris is playing")).toBeVisible();
+    const chrisPage = await phone(other, { player: chris, notifications: "granted" });
+    await enablePush(chrisPage);
+    await expect(page.getByText("Black, here now")).toHaveCount(0);
+    await chrisPage.goto(`/chess/${id}`);
+    await expect(page.getByText("Black, here now")).toBeVisible();
     await other.close();
+  });
+
+  test("old chess links open the New game sheet on their mode", async ({ context }) => {
+    const me = await createPlayer("Shlok");
+    const page = await phone(context, { player: me, notifications: "granted" });
+    await enablePush(page);
+    await page.goto("/chess/mode/four");
+    await expect(page).toHaveURL(/\/\?new=four$/);
+    await expect(page.getByRole("dialog").getByRole("radio", { name: "4-Player" })).toHaveAttribute("aria-checked", "true");
+    await page.goto("/chess?mode=chess:realtime");
+    await expect(page.getByRole("dialog").getByRole("radio", { name: "Real-time" })).toHaveAttribute("data-state", "checked");
+    await expect(page.getByRole("dialog").getByRole("radio", { name: "1v1" })).toHaveAttribute("aria-checked", "true");
+    await page.getByRole("button", { name: "Close" }).click();
+    await expect(page).toHaveURL(/\/$/);
+  });
+
+  test("a swipe from the left edge goes back", async ({ context }) => {
+    const me = await createPlayer("Shlok");
+    const chris = await createPlayer("Chris");
+    const id = await admin().action(anyApi.testing.startMatch, { mode: "chess:classic", a: me.userId, b: chris.userId });
+    const page = await phone(context, { player: me, notifications: "granted" });
+    await enablePush(page);
+    await page.getByRole("link", { name: /Chris/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/chess/${id}$`));
+    await expect(page.getByRole("grid")).toBeVisible();
+    // A short drag springs back and stays put.
+    // A finger moving at a steady pace, then pausing before it lets go (so it isn't a flick).
+    const swipe = (to: number) =>
+      page.evaluate(async (to) => {
+        const touch = (x: number) => new Touch({ identifier: 1, target: document.body, clientX: x, clientY: 400 });
+        const wait = () => new Promise((r) => setTimeout(r, 40));
+        document.body.dispatchEvent(new TouchEvent("touchstart", { touches: [touch(4)], bubbles: true }));
+        for (let x = 20; x <= to; x += 20) {
+          await wait();
+          document.body.dispatchEvent(new TouchEvent("touchmove", { touches: [touch(x)], bubbles: true, cancelable: true }));
+        }
+        for (let i = 0; i < 5; i++) {
+          await wait();
+          document.body.dispatchEvent(new TouchEvent("touchmove", { touches: [touch(to)], bubbles: true, cancelable: true }));
+        }
+        document.body.dispatchEvent(new TouchEvent("touchend", { touches: [], bubbles: true }));
+      }, to);
+    await page.waitForTimeout(600);
+    await swipe(70);
+    await page.waitForTimeout(400);
+    await expect(page).toHaveURL(new RegExp(`/chess/${id}$`));
+    await swipe(260);
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole("heading", { name: "Play", level: 1 })).toBeVisible();
+  });
+
+  test("the app icon badge counts games waiting on me", async ({ context }) => {
+    const me = await createPlayer("Shlok");
+    const chris = await createPlayer("Chris");
+    await context.addInitScript(() => {
+      (window as unknown as { badges: number[] }).badges = [];
+      const nav = navigator as Navigator & { setAppBadge: (n?: number) => Promise<void>; clearAppBadge: () => Promise<void> };
+      nav.setAppBadge = async (n?: number) => void (window as unknown as { badges: number[] }).badges.push(n ?? 0);
+      nav.clearAppBadge = async () => void (window as unknown as { badges: number[] }).badges.push(0);
+    });
+    const page = await phone(context, { player: me, notifications: "granted" });
+    await page.goto("/");
+    await expect.poll(() => page.evaluate(() => (window as unknown as { badges: number[] }).badges.at(-1))).toBe(0);
+    await admin().action(anyApi.testing.startMatch, { mode: "chess:classic", a: me.userId, b: chris.userId });
+    await expect.poll(() => page.evaluate(() => (window as unknown as { badges: number[] }).badges.at(-1))).toBe(1);
   });
 
   test("taps show up live on other players' screens", async ({ context, browser }) => {
@@ -167,7 +250,7 @@ test.describe("signed in", () => {
     await createPlayer("Chris", { tagline: "Never lost a duel" });
     const page = await phone(context, { player: me });
     await page.goto("/crew");
-    await page.getByRole("button", { name: /Chris/ }).click();
+    await page.getByRole("button", { name: /Never lost a duel/ }).click();
     await expect(page.getByRole("dialog").getByText("Hasn't opened the app yet")).toBeVisible();
   });
 

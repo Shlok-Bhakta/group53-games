@@ -332,6 +332,31 @@ describe("classic chess", () => {
     await white.as.mutation(api.chess.move, { id, from: "e2", to: "e4" });
     expect(await black.as.query(api.matches.attention, {})).toMatchObject({ myTurn: 1 });
   });
+
+  test("pushes carry the app icon badge: my moves plus challenges", async () => {
+    const t = setup();
+    const { id, white, black } = await classicGame(t);
+    const boiler = await signedIn(t, "Boiler");
+    await boiler.as.mutation(api.matches.challenge, { mode: "chess:classic", opponents: [black.userId] });
+    await white.as.mutation(api.chess.move, { id, from: "e2", to: "e4" });
+    const badges = (await scheduled(t))
+      .filter((s) => s.name === "push:sendToUser" && (s.args[0] as { userId: Id<"users"> }).userId === black.userId)
+      .map((s) => (s.args[0] as { badge?: number }).badge);
+    // Game on (nothing waiting yet), the challenge (1 invite), then white's move (1 invite + 1 move).
+    expect(badges).toEqual([0, 1, 2]);
+  });
+
+  test("the inbox lists other people's games to watch and my recent results", async () => {
+    const t = setup();
+    const { id, white } = await classicGame(t);
+    const boiler = await signedIn(t, "Boiler");
+    expect((await boiler.as.query(api.matches.inbox, {}))!.watch.map((m) => m._id)).toEqual([id]);
+    expect((await white.as.query(api.matches.inbox, {}))!.watch).toEqual([]);
+    await white.as.mutation(api.matches.resign, { id });
+    const inbox = (await white.as.query(api.matches.inbox, {}))!;
+    expect(inbox.recent.map((m) => m._id)).toEqual([id]);
+    expect((await boiler.as.query(api.matches.inbox, {}))!.recent).toEqual([]);
+  });
 });
 
 describe("real-time chess", () => {

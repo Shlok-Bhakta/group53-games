@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
@@ -75,7 +75,7 @@ const structureOf = (s: State) =>
     s.captures.length,
   ]);
 
-export function RealtimeGame({ match, meId }: { match: MatchView; meId: Id<"users"> | undefined }) {
+export function RealtimeGame({ match, meId, above, below, overlay }: { match: MatchView; meId: Id<"users"> | undefined; above?: ReactNode; below?: ReactNode; overlay?: ReactNode }) {
   const state = match.state as RealtimeState;
   const rt = useQuery(api.chess.rtState, { id: match._id });
   const clock = useServerClock();
@@ -169,43 +169,66 @@ export function RealtimeGame({ match, meId }: { match: MatchView; meId: Id<"user
   const selected = sim.pieces.find((p) => p.id === selectedId && p.color === myColor && !p.dead) ?? null;
   const targets: Sq[] = !playing || !selected ? [] : selected.status === "ready" ? legalTargets(sim.pieces, selected, variant) : premoveTargets(selected, variant);
 
+  const showHint = useFirstGamesHint(match._id);
+
   const send = (piece: Piece, to: Sq | null) => {
     const clientTick = Math.max(Math.floor(displayTick()), (rt?.snapshot as State | null)?.tick ?? 0);
     rtMove({ id: match._id, pieceId: piece.id, toX: to?.[0] ?? 0, toY: to?.[1] ?? 0, kind: to ? "move" : "cancel", clientTick }).catch((err) => toast.error(errorText(err)));
   };
 
   return (
-    <div className={cn("relative", variant === "four" && "-mx-2.5")}>
-      <RtBoard
-        sim={sim}
-        myColor={myColor}
-        view={view}
-        playing={playing}
-        selected={selected}
-        targets={targets}
-        pieceEls={pieceEls}
-        cooldownEls={cooldownEls}
-        displayTick={displayTick}
-        onSelect={(p) => setSelectedId(p?.id ?? null)}
-        onMove={(p, to) => {
-          send(p, to);
-          setSelectedId(null);
-        }}
-        onCancel={(p) => {
-          send(p, null);
-          setSelectedId(null);
-        }}
-      />
-      <Overlay match={match} state={state} meId={meId} countdown={countdown} />
+    <>
+      {above}
+      <div className={cn("relative", variant === "four" && "-mx-2.5")}>
+        <RtBoard
+          sim={sim}
+          myColor={myColor}
+          view={view}
+          playing={playing}
+          selected={selected}
+          targets={targets}
+          pieceEls={pieceEls}
+          cooldownEls={cooldownEls}
+          displayTick={displayTick}
+          onSelect={(p) => setSelectedId(p?.id ?? null)}
+          onMove={(p, to) => {
+            send(p, to);
+            setSelectedId(null);
+          }}
+          onCancel={(p) => {
+            send(p, null);
+            setSelectedId(null);
+          }}
+        >
+          {overlay}
+        </RtBoard>
+        <Overlay match={match} state={state} meId={meId} countdown={countdown} />
+      </div>
+      {below}
       {out && match.status === "active" ? (
-        <p className="mt-3 text-center font-semibold text-destructive">Your king fell. Your army is stone now; watch who survives.</p>
+        <p className="px-1 text-center text-callout font-semibold text-destructive">Your king fell. Your army is stone now; watch who survives.</p>
       ) : (
-        <p className="mt-3 text-center text-sm text-muted-foreground">
-          Move any piece any time; it rests 5 seconds after landing. Drag a resting piece to premove it, tap it to cancel.
-        </p>
+        showHint && match.status === "active" && (
+          <p className="px-1 text-center text-footnote text-muted-foreground">
+            Move any piece any time; it rests 5 seconds after landing. Drag a resting piece to premove it, tap it to cancel.
+          </p>
+        )
       )}
-    </div>
+    </>
   );
+}
+
+// The how-it-works line under a real-time board, for your first few games only.
+const HINT_KEY = "rtHintGames";
+function useFirstGamesHint(matchId: string) {
+  const [show] = useState(() => {
+    const seen: string[] = JSON.parse(localStorage.getItem(HINT_KEY) ?? "[]");
+    if (seen.includes(matchId)) return true;
+    if (seen.length >= 3) return false;
+    localStorage.setItem(HINT_KEY, JSON.stringify([...seen, matchId]));
+    return true;
+  });
+  return show;
 }
 
 type BoardProps = {
@@ -221,9 +244,10 @@ type BoardProps = {
   onSelect: (p: Piece | null) => void;
   onMove: (p: Piece, to: Sq) => void;
   onCancel: (p: Piece) => void;
+  children?: ReactNode;
 };
 
-function RtBoard({ sim, myColor, view, playing, selected, targets, pieceEls, cooldownEls, displayTick, onSelect, onMove, onCancel }: BoardProps) {
+function RtBoard({ sim, myColor, view, playing, selected, targets, pieceEls, cooldownEls, displayTick, onSelect, onMove, onCancel, children }: BoardProps) {
   const ref = useRef<HTMLDivElement>(null);
   const ghost = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<{ piece: Piece; over: Sq | null } | null>(null);
@@ -323,7 +347,7 @@ function RtBoard({ sim, myColor, view, playing, selected, targets, pieceEls, coo
       ref={ref}
       role="grid"
       aria-label={small ? "4-player real-time chess board" : "Real-time chess board"}
-      className={cn("board relative aspect-square w-full touch-none select-none overflow-hidden", small ? "rounded-md" : "rounded-xl shadow-lg")}
+      className={cn("board relative aspect-square w-full touch-none select-none overflow-hidden rounded-sm", !small && "shadow-lg shadow-black/20")}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -400,6 +424,7 @@ function RtBoard({ sim, myColor, view, playing, selected, targets, pieceEls, coo
       </div>
 
       <CaptureBursts sim={sim} view={view} />
+      {children}
     </div>
   );
 }
@@ -417,8 +442,8 @@ const Squares = memo(function Squares({ view }: { view: View }) {
         const label = view.name(sq);
         return (
           <div key={i} role="gridcell" aria-label={label} data-square={label} className={cn("relative", dark ? "bg-[var(--board-dark)]" : "bg-[var(--board-light)]")}>
-            {n === 8 && c === 0 && <span className={cn("absolute left-[3%] top-[2%] text-[9px] font-bold leading-none", dark ? "text-[var(--board-light)]" : "text-[var(--board-dark)]")}>{sq[1] + 1}</span>}
-            {n === 8 && r === 7 && <span className={cn("absolute bottom-[2%] right-[4%] text-[9px] font-bold leading-none", dark ? "text-[var(--board-light)]" : "text-[var(--board-dark)]")}>{FILES[sq[0]]}</span>}
+            {n === 8 && c === 0 && <span className={cn("absolute left-[5%] top-[4%] text-caption font-bold leading-none", dark ? "text-[var(--board-light)]" : "text-[var(--board-dark)]")}>{sq[1] + 1}</span>}
+            {n === 8 && r === 7 && <span className={cn("absolute bottom-[4%] right-[6%] text-caption font-bold leading-none", dark ? "text-[var(--board-light)]" : "text-[var(--board-dark)]")}>{FILES[sq[0]]}</span>}
           </div>
         );
       })}
@@ -485,10 +510,10 @@ function Overlay({ match, state, meId, countdown }: { match: MatchView; state: R
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="pointer-events-none absolute inset-x-0 top-0 grid aspect-square place-items-center rounded-xl bg-background/55 backdrop-blur-[2px]"
+          className="pointer-events-none absolute inset-0 grid place-items-center rounded-sm bg-background/55 backdrop-blur-[2px]"
         >
           {state.startAt === null ? (
-            <p className="max-w-[24ch] text-center font-display text-xl">
+            <p className="max-w-[24ch] text-center font-display text-heading">
               {waitingFor.length ? `Waiting for ${listNames(waitingFor.map((p) => p.name))} to open the board` : "Starting…"}
             </p>
           ) : (

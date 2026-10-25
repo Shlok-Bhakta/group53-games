@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 
@@ -15,28 +15,39 @@ function keyToBase64(key: ArrayBuffer | null) {
   return key ? btoa(String.fromCharCode(...new Uint8Array(key))) : "";
 }
 
+// This device's subscription, shared by every screen that asks: turning push on in the New game sheet
+// unlocks the Play tab underneath it at the same moment.
+// `endpoint` is undefined while we ask the service worker, null when this device has no subscription.
+type Device = { endpoint: string | null | undefined; permission: NotificationPermission };
+let device: Device = { endpoint: pushSupported ? undefined : null, permission: pushSupported ? Notification.permission : "denied" };
+const listeners = new Set<() => void>();
+const setDevice = (patch: Partial<Device>) => {
+  device = { ...device, ...patch };
+  for (const l of listeners) l();
+};
+const subscribe = (l: () => void) => {
+  listeners.add(l);
+  return () => void listeners.delete(l);
+};
+let probed = false;
+function probe() {
+  if (probed || !pushSupported) return;
+  probed = true;
+  navigator.serviceWorker.ready
+    .then((reg) => reg.pushManager.getSubscription())
+    .then((sub) => setDevice({ endpoint: sub?.endpoint ?? null }))
+    .catch(() => setDevice({ endpoint: null }));
+}
+
 export function useNotifications() {
   const vapidKey = useQuery(api.notifications.vapidPublicKey);
   const saveSubscription = useMutation(api.notifications.subscribe);
   const removeSubscription = useMutation(api.notifications.unsubscribe);
   const sendTest = useMutation(api.notifications.sendTest);
 
-  // undefined while we ask the service worker, null when this device has no subscription.
-  const [endpoint, setEndpoint] = useState<string | null | undefined>(pushSupported ? undefined : null);
-  const [permission, setPermission] = useState(pushSupported ? Notification.permission : "denied");
+  const { endpoint, permission } = useSyncExternalStore(subscribe, () => device);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (!pushSupported) return;
-    let cancelled = false;
-    navigator.serviceWorker.ready
-      .then((reg) => reg.pushManager.getSubscription())
-      .then((sub) => !cancelled && setEndpoint(sub?.endpoint ?? null))
-      .catch(() => !cancelled && setEndpoint(null));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  useEffect(probe, []);
 
   const serverHas = useQuery(api.notifications.hasEndpoint, endpoint ? { endpoint } : "skip");
 
@@ -53,7 +64,7 @@ export function useNotifications() {
     try {
       // iOS only shows the prompt when this is the first await in the tap handler.
       const result = await Notification.requestPermission();
-      setPermission(result);
+      setDevice({ permission: result });
       if (result !== "granted") return;
       if (!vapidKey) throw new Error("The server has no push key yet.");
       const reg = await navigator.serviceWorker.ready;
@@ -65,7 +76,7 @@ export function useNotifications() {
         p256dh: keyToBase64(sub.getKey("p256dh")),
         auth: keyToBase64(sub.getKey("auth")),
       });
-      setEndpoint(sub.endpoint);
+      setDevice({ endpoint: sub.endpoint });
     } finally {
       setBusy(false);
     }
@@ -80,7 +91,7 @@ export function useNotifications() {
         await removeSubscription({ endpoint: sub.endpoint });
         await sub.unsubscribe();
       }
-      setEndpoint(null);
+      setDevice({ endpoint: null });
     } finally {
       setBusy(false);
     }

@@ -552,8 +552,9 @@ export const attention = query({
   },
 });
 
-// Everything that wants me, across every mode, for the home screen: challenges to answer, games where
-// it's my move, real-time games about to start, lobbies with a free seat, and games I'm waiting on.
+// Everything that wants me, across every mode, for the Play tab: challenges to answer, games where it's my
+// move, real-time games about to start, lobbies with a free seat, games I'm waiting on, other people's games
+// to watch, and my recent results.
 export const inbox = query({
   args: {},
   handler: async (ctx) => {
@@ -571,6 +572,16 @@ export const inbox = query({
       theirTurn: await views(mineActive.filter((m) => !realtime(m) && m.turn !== userId)),
       open: await views(waiting.filter((m) => !m.invited.includes(userId) && canJoin(m, userId))),
       waiting: await views(waiting.filter((m) => isPlayer(m, userId))),
+      // Other people's games, to watch.
+      watch: await views(active.filter((m) => !isPlayer(m, userId))),
+      // My last few finished games, newest first.
+      recent: await Promise.all(
+        (await ctx.db.query("matches").withIndex("by_status", (q) => q.eq("status", "finished")).collect())
+          .filter((m) => isPlayer(m, userId))
+          .sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0))
+          .slice(0, 5)
+          .map((m) => withPeople(ctx, m)),
+      ),
     };
   },
 });

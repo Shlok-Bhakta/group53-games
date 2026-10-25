@@ -25,6 +25,10 @@ self.addEventListener("push", (event) => {
           tag: data.tag,
           data: { url: data.url },
         });
+        // The red number on the home screen icon (iOS 16.4+ home screen apps, Chrome on desktop).
+        if (typeof data.badge === "number" && self.navigator.setAppBadge) {
+          await (data.badge > 0 ? self.navigator.setAppBadge(data.badge) : self.navigator.clearAppBadge()).catch(() => {});
+        }
       } catch (err) {
         console.error("push handler failed:", err);
       }

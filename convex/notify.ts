@@ -14,7 +14,17 @@ export async function notify(ctx: MutationCtx, userId: Id<"users">, push: Push) 
     .unique();
   const watching = presence && presence.online && Date.now() - presence.lastSeen < ONLINE_WINDOW_MS && presence.path === push.url;
   if (watching) return;
-  await ctx.scheduler.runAfter(0, internal.push.sendToUser, { userId, ...push });
+  await ctx.scheduler.runAfter(0, internal.push.sendToUser, { userId, ...push, badge: await badgeCount(ctx, userId) });
+}
+
+// The number on the app icon: games where it's my move plus challenges waiting for an answer. Pushes carry
+// it so the icon updates while the app is closed; the open app keeps it current from matches.attention.
+export async function badgeCount(ctx: MutationCtx, userId: Id<"users">) {
+  const active = await ctx.db.query("matches").withIndex("by_status", (q) => q.eq("status", "active")).collect();
+  const waiting = await ctx.db.query("matches").withIndex("by_status", (q) => q.eq("status", "waiting")).collect();
+  const myTurn = active.filter((m) => m.turn === userId).length;
+  const invites = waiting.filter((m) => m.invited.includes(userId) && !m.players.some((p) => p.userId === userId)).length;
+  return myTurn + invites;
 }
 
 export async function displayName(ctx: MutationCtx, userId: Id<"users">) {

@@ -12,7 +12,7 @@ export function Tiles({
 }: {
   word: string;
   states?: TileState[];
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
   flip?: boolean;
   label?: string;
 }) {

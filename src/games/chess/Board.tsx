@@ -1,4 +1,4 @@
-import { useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { nearest, pieceSrc, pointToScreen, same, type Sq, type View } from "./geometry";
 
@@ -31,6 +31,8 @@ type Props = {
   check?: Sq[];
   disabled?: boolean;
   label?: string;
+  // Drawn over the board, e.g. the players in a four-player board's empty corners. Doesn't take taps.
+  children?: ReactNode;
 };
 
 const FILES = "abcdefgh";
@@ -40,7 +42,7 @@ export const fromName = (s: string): Sq => [s.charCodeAt(0) - 97, Number(s.slice
 // A tap this close to a square's center (in squares) counts as that square on the 14x14 board.
 const REACH = 0.85;
 
-export function Board({ pieces, view, canSelect, selectable, selected, targets, onSelect, onMove, lastMove, check = [], disabled, label }: Props) {
+export function Board({ pieces, view, canSelect, selectable, selected, targets, onSelect, onMove, lastMove, check = [], disabled, label, children }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<{ from: Sq; dx: number; dy: number; moved: boolean } | null>(null);
   const start = useRef<{ x: number; y: number } | null>(null);
@@ -105,7 +107,7 @@ export function Board({ pieces, view, canSelect, selectable, selected, targets, 
       ref={ref}
       role="grid"
       aria-label={label ?? "Chess board"}
-      className={cn("board relative aspect-square w-full touch-none select-none overflow-hidden", small ? "rounded-md" : "rounded-xl shadow-lg", disabled && "opacity-95")}
+      className={cn("board relative aspect-square w-full touch-none select-none overflow-hidden rounded-sm", !small && "shadow-lg shadow-black/20")}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -134,12 +136,12 @@ export function Board({ pieces, view, canSelect, selectable, selected, targets, 
                   <span className={cn("absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/25", small ? "size-[38%]" : "size-[30%]")} />
                 ))}
               {!small && c === 0 && (
-                <span className={cn("pointer-events-none absolute left-[3%] top-[2%] text-[9px] font-bold leading-none", dark ? "text-[var(--board-light)]" : "text-[var(--board-dark)]")}>
+                <span className={cn("pointer-events-none absolute left-[5%] top-[4%] text-caption font-bold leading-none", dark ? "text-[var(--board-light)]" : "text-[var(--board-dark)]")}>
                   {sq[1] + 1}
                 </span>
               )}
               {!small && r === 7 && (
-                <span className={cn("pointer-events-none absolute bottom-[2%] right-[4%] text-[9px] font-bold leading-none", dark ? "text-[var(--board-light)]" : "text-[var(--board-dark)]")}>
+                <span className={cn("pointer-events-none absolute bottom-[4%] right-[6%] text-caption font-bold leading-none", dark ? "text-[var(--board-light)]" : "text-[var(--board-dark)]")}>
                   {FILES[sq[0]]}
                 </span>
               )}
@@ -169,6 +171,7 @@ export function Board({ pieces, view, canSelect, selectable, selected, targets, 
           );
         })}
       </div>
+      {children}
     </div>
   );
 }

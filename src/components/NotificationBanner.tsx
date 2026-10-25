@@ -1,4 +1,3 @@
-import { motion } from "motion/react";
 import { BellRingingIcon, BellSlashIcon, SpinnerGapIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -13,14 +12,14 @@ export function NotificationBanner({ push }: { push: Push }) {
 
   if (push.state === "blocked") {
     return (
-      <section className="rounded-3xl border border-destructive/30 bg-destructive/8 p-5">
+      <section className="rounded-lg bg-destructive/10 p-4">
         <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-2xl bg-destructive/15 text-destructive">
+          <span className="grid size-10 place-items-center rounded-sm bg-destructive/15 text-destructive">
             <BellSlashIcon size={22} weight="fill" />
           </span>
-          <h2 className="font-display text-lg">Notifications are blocked</h2>
+          <h2 className="font-display text-heading">Notifications are blocked</h2>
         </div>
-        <p className="mt-3 text-[0.95rem] leading-relaxed text-muted-foreground">{blockedFix()}</p>
+        <p className="mt-3 text-callout text-muted-foreground">{blockedFix()}</p>
       </section>
     );
   }
@@ -34,23 +33,14 @@ export function NotificationBanner({ push }: { push: Push }) {
   };
 
   return (
-    <motion.section
-      initial={{ opacity: 0, scale: 0.97 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ type: "spring", stiffness: 300, damping: 26 }}
-      className="rounded-3xl bg-primary p-5 text-primary-foreground shadow-xl shadow-primary/20"
-    >
+    <section className="rounded-lg bg-primary p-4 text-primary-foreground">
       <div className="flex items-start gap-3.5">
-        <motion.span
-          className="grid size-11 shrink-0 place-items-center rounded-2xl bg-primary-foreground/15"
-          animate={{ rotate: [0, -14, 12, -8, 6, 0] }}
-          transition={{ duration: 0.9, repeat: Infinity, repeatDelay: 2.6, ease: "easeInOut" }}
-        >
+        <span className="grid size-11 shrink-0 place-items-center rounded-sm bg-primary-foreground/15">
           <BellRingingIcon size={24} weight="fill" />
-        </motion.span>
+        </span>
         <div>
-          <h2 className="font-display text-xl leading-tight">Turn on notifications to play</h2>
-          <p className="mt-1 text-[0.95rem] leading-snug opacity-85">So you know when it's your turn or someone hits you.</p>
+          <h2 className="font-display text-heading">Turn on notifications to play</h2>
+          <p className="mt-1 text-callout opacity-85">So you know when it's your turn or someone hits you.</p>
         </div>
       </div>
       <Button
@@ -62,7 +52,7 @@ export function NotificationBanner({ push }: { push: Push }) {
         {push.busy ? <SpinnerGapIcon className="animate-spin" /> : null}
         Turn on notifications
       </Button>
-    </motion.section>
+    </section>
   );
 }
 

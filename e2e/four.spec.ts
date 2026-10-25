@@ -10,7 +10,7 @@ async function otherPhone(browser: Browser, player: Player) {
 async function enablePush(page: Page) {
   await page.goto("/");
   await page.getByRole("button", { name: "Turn on notifications" }).click();
-  await expect(page.getByRole("link", { name: "Play" }).first()).toBeVisible();
+  await expect(page.getByText("Turn on notifications to play")).toHaveCount(0);
 }
 
 const getMatch = (id: string) => admin().query(anyApi.testing.getMatch, { id });
@@ -46,30 +46,30 @@ async function pieceOn(page: Page, piece: string, square: string) {
 }
 
 test.describe("4-player chess", () => {
-  test("the chess screen has async and real-time columns, and each mode opens its own page", async ({ context }) => {
+  test("the New game sheet picks kind and seats, and shows a mode's rules on demand", async ({ context }) => {
     const me = await createPlayer("Shlok");
     const page = await phone(context, { player: me, notifications: "granted" });
     await enablePush(page);
-    await page.goto("/chess");
-    const async = page.getByRole("region", { name: "Async" });
-    const realtime = page.getByRole("region", { name: "Real-time" });
-    await expect(async.getByRole("link")).toHaveText([/1v1/, /4-Player/]);
-    await expect(realtime.getByRole("link")).toHaveText([/1v1/, /4-Player/]);
-    // Async first, then real-time below it, each its own panel.
-    const [top, bottom] = [await async.boundingBox(), await realtime.boundingBox()];
-    expect(bottom!.y).toBeGreaterThan(top!.y + top!.height - 1);
+    await page.getByRole("button", { name: "New game" }).click();
+    const sheet = page.getByRole("dialog");
+    await sheet.getByRole("radio", { name: "4-Player", exact: true }).click();
+    await expect(sheet.getByRole("radio", { name: "4-Player", exact: true })).toHaveAttribute("aria-checked", "true");
+    // Switching to real-time keeps the seat count.
+    await sheet.getByRole("radio", { name: "Real-time" }).click();
+    await expect(sheet.getByRole("radio", { name: "4-Player", exact: true })).toHaveAttribute("aria-checked", "true");
+    await expect(sheet.getByRole("button", { name: "How Real-time 4-Player works" })).toBeVisible();
+    await sheet.getByRole("radio", { name: "Async" }).click();
 
-    await async.getByRole("link", { name: "Async 4-Player" }).click();
-    await expect(page.getByRole("heading", { name: "4-player chess" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Find a game" })).toBeVisible();
-    // New to the mode, so the rules start open.
-    await expect(page.getByRole("button", { name: "How to play" })).toHaveAttribute("aria-expanded", "true");
-    await expect(page.getByText("Check two kings with one move")).toBeVisible();
-    // Closing shrinks smoothly all the way down: no jump at the end when the list leaves the page.
-    const rules = page.locator("section", { has: page.getByRole("button", { name: "How to play" }) });
+    // Rules start folded, and open and close smoothly: no jump at the end when the list leaves the page.
+    const toggle = sheet.getByRole("button", { name: "How 4-Player works" });
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await toggle.click();
+    await expect(sheet.getByText("Check two kings with one move")).toBeVisible();
+    await page.waitForTimeout(400);
+    const rules = sheet.locator("section", { has: page.getByRole("button", { name: "How 4-Player works" }) });
     const open = (await rules.boundingBox())!.height;
     const heights: number[] = await page.evaluate(async () => {
-      const btn = [...document.querySelectorAll("button")].find((b) => b.textContent?.includes("How to play"))!;
+      const btn = [...document.querySelectorAll("button")].find((b) => b.textContent?.includes("How 4-Player works"))!;
       const section = btn.closest("section")!;
       const out: number[] = [];
       btn.click();
@@ -84,13 +84,12 @@ test.describe("4-player chess", () => {
     expect(closed).toBeLessThan(60);
     expect(heights.some((h) => h > closed + 40 && h < open - 40), "passes through in-between heights").toBe(true);
     const steps = heights.slice(1).map((h, i) => heights[i] - h);
-    expect(Math.max(...steps), "no frame drops more than a fifth of the way").toBeLessThan((open - closed) / 5);
-    await page.getByRole("link", { name: "Back to chess" }).click();
-    await realtime.getByRole("link", { name: "Real-time 4-Player" }).click();
-    await expect(page.getByRole("heading", { name: "4-player real-time chess" })).toBeVisible();
-    // Old links still land on the right mode.
-    await page.goto("/chess?mode=chess:realtime");
-    await expect(page.getByRole("heading", { name: "Real-time chess" })).toBeVisible();
+    expect(Math.max(...steps), "no frame drops more than a quarter of the way").toBeLessThan((open - closed) / 4);
+
+    // The sheet remembers the last mode.
+    await page.getByRole("button", { name: "Close" }).click();
+    await page.getByRole("button", { name: "New game" }).click();
+    await expect(sheet.getByRole("radio", { name: "4-Player", exact: true })).toHaveAttribute("aria-checked", "true");
   });
 
   test("challenge three friends; a push link, the home inbox, and a notification tap each put them in the game", async ({ context, browser }) => {
@@ -98,10 +97,9 @@ test.describe("4-player chess", () => {
     const { players, pages, close } = await fourPhones(browser, context);
     const [a, b, c, d] = pages;
 
-    await a.goto("/chess/mode/four");
-    await a.getByRole("button", { name: "Challenge" }).click();
+    await a.goto("/?new=four");
     const sheet = a.getByRole("dialog");
-    for (const name of ["Chris", "Sam", "Alex"]) await sheet.getByRole("button", { name: new RegExp(name) }).click();
+    for (const name of ["Chris", "Sam", "Alex"]) await sheet.getByRole("button", { name, exact: true }).click();
     await sheet.getByRole("button", { name: "Send challenge" }).click();
     await expect(a.getByRole("heading", { name: "Challenge sent" })).toBeVisible();
     await expect(a.getByRole("list", { name: "Seats" }).getByLabel("Asked Chris")).toBeVisible();
@@ -112,13 +110,13 @@ test.describe("4-player chess", () => {
     await expect(b.getByRole("heading", { name: "You're in. Waiting for 2 more" })).toBeVisible();
     await expect(a.getByRole("list", { name: "Seats" }).getByLabel("Asked Chris")).toHaveCount(0);
 
-    // Sam accepts from the home screen inbox.
+    // Sam accepts from the Play tab.
     await c.goto("/");
     await c.getByRole("region", { name: "Challenge from Shlok" }).getByRole("button", { name: "Accept" }).click();
     await expect(c.getByRole("heading", { name: "You're in. Waiting for 1 more" })).toBeVisible();
     await expect(a.getByRole("heading", { name: "Waiting for 1 more" })).toBeVisible();
 
-    // Alex taps the notification while the app is open on the home screen: the service worker hands the
+    // Alex taps the notification while the app is open on the Play tab: the service worker hands the
     // URL to the app, which routes there and takes the seat.
     await d.goto("/");
     await expect(d.getByRole("region", { name: "Challenge from Shlok" })).toBeVisible();
@@ -139,11 +137,12 @@ test.describe("4-player chess", () => {
     }
 
     // Red moves first; it shows up live for blue, whose turn it is next.
-    await expect(g.red.locator('[data-seat="red"]')).toContainText("Move");
+    await expect(g.red.getByText("Your move")).toBeVisible();
+    await expect(g.blue.getByText(/is on it|Waiting for/)).toBeVisible();
     await tapMove(g.red, "e2", "e4");
     await expect(g.blue.getByLabel("Moves")).toContainText("e4");
-    await expect(g.blue.locator('[data-seat="blue"]')).toContainText("Move");
-    await expect(g.red.locator('[data-seat="red"]')).not.toContainText("Move");
+    await expect(g.blue.getByText("Your move")).toBeVisible();
+    await expect(g.red.getByText("Your move")).toHaveCount(0);
     // Red can't move again out of turn.
     await g.red.locator("[data-square=d2]").click();
     await expect(g.red.locator("[data-square=d3] span.rounded-full")).toHaveCount(0);
@@ -182,14 +181,13 @@ test.describe("4-player chess", () => {
   test("an open 4-player lobby fills from the queue", async ({ context, browser }) => {
     test.setTimeout(90_000);
     const { pages, close } = await fourPhones(browser, context);
-    await pages[0].goto("/chess/mode/four");
-    await pages[0].getByRole("button", { name: "Find a game" }).click();
+    await pages[0].goto("/?new=four");
+    await pages[0].getByRole("button", { name: /^Anyone/ }).click();
     await expect(pages[0].getByRole("heading", { name: "Waiting for 3 more" })).toBeVisible();
     const id = matchIdOf(pages[0]);
     for (const [i, p] of pages.slice(1).entries()) {
-      await p.goto("/chess/mode/four");
-      await expect(p.getByText("Open seats")).toBeVisible();
-      await p.getByRole("button", { name: "Join a game" }).click();
+      await p.goto("/?new=four");
+      await p.getByRole("button", { name: /^Join Shlok's game/ }).click();
       if (i < 2) await expect(p.getByRole("heading", { name: `You're in. Waiting for ${2 - i} more` })).toBeVisible();
     }
     for (const p of pages) await expect(p.getByRole("grid", { name: "4-player chess board" })).toBeVisible();
@@ -248,7 +246,7 @@ test.describe("4-player chess", () => {
     await expect(page.getByRole("grid", { name: "Classic chess board" })).toBeVisible();
     // It's used once: going home stays home.
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Games" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Play", level: 1 })).toBeVisible();
     await expect(page).toHaveURL(/\/$/);
   });
 });

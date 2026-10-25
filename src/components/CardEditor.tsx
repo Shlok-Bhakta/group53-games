@@ -77,7 +77,7 @@ export function CardEditor({ open, onOpenChange, player }: { open: boolean; onOp
               </Section>
             )}
 
-            <div className="flex min-h-[56px] items-center justify-between rounded-2xl border bg-card px-4">
+            <div className="flex min-h-[56px] items-center justify-between rounded-lg bg-card px-4">
               <label htmlFor="glow" className="font-medium">
                 Glow
               </label>
@@ -92,7 +92,7 @@ export function CardEditor({ open, onOpenChange, player }: { open: boolean; onOp
               <div className="grid grid-cols-6 gap-2">
                 {BADGES.map((badge) => (
                   <Choice key={badge || "none"} selected={player.badge === badge} group="badge" onClick={() => set({ badge })} ariaLabel={badge || "No badge"} square>
-                    {badge ? <span className="text-[1.6rem] leading-none">{badge}</span> : <span className="text-xs font-semibold text-muted-foreground">None</span>}
+                    {badge ? <span className="text-title leading-none">{badge}</span> : <span className="text-footnote font-semibold text-muted-foreground">None</span>}
                   </Choice>
                 ))}
               </div>
@@ -107,7 +107,7 @@ export function CardEditor({ open, onOpenChange, player }: { open: boolean; onOp
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section>
-      <h3 className="mb-2.5 text-[13px] font-semibold text-muted-foreground">{title}</h3>
+      <h3 className="mb-2.5 px-1 font-display text-heading">{title}</h3>
       {children}
     </section>
   );
@@ -138,13 +138,13 @@ function Choice({
       aria-label={ariaLabel ?? label}
       onClick={onClick}
       className={cn(
-        "relative flex touch-manipulation flex-col items-center justify-center gap-1.5 rounded-2xl bg-card outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+        "relative flex touch-manipulation flex-col items-center justify-center gap-1.5 rounded-lg bg-card outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
         square ? "aspect-square" : "py-3",
       )}
     >
-      {selected && <motion.span layoutId={`${group}-selected`} transition={spring} className="absolute inset-0 rounded-2xl border-2 border-primary bg-primary/8" />}
+      {selected && <motion.span layoutId={`${group}-selected`} transition={spring} className="absolute inset-0 rounded-lg border-2 border-primary bg-primary/8" />}
       <span className="relative">{children}</span>
-      {label && <span className={cn("relative text-[11px] font-semibold", selected ? "text-primary" : "text-muted-foreground")}>{label}</span>}
+      {label && <span className={cn("relative text-caption font-semibold", selected ? "text-primary" : "text-muted-foreground")}>{label}</span>}
     </motion.button>
   );
 }
@@ -209,9 +209,9 @@ function TaglineField({ value, onSave }: { value: string; onSave: (v: string) =>
               e.currentTarget.blur();
             }
           }}
-          className="block min-h-14 w-full resize-none rounded-2xl border bg-card px-4 py-4 pr-16 text-[17px] leading-snug outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/40"
+          className="block min-h-14 w-full resize-none rounded-lg border bg-card px-4 py-4 pr-16 text-body outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/40"
         />
-        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs tabular-nums text-muted-foreground">
+        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-footnote tabular-nums text-muted-foreground">
           {draft.length}/{TAGLINE_MAX}
         </span>
       </div>

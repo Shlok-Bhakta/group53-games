@@ -12,13 +12,13 @@ export function InstallGate({ children }: { children: ReactNode }) {
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-7 px-5 pb-10 pt-[calc(env(safe-area-inset-top)+40px)]">
       <Tiles word="53" states={["green", "yellow"]} size="lg" flip label="Group 53" />
       <div>
-        <h1 className="font-display text-[2rem] leading-[1.05]">Put Group 53 on your home screen</h1>
-        <p className="mt-3 text-muted-foreground">
+        <h1 className="font-display text-title">Put Group 53 on your home screen</h1>
+        <p className="mt-3 text-callout text-muted-foreground">
           The games run as an app so they can ping you when it's your turn or someone comes for you. It takes about ten seconds.
         </p>
       </div>
       {location.pathname.startsWith("/chess/") && (
-        <p className="rounded-xl border-2 border-primary/40 bg-primary/8 p-4 leading-relaxed">
+        <p className="rounded-lg bg-primary/10 p-4 text-callout ring-2 ring-primary/40">
           <span className="font-semibold">Already installed?</span> Open Group 53 from your home screen. Links can't open the app directly, but this game is waiting in
           the inbox on its home screen.
         </p>
@@ -30,11 +30,11 @@ export function InstallGate({ children }: { children: ReactNode }) {
 
 function Steps({ steps }: { steps: ReactNode[] }) {
   return (
-    <ol className="flex flex-col gap-3">
+    <ol className="flex flex-col gap-4">
       {steps.map((step, i) => (
-        <li key={i} className="flex items-start gap-3.5 rounded-xl border bg-card p-4">
-          <span className="grid size-7 shrink-0 place-items-center rounded-md bg-primary text-sm font-bold text-primary-foreground">{i + 1}</span>
-          <span className="pt-0.5 leading-relaxed">{step}</span>
+        <li key={i} className="flex items-start gap-3.5 px-1">
+          <span className="grid size-7 shrink-0 place-items-center rounded-sm bg-primary text-footnote font-bold text-primary-foreground">{i + 1}</span>
+          <span className="pt-0.5">{step}</span>
         </li>
       ))}
     </ol>
@@ -96,7 +96,7 @@ function AndroidSteps() {
   const { canInstall, install, installed } = useInstallPrompt();
   if (installed) {
     return (
-      <div className="flex items-start gap-3 rounded-xl border-2 border-tile-green bg-card p-4">
+      <div className="flex items-start gap-3 rounded-lg bg-card p-4 ring-2 ring-tile-green">
         <Check size={20} weight="bold" className="mt-0.5 shrink-0 text-tile-green" />
         <p>
           Installed. Open <Key>Group 53</Key> from your home screen or app drawer.

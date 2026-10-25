@@ -35,7 +35,7 @@ export const MODES = {
   },
   "chess:realtime4": {
     game: "chess",
-    name: "4-Player",
+    name: "Real-time 4-Player",
     title: "4-player real-time chess",
     kind: "realtime",
     players: 4,
@@ -61,4 +61,5 @@ export const START_RATING = 1200;
 export const matchPath = (id: string) => `/chess/${id}`;
 // Opening this link joins the game if you're invited or there's a free seat.
 export const acceptPath = (id: string) => `/chess/${id}?accept=1`;
-export const modePath = (mode: ModeKey) => `/chess/mode/${MODES[mode].slug}`;
+// Opens the New game sheet on the Play tab with this mode picked.
+export const modePath = (mode: ModeKey) => `/?new=${MODES[mode].slug}`;

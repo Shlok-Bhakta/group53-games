@@ -12,14 +12,14 @@ export function SignIn() {
         <Tiles word="53" states={["green", "hit"]} flip label="53" />
       </div>
       <div>
-        <h1 className="font-display text-4xl leading-[1.05]">Group 53 Games</h1>
-        <p className="mt-3 max-w-[34ch] text-lg text-muted-foreground">
+        <h1 className="font-display text-title-lg">Group 53 Games</h1>
+        <p className="mt-3 max-w-[34ch] text-body text-muted-foreground">
           Little games for the group, built so you can mess with each other.
         </p>
       </div>
       <Button
         size="xl"
-        className="w-full bg-[#5865F2] text-white hover:bg-[#4752c4]"
+        className="w-full bg-[var(--discord)] text-white hover:bg-[var(--discord)]/85"
         onClick={() => void signIn("discord", { redirectTo: window.location.href })}
       >
         <DiscordLogo size={22} /> Sign in with Discord

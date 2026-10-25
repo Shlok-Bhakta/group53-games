@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation } from "convex/react";
 import { Chess, type Square } from "chess.js";
 import { toast } from "sonner";
@@ -9,6 +9,7 @@ import type { MatchView } from "../../../convex/matches";
 import { Board, fromName, squareName, type BoardPiece, type Sq } from "./Board";
 import { viewFor } from "./geometry";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
+import { cn } from "@/lib/utils";
 
 type Kind = BoardPiece["kind"];
 
@@ -40,7 +41,7 @@ function useStableKeys(board: ReturnType<Chess["board"]>) {
   }, [board]);
 }
 
-export function ClassicGame({ match, meId }: { match: MatchView; meId: Id<"users"> | undefined }) {
+export function ClassicGame({ match, meId, above, below }: { match: MatchView; meId: Id<"users"> | undefined; above?: ReactNode; below?: ReactNode }) {
   const state = match.state as ClassicState;
   const chess = useMemo(() => new Chess(state.fen), [state.fen]);
   const board = useMemo(() => chess.board(), [chess]);
@@ -86,6 +87,7 @@ export function ClassicGame({ match, meId }: { match: MatchView; meId: Id<"users
 
   return (
     <>
+      {above}
       <Board
         label="Classic chess board"
         pieces={pieces}
@@ -99,11 +101,12 @@ export function ClassicGame({ match, meId }: { match: MatchView; meId: Id<"users
         check={king ? [king] : []}
         disabled={!myTurn}
       />
+      {below}
       <MoveList moves={state.moves.map((m) => m.san)} />
       <Drawer open={promotion !== null} onOpenChange={(o) => !o && setPromotion(null)}>
         <DrawerContent className="pb-[calc(env(safe-area-inset-bottom)+20px)]">
           <DrawerHeader>
-            <DrawerTitle className="font-display text-xl">Promote to</DrawerTitle>
+            <DrawerTitle>Promote to</DrawerTitle>
           </DrawerHeader>
           <div className="grid grid-cols-4 gap-3 px-4">
             {(["q", "r", "b", "n"] as const).map((p) => (
@@ -115,7 +118,7 @@ export function ClassicGame({ match, meId }: { match: MatchView; meId: Id<"users
                   if (promotion) play(promotion.from, promotion.to, p);
                   setPromotion(null);
                 }}
-                className="grid aspect-square touch-manipulation place-items-center rounded-2xl bg-card ring-1 ring-border active:scale-95"
+                className="grid aspect-square touch-manipulation place-items-center rounded-lg bg-card transition-transform duration-100 active:scale-[0.97]"
               >
                 <img src={`/pieces/${myColor}${p.toUpperCase()}.svg`} alt="" className="size-4/5" />
               </button>
@@ -133,19 +136,18 @@ function kingSquare(chess: Chess, color: "w" | "b"): Sq | null {
 }
 
 function MoveList({ moves }: { moves: string[] }) {
-  const end = useRef<HTMLDivElement>(null);
-  if (moves.length === 0) return <p className="mt-3 text-center text-sm text-muted-foreground">No moves yet.</p>;
+  if (moves.length === 0) return <p className="flex h-7 items-center px-1 text-footnote text-muted-foreground">No moves yet. White starts.</p>;
   const pairs = Array.from({ length: Math.ceil(moves.length / 2) }, (_, i) => [moves[2 * i], moves[2 * i + 1]] as const);
+  const last = moves.length - 1;
   return (
-    <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none]" aria-label="Moves" ref={(el) => el?.scrollTo({ left: el.scrollWidth })}>
+    <div className="flex h-7 items-center gap-3.5 overflow-x-auto px-1 font-display text-callout tabular-nums [scrollbar-width:none]" aria-label="Moves" ref={(el) => el?.scrollTo({ left: el.scrollWidth })}>
       {pairs.map(([w, b], i) => (
-        <span key={i} className="flex shrink-0 items-center gap-1 rounded-lg bg-card px-2.5 py-1.5 text-sm tabular-nums ring-1 ring-border">
+        <span key={i} className="flex shrink-0 items-center gap-1.5">
           <span className="text-muted-foreground">{i + 1}.</span>
-          <span className="font-semibold">{w}</span>
-          {b && <span className="font-semibold">{b}</span>}
+          <span className={cn(2 * i === last && "rounded-sm bg-primary px-1.5 text-primary-foreground")}>{w}</span>
+          {b && <span className={cn(2 * i + 1 === last && "rounded-sm bg-primary px-1.5 text-primary-foreground")}>{b}</span>}
         </span>
       ))}
-      <div ref={end} />
     </div>
   );
 }

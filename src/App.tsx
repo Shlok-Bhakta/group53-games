@@ -1,26 +1,26 @@
-import { Link, Navigate, Route, Routes, useLocation } from "react-router";
+import { Navigate, Route, Routes, useLocation, useParams } from "react-router";
 import { Authenticated, AuthLoading, Unauthenticated, useQuery } from "convex/react";
-import { AnimatePresence, MotionConfig, motion } from "motion/react";
+import { AnimatePresence, MotionConfig } from "motion/react";
 import { api } from "../convex/_generated/api";
+import { modeBySlug, MODES } from "../convex/modes";
 import { Wordle } from "./games/wordle/Wordle";
-import { ChessHub } from "./games/chess/ChessHub";
 import { ChessMatch } from "./games/chess/ChessMatch";
-import { ModePage } from "./games/chess/ModePage";
 import { InstallGate } from "./InstallGate";
-import { TabBar } from "@/components/TabBar";
+import { TAB_BAR_SPACE, TabBar } from "@/components/TabBar";
 import { TopEdge } from "@/components/TopEdge";
+import { NavBar, useGoBack } from "@/components/AppHeader";
+import { NewGameSheet } from "@/components/NewGameSheet";
 import { NotificationsRequired } from "@/components/NotificationsRequired";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/sonner";
 import { Crew } from "@/pages/Crew";
-import { Home } from "@/pages/Home";
+import { Play } from "@/pages/Play";
 import { SignIn } from "@/pages/SignIn";
 import { You } from "@/pages/You";
 import { ArrivalPills, TapLayer, usePresenceReporter } from "@/presence";
+import { Page, TAB_ROUTES, useAppBadge, useNavDirection, useScrollMemory } from "@/shell";
 import { useVersionCheck } from "@/version";
 import { useDeepLinks } from "@/deepLinks";
-
-const TAB_ROUTES = ["/", "/crew", "/you"];
 
 export function App() {
   useVersionCheck();
@@ -29,8 +29,8 @@ export function App() {
       <InstallGate>
         <AuthLoading>
           <div className="mx-auto flex max-w-md flex-col gap-4 px-4 pt-[calc(env(safe-area-inset-top)+44px)]">
-            <Skeleton className="h-9 w-40" />
-            <Skeleton className="h-72 w-full rounded-3xl" />
+            <Skeleton className="h-10 w-32" />
+            <Skeleton className="h-48 w-full rounded-lg" />
           </div>
         </AuthLoading>
         <Unauthenticated>
@@ -52,49 +52,59 @@ function SignedIn() {
   const location = useLocation();
   const me = useQuery(api.users.me);
   const inTabs = TAB_ROUTES.includes(location.pathname);
+  const direction = useNavDirection();
+  const goBack = useGoBack("/");
   // Taps are shared in the main UI only, not inside games.
   usePresenceReporter({ shareTaps: inTabs });
   useDeepLinks();
+  useScrollMemory(direction);
+  useAppBadge();
 
   return (
     <>
-      <main className={`mx-auto w-full max-w-md px-4 ${inTabs ? "pb-[calc(env(safe-area-inset-bottom)+92px)]" : "pb-[calc(env(safe-area-inset-bottom)+24px)]"}`}>
-        <AnimatePresence mode="popLayout">
-          <motion.div
-            key={location.pathname}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
-          >
-            <Routes location={location}>
-              <Route path="/" element={<Home />} />
-              <Route path="/crew" element={<Crew />} />
-              <Route path="/you" element={<You />} />
-              <Route path="/settings" element={<Navigate to="/you" replace />} />
-              <Route path="/wordle" element={<Wordle />} />
-              <Route path="/chess" element={<NotificationsRequired><ChessHub /></NotificationsRequired>} />
-              <Route path="/chess/mode/:slug" element={<NotificationsRequired><ModePage /></NotificationsRequired>} />
-              <Route path="/chess/:id" element={<NotificationsRequired><ChessMatch /></NotificationsRequired>} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </motion.div>
+      <main className="relative mx-auto w-full max-w-md overflow-x-clip px-4">
+        <AnimatePresence mode="popLayout" initial={false} custom={direction}>
+          <Page key={location.pathname} direction={direction} onBack={inTabs ? null : goBack}>
+            <div style={{ paddingBottom: inTabs ? TAB_BAR_SPACE : "calc(env(safe-area-inset-bottom) + 16px)" }}>
+              <Routes location={location}>
+                <Route path="/" element={<Play />} />
+                <Route path="/crew" element={<Crew />} />
+                <Route path="/you" element={<You />} />
+                <Route path="/settings" element={<Navigate to="/you" replace />} />
+                <Route path="/wordle" element={<Wordle />} />
+                {/* The chess hub and mode pages became the Play tab and the New game sheet. */}
+                <Route path="/chess" element={<LegacyChess />} />
+                <Route path="/chess/mode/:slug" element={<LegacyMode />} />
+                <Route path="/chess/:id" element={<NotificationsRequired><ChessMatch /></NotificationsRequired>} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </div>
+          </Page>
         </AnimatePresence>
       </main>
       {inTabs && <TabBar />}
       {inTabs && <TapLayer meId={me?._id} />}
+      <NewGameSheet />
       <ArrivalPills />
     </>
   );
 }
 
+// Old links: /chess?mode=chess:four and /chess/mode/four open the New game sheet on that mode.
+function LegacyChess() {
+  const mode = new URLSearchParams(useLocation().search).get("mode");
+  return <Navigate to={mode && mode in MODES ? `/?new=${MODES[mode as keyof typeof MODES].slug}` : "/"} replace />;
+}
+function LegacyMode() {
+  const { slug } = useParams<{ slug: string }>();
+  return <Navigate to={slug && modeBySlug(slug) ? `/?new=${slug}` : "/"} replace />;
+}
+
 function NotFound() {
   return (
-    <div className="flex flex-col items-start gap-3 pt-[calc(env(safe-area-inset-top)+48px)]">
-      <h1 className="font-display text-2xl">Nothing here</h1>
-      <Link to="/" className="text-primary underline underline-offset-4">
-        Back to games
-      </Link>
+    <div>
+      <NavBar title="Not found" />
+      <p className="pt-4 text-callout text-muted-foreground">Nothing lives at this address.</p>
     </div>
   );
 }

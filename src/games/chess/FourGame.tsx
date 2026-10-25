@@ -1,6 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useMutation } from "convex/react";
-import { motion } from "motion/react";
 import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -16,7 +15,7 @@ import { cn } from "@/lib/utils";
 // so they stay the same in every theme.
 export const SEAT_COLORS: Record<string, string> = { red: "#e0503f", blue: "#3f7be0", yellow: "#e8b928", green: "#3faa5a", dead: "#9aa0a6" };
 
-export function FourGame({ match, meId }: { match: MatchView; meId: Id<"users"> | undefined }) {
+export function FourGame({ match, meId, overlay, below }: { match: MatchView; meId: Id<"users"> | undefined; overlay?: ReactNode; below?: ReactNode }) {
   const state = match.state as FourState;
   const me = match.players.find((p) => p.userId === meId);
   const myColor = me?.color as Color4 | undefined;
@@ -61,28 +60,26 @@ export function FourGame({ match, meId }: { match: MatchView; meId: Id<"users"> 
           lastMove={last ? [last.from, last.to] : null}
           check={checked}
           disabled={!myTurn}
-        />
+        >
+          {overlay}
+        </Board>
       </div>
+      {below}
       <FourMoves state={state} />
     </>
   );
 }
 
 function FourMoves({ state }: { state: FourState }) {
-  if (state.moves.length === 0) return <p className="text-center text-sm text-muted-foreground">Red moves first, then play goes clockwise.</p>;
+  if (state.moves.length === 0) return <p className="flex h-7 items-center justify-center px-1 text-footnote text-muted-foreground">Red moves first, then play goes clockwise.</p>;
   const recent = state.moves.slice(-24);
   return (
-    <div className="flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none]" aria-label="Moves" ref={(el) => el?.scrollTo({ left: el.scrollWidth })}>
+    <div className="flex h-7 items-center gap-3.5 overflow-x-auto px-1 font-display text-callout tabular-nums [scrollbar-width:none]" aria-label="Moves" ref={(el) => el?.scrollTo({ left: el.scrollWidth })}>
       {recent.map((m, i) => (
-        <motion.span
-          key={state.moves.length - recent.length + i}
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className={cn("flex shrink-0 items-center gap-1.5 rounded-lg bg-card px-2.5 py-1.5 text-sm font-semibold tabular-nums ring-1 ring-border")}
-        >
-          <span className="size-2.5 rounded-full" style={{ background: SEAT_COLORS[m.color] }} />
+        <span key={state.moves.length - recent.length + i} className={cn("flex shrink-0 items-center gap-1.5 rounded-sm", i === recent.length - 1 && "bg-card px-1.5")}>
+          <span className="size-2 rounded-full" style={{ background: SEAT_COLORS[m.color] }} />
           {m.text}
-        </motion.span>
+        </span>
       ))}
     </div>
   );

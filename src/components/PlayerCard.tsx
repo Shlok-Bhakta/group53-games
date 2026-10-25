@@ -38,7 +38,7 @@ export function PlayerCard({ player, online, size = "grid", className }: Props) 
           <span
             className={cn(
               "absolute z-10 grid place-items-center rounded-full bg-black/30 backdrop-blur-md",
-              hero ? "right-3.5 top-3.5 size-12 text-[1.65rem]" : "right-2.5 top-2.5 size-9 text-xl",
+              hero ? "right-3.5 top-3.5 size-12 text-title" : "right-2.5 top-2.5 size-9 text-heading",
             )}
             aria-hidden="true"
           >
@@ -46,12 +46,12 @@ export function PlayerCard({ player, online, size = "grid", className }: Props) 
           </span>
         )}
         <div className={cn("pcard-body z-10", hero && "px-5 pb-5")}>
-          <h3 className={cn("pcard-name font-display truncate leading-tight", hero ? "text-[1.75rem]" : "text-[1.05rem]")}>{player.name}</h3>
+          <h3 className={cn("pcard-name font-display truncate leading-tight", hero ? "text-title" : "text-body")}>{player.name}</h3>
           {player.username && player.username !== player.name && (
-            <p className={cn("truncate text-muted-foreground", hero ? "text-sm" : "text-xs")}>@{player.username}</p>
+            <p className={cn("truncate text-muted-foreground", hero ? "text-callout" : "text-footnote")}>@{player.username}</p>
           )}
           {player.tagline && (
-            <p className={cn("mt-1 line-clamp-2 text-foreground/85", hero ? "text-[0.95rem]" : "text-[0.8rem] leading-snug")}>{player.tagline}</p>
+            <p className={cn("mt-1 line-clamp-2 text-foreground/85", hero ? "text-callout" : "text-footnote")}>{player.tagline}</p>
           )}
         </div>
       </div>
