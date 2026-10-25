@@ -36,37 +36,41 @@ const RULES: Record<ModeKey, string[]> = {
   ],
 };
 
-// The rules for a mode, folded away once you've played it.
+// The rules for a mode, folded away once you've played it. Height animates on a bare wrapper (padding
+// lives inside it) so it closes all the way down instead of snapping shut at the end.
 export function Rules({ mode, defaultOpen }: { mode: ModeKey; defaultOpen: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <section className="overflow-hidden rounded-2xl border bg-card">
+    <section>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex min-h-14 w-full touch-manipulation items-center gap-3 px-4 text-left font-semibold active:bg-muted"
+        className="-mx-1 flex min-h-12 w-[calc(100%+0.5rem)] touch-manipulation items-center gap-2.5 rounded-xl px-1 text-left font-semibold active:bg-muted"
       >
         <BookOpenTextIcon size={20} weight="fill" className="text-primary" />
         <span className="flex-1">How to play</span>
-        <CaretDownIcon weight="bold" className={cn("text-muted-foreground transition-transform", open && "rotate-180")} />
+        <CaretDownIcon weight="bold" className={cn("text-muted-foreground transition-transform duration-300", open && "rotate-180")} />
       </button>
       <AnimatePresence initial={false}>
         {open && (
-          <motion.ol
+          <motion.div
+            key="rules"
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 380, damping: 34 }}
-            className="flex flex-col gap-2.5 px-4 pb-4"
+            transition={{ duration: 0.28, ease: [0.25, 0.8, 0.25, 1] }}
+            className="overflow-hidden"
           >
-            {RULES[mode].map((rule, i) => (
-              <li key={i} className="flex gap-3 text-[0.95rem] leading-relaxed">
-                <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-md bg-primary/12 text-xs font-bold text-primary">{i + 1}</span>
-                <span>{rule}</span>
-              </li>
-            ))}
-          </motion.ol>
+            <ol className="flex flex-col gap-2.5 pb-1 pt-2">
+              {RULES[mode].map((rule, i) => (
+                <li key={i} className="flex gap-3 text-[0.95rem] leading-relaxed">
+                  <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-md bg-primary/12 text-xs font-bold text-primary">{i + 1}</span>
+                  <span>{rule}</span>
+                </li>
+              ))}
+            </ol>
+          </motion.div>
         )}
       </AnimatePresence>
     </section>

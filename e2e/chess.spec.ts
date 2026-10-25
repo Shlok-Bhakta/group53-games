@@ -278,7 +278,8 @@ test.describe("chess", () => {
 
   test("the game header scrolls with the page and the share button lines up with the title", async ({ context, browser }) => {
     const g = await startClassic(browser, context);
-    const header = g.white.locator("header").first();
+    // The game's own header (the page we came from may still be fading out).
+    const header = g.white.locator("header", { has: g.white.getByRole("heading", { name: "Classic chess", level: 1 }) });
     // iOS blurs things pinned to the top edge, so nothing with text there may be sticky or fixed.
     expect(await header.evaluate((el) => getComputedStyle(el).position)).toBe("static");
     const title = (await g.white.getByRole("heading", { name: "Classic chess", level: 1 }).boundingBox())!;

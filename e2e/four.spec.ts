@@ -65,6 +65,26 @@ test.describe("4-player chess", () => {
     // New to the mode, so the rules start open.
     await expect(page.getByRole("button", { name: "How to play" })).toHaveAttribute("aria-expanded", "true");
     await expect(page.getByText("Check two kings with one move")).toBeVisible();
+    // Closing shrinks smoothly all the way down: no jump at the end when the list leaves the page.
+    const rules = page.locator("section", { has: page.getByRole("button", { name: "How to play" }) });
+    const open = (await rules.boundingBox())!.height;
+    const heights: number[] = await page.evaluate(async () => {
+      const btn = [...document.querySelectorAll("button")].find((b) => b.textContent?.includes("How to play"))!;
+      const section = btn.closest("section")!;
+      const out: number[] = [];
+      btn.click();
+      const t0 = performance.now();
+      while (performance.now() - t0 < 600) {
+        out.push(section.getBoundingClientRect().height);
+        await new Promise((r) => requestAnimationFrame(r));
+      }
+      return out;
+    });
+    const closed = heights.at(-1)!;
+    expect(closed).toBeLessThan(60);
+    expect(heights.some((h) => h > closed + 40 && h < open - 40), "passes through in-between heights").toBe(true);
+    const steps = heights.slice(1).map((h, i) => heights[i] - h);
+    expect(Math.max(...steps), "no frame drops more than a fifth of the way").toBeLessThan((open - closed) / 5);
     await page.getByRole("link", { name: "Back to chess" }).click();
     await realtime.getByRole("link", { name: "Real-time 4-Player" }).click();
     await expect(page.getByRole("heading", { name: "4-player real-time chess" })).toBeVisible();

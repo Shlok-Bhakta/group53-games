@@ -6,6 +6,7 @@ import { api } from "../../../convex/_generated/api";
 import type { MatchView } from "../../../convex/matches";
 import { MODES, type ModeKey } from "../../../convex/modes";
 import { cn } from "@/lib/utils";
+import { Separator } from "@/components/ui/separator";
 import { InviteCard, MatchRow, TurnChip } from "./parts";
 
 // Show this many rows before folding the rest behind "Show more".
@@ -13,7 +14,7 @@ const FOLD = 3;
 
 // Every chess game that wants me, across all modes: challenges first, then my moves, live games, and open
 // seats. Games waiting on someone else fold away underneath.
-export function Inbox({ className }: { className?: string }) {
+export function Inbox({ className, title }: { className?: string; title?: string }) {
   const inbox = useQuery(api.matches.inbox);
   const me = useQuery(api.users.me);
   const [expanded, setExpanded] = useState(false);
@@ -37,6 +38,12 @@ export function Inbox({ className }: { className?: string }) {
 
   return (
     <div className={cn("flex flex-col gap-2.5", className)} aria-label="Chess inbox">
+      {title && (
+        <>
+          <Separator className="mb-2" />
+          <h2 className="px-1 font-display text-xl leading-tight">{title}</h2>
+        </>
+      )}
       <AnimatePresence initial={false}>
         {inbox.invites.map((m) => (
           <InviteCard key={m._id} match={m} />
