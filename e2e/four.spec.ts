@@ -53,16 +53,18 @@ test.describe("4-player chess", () => {
     await page.goto("/chess");
     const async = page.getByRole("region", { name: "Async" });
     const realtime = page.getByRole("region", { name: "Real-time" });
-    await expect(async.getByRole("link")).toHaveText([/Classic/, /4-Player/]);
-    await expect(realtime.getByRole("link")).toHaveText([/Real-time/, /4-Player/]);
-    // Side by side, not stacked.
-    const [l, r] = [await async.boundingBox(), await realtime.boundingBox()];
-    expect(Math.abs(l!.y - r!.y)).toBeLessThan(2);
-    expect(r!.x).toBeGreaterThan(l!.x + l!.width - 1);
+    await expect(async.getByRole("link")).toHaveText([/1v1/, /4-Player/]);
+    await expect(realtime.getByRole("link")).toHaveText([/1v1/, /4-Player/]);
+    // Async first, then real-time below it, each its own panel.
+    const [top, bottom] = [await async.boundingBox(), await realtime.boundingBox()];
+    expect(bottom!.y).toBeGreaterThan(top!.y + top!.height - 1);
 
     await async.getByRole("link", { name: "Async 4-Player" }).click();
     await expect(page.getByRole("heading", { name: "4-player chess" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Find a game" })).toBeVisible();
+    // New to the mode, so the rules start open.
+    await expect(page.getByRole("button", { name: "How to play" })).toHaveAttribute("aria-expanded", "true");
+    await expect(page.getByText("Check two kings with one move")).toBeVisible();
     await page.getByRole("link", { name: "Back to chess" }).click();
     await realtime.getByRole("link", { name: "Real-time 4-Player" }).click();
     await expect(page.getByRole("heading", { name: "4-player real-time chess" })).toBeVisible();

@@ -9,6 +9,7 @@ import { BackHeader } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AsyncButton } from "@/components/AsyncButton";
+import { Rules } from "./Rules";
 import { ChallengeSheet, Leaderboard, MatchRow, ResultChip, Section, TurnChip } from "./parts";
 
 // One mode: start or join a game, your games in it, games to watch, and its leaderboard. Challenges to you
@@ -18,6 +19,7 @@ export function ModePage() {
   const mode = modeBySlug(slug ?? "");
   const lobby = useQuery(api.matches.lobby, mode ? { mode } : "skip");
   const me = useQuery(api.users.me);
+  const ratings = useQuery(api.ratings.mine);
   const queue = useMutation(api.matches.queue);
   const navigate = useNavigate();
   const [challenging, setChallenging] = useState(false);
@@ -71,6 +73,8 @@ export function ModePage() {
               </Button>
             </div>
           )}
+
+          {ratings && <Rules mode={mode} defaultOpen={!ratings[mode]?.games} />}
 
           {lobby.open.length > 0 && (
             <Section title={seats > 2 ? "Open seats" : "Waiting for an opponent"}>
