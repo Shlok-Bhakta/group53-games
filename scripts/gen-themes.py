@@ -88,11 +88,28 @@ THEMES = {
   ),
 }
 
+# Board squares (light, dark) per theme and mode.
+BOARDS = {
+  "felt": (("#ebecd0", "#739552"), ("#e6e8c7", "#5f8a4a")),
+  "catppuccin": (("#e6e9ef", "#8c8fa1"), ("#bac2de", "#585b70")),
+  "gruvbox": (("#ebdbb2", "#a89984"), ("#d5c4a1", "#7c6f64")),
+  "nord": (("#e5e9f0", "#81a1c1"), ("#d8dee9", "#5e81ac")),
+  "tokyonight": (("#e9e9ec", "#7890dd"), ("#c0caf5", "#3d59a1")),
+  "dracula": (("#fffbeb", "#a69ccf"), ("#f8f8f2", "#6272a4")),
+  "rosepine": (("#faf4ed", "#d7827e"), ("#e0def4", "#6e6a86")),
+  "slate": (("#e2e8f0", "#64748b"), ("#cbd5e1", "#475569")),
+  "varsity": (("#f5e6c8", "#9b2c3a"), ("#f0dcb4", "#7a1f2b")),
+  "wordle": (("#ebecd0", "#6aaa64"), ("#d3d6da", "#538d4e")),
+}
+
 def block(sel, vals):
     return sel + " {\n" + "\n".join(f"  --{k}: {v};" for k, v in vals.items()) + "\n}\n"
 
 out = ["/* Themes. Felt is the default; the rest switch on data-palette (on <html>, or on any element for previews). */\n"]
 for name, (light, dark) in THEMES.items():
+    (bl, bd), (dl, dd) = BOARDS[name]
+    light = {**light, "board-light": bl, "board-dark": bd}
+    dark = {**dark, "board-light": dl, "board-dark": dd}
     lsel = f'[data-palette="{name}"]' + (", :root" if name == "felt" else "")
     dsel = f':is(.dark[data-palette="{name}"], .dark [data-palette="{name}"])' + (", .dark" if name == "felt" else "")
     out.append(block(lsel, light) + block(dsel, dark))

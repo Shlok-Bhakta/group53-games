@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 // iOS-style large title at the top of each tab.
 export function LargeTitle({ title, subtitle, action }: { title: string; subtitle?: ReactNode; action?: ReactNode }) {
   return (
-    <header className="flex items-end justify-between gap-3 pb-4 pt-[calc(env(safe-area-inset-top)+20px)]">
+    <header className="flex items-end justify-between gap-3 pb-4 pt-[calc(env(safe-area-inset-top)+44px)]">
       <div className="min-w-0">
         <h1 className="font-display truncate text-[2.1rem] leading-none">{title}</h1>
         {subtitle && <div className="mt-2 text-[0.95rem] text-muted-foreground">{subtitle}</div>}
@@ -13,12 +13,14 @@ export function LargeTitle({ title, subtitle, action }: { title: string; subtitl
   );
 }
 
-// Compact header with a back button, for screens pushed on top of a tab.
-export function BackHeader({ title, back }: { title: string; back: ReactNode }) {
+// Compact header with a back button, for screens pushed on top of a tab. It scrolls with the page on
+// purpose, and starts below the band iOS blurs under the status bar (see TopEdge).
+export function BackHeader({ title, back, action }: { title: string; back: ReactNode; action?: ReactNode }) {
   return (
-    <header className="sticky top-0 z-10 -mx-4 mb-3 flex min-h-14 items-center gap-1 bg-background/85 px-2 pb-2 pt-[calc(env(safe-area-inset-top)+6px)] backdrop-blur-xl">
+    <header className="-mx-2 mb-3 flex min-h-12 items-center gap-1 pt-[calc(env(safe-area-inset-top)+34px)]">
       {back}
-      <h1 className="font-display truncate text-xl">{title}</h1>
+      <h1 className="font-display min-w-0 flex-1 truncate text-xl">{title}</h1>
+      {action}
     </header>
   );
 }

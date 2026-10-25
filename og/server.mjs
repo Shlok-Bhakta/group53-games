@@ -55,6 +55,11 @@ const PAGES = {
     description: () => "Everyone gets the same word. Solve it, then spend what you earn messing up someone else's board.",
     card: "wordle",
   },
+  "/chess": {
+    title: () => "Chess",
+    description: () => "Classic, real-time, and 4-player free-for-all chess. Come take a seat.",
+    card: "chess",
+  },
   "/crew": {
     title: () => "The crew",
     description: (crew) => crew.map((p) => p.name).join(", "),
@@ -145,6 +150,16 @@ function frame(...children) {
 }
 
 const CARDS = {
+  chess: (crew, images) =>
+    frame(
+      h(
+        "div",
+        { flexDirection: "column", gap: 28 },
+        tiles("CHESS", ["green", "yellow", "green", "hit", "green"], 118),
+        h("div", { fontSize: 40, fontWeight: 500, color: "#cfe9dd", maxWidth: 940, lineHeight: 1.25 }, "Classic at your own pace, or real-time with no turns."),
+      ),
+      h("div", { alignItems: "center", justifyContent: "space-between" }, crewRow(crew, images, 84), h("div", { color: EMBED_COLOR, fontSize: 34, fontWeight: 800 }, "Tap to play")),
+    ),
   home: (crew, images) =>
     frame(
       h("div", { fontSize: 88, fontWeight: 800, lineHeight: 1.02, letterSpacing: -2, maxWidth: 980 }, "Who are we ruining today?"),
@@ -166,6 +181,104 @@ const CARDS = {
       h("div", { alignItems: "center", justifyContent: "space-between" }, crewRow(crew, images, 84), h("div", { color: EMBED_COLOR, fontSize: 34, fontWeight: 800 }, "PvP Wordle")),
     ),
 };
+
+// --- chess game previews ---
+
+const PIECES_URL = process.env.PIECES_URL ?? "http://web/pieces";
+const pieceCache = new Map();
+async function pieceImage(code) {
+  if (!pieceCache.has(code)) {
+    const res = await fetch(`${PIECES_URL}/${code}.svg`, { signal: AbortSignal.timeout(3000) });
+    pieceCache.set(code, `data:image/svg+xml;base64,${Buffer.from(await res.arrayBuffer()).toString("base64")}`);
+  }
+  return pieceCache.get(code);
+}
+
+const MODE_TITLES = { "chess:classic": "Classic chess", "chess:realtime": "Real-time chess", "chess:four": "4-player chess", "chess:realtime4": "4-player real-time chess" };
+const COLOR_NAMES = { w: "White", b: "Black", red: "Red", blue: "Blue", yellow: "Yellow", green: "Green" };
+const SEAT_COLORS = { red: "#e0503f", blue: "#3f7be0", yellow: "#e8b928", green: "#3faa5a" };
+const listNames = (names) => (names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`);
+
+function matchText(m) {
+  const seats = m.seats ?? 2;
+  const names = m.players.map((p) => p.name);
+  const realtime = m.mode === "chess:realtime" || m.mode === "chess:realtime4";
+  const mode = MODE_TITLES[m.mode] ?? "Chess";
+  const title = m.players.length < 2 ? `${names[0]} wants a game` : seats > 2 ? listNames(names) : names.join(" vs ");
+  if (m.status === "waiting") {
+    const status =
+      seats > 2
+        ? `${m.players.length} of ${seats} seats taken. ${realtime ? "It starts when everyone's on the board." : "Tap to take one."}`
+        : realtime ? "Waiting for an opponent. It starts the moment you join." : "Waiting for an opponent. Tap to take the other seat.";
+    return { title: m.players.length < 2 ? title : `${names[0]} wants ${mode.toLowerCase()}`, status, mode };
+  }
+  if (m.status === "cancelled") return { title, status: "This game was called off.", mode };
+  if (m.status === "finished") {
+    const how = { checkmate: "by checkmate", resign: "by resignation", king: "by taking the king", last_king: "as the last king standing", last_player: "as the last one standing" }[m.result.reason] ?? "";
+    return { title, status: m.result.draw ? "Drawn." : `${m.result.winner} won ${how}.`.replace(" .", "."), mode };
+  }
+  if (m.toMove) {
+    const mover = m.players.find((p) => p.color === m.toMove);
+    return { title, status: `${mover?.name ?? "Someone"} to move. ${m.moveCount} moves in.`, mode };
+  }
+  return { title, status: "Live right now. Tap to watch.", mode };
+}
+
+async function renderMatch(m) {
+  const size = m.board.length;
+  const cell = 512 / size;
+  const rows = [];
+  for (let r = 0; r < size; r++) {
+    const cells = [];
+    for (let c = 0; c < size; c++) {
+      const code = m.board[r][c];
+      const dark = (r + c) % 2 === 1;
+      cells.push(
+        h(
+          "div",
+          { width: cell, height: cell, flexShrink: 0, background: code === null ? "transparent" : dark ? "#739552" : "#ebecd0", alignItems: "center", justifyContent: "center" },
+          code ? { type: "img", props: { src: await pieceImage(code), width: cell - 2, height: cell - 2 } } : [],
+        ),
+      );
+    }
+    rows.push(h("div", { flexDirection: "row" }, cells));
+  }
+  const text = matchText(m);
+  const four = size > 8;
+  const images = await Promise.all(m.players.map((p) => fetchImage(p.image)));
+  const order = four ? ["red", "blue", "yellow", "green"].map((c) => m.players.findIndex((p) => p.color === c)).filter((i) => i >= 0) : m.players.map((_, i) => i);
+  const shown = order.length ? order : m.players.map((_, i) => i);
+  const tree = h(
+    "div",
+    { width: 1200, height: 630, padding: 55, gap: 56, alignItems: "center", backgroundImage: "linear-gradient(140deg, #1f6b4f 0%, #134232 55%, #0b261d 100%)", color: "#f2fbf6", fontFamily: "Rubik" },
+    h("div", { width: 512, height: 512, flexShrink: 0, flexDirection: "column", borderRadius: four ? 6 : 18, overflow: "hidden", boxShadow: four ? "none" : "0 18px 40px rgba(0,0,0,0.4)" }, rows),
+    h(
+      "div",
+      { flexDirection: "column", gap: four ? 18 : 26, flex: 1 },
+      h("div", { alignItems: "center", gap: 14 }, tiles("53", ["green", "yellow"], 44), h("div", { fontSize: 30, fontWeight: 800, color: "#bfe3d3" }, text.mode)),
+      h(
+        "div",
+        { flexDirection: "column", gap: four ? 10 : 16 },
+        ...shown.map((i) => {
+          const p = m.players[i];
+          const big = !four;
+          return h(
+            "div",
+            { alignItems: "center", gap: 16 },
+            p.color && SEAT_COLORS[p.color] ? h("div", { width: 12, height: 48, borderRadius: 6, background: SEAT_COLORS[p.color] }) : [],
+            avatar({ name: p.name, frame: "none" }, big ? 64 : 48, images[i]),
+            h("div", { fontSize: big ? 40 : 32, fontWeight: 800 }, p.name),
+            m.points && p.color ? h("div", { fontSize: 24, color: "#9fcbb6", fontWeight: 500 }, `${m.points[p.color]} pts`) : p.color ? h("div", { fontSize: 24, color: "#9fcbb6", fontWeight: 500 }, COLOR_NAMES[p.color] ?? "") : [],
+          );
+        }),
+      ),
+      h("div", { fontSize: four ? 28 : 32, fontWeight: 500, color: "#d7efe4", lineHeight: 1.3 }, text.status),
+      h("div", { fontSize: 30, fontWeight: 800, color: EMBED_COLOR }, m.status === "finished" ? "Tap for a rematch" : m.status === "waiting" ? "Tap to join" : "Tap to open"),
+    ),
+  );
+  const svg = await satori(tree, { width: 1200, height: 630, fonts: FONTS, loadAdditionalAsset });
+  return new Resvg(svg, { fitTo: { mode: "width", value: 1200 } }).render().asPng();
+}
 
 // --- data and assets ---
 async function getCrew() {
@@ -217,11 +330,21 @@ async function renderCard(card) {
 const escape = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 async function pageHtml(pathname, search) {
-  const page = PAGES[pathname] ?? PAGES["/"];
-  const crew = await getCrew();
-  const title = page.title(crew);
-  const description = page.description(crew);
-  const image = `${SITE}/og/image/${page.card}.png?v=${version(crew)}`;
+  let title, description, image;
+  const game = pathname.match(/^\/chess\/([a-z0-9]+)$/);
+  const m = game ? await convex.query(anyApi.previews.match, { id: game[1] }) : null;
+  if (m) {
+    const text = matchText(m);
+    title = text.title;
+    description = `${text.mode}. ${text.status}`;
+    image = `${SITE}/og/match/${game[1]}.png?v=${version([m.status, m.moveCount, m.board])}`;
+  } else {
+    const page = PAGES[pathname] ?? PAGES["/"];
+    const crew = await getCrew();
+    title = page.title(crew);
+    description = page.description(crew);
+    image = `${SITE}/og/image/${page.card}.png?v=${version(crew)}`;
+  }
   const url = `${SITE}${pathname}${search}`;
   return `<!doctype html>
 <html lang="en"><head>
@@ -252,6 +375,13 @@ http
         const png = await renderCard(image[1]);
         res.writeHead(200, { "content-type": "image/png", "cache-control": "public, max-age=300" });
         return void res.end(png);
+      }
+      const matchImage = pathname.match(/^\/og\/match\/([a-z0-9]+)\.png$/);
+      if (matchImage) {
+        const m = await convex.query(anyApi.previews.match, { id: matchImage[1] });
+        if (!m) return void res.writeHead(404).end();
+        res.writeHead(200, { "content-type": "image/png", "cache-control": "public, max-age=60" });
+        return void res.end(await renderMatch(m));
       }
       if (pathname === "/og/health") return void res.writeHead(200).end("ok");
       const html = await pageHtml(pathname, search);

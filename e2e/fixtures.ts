@@ -43,20 +43,33 @@ export async function phone(context: BrowserContext, opts: PhoneOptions = {}): P
         localStorage.setItem(`__convexAuthRefreshToken_${ns}`, refresh);
         sessionStorage.setItem("e2e-seeded", "1");
       }
-      // Headless Chromium has no push service, so stand in a fake one.
-      let permission = notifications as NotificationPermission;
-      let sub: PushSubscription | null = null;
-      const fakeSub = {
-        endpoint: `https://push.example.com/${Math.random().toString(36).slice(2)}`,
-        getKey: () => new Uint8Array([1, 2, 3]).buffer,
-        unsubscribe: async () => ((sub = null), true),
-      } as unknown as PushSubscription;
+      // Headless Chromium has no push service, so stand in a fake one. Like a real phone, the
+      // subscription and permission survive reloads.
+      let permission = (localStorage.getItem("e2e-push-permission") ?? notifications) as NotificationPermission;
+      const makeSub = (endpoint: string) =>
+        ({
+          endpoint,
+          getKey: () => new Uint8Array([1, 2, 3]).buffer,
+          unsubscribe: async () => {
+            localStorage.removeItem("e2e-push-endpoint");
+            sub = null;
+            return true;
+          },
+        }) as unknown as PushSubscription;
+      const saved = localStorage.getItem("e2e-push-endpoint");
+      let sub: PushSubscription | null = saved ? makeSub(saved) : null;
+      const subscribe = async () => {
+        const endpoint = `https://push.example.com/${Math.random().toString(36).slice(2)}`;
+        localStorage.setItem("e2e-push-endpoint", endpoint);
+        return (sub = makeSub(endpoint));
+      };
       class FakeNotification {
         static get permission() {
           return permission;
         }
         static async requestPermission() {
           if (permission === "default") permission = "granted";
+          localStorage.setItem("e2e-push-permission", permission);
           return permission;
         }
       }
@@ -65,13 +78,12 @@ export async function phone(context: BrowserContext, opts: PhoneOptions = {}): P
       const reg = {
         pushManager: {
           getSubscription: async () => sub,
-          subscribe: async () => (sub = fakeSub),
+          subscribe,
         },
       };
-      Object.defineProperty(navigator, "serviceWorker", {
-        value: { ready: Promise.resolve(reg), register: async () => reg, addEventListener() {} },
-        configurable: true,
-      });
+      // An event target, so tests can deliver the messages public/sw.js posts on a notification tap.
+      const sw = Object.assign(new EventTarget(), { ready: Promise.resolve(reg), register: async () => reg, startMessages() {} });
+      Object.defineProperty(navigator, "serviceWorker", { value: sw, configurable: true });
     },
     [opts.installed ?? true, ns, opts.player?.token ?? "", opts.player?.refreshToken ?? "", opts.notifications ?? "default"] as const,
   );

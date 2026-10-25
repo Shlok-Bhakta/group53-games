@@ -194,7 +194,7 @@ export function ArrivalPills() {
   }, [others, loaded]);
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+8px)] z-50 flex flex-col items-center gap-2" aria-live="polite">
+    <div className="pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+36px)] z-50 flex flex-col items-center gap-2" aria-live="polite">
       <AnimatePresence>
         {arrivals.map((a) => (
           <motion.div

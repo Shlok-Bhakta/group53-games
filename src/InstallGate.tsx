@@ -17,6 +17,12 @@ export function InstallGate({ children }: { children: ReactNode }) {
           The games run as an app so they can ping you when it's your turn or someone comes for you. It takes about ten seconds.
         </p>
       </div>
+      {location.pathname.startsWith("/chess/") && (
+        <p className="rounded-xl border-2 border-primary/40 bg-primary/8 p-4 leading-relaxed">
+          <span className="font-semibold">Already installed?</span> Open Group 53 from your home screen. Links can't open the app directly, but this game is waiting in
+          the inbox on its home screen.
+        </p>
+      )}
       {inAppBrowser ? <OpenInBrowser /> : platform === "ios" ? <IosSteps /> : <AndroidSteps />}
     </div>
   );

@@ -1,7 +1,9 @@
 import { Link } from "react-router";
 import { motion } from "motion/react";
-import { LockSimpleIcon, PlayIcon, ShareNetworkIcon } from "@phosphor-icons/react";
+import { HammerIcon, LockSimpleIcon, PlayIcon, ShareNetworkIcon } from "@phosphor-icons/react";
 import { games } from "@/games";
+import { ChessBanner } from "@/games/chess/ChessBanner";
+import { Inbox } from "@/games/chess/Inbox";
 import { Tiles } from "@/Tiles";
 import { Button } from "@/components/ui/button";
 import { LargeTitle } from "@/components/AppHeader";
@@ -29,16 +31,27 @@ export function Home() {
           className="overflow-hidden rounded-3xl border bg-card"
         >
           <div className="relative grid place-items-center bg-muted/60 px-4 py-9 [background-image:radial-gradient(color-mix(in_oklch,var(--foreground)_9%,transparent)_1px,transparent_1px)] [background-size:14px_14px]">
-            <Tiles word={g.tiles.word} states={g.tiles.states} flip label={g.name} />
+            {g.art === "chess" ? <ChessBanner /> : <Tiles word={g.tiles.word} states={g.tiles.states} flip label={g.name} />}
           </div>
           <div className="p-5">
             <div className="flex items-center justify-between gap-3">
               <h2 className="font-display text-2xl leading-tight">{g.name}</h2>
-              <PlayingNow gamePath={g.path} />
+              {g.wip ? (
+                <span className="flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">
+                  <HammerIcon weight="bold" /> Work in progress
+                </span>
+              ) : (
+                <PlayingNow gamePath={g.path} />
+              )}
             </div>
             <p className="mt-1.5 text-[0.95rem] leading-relaxed text-muted-foreground">{g.blurb}</p>
+            {g.path === "/chess" && !locked && <Inbox className="mt-4" />}
             <div className="mt-5 flex gap-2.5">
-              {locked ? (
+              {g.wip ? (
+                <Button size="xl" className="flex-1" variant="secondary" disabled>
+                  Coming soon
+                </Button>
+              ) : locked ? (
                 <Button size="xl" className="flex-1" variant="secondary" disabled>
                   <LockSimpleIcon weight="bold" /> Locked
                 </Button>

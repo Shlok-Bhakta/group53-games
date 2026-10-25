@@ -61,9 +61,22 @@ describe("profiles", () => {
 });
 
 describe("presence", () => {
+  test("heartbeats that change nothing don't rewrite the row", async () => {
+    const t = setup();
+    const { as } = await signedIn(t);
+    await as.mutation(api.presence.heartbeat, { path: "/", online: true });
+    const first = (await t.run((ctx) => ctx.db.query("presence").collect()))[0];
+    await as.mutation(api.presence.heartbeat, { path: "/", online: true });
+    expect((await t.run((ctx) => ctx.db.query("presence").collect()))[0]._creationTime).toBe(first._creationTime);
+    expect((await t.run((ctx) => ctx.db.query("presence").collect()))[0].lastSeen).toBe(first.lastSeen);
+    await as.mutation(api.presence.heartbeat, { path: "/crew", online: true });
+    expect((await t.run((ctx) => ctx.db.query("presence").collect()))[0].path).toBe("/crew");
+  });
+
   test("taps clamp to the screen and count up", async () => {
     const t = setup();
     const { as, userId } = await signedIn(t);
+    await as.mutation(api.presence.heartbeat, { path: "/crew", online: true });
     await as.mutation(api.presence.tap, { x: 1.7, y: -20, path: "/crew" });
     await as.mutation(api.presence.tap, { x: 0.25, y: 300, path: "/crew" });
     const [row] = await as.query(api.presence.list, {});

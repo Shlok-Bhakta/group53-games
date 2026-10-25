@@ -140,7 +140,7 @@ test.describe("signed in", () => {
     await chrisPage.goto("/");
     await expect(page.getByLabel("1 online")).toBeVisible();
     await expect(page.getByText("Chris is playing")).toHaveCount(0);
-    await chrisPage.goto("/wordle");
+    await chrisPage.goto("/chess");
     await expect(page.getByText("Chris is playing")).toBeVisible();
     await other.close();
   });
@@ -241,6 +241,21 @@ test.describe("signed in", () => {
     await page.getByRole("button", { name: "Sign out" }).click();
     await page.getByRole("alertdialog").getByRole("button", { name: "Sign out" }).click();
     await expect(page.getByRole("button", { name: "Sign in with Discord" })).toBeVisible();
+  });
+
+  test("a new deploy reloads the app, but only offers an update inside a game", async ({ context }) => {
+    const me = await createPlayer("Shlok");
+    const page = await phone(context, { player: me });
+    await page.route("**/version.json*", (route) => route.fulfill({ json: { id: "a-newer-build" } }));
+    let loads = 0;
+    page.on("load", () => loads++);
+    await page.goto("/");
+    await expect.poll(() => loads, { timeout: 8000 }).toBeGreaterThan(1);
+    // It reloads once for a given build, then offers the update instead of looping.
+    await expect(page.getByText("A new version is ready")).toBeVisible({ timeout: 8000 });
+    expect(loads).toBe(2);
+    await page.goto("/chess/k000000000000000000000000000000");
+    await expect(page.getByText("A new version is ready")).toBeVisible({ timeout: 8000 });
   });
 
   for (const path of ["/", "/crew", "/you"]) {

@@ -13,7 +13,7 @@ services:
       REDACT_LOGS_TO_CLIENT: "true"
       DISABLE_BEACON: "true"
     volumes:
-      - /home/shlok/usb1/docker/group53/convex-data:/convex/data
+      - /home/shlok/ssd-data/group53/convex-data:/convex/data
     ports:
       - "100.88.30.127:38441:3210"
       - "100.88.30.127:38442:3211"

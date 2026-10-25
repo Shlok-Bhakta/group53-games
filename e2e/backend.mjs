@@ -46,7 +46,7 @@ async function waitFor(url, timeoutMs = 60_000) {
   throw new Error(`Timed out waiting for ${url}`);
 }
 
-export async function startBackend() {
+export async function startBackend({ build = true } = {}) {
   const apiPort = await freePort();
   // The backend verifies session tokens by fetching its own site origin from inside the container,
   // where the site proxy always listens on 3211. Binding host port 3211 too makes one URL work on both sides.
@@ -83,7 +83,15 @@ export async function startBackend() {
   // The CLI reads the self-hosted target from the environment; deploy first so env vars apply to a live deployment.
   execSync("npx convex deploy -y", { cwd: ROOT, env, stdio: "inherit" });
   for (const [k, v] of Object.entries(vars)) execFileSync("npx", ["convex", "env", "set", "--", k, v], { cwd: ROOT, env, stdio: "ignore" });
-  execSync("npx vite build --outDir e2e/.state/dist --emptyOutDir", { cwd: ROOT, env: { ...env, VITE_CONVEX_URL: url }, stdio: "inherit" });
+  if (build) execSync("npx vite build --outDir e2e/.state/dist --emptyOutDir", { cwd: ROOT, env: { ...env, VITE_CONVEX_URL: url }, stdio: "inherit" });
+
+  // The backend compiles each module the first time it runs; warm them so the first test isn't slow.
+  for (const fn of ["testing:reset", "testing:createPlayer"]) {
+    try {
+      execFileSync("npx", ["convex", "run", fn, fn === "testing:createPlayer" ? '{"name":"warmup"}' : "{}"], { cwd: ROOT, env, stdio: "ignore" });
+    } catch {}
+  }
+  execFileSync("npx", ["convex", "run", "testing:reset", "{}"], { cwd: ROOT, env, stdio: "ignore" });
 
   const state = { name, url, siteUrl, adminKey };
   mkdirSync(path.dirname(STATE_FILE), { recursive: true });

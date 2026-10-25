@@ -32,18 +32,39 @@ self.addEventListener("push", (event) => {
   );
 });
 
+// Where a tapped notification wants to go, kept in the Cache API so the app can pick it up even when the
+// direct hand-off below doesn't arrive (iOS sometimes opens the app at its start URL instead).
+const PENDING = "group53-pending";
+async function rememberClick(url) {
+  try {
+    const cache = await caches.open(PENDING);
+    await cache.put("/__pending-navigation", new Response(JSON.stringify({ url, at: Date.now() }), { headers: { "content-type": "application/json" } }));
+  } catch (err) {
+    console.error("couldn't save the notification target:", err);
+  }
+}
+
+// Tapping a notification takes you to its page. An open app gets a message and routes there itself
+// (WindowClient.navigate() is unreliable in iOS standalone apps and reloads the page elsewhere); with
+// nothing open, a new window opens at the URL.
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification.data?.url || "/";
+  const url = new URL(event.notification.data?.url || "/", self.location.origin).href;
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
-      for (const client of clients) {
-        if ("focus" in client) {
-          client.navigate(url);
-          return client.focus();
+    (async () => {
+      await rememberClick(url);
+      const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const client = clients.find((c) => new URL(c.url).origin === self.location.origin) ?? clients[0];
+      if (client) {
+        client.postMessage({ type: "navigate", url });
+        try {
+          await client.focus();
+        } catch {
+          // Some platforms only allow focusing in direct response to a click; the message still lands.
         }
+        return;
       }
-      return self.clients.openWindow(url);
-    }),
+      await self.clients.openWindow(url);
+    })(),
   );
 });

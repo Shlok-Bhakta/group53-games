@@ -14,7 +14,7 @@ function tokens(id: string, mode: "light" | "dark") {
   return Object.fromEntries([...body.matchAll(/--([\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
 }
 
-const REQUIRED = ["background", "foreground", "card", "primary", "primary-foreground", "muted", "muted-foreground", "border", "destructive", "tile-green", "tile-yellow", "tile-gray", "tile-hit", "tile-ink", "tile-yellow-ink", "tile-gray-ink", "tile-hit-ink", "tile-blank", "tile-edge"];
+const REQUIRED = ["background", "foreground", "card", "primary", "primary-foreground", "muted", "muted-foreground", "border", "destructive", "tile-green", "tile-yellow", "tile-gray", "tile-hit", "tile-ink", "tile-yellow-ink", "tile-gray-ink", "tile-hit-ink", "tile-blank", "tile-edge", "board-light", "board-dark"];
 
 const contrast = (a: string, b: string) => wcagContrast(parse(a)!, parse(b)!);
 

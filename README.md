@@ -2,7 +2,7 @@
 
 # Group 53 Games
 
-Small games for a small group. React and Vite on the front end, a self-hosted Convex backend on kiwi (SQLite), and Discord sign-in through Convex Auth. Each game lives at its own path: `/wordle` is PvP Wordle.
+Small games for a small group. React and Vite on the front end, a self-hosted Convex backend on kiwi (SQLite), and Discord sign-in through Convex Auth. Each game lives at its own path. `/chess` has classic (async, with turn notifications and 8-hour reminders) and real-time chess (Kung Fu Chess rules, like rtchess.org), plus Elo leaderboards. `/wordle` is a work in progress.
 
 ## Local development
 
@@ -20,7 +20,7 @@ npm run dev
 
 ## Kiwi deployment
 
-The stack lives in `~/Services/group53` on kiwi. `compose.yaml` runs Convex, its dashboard, the web app, the `og` link-preview service, and a Cloudflare Tunnel (`group53-games`). Convex stores SQLite and files at `/home/shlok/usb1/docker/group53/convex-data`. `.env` there holds `INSTANCE_SECRET`, `CONVEX_URL`, and `CONVEX_SITE_URL`. `secrets/` holds the tunnel credentials and the admin key, both mode 600.
+The stack lives in `~/Services/group53` on kiwi. `compose.yaml` runs Convex, its dashboard, the web app, the `og` link-preview service, and a Cloudflare Tunnel (`group53-games`). Convex stores SQLite and files at `/home/shlok/ssd-data/group53/convex-data` on the SSD (the 5TB USB disk is SMR and far too slow for it). `.env` there holds `INSTANCE_SECRET`, `CONVEX_URL`, and `CONVEX_SITE_URL`. `secrets/` holds the tunnel credentials and the admin key, both mode 600.
 
 | Hostname | Target |
 | --- | --- |
@@ -39,3 +39,7 @@ The Discord application's redirect URI is `https://group53-site.shlokbhakta.dev/
 ## Link previews
 
 nginx sends link unfurlers (Discordbot, Slackbot, iMessage, and similar) to `og/`, which returns Open Graph tags and renders a 1200×630 card from live Convex data with satori. It reads data through internal queries in `convex/previews.ts` using the admin key, so nothing is exposed publicly. Card image URLs carry a hash of the data, and the in-app Share button adds a random `s` parameter, so Discord unfurls each shared link fresh. To add a preview for a new page, add an entry to `PAGES` and a card to `CARDS` in `og/server.mjs`.
+
+## Credits
+
+Chess pieces by Colin M.L. Burnett, CC BY-SA 3.0, via Wikimedia Commons (see `public/pieces/LICENSE.md`). Real-time chess rules follow [rtchess.org](https://rtchess.org).

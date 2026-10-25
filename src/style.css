@@ -87,6 +87,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: #ffffff;
   --tile-edge: oklch(0.8 0.025 160);
+  --board-light: #ebecd0;
+  --board-dark: #739552;
 }
 :is(.dark[data-palette="felt"], .dark [data-palette="felt"]), .dark {
   --background: oklch(0.255 0.045 162);
@@ -117,6 +119,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: oklch(0.34 0.05 162);
   --tile-edge: oklch(0.46 0.05 162);
+  --board-light: #e6e8c7;
+  --board-dark: #5f8a4a;
 }
 
 [data-palette="catppuccin"] {
@@ -148,6 +152,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: #eff1f5;
   --tile-edge: #bcc0cc;
+  --board-light: #e6e9ef;
+  --board-dark: #8c8fa1;
 }
 :is(.dark[data-palette="catppuccin"], .dark [data-palette="catppuccin"]) {
   --background: #181825;
@@ -178,6 +184,8 @@
   --tile-hit-ink: #11111b;
   --tile-blank: #313244;
   --tile-edge: #45475a;
+  --board-light: #bac2de;
+  --board-dark: #585b70;
 }
 
 [data-palette="gruvbox"] {
@@ -209,6 +217,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: #fbf1c7;
   --tile-edge: #bdae93;
+  --board-light: #ebdbb2;
+  --board-dark: #a89984;
 }
 :is(.dark[data-palette="gruvbox"], .dark [data-palette="gruvbox"]) {
   --background: #1d2021;
@@ -239,6 +249,8 @@
   --tile-hit-ink: #1d2021;
   --tile-blank: #3c3836;
   --tile-edge: #504945;
+  --board-light: #d5c4a1;
+  --board-dark: #7c6f64;
 }
 
 [data-palette="nord"] {
@@ -270,6 +282,8 @@
   --tile-hit-ink: #2e3440;
   --tile-blank: #eceff4;
   --tile-edge: #c2cad8;
+  --board-light: #e5e9f0;
+  --board-dark: #81a1c1;
 }
 :is(.dark[data-palette="nord"], .dark [data-palette="nord"]) {
   --background: #2e3440;
@@ -300,6 +314,8 @@
   --tile-hit-ink: #2e3440;
   --tile-blank: #434c5e;
   --tile-edge: #4c566a;
+  --board-light: #d8dee9;
+  --board-dark: #5e81ac;
 }
 
 [data-palette="tokyonight"] {
@@ -331,6 +347,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: #e9e9ec;
   --tile-edge: #b4b8cc;
+  --board-light: #e9e9ec;
+  --board-dark: #7890dd;
 }
 :is(.dark[data-palette="tokyonight"], .dark [data-palette="tokyonight"]) {
   --background: #16161e;
@@ -361,6 +379,8 @@
   --tile-hit-ink: #16161e;
   --tile-blank: #292e42;
   --tile-edge: #3b4261;
+  --board-light: #c0caf5;
+  --board-dark: #3d59a1;
 }
 
 [data-palette="dracula"] {
@@ -392,6 +412,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: #fffbeb;
   --tile-edge: #cfcbb4;
+  --board-light: #fffbeb;
+  --board-dark: #a69ccf;
 }
 :is(.dark[data-palette="dracula"], .dark [data-palette="dracula"]) {
   --background: #21222c;
@@ -422,6 +444,8 @@
   --tile-hit-ink: #21222c;
   --tile-blank: #343746;
   --tile-edge: #44475a;
+  --board-light: #f8f8f2;
+  --board-dark: #6272a4;
 }
 
 [data-palette="rosepine"] {
@@ -453,6 +477,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: #fffaf3;
   --tile-edge: #cecacd;
+  --board-light: #faf4ed;
+  --board-dark: #d7827e;
 }
 :is(.dark[data-palette="rosepine"], .dark [data-palette="rosepine"]) {
   --background: #191724;
@@ -483,6 +509,8 @@
   --tile-hit-ink: #191724;
   --tile-blank: #26233a;
   --tile-edge: #403d52;
+  --board-light: #e0def4;
+  --board-dark: #6e6a86;
 }
 
 [data-palette="slate"] {
@@ -514,6 +542,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: #ffffff;
   --tile-edge: #cbd5e1;
+  --board-light: #e2e8f0;
+  --board-dark: #64748b;
 }
 :is(.dark[data-palette="slate"], .dark [data-palette="slate"]) {
   --background: #0f172a;
@@ -544,6 +574,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: #1e293b;
   --tile-edge: #475569;
+  --board-light: #cbd5e1;
+  --board-dark: #475569;
 }
 
 [data-palette="varsity"] {
@@ -575,6 +607,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: #ffffff;
   --tile-edge: oklch(0.8 0.02 20);
+  --board-light: #f5e6c8;
+  --board-dark: #9b2c3a;
 }
 :is(.dark[data-palette="varsity"], .dark [data-palette="varsity"]) {
   --background: oklch(0.22 0.04 15);
@@ -605,6 +639,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: oklch(0.31 0.05 15);
   --tile-edge: oklch(0.44 0.06 15);
+  --board-light: #f0dcb4;
+  --board-dark: #7a1f2b;
 }
 
 [data-palette="wordle"] {
@@ -636,6 +672,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: #ffffff;
   --tile-edge: #d3d6da;
+  --board-light: #ebecd0;
+  --board-dark: #6aaa64;
 }
 :is(.dark[data-palette="wordle"], .dark [data-palette="wordle"]) {
   --background: #121213;
@@ -666,6 +704,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: #1d1d1f;
   --tile-edge: #3a3a3c;
+  --board-light: #d3d6da;
+  --board-dark: #538d4e;
 }
 
 :root { --radius: 0.875rem; }
