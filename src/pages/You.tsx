@@ -1,0 +1,280 @@
+import { useState, type ReactNode } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { useAuthActions } from "@convex-dev/auth/react";
+import {
+  BellRingingIcon,
+  CaretRightIcon,
+  CheckIcon,
+  PaletteIcon,
+  PaperPlaneTiltIcon,
+  PencilSimpleIcon,
+  SignOutIcon,
+  TextAaIcon,
+  type Icon,
+} from "@phosphor-icons/react";
+import { motion } from "motion/react";
+import { toast } from "sonner";
+import { api } from "../../convex/_generated/api";
+import { LargeTitle } from "@/components/AppHeader";
+import { CardEditor } from "@/components/CardEditor";
+import { PlayerCard } from "@/components/PlayerCard";
+import { Segmented } from "@/components/Segmented";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { useNotifications } from "@/notifications";
+import { useTheme } from "@/theme";
+import { FONTS, PALETTES } from "@/themes";
+import { cn } from "@/lib/utils";
+
+export function You() {
+  const mine = useQuery(api.profiles.mine);
+  const [editing, setEditing] = useState(false);
+
+  return (
+    <div className="flex flex-col gap-7">
+      <div>
+        <LargeTitle title="You" />
+        {mine ? (
+          <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: "spring", stiffness: 260, damping: 26 }}>
+            <PlayerCard player={mine} online size="hero" />
+          </motion.div>
+        ) : (
+          <Skeleton className="aspect-[5/6] rounded-[22px]" />
+        )}
+        <Button size="xl" variant="secondary" className="mt-3 w-full" onClick={() => setEditing(true)} disabled={!mine}>
+          <PencilSimpleIcon weight="bold" /> Edit card
+        </Button>
+      </div>
+
+      {mine && <CardEditor open={editing} onOpenChange={setEditing} player={mine} />}
+
+      <NotificationsGroup />
+      <AppearanceGroup />
+      <AccountGroup name={mine?.name} username={mine?.username} />
+    </div>
+  );
+}
+
+function NotificationsGroup() {
+  const push = useNotifications();
+  const toggle = async (next: boolean) => {
+    try {
+      await (next ? push.enable() : push.disable());
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+  };
+  const footer =
+    push.state === "blocked"
+      ? "Notifications are blocked for Group 53. Turn them on in your phone's settings, then reopen the app."
+      : "Turns, attacks, and results. Games stay locked while these are off.";
+  return (
+    <Group title="Notifications" footer={footer}>
+      <Row icon={BellRingingIcon} tint="#ff453a" label="Notifications" htmlFor="push-switch">
+        <Switch
+          id="push-switch"
+          checked={push.state === "on"}
+          disabled={push.busy || push.state === "blocked" || push.state === "unsupported" || push.state === "loading"}
+          onCheckedChange={(v) => void toggle(v)}
+        />
+      </Row>
+      {push.state === "on" && (
+        <Row
+          icon={PaperPlaneTiltIcon}
+          tint="#30d158"
+          label="Send a test notification"
+          onClick={() => void push.sendTest().then(() => toast.success("Sent. It should land in a few seconds."))}
+        />
+      )}
+    </Group>
+  );
+}
+
+function AppearanceGroup() {
+  const { theme, setTheme, palette, setPalette, font, setFont } = useTheme();
+  const [sheet, setSheet] = useState<"theme" | "font" | null>(null);
+  return (
+    <Group title="Appearance">
+      <div className="p-3">
+        <Segmented
+          label="Mode"
+          value={theme}
+          onChange={setTheme}
+          options={[
+            { value: "system", label: "Auto" },
+            { value: "light", label: "Light" },
+            { value: "dark", label: "Dark" },
+          ]}
+        />
+      </div>
+      <Row icon={PaletteIcon} tint="#ff9f0a" label="Theme" value={PALETTES.find((p) => p.id === palette)?.name} onClick={() => setSheet("theme")} />
+      <Row icon={TextAaIcon} tint="#64d2ff" label="Font" value={FONTS.find((f) => f.id === font)?.name} onClick={() => setSheet("font")} />
+
+      <Sheet open={sheet === "theme"} onClose={() => setSheet(null)} title="Theme">
+        <div className="grid grid-cols-2 gap-3">
+          {PALETTES.map((p) => (
+            <motion.button
+              key={p.id}
+              type="button"
+              whileTap={{ scale: 0.96 }}
+              data-palette={p.id}
+              aria-pressed={palette === p.id}
+              onClick={() => setPalette(p.id)}
+              className="relative flex touch-manipulation flex-col gap-3 rounded-2xl bg-background p-3 text-left text-foreground outline-none ring-1 ring-border focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
+              {palette === p.id && (
+                <motion.span layoutId="theme-selected" className="absolute -inset-[3px] rounded-[19px] border-[3px] border-primary" transition={{ type: "spring", stiffness: 500, damping: 36 }} />
+              )}
+              <span className="flex items-center gap-1" aria-hidden="true">
+                {(["green", "yellow", "gray", "hit"] as const).map((c) => (
+                  <span key={c} className={`tile tile-${c}`} style={{ width: 22, height: 22, borderRadius: 5 }} />
+                ))}
+              </span>
+              <span className="flex items-center justify-between rounded-xl bg-card px-3 py-2.5">
+                <span className="min-w-0">
+                  <span className="block truncate font-bold leading-tight">{p.name}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{p.note}</span>
+                </span>
+                <span className="size-5 shrink-0 rounded-full bg-primary" />
+              </span>
+            </motion.button>
+          ))}
+        </div>
+      </Sheet>
+
+      <Sheet open={sheet === "font"} onClose={() => setSheet(null)} title="Font">
+        <div className="flex flex-col gap-2">
+          {FONTS.map((f) => (
+            <motion.button
+              key={f.id}
+              type="button"
+              whileTap={{ scale: 0.98 }}
+              data-font={f.id}
+              aria-pressed={font === f.id}
+              onClick={() => setFont(f.id)}
+              style={{ fontFamily: "var(--app-font)" }}
+              className={cn(
+                "flex min-h-[72px] touch-manipulation items-center justify-between gap-3 rounded-2xl border-2 bg-card px-4 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                font === f.id ? "border-primary" : "border-transparent",
+              )}
+            >
+              <span>
+                <span className="font-display block text-xl leading-tight">PvP Wordle</span>
+                <span className="block text-sm text-muted-foreground">{f.name}</span>
+              </span>
+              {font === f.id && <CheckIcon size={22} weight="bold" className="shrink-0 text-primary" />}
+            </motion.button>
+          ))}
+        </div>
+      </Sheet>
+    </Group>
+  );
+}
+
+function AccountGroup({ name, username }: { name?: string; username?: string }) {
+  const { signOut } = useAuthActions();
+  return (
+    <Group title="Account" footer={name ? `Signed in with Discord as ${username ? `@${username}` : name}.` : undefined}>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <button type="button" className="flex min-h-[52px] w-full touch-manipulation items-center gap-3 px-4 text-left font-semibold text-destructive active:bg-muted">
+            <SignOutIcon size={22} weight="bold" /> Sign out
+          </button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign out?</AlertDialogTitle>
+            <AlertDialogDescription>You'll need to sign in with Discord again to play.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="h-12">Stay signed in</AlertDialogCancel>
+            <AlertDialogAction className="h-12" variant="destructive" onClick={() => void signOut()}>
+              Sign out
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Group>
+  );
+}
+
+function Group({ title, footer, children }: { title: string; footer?: string; children: ReactNode }) {
+  return (
+    <section>
+      <h2 className="px-1 pb-2 text-[13px] font-semibold text-muted-foreground">{title}</h2>
+      <div className="divide-y divide-border overflow-hidden rounded-2xl border bg-card">{children}</div>
+      {footer && <p className="px-1 pt-2 text-[13px] leading-snug text-muted-foreground">{footer}</p>}
+    </section>
+  );
+}
+
+// An iOS settings row: tinted icon tile, label, then a control, a value with a chevron, or nothing.
+function Row({
+  icon: RowIcon,
+  tint,
+  label,
+  value,
+  onClick,
+  htmlFor,
+  children,
+}: {
+  icon: Icon;
+  tint: string;
+  label: string;
+  value?: string;
+  onClick?: () => void;
+  htmlFor?: string;
+  children?: ReactNode;
+}) {
+  const inner = (
+    <>
+      <span className="grid size-[30px] shrink-0 place-items-center rounded-[9px] text-white" style={{ background: tint }}>
+        <RowIcon size={18} weight="fill" />
+      </span>
+      {htmlFor ? (
+        <label htmlFor={htmlFor} className="flex-1 text-[1rem] font-medium">
+          {label}
+        </label>
+      ) : (
+        <span className="flex-1 text-[1rem] font-medium">{label}</span>
+      )}
+      {value && <span className="text-[0.95rem] text-muted-foreground">{value}</span>}
+      {onClick && <CaretRightIcon size={16} weight="bold" className="text-muted-foreground/70" />}
+      {children}
+    </>
+  );
+  const cls = "flex min-h-[52px] w-full items-center gap-3 px-4 text-left";
+  return onClick ? (
+    <button type="button" onClick={onClick} className={cn(cls, "touch-manipulation active:bg-muted")}>
+      {inner}
+    </button>
+  ) : (
+    <div className={cls}>{inner}</div>
+  );
+}
+
+function Sheet({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
+  return (
+    <Drawer open={open} onOpenChange={(o) => !o && onClose()}>
+      <DrawerContent className="max-h-[92dvh]">
+        <DrawerHeader className="pb-2">
+          <DrawerTitle className="font-display text-xl">{title}</DrawerTitle>
+        </DrawerHeader>
+        <div className="overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom)+20px)] pt-1">{children}</div>
+      </DrawerContent>
+    </Drawer>
+  );
+}

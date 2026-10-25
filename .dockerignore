@@ -1,0 +1,15 @@
+**/node_modules
+dist
+.git
+.env
+.env.local
+.playtest-*
+.env.production
+.convex
+tsconfig.tsbuildinfo
+secrets
+og
+e2e
+test-results
+playwright-report
+scripts

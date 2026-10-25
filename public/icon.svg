@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#121213"/>
+  <rect x="96" y="166" width="152" height="180" rx="14" fill="#538d4e"/>
+  <rect x="264" y="166" width="152" height="180" rx="14" fill="#b59f3b"/>
+  <text x="172" y="256" dy="0.36em" text-anchor="middle" font-family="Noto Sans, DejaVu Sans, system-ui, sans-serif" font-size="136" font-weight="700" fill="#ffffff">5</text>
+  <text x="340" y="256" dy="0.36em" text-anchor="middle" font-family="Noto Sans, DejaVu Sans, system-ui, sans-serif" font-size="136" font-weight="700" fill="#ffffff">3</text>
+</svg>

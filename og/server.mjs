@@ -1,0 +1,265 @@
+// Link previews for Discord and other unfurlers. nginx sends crawler requests here; people never see this.
+// Each page gets Open Graph tags, and its image is rendered on demand from live Convex data.
+import http from "node:http";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import satori from "satori";
+import { Resvg } from "@resvg/resvg-js";
+import { ConvexHttpClient } from "convex/browser";
+import { anyApi } from "convex/server";
+
+const require = createRequire(import.meta.url);
+const SITE = process.env.SITE_URL ?? "https://group53.shlokbhakta.dev";
+const PORT = Number(process.env.PORT ?? 8787);
+const EMBED_COLOR = "#e8b647";
+
+const convex = new ConvexHttpClient(process.env.CONVEX_URL ?? "http://convex:3210");
+convex.setAdminAuth(readFileSync(process.env.ADMIN_KEY_FILE ?? "/run/secrets/admin_key", "utf8").trim());
+
+const font = (weight) => readFileSync(require.resolve(`@fontsource/rubik/files/rubik-latin-${weight}-normal.woff`));
+const FONTS = [
+  { name: "Rubik", data: font(500), weight: 500, style: "normal" },
+  { name: "Rubik", data: font(800), weight: 800, style: "normal" },
+];
+
+// Mirrors the ring styles in src/style.css. satori has no conic gradients, so holo is linear.
+const RINGS = {
+  none: null,
+  white: "#f8fafc",
+  green: "#5fae57",
+  yellow: "#e3b341",
+  red: "#e5484d",
+  blue: "#3b82f6",
+  purple: "#a855f7",
+  pink: "#ec4899",
+  gold: "linear-gradient(135deg, #fef3c7, #f59e0b 45%, #b45309 70%, #fde68a)",
+  fire: "linear-gradient(200deg, #fde047, #f97316 45%, #dc2626)",
+  toxic: "linear-gradient(160deg, #ecfccb, #84cc16 45%, #166534)",
+  holo: "linear-gradient(135deg, #f43f5e, #f59e0b, #84cc16, #06b6d4, #8b5cf6)",
+  rgb: "linear-gradient(90deg, #ff0040, #ffbf00, #00ff80, #0080ff, #bf00ff)",
+  ice: "linear-gradient(160deg, #f0f9ff, #7dd3fc 45%, #2563eb)",
+};
+
+const TILE = { green: "#5fae57", yellow: "#e3b341", gray: "#5d6b66", hit: "#e5484d", blank: "#2b5a48" };
+
+// Each shareable path: its title, description, and which image to draw.
+const PAGES = {
+  "/": {
+    title: () => "Group 53 Games",
+    description: (crew) => `${crew.length} in the crew. Little games for the group, built so you can mess with each other.`,
+    card: "home",
+  },
+  "/wordle": {
+    title: () => "PvP Wordle",
+    description: () => "Everyone gets the same word. Solve it, then spend what you earn messing up someone else's board.",
+    card: "wordle",
+  },
+  "/crew": {
+    title: () => "The crew",
+    description: (crew) => crew.map((p) => p.name).join(", "),
+    card: "home",
+  },
+};
+
+// --- tiny element helper for satori ---
+const h = (type, style, ...children) => ({ type, props: { style: { display: "flex", boxSizing: "border-box", ...style }, children: children.flat() } });
+
+function tiles(word, states, size) {
+  return h(
+    "div",
+    { gap: size * 0.12 },
+    [...word].map((ch, i) => {
+      const state = states[i] ?? "blank";
+      return h(
+        "div",
+        {
+          width: size,
+          height: size,
+          borderRadius: size * 0.17,
+          background: TILE[state],
+          color: state === "yellow" ? "#1d2a24" : "#ffffff",
+          fontSize: size * 0.56,
+          fontWeight: 800,
+          alignItems: "center",
+          justifyContent: "center",
+          boxShadow: `inset 0 -${size * 0.07}px 0 rgba(0,0,0,0.2)`,
+          transform: state === "hit" ? `rotate(-9deg) translateY(${size * 0.06}px)` : undefined,
+        },
+        ch,
+      );
+    }),
+  );
+}
+
+function avatar(p, size, image) {
+  const ring = p.frame === "none" ? null : (["solid", "comet", "pulse", "neon"].includes(p.frame) ? p.frameColor : RINGS[p.frame]) ?? null;
+  const pad = ring ? size * 0.06 : 0;
+  const face = image
+    ? { type: "img", props: { src: image, width: size - pad * 2 - size * 0.07, height: size - pad * 2 - size * 0.07, style: { borderRadius: 9999 } } }
+    : h(
+        "div",
+        { width: "100%", height: "100%", borderRadius: 9999, background: "#2f6b55", color: "#d7efe4", fontSize: size * 0.42, fontWeight: 800, alignItems: "center", justifyContent: "center" },
+        p.name.slice(0, 1).toUpperCase(),
+      );
+  return h(
+    "div",
+    { position: "relative", width: size, height: size },
+    h(
+      "div",
+      { width: size, height: size, borderRadius: 9999, padding: pad, background: ring ?? "transparent", backgroundImage: ring?.startsWith("linear") ? ring : undefined },
+      h("div", { width: "100%", height: "100%", borderRadius: 9999, padding: size * 0.035, background: "#123b2d", alignItems: "center", justifyContent: "center" }, face),
+    ),
+    p.badge ? h("div", { position: "absolute", right: -size * 0.06, bottom: -size * 0.06, fontSize: size * 0.36 }, p.badge) : [],
+  );
+}
+
+function crewRow(crew, images, size = 92) {
+  const shown = crew.slice(0, 7);
+  return h(
+    "div",
+    { alignItems: "center" },
+    shown.map((p, i) => h("div", { marginLeft: i === 0 ? 0 : -size * 0.18 }, avatar(p, size, images[i]))),
+    crew.length > shown.length
+      ? h("div", { marginLeft: 16, color: "#d7efe4", fontSize: 34, fontWeight: 800 }, `+${crew.length - shown.length}`)
+      : [],
+  );
+}
+
+function frame(...children) {
+  return h(
+    "div",
+    {
+      width: 1200,
+      height: 630,
+      flexDirection: "column",
+      justifyContent: "space-between",
+      padding: "56px 64px",
+      backgroundImage: "linear-gradient(140deg, #1f6b4f 0%, #134232 55%, #0b261d 100%)",
+      color: "#f2fbf6",
+      fontFamily: "Rubik",
+    },
+    h("div", { alignItems: "center", gap: 18 }, tiles("53", ["green", "yellow"], 58), h("div", { fontSize: 40, fontWeight: 800 }, "Group 53 Games")),
+    ...children,
+  );
+}
+
+const CARDS = {
+  home: (crew, images) =>
+    frame(
+      h("div", { fontSize: 88, fontWeight: 800, lineHeight: 1.02, letterSpacing: -2, maxWidth: 980 }, "Who are we ruining today?"),
+      h(
+        "div",
+        { alignItems: "center", justifyContent: "space-between" },
+        crewRow(crew, images),
+        h("div", { flexDirection: "column", alignItems: "flex-end", color: "#bfe3d3", fontSize: 30, fontWeight: 500 }, `${crew.length} in the crew`, h("div", { color: EMBED_COLOR, fontWeight: 800 }, "Tap to join")),
+      ),
+    ),
+  wordle: (crew, images) =>
+    frame(
+      h(
+        "div",
+        { flexDirection: "column", gap: 28 },
+        tiles("WORDLE", ["green", "yellow", "gray", "green", "hit", "green"], 118),
+        h("div", { fontSize: 40, fontWeight: 500, color: "#cfe9dd", maxWidth: 900, lineHeight: 1.25 }, "Same word for everyone. Solve it, then wreck someone else's board."),
+      ),
+      h("div", { alignItems: "center", justifyContent: "space-between" }, crewRow(crew, images, 84), h("div", { color: EMBED_COLOR, fontSize: 34, fontWeight: 800 }, "PvP Wordle")),
+    ),
+};
+
+// --- data and assets ---
+async function getCrew() {
+  return await convex.query(anyApi.previews.crew, {});
+}
+
+// satori can't decode GIFs, so ask Discord's CDN for PNGs and inline them.
+async function fetchImage(url) {
+  if (!url) return null;
+  try {
+    const res = await fetch(url.replace(/\.gif(\?|$)/, ".png$1"), { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) return null;
+    const type = res.headers.get("content-type") ?? "image/png";
+    return `data:${type};base64,${Buffer.from(await res.arrayBuffer()).toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+
+// Emoji badges come from Twemoji.
+async function loadAdditionalAsset(code, segment) {
+  if (code !== "emoji") return undefined;
+  const points = [...segment].map((c) => c.codePointAt(0).toString(16)).filter((c) => c !== "fe0f").join("-");
+  try {
+    const res = await fetch(`https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/${points}.svg`, { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) return undefined;
+    return `data:image/svg+xml;base64,${Buffer.from(await res.arrayBuffer()).toString("base64")}`;
+  } catch {
+    return undefined;
+  }
+}
+
+const version = (crew) => createHash("sha1").update(JSON.stringify(crew)).digest("hex").slice(0, 10);
+
+// Renders are cheap but not free; keep each (card, data version) for a few minutes.
+const rendered = new Map();
+async function renderCard(card) {
+  const crew = await getCrew();
+  const key = `${card}:${version(crew)}`;
+  const hit = rendered.get(key);
+  if (hit && Date.now() - hit.at < 5 * 60_000) return hit.png;
+  const images = await Promise.all(crew.slice(0, 7).map((p) => fetchImage(p.image)));
+  const svg = await satori(CARDS[card](crew, images), { width: 1200, height: 630, fonts: FONTS, loadAdditionalAsset });
+  const png = new Resvg(svg, { fitTo: { mode: "width", value: 1200 } }).render().asPng();
+  rendered.set(key, { png, at: Date.now() });
+  return png;
+}
+
+const escape = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+async function pageHtml(pathname, search) {
+  const page = PAGES[pathname] ?? PAGES["/"];
+  const crew = await getCrew();
+  const title = page.title(crew);
+  const description = page.description(crew);
+  const image = `${SITE}/og/image/${page.card}.png?v=${version(crew)}`;
+  const url = `${SITE}${pathname}${search}`;
+  return `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>${escape(title)}</title>
+<meta name="description" content="${escape(description)}">
+<meta property="og:site_name" content="Group 53 Games">
+<meta property="og:type" content="website">
+<meta property="og:url" content="${escape(url)}">
+<meta property="og:title" content="${escape(title)}">
+<meta property="og:description" content="${escape(description)}">
+<meta property="og:image" content="${escape(image)}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="${escape(title)}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="${EMBED_COLOR}">
+</head><body><a href="${escape(url)}">${escape(title)}</a></body></html>`;
+}
+
+http
+  .createServer(async (req, res) => {
+    const { pathname, search } = new URL(req.url ?? "/", SITE);
+    try {
+      const image = pathname.match(/^\/og\/image\/(\w+)\.png$/);
+      if (image) {
+        if (!CARDS[image[1]]) return void res.writeHead(404).end();
+        const png = await renderCard(image[1]);
+        res.writeHead(200, { "content-type": "image/png", "cache-control": "public, max-age=300" });
+        return void res.end(png);
+      }
+      if (pathname === "/og/health") return void res.writeHead(200).end("ok");
+      const html = await pageHtml(pathname, search);
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" });
+      res.end(html);
+    } catch (err) {
+      console.error(req.url, err);
+      res.writeHead(500).end();
+    }
+  })
+  .listen(PORT, () => console.log(`og listening on ${PORT}`));

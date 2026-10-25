@@ -1,0 +1,72 @@
+services:
+  convex:
+    image: ghcr.io/get-convex/convex-backend@sha256:01aaebb72d7e9a32c82d183b3a25ffe15278f4dc656ecf30b21777691929d1ab
+    restart: unless-stopped
+    stop_signal: SIGINT
+    stop_grace_period: 30s
+    environment:
+      INSTANCE_NAME: group53-kiwi
+      INSTANCE_SECRET: ${INSTANCE_SECRET:?set INSTANCE_SECRET in .env}
+      CONVEX_CLOUD_ORIGIN: ${CONVEX_URL:-http://100.88.30.127:38441}
+      CONVEX_SITE_ORIGIN: ${CONVEX_SITE_URL:-http://100.88.30.127:38442}
+      DO_NOT_REQUIRE_SSL: "true"
+      REDACT_LOGS_TO_CLIENT: "true"
+      DISABLE_BEACON: "true"
+    volumes:
+      - /home/shlok/usb1/docker/group53/convex-data:/convex/data
+    ports:
+      - "100.88.30.127:38441:3210"
+      - "100.88.30.127:38442:3211"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3210/version"]
+      interval: 5s
+      timeout: 4s
+      start_period: 30s
+      retries: 12
+  dashboard:
+    image: ghcr.io/get-convex/convex-dashboard@sha256:1300bccca83da1dc6465962539023eb5ca8fcb11cc98995086326a550855d496
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_DEPLOYMENT_URL: http://100.88.30.127:38441
+    ports:
+      - "100.88.30.127:38443:6791"
+    depends_on:
+      convex:
+        condition: service_healthy
+  web:
+    build:
+      context: .
+      args:
+        VITE_CONVEX_URL: ${CONVEX_URL:-http://100.88.30.127:38441}
+    restart: unless-stopped
+    ports:
+      - "100.88.30.127:38440:80"
+    depends_on:
+      convex:
+        condition: service_healthy
+  og:
+    build: ./og
+    restart: unless-stopped
+    user: "1000:1000"
+    environment:
+      CONVEX_URL: http://convex:3210
+      SITE_URL: https://group53.shlokbhakta.dev
+      ADMIN_KEY_FILE: /run/secrets/admin_key
+    volumes:
+      - ./secrets/admin_key:/run/secrets/admin_key:ro
+    depends_on:
+      convex:
+        condition: service_healthy
+  tunnel:
+    image: cloudflare/cloudflared@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c
+    restart: unless-stopped
+    user: "1000:1000"
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+      - ./secrets/tunnel.json:/etc/cloudflared/credentials.json:ro
+    depends_on:
+      convex:
+        condition: service_healthy
+      web:
+        condition: service_started

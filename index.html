@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover" />
+    <meta name="theme-color" content="#f3f4f9" />
+    <script>
+      // Apply saved appearance before first paint so there's no flash.
+      try {
+        var t = localStorage.getItem("theme") || "system";
+        var dark = t === "dark" || (t === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+        var root = document.documentElement;
+        root.classList.toggle("dark", dark);
+        root.dataset.palette = localStorage.getItem("palette") || "felt";
+        root.dataset.font = localStorage.getItem("font") || "oxanium";
+        var tc = localStorage.getItem("theme-color");
+        if (tc) document.querySelector('meta[name="theme-color"]').setAttribute("content", tc);
+      } catch (e) {}
+    </script>
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Group 53" />
+    <title>Group 53 Games</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,10 @@
+tunnel: 0bc09fb7-3036-41cd-bf63-ef60444fd625
+credentials-file: /etc/cloudflared/credentials.json
+ingress:
+  - hostname: group53.shlokbhakta.dev
+    service: http://web:80
+  - hostname: group53-api.shlokbhakta.dev
+    service: http://convex:3210
+  - hostname: group53-site.shlokbhakta.dev
+    service: http://convex:3211
+  - service: http_status:404

@@ -1,0 +1,52 @@
+# Group 53 Games
+
+Small multiplayer games for one friend group from Discord. The first game is PvP Wordle. More games live at their own paths in the same app.
+
+## Who this is for
+
+- **At most 5 players, maybe 10.** Never design for scale. A full table scan, a query that returns everyone, or a cron that touches every row is fine. Use this headroom to make the games richer, not to optimize.
+- **Phones only.** Everyone plays from the installed PWA on iOS or Android. Desktop only needs to not break. Design for thumbs: tap targets at least 44px, primary actions 56px, nothing important in tiny menus, and confirm anything destructive.
+- **Everyone is a software developer.** Programmer jokes and references land, and so do themes like Catppuccin, Gruvbox and Nord.
+- **Low friction.** Every extra tap or screen costs players. Prefer one-tap actions, sensible defaults, and flows that resume where people left off.
+
+## Design principles
+
+- **Lean on Convex's live updates.** Every query is a live subscription: when the database changes, every connected client re-renders instantly. Build features on that. Show other players' moves the moment they happen, presence ("Chris is typing a guess"), live scoreboards, attacks landing on your board in real time, and animations triggered by someone else's action. If a feature could be live, make it live.
+- **Spend compute freely.** The group is tiny, so server work is basically free. Recompute derived state on every change, fan out notifications generously, render images on demand, and schedule as many functions as needed.
+- **Make it interactive and PvP.** Games should let players affect each other: sabotage, steal, block, taunt. Async is fine, since games run over a day rather than in one sitting, but whatever is happening should feel live.
+- **Notifications are core.** Push is how players hear they've been hit or that it's their turn. Games stay locked until push is on. When something happens to a player, notify them.
+- **Discord is home.** Players sign in with Discord, links get shared in Discord, and link previews should show live game state (see `og/`).
+
+## Stack
+
+- React 19, Vite, React Router, Tailwind v4 and shadcn/ui (Radix). Components are in `src/components/ui`; use them instead of hand-rolled controls.
+- Self-hosted Convex on kiwi with SQLite, plus Convex Auth with the Discord provider.
+- Web push through `web-push` in a Node action (`convex/push.ts`).
+- `og/`: a small Node service that renders Discord and Open Graph previews with satori and resvg.
+
+## Look and feel
+
+- Wordle-style letter tiles are the motif (`src/Tiles.tsx`). A crooked red "hit" tile marks a PvP attack.
+- Themes live in `src/style.css` and are listed in `src/themes.ts`. Each theme defines light and dark tokens plus tile colors. Use tokens like `bg-card`, `text-muted-foreground` and `var(--tile-green)`, never raw colors, so every theme works.
+- Fonts can be changed on the You tab (Oxanium by default). Use `.font-display` for headlines.
+- Use Phosphor icons (`@phosphor-icons/react`, `*Icon` exports), filled for active states. Use Motion (`motion/react`) for springs, shared-layout selection, and live presence. Respect reduced motion (`MotionConfig` is set in `App.tsx`).
+- Presence: `convex/presence.ts` stores a heartbeat and the latest tap per player. `src/presence.tsx` shows online dots and other players' taps on the main tabs.
+- Player cosmetics (frame, frame color, glow, effect, badge, tagline) are in the `profiles` table, with options in `convex/profileOptions.ts`. Name and avatar come from Discord on every sign-in and are not editable.
+
+## Testing
+
+Run both suites before shipping, and add tests with every feature.
+
+- `npm test`: Vitest. `convex/*.test.ts` run Convex functions with convex-test (helpers in `convex/test.setup.ts`). `src/themes.test.ts` parses `style.css` and fails if any theme is missing a token or has text below WCAG AA contrast in light or dark mode.
+- `npm run test:e2e`: Playwright at iPhone size against a throwaway Convex backend in Docker (`e2e/backend.mjs`). It uses the same image as kiwi, runs on host port 3211, and the app is previewed on 4573. Fixtures in `e2e/fixtures.ts` create signed-in players through `convex/testing.ts`, emulate the installed PWA, and fake push. The suite covers the install gate, notifications locking games, live presence and taps across two phones, card edits, themes, sign-out, 44px tap targets, and axe accessibility scans.
+- First run: `npm run test:e2e:install` to download Chromium. If GitHub's registry is unreachable, copy the backend image from kiwi: `ssh kiwi docker save ghcr.io/get-convex/convex-backend:latest | docker load`.
+- `SCREENS=1 npm run test:e2e -- screens` writes review screenshots to `e2e/.state/screens` in dark and light mode. Look at them before shipping UI changes.
+- `convex/testing.ts` only works where `ALLOW_TEST_HELPERS=1`. Never set that on kiwi.
+- Themes are generated by `scripts/gen-themes.py`. Change colors there, then regenerate the theme block in `style.css`.
+
+## Working on it
+
+- `.env.local` points the Convex CLI at the kiwi deployment over Tailscale. Push functions with `npx convex deploy -y`.
+- Ship the web app and backend together. Removing or renaming a Convex function before the new frontend is live crashes the deployed app. Deploy additive backend changes first, the web app next, and removals last.
+- Web deploy: rsync the repo to `kiwi:Services/group53/` without `node_modules`, `dist`, `.git`, `secrets`, `.env*` or `.convex`, then run `docker compose up -d --build web og` there. See `README.md`.
+- Discord OAuth needs `issuer: "https://discord.com"` on the provider (`convex/auth.ts`), or every sign-in fails on the `iss` check.
