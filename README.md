@@ -2,7 +2,7 @@
 
 # Group 53 Games
 
-Small games for a small group. React and Vite on the front end, a self-hosted Convex backend on kiwi (SQLite), and Discord sign-in through Convex Auth. The Play tab gathers every game that wants you, and the + button starts a new one. Chess comes in classic (async, with turn notifications and 8-hour reminders) and real-time (Kung Fu Chess rules, like rtchess.org), each for two or four players, with Elo leaderboards on the Crew tab. PvP Wordle is a work in progress.
+Small games for a small group. React and Vite on the front end, a self-hosted Convex backend on kiwi (SQLite), and Discord sign-in through Convex Auth. Home gathers every game that wants you; Games is where you start one. Chess comes in classic (async, with turn notifications and 8-hour reminders) and real-time (Kung Fu Chess rules, like rtchess.org), each for two or four players, with an Elo leaderboard per mode. PvP Wordle is a work in progress.
 
 ## Local development
 

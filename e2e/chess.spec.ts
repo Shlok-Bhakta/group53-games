@@ -39,14 +39,14 @@ async function startClassic(browser: Browser, context: Parameters<typeof phone>[
   await enablePush(a);
   await enablePush(b.page);
 
-  await a.goto("/?new=classic");
-  await a.getByRole("button", { name: /^Anyone/ }).click();
+  await a.goto("/chess/mode/classic");
+  await a.getByRole("button", { name: "Find a game" }).click();
   await expect(a.getByRole("heading", { name: "Looking for an opponent" })).toBeVisible();
   const id = matchIdOf(a);
 
-  await b.page.goto("/?new=classic");
-  await expect(b.page.getByText("Waiting for an opponent")).toBeVisible();
-  await b.page.getByRole("button", { name: /^Join Shlok's game/ }).click();
+  await b.page.goto("/chess/mode/classic");
+  await expect(b.page.getByRole("region", { name: "Open seats" })).toContainText("Shlok");
+  await b.page.getByRole("button", { name: "Join a game" }).click();
   await expect(b.page.getByRole("grid", { name: "Classic chess board" })).toBeVisible();
   await expect(a.getByRole("grid", { name: "Classic chess board" })).toBeVisible();
 
@@ -99,7 +99,7 @@ test.describe("chess", () => {
     await expect(g.black.getByRole("heading", { name: "You won" })).toBeVisible();
     await expect(g.black.getByText("1216", { exact: true })).toBeVisible();
 
-    await g.black.goto("/crew");
+    await g.black.goto("/chess/mode/classic");
     const board = g.black.getByRole("list", { name: "Classic leaderboard" });
     await expect(board.getByRole("listitem").first()).toContainText("You");
     await expect(board.getByRole("listitem").first()).toContainText("1216");
@@ -130,12 +130,11 @@ test.describe("chess", () => {
     await enablePush(a);
     await enablePush(b.page);
 
-    await a.goto("/");
-    await a.getByRole("button", { name: "New game" }).click();
-    await a.getByRole("dialog").getByRole("button", { name: "Challenge Chris" }).click();
+    await a.goto("/chess/mode/classic");
+    await a.getByRole("button", { name: "Challenge Chris" }).click();
     await expect(a.getByRole("heading", { name: "Challenge sent" })).toBeVisible();
 
-    // The challenge shows up live on the Play tab.
+    // The challenge shows up live on Home.
     await b.page.goto("/");
     const invite = b.page.getByRole("region", { name: "Challenge from Shlok" });
     await expect(invite).toBeVisible();
@@ -155,8 +154,8 @@ test.describe("chess", () => {
     await enablePush(a);
     await enablePush(b.page);
 
-    await a.goto("/?new=realtime");
-    await a.getByRole("button", { name: /^Anyone/ }).click();
+    await a.goto("/chess/mode/realtime");
+    await a.getByRole("button", { name: "Find a game" }).click();
     await a.waitForURL(/\/chess\/[a-z0-9]+$/);
     const id = matchIdOf(a);
     await b.page.goto(`/chess/${id}`);
@@ -217,8 +216,8 @@ test.describe("chess", () => {
     const b = await otherPhone(browser, chris);
     await enablePush(a);
     await enablePush(b.page);
-    await a.goto("/?new=realtime");
-    await a.getByRole("button", { name: /^Anyone/ }).click();
+    await a.goto("/chess/mode/realtime");
+    await a.getByRole("button", { name: "Find a game" }).click();
     await a.waitForURL(/\/chess\/[a-z0-9]+$/);
     const id = matchIdOf(a);
     await b.page.goto(`/chess/${id}`);
@@ -253,8 +252,8 @@ test.describe("chess", () => {
     const b = await otherPhone(browser, chris);
     await enablePush(a);
     await enablePush(b.page);
-    await a.goto("/?new=realtime");
-    await a.getByRole("button", { name: /^Anyone/ }).click();
+    await a.goto("/chess/mode/realtime");
+    await a.getByRole("button", { name: "Find a game" }).click();
     await a.waitForURL(/\/chess\/[a-z0-9]+$/);
     const id = matchIdOf(a);
     await b.page.goto(`/chess/${id}`);
@@ -281,11 +280,11 @@ test.describe("chess", () => {
   test("the game header scrolls with the page and the share button lines up with the title", async ({ context, browser }) => {
     const g = await startClassic(browser, context);
     // The game's own header (the page we came from may still be fading out).
-    const header = g.white.locator("header", { has: g.white.getByRole("heading", { name: "Classic", exact: true, level: 1 }) });
+    const header = g.white.locator("header", { has: g.white.getByRole("heading", { name: "Classic", exact: true, level: 1 }) }).last();
     // iOS blurs things pinned to the top edge, so nothing with text there may be sticky or fixed.
     expect(await header.evaluate((el) => getComputedStyle(el).position)).toBe("static");
-    // The title block (title plus "vs Chris") centers on the share button, like an iOS navigation bar.
-    const heading = g.white.getByRole("heading", { name: "Classic", exact: true, level: 1 });
+    // The title centers on the share button.
+    const heading = g.white.getByRole("heading", { name: "Classic", exact: true, level: 1 }).last();
     const title = (await heading.boundingBox())!;
     const block = (await heading.locator("..").boundingBox())!;
     const share = (await g.white.getByRole("button", { name: "Share this game" }).boundingBox())!;
@@ -295,17 +294,17 @@ test.describe("chess", () => {
     await g.close();
   });
 
-  test("mashing Anyone or a challenge only ever makes one game", async ({ context, browser }) => {
+  test("mashing Find a game or a challenge only ever makes one game", async ({ context, browser }) => {
     const shlok = await createPlayer("Shlok");
     const chris = await createPlayer("Chris");
     const a = await phone(context, { player: shlok, notifications: "granted" });
     await enablePush(a);
-    await a.goto("/?new=classic");
-    const find = a.getByRole("button", { name: /^Anyone/ });
+    await a.goto("/chess/mode/classic");
+    const find = a.getByRole("button", { name: "Find a game" });
     await find.evaluate((el: HTMLElement) => { for (let i = 0; i < 8; i++) el.click(); });
     await a.waitForURL(/\/chess\/[a-z0-9]+$/);
-    await a.goto("/?new=realtime");
-    const row = a.getByRole("dialog").getByRole("button", { name: "Challenge Chris" });
+    await a.goto("/chess/mode/realtime");
+    const row = a.getByRole("button", { name: "Challenge Chris" });
     await expect(row).toBeVisible();
     await row.evaluate((el: HTMLElement) => { for (let i = 0; i < 8; i++) el.click(); });
     await a.waitForURL(/\/chess\/[a-z0-9]+$/);

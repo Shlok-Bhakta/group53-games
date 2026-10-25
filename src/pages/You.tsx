@@ -57,7 +57,7 @@ export function You() {
 
       <NotificationsGroup />
       <AppearanceGroup />
-      <AccountGroup name={mine?.name} username={mine?.username} />
+      <AccountGroup />
     </div>
   );
 }
@@ -71,10 +71,8 @@ function NotificationsGroup() {
       toast.error((err as Error).message);
     }
   };
-  const footer =
-    push.state === "blocked"
-      ? "Notifications are blocked for Group 53. Turn them on in your phone's settings, then reopen the app."
-      : "Turns, attacks, and results. Games stay locked while these are off.";
+  // Only when there's something to do about it.
+  const footer = push.state === "blocked" ? "Notifications are blocked for Group 53. Turn them on in your phone's settings, then reopen the app." : undefined;
   return (
     <Group title="Notifications" footer={footer}>
       <Row icon={BellRingingIcon} tint="#ff453a" label="Notifications" htmlFor="push-switch">
@@ -178,10 +176,10 @@ function AppearanceGroup() {
   );
 }
 
-function AccountGroup({ name, username }: { name?: string; username?: string }) {
+function AccountGroup() {
   const { signOut } = useAuthActions();
   return (
-    <Group title="Account" footer={name ? `Signed in with Discord as ${username ? `@${username}` : name}.` : undefined}>
+    <Group title="Account">
       <AlertDialog>
         <AlertDialogTrigger asChild>
           <button type="button" className="flex min-h-[52px] w-full touch-manipulation items-center gap-3 px-4 text-left font-semibold text-destructive transition-colors active:bg-muted">

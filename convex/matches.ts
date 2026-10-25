@@ -536,6 +536,17 @@ export const lobby = query({
   },
 });
 
+// A game's last few finished matches across the crew, newest first, for that game's page.
+export const recent = query({
+  args: { game: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, { game, limit }) => {
+    if ((await getAuthUserId(ctx)) === null) return [];
+    const finished = await ctx.db.query("matches").withIndex("by_status", (q) => q.eq("status", "finished")).collect();
+    const mine = finished.filter((m) => MODES[m.mode as ModeKey]?.game === game).sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0));
+    return Promise.all(mine.slice(0, limit ?? 10).map((m) => withPeople(ctx, m)));
+  },
+});
+
 // For badges: async games waiting on me, plus challenges and lobbies I could join.
 export const attention = query({
   args: {},

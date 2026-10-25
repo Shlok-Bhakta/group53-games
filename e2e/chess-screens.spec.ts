@@ -13,7 +13,7 @@ const AV = {
 async function enablePush(page: Page) {
   await page.goto("/");
   await page.getByRole("button", { name: "Turn on notifications" }).click();
-  await expect(page.getByRole("link", { name: "Play" }).first()).toBeVisible();
+  await expect(page.getByText("Turn on notifications to play")).toHaveCount(0);
 }
 const shot = async (page: Page, name: string, full = false) => {
   await page.waitForTimeout(900);
@@ -38,17 +38,21 @@ test("chess screens", async ({ browser }) => {
   await enablePush(b);
 
   await a.goto("/");
-  await shot(a, "play-empty");
-  await a.goto("/?new=classic");
-  await shot(a, "new-game");
-  await a.getByRole("button", { name: /^Anyone/ }).click();
+  await shot(a, "home-empty");
+  await a.goto("/games");
+  await shot(a, "games");
+  await a.goto("/chess");
+  await shot(a, "hub", true);
+  await a.goto("/chess/mode/classic");
+  await shot(a, "mode-classic", true);
+  await a.getByRole("button", { name: "Find a game" }).click();
   await a.waitForURL(/\/chess\/[a-z0-9]+$/);
   await shot(a, "lobby");
   const id = a.url().split("/chess/")[1];
 
-  await b.goto("/?new=classic");
-  await shot(b, "new-game-join-light");
-  await b.getByRole("button", { name: /^Join/ }).click();
+  await b.goto("/chess/mode/classic");
+  await shot(b, "mode-join-light", true);
+  await b.getByRole("button", { name: "Join a game" }).click();
   await expect(b.getByRole("grid")).toBeVisible();
   const m = await admin().query(anyApi.testing.getMatch, { id });
   const white = m.players.find((p: { color: string }) => p.color === "w").userId === shlok.userId ? a : b;
@@ -62,9 +66,8 @@ test("chess screens", async ({ browser }) => {
   await shot(white, "classic-waiting");
 
   // Real-time
-  await a.goto("/?new=realtime");
-  await shot(a, "new-game-realtime");
-  await a.getByRole("button", { name: /^Anyone/ }).click();
+  await a.goto("/chess/mode/realtime");
+  await a.getByRole("button", { name: "Find a game" }).click();
   await a.waitForURL(/\/chess\/[a-z0-9]+$/);
   const rid = a.url().split("/chess/")[1];
   await b.goto(`/chess/${rid}`);
@@ -108,14 +111,16 @@ test("four-player screens", async ({ browser }) => {
 
   // A challenge waiting in the home inbox, alongside a classic game where it's your move.
   await admin().action(anyApi.testing.startMatch, { mode: "chess:classic", a: people[1].userId, b: people[0].userId });
-  await a.goto("/?new=four");
-  for (const n of ["chrisis14", "samwise"]) await a.getByRole("dialog").getByRole("button", { name: n, exact: true }).click();
+  await a.goto("/chess/mode/four");
+  for (const n of ["chrisis14", "samwise"]) await a.getByRole("button", { name: n, exact: true }).click();
   await shot(a, "four-challenge-sheet");
-  await a.getByRole("dialog").getByRole("button", { name: /Challenge 2/ }).click();
+  await a.getByRole("button", { name: /Challenge 2/ }).click();
   await a.waitForURL(/\/chess\/[a-z0-9]+$/);
   await shot(a, "four-lobby");
   await b.goto("/");
-  await shot(b, "play-inbox-light", true);
+  await shot(b, "home-inbox-light", true);
+  await b.goto("/chess");
+  await shot(b, "hub-light", true);
 
   // A game in progress, from each side.
   const id = await admin().action(anyApi.testing.startFour, { mode: "chess:four", players: people.map((p) => p.userId) });

@@ -7,7 +7,7 @@ import { api } from "../convex/_generated/api";
 // Screens come in like a native navigation stack: tabs switch instantly, a screen pushed on top of a tab
 // slides in from the right, and Back (or a swipe from the left edge) slides it away again.
 
-export const TAB_ROUTES = ["/", "/crew", "/you"];
+export const TAB_ROUTES = ["/", "/games", "/crew", "/you"];
 const isTab = (path: string) => TAB_ROUTES.includes(path);
 const SLIDE = { type: "spring", bounce: 0, duration: 0.42 } as const;
 

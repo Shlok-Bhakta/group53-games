@@ -28,13 +28,11 @@ for (const scheme of ["dark", "light"] as const) {
     };
 
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Play", exact: true })).toBeVisible();
-    await shot("play");
-    if (scheme === "light") {
-      await page.getByRole("button", { name: "New game" }).click();
-      await shot("new-game");
-      await page.keyboard.press("Escape");
-    }
+    await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
+    await shot("home");
+    await page.goto("/games");
+    await expect(page.getByRole("heading", { name: "Games", exact: true })).toBeVisible();
+    await shot("games");
     await page.goto("/crew");
     await expect(page.getByRole("heading", { name: "Crew" })).toBeVisible();
     await chrisPage.mouse.click(250, 520);

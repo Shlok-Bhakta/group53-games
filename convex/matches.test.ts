@@ -346,6 +346,20 @@ describe("classic chess", () => {
     expect(badges).toEqual([0, 1, 2]);
   });
 
+  test("a game's recent matches include everyone's, newest first", async () => {
+    const t = setup();
+    const first = await classicGame(t);
+    await first.white.as.mutation(api.matches.resign, { id: first.id });
+    vi.advanceTimersByTime(60_000);
+    const boiler = await signedIn(t, "Boiler");
+    const wes = await signedIn(t, "Wes");
+    const second = await boiler.as.mutation(api.matches.queue, { mode: "chess:classic" });
+    await wes.as.mutation(api.matches.queue, { mode: "chess:classic" });
+    await boiler.as.mutation(api.matches.resign, { id: second });
+    expect((await first.white.as.query(api.matches.recent, { game: "chess" })).map((m) => m._id)).toEqual([second, first.id]);
+    expect(await first.white.as.query(api.matches.recent, { game: "wordle" })).toEqual([]);
+  });
+
   test("the inbox lists other people's games to watch and my recent results", async () => {
     const t = setup();
     const { id, white } = await classicGame(t);

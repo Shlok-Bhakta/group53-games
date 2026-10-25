@@ -93,13 +93,13 @@ export const leaderboard = query({
   },
 });
 
-// My rating in every mode I've played, for the mode picker.
+// My rating and record in every mode I've played, for the mode cards and the stats on Home.
 export const mine = query({
   args: {},
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) return {};
     const rows = await ctx.db.query("ratings").collect();
-    return Object.fromEntries(rows.filter((r) => r.userId === userId).map((r) => [r.mode, { rating: r.rating, games: r.games }]));
+    return Object.fromEntries(rows.filter((r) => r.userId === userId).map((r) => [r.mode, { rating: r.rating, games: r.games, wins: r.wins, losses: r.losses, draws: r.draws }]));
   },
 });

@@ -73,7 +73,6 @@ export function ChessMatch() {
   const meId = me?._id;
   const mine = match.players.find((p) => p.userId === meId);
   const opponent = match.players.find((p) => p.userId !== meId) ?? null;
-  const subtitle = !mine && match.status !== "waiting" ? "Watching" : four ? `${mode.players} players` : opponent && match.status !== "waiting" ? `vs ${opponent.name}` : undefined;
   const share = (
     <Button variant="ghost" size="icon" aria-label="Share this game" onClick={() => void shareLink(`/chess/${match._id}`, `${mode.name} chess on Group 53:`)}>
       <ShareNetworkIcon size={22} weight="bold" />
@@ -94,7 +93,7 @@ export function ChessMatch() {
 
   return (
     <div className="flex min-h-[calc(100svh-env(safe-area-inset-bottom)-16px)] flex-col">
-      <NavBar title={mode.name} subtitle={subtitle} back="/" action={share} />
+      <NavBar title={mode.name} back={modePath(match.mode as ModeKey)} action={share} />
       {match.status === "waiting" || match.status === "cancelled" ? (
         <Lobby match={match} meId={meId} onLeave={() => navigate("/", { replace: true })} />
       ) : (
@@ -568,10 +567,7 @@ function Lobby({ match, meId, onLeave }: { match: MatchView; meId: Id<"users"> |
     <div className="flex flex-1 flex-col">
       <div className="flex flex-1 flex-col items-center justify-center gap-5 py-6 text-center">
         {mode.players > 2 ? <Seats match={match} /> : <PlayerAvatar name={host.name} image={host.image} frame={host.frame} frameColor={host.frameColor} badge={host.badge} size={96} />}
-        <div>
-          <h2 className="font-display text-title">{title}</h2>
-          <p className="mx-auto mt-2 max-w-[34ch] text-callout text-muted-foreground">{mode.blurb}</p>
-        </div>
+        <h2 className="font-display text-title">{title}</h2>
       </div>
       {isHost ? (
         <div className="grid w-full gap-2">

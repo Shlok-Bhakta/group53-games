@@ -15,7 +15,7 @@ export const games: GameEntry[] = [
   {
     path: "/chess",
     name: "Chess",
-    blurb: "Two players or four, at your own pace or all at once in real time. Challenges and your moves wait on this card.",
+    blurb: "Two players or four, at your own pace or all at once in real time.",
     tiles: { word: "CHESS", states: ["green", "yellow", "green", "hit", "green"] },
     art: "chess",
   },

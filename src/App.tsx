@@ -1,20 +1,21 @@
-import { Navigate, Route, Routes, useLocation, useParams } from "react-router";
+import { Navigate, Route, Routes, useLocation } from "react-router";
 import { Authenticated, AuthLoading, Unauthenticated, useQuery } from "convex/react";
 import { AnimatePresence, MotionConfig } from "motion/react";
 import { api } from "../convex/_generated/api";
-import { modeBySlug, MODES } from "../convex/modes";
 import { Wordle } from "./games/wordle/Wordle";
+import { ChessHub } from "./games/chess/ChessHub";
 import { ChessMatch } from "./games/chess/ChessMatch";
+import { ModePage } from "./games/chess/ModePage";
 import { InstallGate } from "./InstallGate";
 import { TAB_BAR_SPACE, TabBar } from "@/components/TabBar";
 import { TopEdge } from "@/components/TopEdge";
 import { NavBar, useGoBack } from "@/components/AppHeader";
-import { NewGameSheet } from "@/components/NewGameSheet";
 import { NotificationsRequired } from "@/components/NotificationsRequired";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/sonner";
 import { Crew } from "@/pages/Crew";
-import { Play } from "@/pages/Play";
+import { Games } from "@/pages/Games";
+import { Home } from "@/pages/Home";
 import { SignIn } from "@/pages/SignIn";
 import { You } from "@/pages/You";
 import { ArrivalPills, TapLayer, usePresenceReporter } from "@/presence";
@@ -67,14 +68,14 @@ function SignedIn() {
           <Page key={location.pathname} direction={direction} onBack={inTabs ? null : goBack}>
             <div style={{ paddingBottom: inTabs ? TAB_BAR_SPACE : "calc(env(safe-area-inset-bottom) + 16px)" }}>
               <Routes location={location}>
-                <Route path="/" element={<Play />} />
+                <Route path="/" element={<Home />} />
+                <Route path="/games" element={<Games />} />
                 <Route path="/crew" element={<Crew />} />
                 <Route path="/you" element={<You />} />
                 <Route path="/settings" element={<Navigate to="/you" replace />} />
                 <Route path="/wordle" element={<Wordle />} />
-                {/* The chess hub and mode pages became the Play tab and the New game sheet. */}
-                <Route path="/chess" element={<LegacyChess />} />
-                <Route path="/chess/mode/:slug" element={<LegacyMode />} />
+                <Route path="/chess" element={<NotificationsRequired><ChessHub /></NotificationsRequired>} />
+                <Route path="/chess/mode/:slug" element={<NotificationsRequired><ModePage /></NotificationsRequired>} />
                 <Route path="/chess/:id" element={<NotificationsRequired><ChessMatch /></NotificationsRequired>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
@@ -84,20 +85,9 @@ function SignedIn() {
       </main>
       {inTabs && <TabBar />}
       {inTabs && <TapLayer meId={me?._id} />}
-      <NewGameSheet />
       <ArrivalPills />
     </>
   );
-}
-
-// Old links: /chess?mode=chess:four and /chess/mode/four open the New game sheet on that mode.
-function LegacyChess() {
-  const mode = new URLSearchParams(useLocation().search).get("mode");
-  return <Navigate to={mode && mode in MODES ? `/?new=${MODES[mode as keyof typeof MODES].slug}` : "/"} replace />;
-}
-function LegacyMode() {
-  const { slug } = useParams<{ slug: string }>();
-  return <Navigate to={slug && modeBySlug(slug) ? `/?new=${slug}` : "/"} replace />;
 }
 
 function NotFound() {

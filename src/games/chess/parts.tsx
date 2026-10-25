@@ -204,9 +204,11 @@ export function Leaderboard({ mode, meId, onPick }: { mode: ModeKey; meId?: Id<"
             <PlayerAvatar name={p.name} image={p.image} frame={p.frame} frameColor={p.frameColor} size={34} />
             <span className="min-w-0 flex-1">
               <span className="block truncate font-semibold">{r.userId === meId ? "You" : p.name}</span>
-              <span className="block text-footnote tabular-nums text-muted-foreground">
-                {!ranked ? "No games yet" : four ? `${r.wins} won of ${r.games}` : `${r.wins} won, ${r.losses} lost${r.draws ? `, ${r.draws} drawn` : ""}`}
-              </span>
+              {ranked && (
+                <span className="block text-footnote tabular-nums text-muted-foreground">
+                  {four ? `${r.wins} won of ${r.games}` : `${r.wins} won, ${r.losses} lost${r.draws ? `, ${r.draws} drawn` : ""}`}
+                </span>
+              )}
             </span>
             <span className={cn("font-display text-heading tabular-nums", !ranked && "text-muted-foreground")}>{r.rating}</span>
           </>
