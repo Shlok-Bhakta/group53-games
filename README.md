@@ -30,7 +30,7 @@ The stack lives in `~/Services/group53` on kiwi. `compose.yaml` runs Convex, its
 
 On the tailnet, the web app is at port 38440, the API at 38441, HTTP actions at 38442, and the dashboard at 38443.
 
-To ship a change, push the functions with `npx convex deploy -y`, rsync the repo to kiwi without `node_modules`, `dist`, `.git`, `.env*`, `.convex`, or `secrets`, and run `docker compose up -d --build web og` there.
+To ship a change, commit it and run `npm run deploy`. It pushes the Convex functions, copies the repo to kiwi, rebuilds the `web` and `og` containers, cleans up the old images, and checks the site is up.
 
 ## Discord sign-in
 
