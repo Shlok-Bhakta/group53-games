@@ -131,7 +131,15 @@ Convex functions go live before the web app does. Additive backend changes (new 
 
 ### On kiwi
 
-The stack is `~/Services/group53` (a copy, not a git checkout): `compose.yaml` runs `convex`, `dashboard`, `web`, `og` and `tunnel` (Cloudflare Tunnel `group53-games`). Deploys only rebuild `web` and `og`; the other three keep running.
+The stack is `~/Services/group53` (a copy, not a git checkout). `compose.yaml` runs five containers, about 430 MB of RAM together:
+
+- `convex`: the whole backend (database, functions, websockets, scheduler, real-time tick). SQLite on the SSD.
+- `web`: nginx serving the built app (`Dockerfile` builds with Node, then keeps only `dist/` and nginx, about 5 MB of RAM). `nginx.conf` also sends link-preview bots to `og`, falls back to `index.html` for deep links, caches `/assets/` for a year, and never caches `sw.js` or `version.json`.
+- `og`: a small Node server for Discord and Open Graph link previews. Bots can't run the app's JavaScript, so `og` reads live data from Convex and returns the tags plus a PNG card: satori lays the card out as SVG, resvg turns it into PNG. It isn't a backend for the app; the app talks to Convex directly.
+- `tunnel`: Cloudflare Tunnel `group53-games`, which puts the three public hostnames online without opening ports on kiwi.
+- `dashboard`: the Convex web dashboard on the tailnet. Nothing depends on it; the CLI does the same jobs.
+
+Deploys only rebuild `web` and `og`; the other three keep running.
 
 ```sh
 ssh kiwi 'cd Services/group53 && docker compose ps'                    # what's running
