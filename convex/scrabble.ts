@@ -347,7 +347,8 @@ export const draft = query({
   },
 });
 
-// Who else is planning right now and how many tiles they've laid out. Never where.
+// Who else is planning right now, and the squares they're trying (never the letters), so their phones can
+// show face-down tiles like Letter League does: a little window into who's stuck and who's confident.
 export const planning = query({
   args: { id: v.id("matches") },
   handler: async (ctx, { id }) => {
@@ -357,6 +358,8 @@ export const planning = query({
       .query("drafts")
       .withIndex("by_match_user", (q) => q.eq("matchId", id))
       .collect();
-    return rows.filter((r) => r.userId !== userId && r.count > 0).map((r) => ({ userId: r.userId, count: r.count, at: r.at }));
+    return rows
+      .filter((r) => r.userId !== userId && r.count > 0)
+      .map((r) => ({ userId: r.userId, count: r.count, at: r.at, cells: (r.data as Draft).placed.map((p) => [p.x, p.y] as [number, number]) }));
   },
 });

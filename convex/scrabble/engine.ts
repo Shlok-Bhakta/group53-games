@@ -1,8 +1,8 @@
-// Scrabble, the way Letter League plays it: 2 to 8 players on one board, a rack each. The core rules (which
-// plays are legal, which words they form, how they score, the standard board, letter values and bag) come
-// from @bglowacki/bingo-engine, set up for English Scrabble. On top of it we add what Letter League has and
-// the library doesn't: a bigger board (handed to the engine as its layout) and Wild bonuses (scored here from
-// the engine's per-word breakdown), plus turns, seats and standings.
+// Scrabble for 2 to 8 players on one board, a rack each, with official rules or Letter League's. The official
+// rules (which plays are legal, which words they form, how they score, the standard board, letter values and
+// bag) come from @bglowacki/bingo-engine, set up for English Scrabble. On top of it we add a bigger board
+// (handed to the engine as its layout), Letter League's rule changes (LEAGUE below), and turns, seats and
+// standings.
 //
 // Pure and shared by the server (which validates every play) and the phones (which preview the score as you
 // place tiles). Checking words against the dictionary is the server's job (convex/scrabble/dictionary.ts),
@@ -77,10 +77,16 @@ export type Placed = { x: number; y: number; letter: string; blank?: boolean; se
 // A tile someone is putting down this turn. `letter` names what a blank plays as.
 export type Placement = { id: number; x: number; y: number; letter?: string };
 
-// Settings that change the rules. A bingo is always using the whole rack. Wild (Letter League's default):
-// a bonus square keeps working for every later word through its tile, not just the turn it's covered.
-export type Rules = { size: number; rack: number; wild: boolean };
-export const rulesOf = (settings: Record<string, number>): Rules => ({ size: settings.board ?? 15, rack: settings.rack ?? SCRABBLE_CLASSIC_RULES.rackSize, wild: settings.wild === 1 });
+// Settings that change the rules. A bingo is always using the whole rack. `league` plays by Letter League's
+// rules instead of Scrabble's.
+export type Rules = { size: number; rack: number; league: boolean };
+export const rulesOf = (settings: Record<string, number>): Rules => ({ size: settings.board ?? 15, rack: settings.rack ?? SCRABBLE_CLASSIC_RULES.rackSize, league: settings.rules === 1 });
+
+// What Letter League does differently from official Scrabble. Everything else is the same engine, board and
+// word list.
+//  - stickyBonuses ("Wild" scoring, Letter League's default): a bonus square stays with the tile on it, so
+//    every later word through that tile scores it again. Add an S to a doubled word and it doubles again.
+export const LEAGUE = { stickyBonuses: true } as const;
 
 const engines = new Map<string, BingoEngine>();
 const anyWord = { has: () => true, hasPrefix: () => true };
@@ -94,9 +100,9 @@ function engineFor(rules: Rules) {
   return e;
 }
 
-// Wild scoring, from the engine's breakdown of a word: the same sum, but every tile's square counts, old or
-// new. (Classic scoring is the engine's own.)
-function wildScore(size: number, cells: readonly { row: number; col: number; letter: string; isBlank: boolean }[]) {
+// Sticky-bonus scoring, from the engine's breakdown of a word: the same sum, but every tile's square counts,
+// old or new. (Official scoring is the engine's own.)
+function stickyScore(size: number, cells: readonly { row: number; col: number; letter: string; isBlank: boolean }[]) {
   let sum = 0;
   let mult = 1;
   for (const c of cells) {
@@ -200,12 +206,12 @@ export function evaluate(board: Placed[], placement: Placement[], rack: Tile[], 
   const scored = engine.scorePlacement(before, play);
   const words = scored.words
     .filter((w) => w.word.length > 1)
-    .map((w) => ({ word: w.word.toUpperCase(), score: rules.wild ? wildScore(size, w.cells) : w.score, cells: w.cells.map((c) => [c.col, c.row] as [number, number]) }));
+    .map((w) => ({ word: w.word.toUpperCase(), score: rules.league && LEAGUE.stickyBonuses ? stickyScore(size, w.cells) : w.score, cells: w.cells.map((c) => [c.col, c.row] as [number, number]) }));
   if (words.length === 0) return { ok: false, error: "Words need at least two letters." };
   // The main word (the one through every new tile) first.
   const main = words.findIndex((w) => placement.every((p) => w.cells.some(([x, y]) => x === p.x && y === p.y)));
   if (main > 0) words.unshift(...words.splice(main, 1));
-  const total = rules.wild ? words.reduce((s, w) => s + w.score, 0) + (scored.bingo ? BINGO : 0) : scored.total;
+  const total = rules.league && LEAGUE.stickyBonuses ? words.reduce((s, w) => s + w.score, 0) + (scored.bingo ? BINGO : 0) : scored.total;
   return { ok: true, words, score: total, bingo: scored.bingo };
 }
 

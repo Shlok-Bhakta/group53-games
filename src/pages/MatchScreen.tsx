@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { useQuery } from "convex/react";
 import { ShareNetworkIcon } from "@phosphor-icons/react";
@@ -10,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Lobby } from "@/components/match";
 import type { GameUI } from "@/games";
 import { shareLink } from "@/share";
+import { wantMusic } from "@/sound";
 
 // Any game, at /<game>/<id>: a compact bar on top, then the lobby while it fills, or the game itself.
 export function MatchScreen({ game }: { game: GameUI }) {
@@ -17,6 +19,12 @@ export function MatchScreen({ game }: { game: GameUI }) {
   const match = useQuery(api.matches.get, { id: id as Id<"matches"> });
   const me = useQuery(api.users.me);
   const navigate = useNavigate();
+  // Background music in Scrabble games, lobby included.
+  useEffect(() => {
+    if (game.key !== "scrabble") return;
+    wantMusic(true);
+    return () => wantMusic(false);
+  }, [game.key]);
 
   if (match === undefined) {
     return (

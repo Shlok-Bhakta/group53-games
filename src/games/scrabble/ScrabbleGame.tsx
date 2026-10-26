@@ -30,6 +30,8 @@ import { errorText } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { ScrabbleBoard, type BoardHandle, type DraftTile } from "./Board";
 import { LetterTile } from "./Tile";
+import { Tiles } from "@/Tiles";
+import { sfx } from "@/sound";
 
 type Draft = { placed: Placement[]; order: number[] };
 const key = (x: number, y: number) => `${x},${y}`;
@@ -64,7 +66,8 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
   // Saved as you go, a moment after you stop moving tiles.
   useEffect(() => {
     if (!hydrated.current || !playing) return;
-    const timer = setTimeout(() => void saveDraft({ id: match._id, placed: draft.placed, order: draft.order }).catch(() => {}), 400);
+    // Quick, so other phones see your face-down tiles move almost as you move them.
+    const timer = setTimeout(() => void saveDraft({ id: match._id, placed: draft.placed, order: draft.order }).catch(() => {}), 120);
     return () => clearTimeout(timer);
   }, [draft, playing, match._id, saveDraft]);
 
@@ -108,8 +111,12 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
     const rest = placed.filter((p) => p.id !== id && !(p.x === x && p.y === y));
     setPlaced([...rest, { id, x, y, ...(tile.letter === "?" ? { letter: letter ?? prior?.letter } : {}) }]);
     setSelected(null);
+    sfx("place");
   };
-  const recall = (id: number) => setPlaced(placed.filter((p) => p.id !== id));
+  const recall = (id: number) => {
+    setPlaced(placed.filter((p) => p.id !== id));
+    sfx("recall");
+  };
 
   const onCellTap = (x: number, y: number) => {
     if (selected !== null && !occupied.has(key(x, y))) putDown(selected, x, y);
@@ -122,6 +129,7 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
   const [drag, setDrag] = useState<{ id: number; from: "rack" | "board" } | null>(null);
   const [target, setTarget] = useState<[number, number] | null>(null);
   const [slot, setSlot] = useState<number | null>(null);
+  const [hop, setHop] = useState(0);
 
   const rackSlotAt = (clientX: number, clientY: number) => {
     const el = rackEl.current;
@@ -142,8 +150,13 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
     let moved = false;
     let cell: [number, number] | null = null;
     let at: number | null = null;
+    // The tile leans into the direction you drag it, and settles when you stop.
+    let lastX = x0;
+    let tilt = 0;
     const place = (cx: number, cy: number) => {
-      if (ghost.current) ghost.current.style.transform = `translate3d(${cx}px, ${cy - LIFT}px, 0) translate(-50%, -50%)`;
+      tilt = Math.max(-14, Math.min(14, tilt * 0.6 + (cx - lastX) * 0.9));
+      lastX = cx;
+      if (ghost.current) ghost.current.style.transform = `translate3d(${cx}px, ${cy - LIFT}px, 0) translate(-50%, -50%) rotate(${tilt}deg)`;
     };
     const move = (ev: PointerEvent) => {
       if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return;
@@ -151,6 +164,7 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
         moved = true;
         setSelected(null);
         setDrag({ id, from });
+        sfx("pick");
       }
       place(ev.clientX, ev.clientY);
       const c = board.current?.cellAt(ev.clientX, ev.clientY - LIFT) ?? null;
@@ -169,7 +183,10 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
       if (!moved) {
         // A tap: rack tiles get picked up, board tiles go home.
         if (from === "board") recall(id);
-        else setSelected((s) => (s === id ? null : id));
+        else {
+          setSelected((s) => (s === id ? null : id));
+          sfx("pick");
+        }
         return;
       }
       if (ev.type === "pointercancel") return;
@@ -179,6 +196,7 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
         ids.splice(Math.min(at, ids.length), 0, id);
         setOrder([...ids, ...placed.filter((p) => p.id !== id).map((p) => p.id)]);
         if (from === "board") recall(id);
+        else sfx("place");
       }
     };
     window.addEventListener("pointermove", move);
@@ -194,6 +212,16 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
   const checking = words.length > 0 && unknown === undefined;
   const bad = unknown?.filter((w) => words.includes(w)) ?? [];
   const tone = !evaluation ? "idle" : !evaluation.ok || bad.length ? "bad" : checking ? "idle" : "ok";
+  // Shake (and a soft "nope") the moment a layout stops making real words.
+  const [shake, setShake] = useState(0);
+  const lastTone = useRef(tone);
+  useEffect(() => {
+    if (tone === "bad" && lastTone.current !== "bad" && evaluation?.ok) {
+      setShake((n) => n + 1);
+      sfx("invalid");
+    }
+    lastTone.current = tone;
+  }, [tone, evaluation?.ok]);
   const bubble = useMemo(() => {
     if (!evaluation?.ok) return null;
     const main = evaluation.words[0].cells.at(-1)!;
@@ -203,6 +231,40 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
   // --- The latest move, which every phone animates in ---
   const last = state.moves.at(-1);
   const fresh = useMemo(() => new Set(state.tiles.filter((t) => t.turn === state.moves.length - 1 && last?.kind === "play").map((t) => key(t.x, t.y))), [state.tiles, state.moves.length, last?.kind]);
+  const lastCell = useMemo(() => [...fresh].map((k) => k.split(",").map(Number) as [number, number]).sort((a, b) => b[0] + b[1] - a[0] - a[1])[0], [fresh]);
+  const scored = last?.kind === "play" && lastCell ? { key: state.moves.length, x: lastCell[0], y: lastCell[1], text: `+${last.score}`, color: seatColor(last.seat) } : null;
+
+  // Whoever's turn it is, trying tiles out: face down on everyone else's board.
+  const planning = useQuery(api.scrabble.planning, match.status === "active" ? { id: match._id } : "skip");
+  const upUser = match.status === "active" ? match.players[state.turn]?.userId : undefined;
+  const upPlan = upUser && upUser !== meId ? planning?.find((p) => p.userId === upUser) : undefined;
+  const ghosts = upPlan ? { cells: upPlan.cells, color: seatColor(state.turn) } : null;
+  const ghostCount = ghosts?.cells.length ?? 0;
+  const ghostSig = ghosts?.cells.map((c) => c.join(",")).join("|") ?? "";
+  const heardGhosts = useRef(ghostSig);
+  useEffect(() => {
+    if (ghostSig !== heardGhosts.current && ghostCount > 0) sfx("ghost");
+    heardGhosts.current = ghostSig;
+  }, [ghostSig, ghostCount]);
+
+  // Sounds for things that happen on other phones: a word landing, your turn coming round, the end.
+  const seenMoves = useRef(state.moves.length);
+  useEffect(() => {
+    if (state.moves.length <= seenMoves.current) return;
+    seenMoves.current = state.moves.length;
+    const m = state.moves.at(-1)!;
+    if (m.seat !== mySeat && m.kind === "play") sfx(m.bingo ? "bingo" : "land", { count: m.count });
+    if (myTurn) setTimeout(() => sfx("turn"), m.kind === "play" ? 650 : 100);
+  }, [state.moves, mySeat, myTurn]);
+  const wasActive = useRef(match.status === "active");
+  useEffect(() => {
+    if (wasActive.current && match.status === "finished" && mySeat >= 0) sfx(match.result?.winners.includes(meId!) ? "win" : "lose");
+    wasActive.current = match.status === "active";
+  }, [match.status, match.result, mySeat, meId]);
+
+  // The celebration when anyone plays all their tiles.
+  const bingoKey = last?.bingo ? state.moves.length : null;
+
   const focus = useMemo<[number, number]>(() => {
     if (!state.tiles.length && !draft.placed.length) return [centre(state.size), centre(state.size)];
     const pts = [...state.tiles, ...draft.placed];
@@ -233,7 +295,7 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
 
   return (
     <div className="flex flex-1 flex-col gap-2 pb-1">
-      <Scoreboard match={match} state={state} meId={meId} />
+      <Scoreboard match={match} state={state} meId={meId} planning={planning} />
       <StatusLine match={match} state={state} meId={meId} myTurn={myTurn} />
       <div ref={area} className={cn("relative flex justify-center", finished ? "aspect-square w-full" : "min-h-[240px] flex-1")}>
         {px > 0 && (
@@ -254,11 +316,17 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
               focus={focus}
               zoomOnDoubleTap={selected === null}
               reveal={{ key: state.moves.length, cells: [...fresh].map((k) => k.split(",").map(Number) as [number, number]) }}
+              ghosts={ghosts}
+              scored={scored}
+              shake={shake}
               onCellTap={onCellTap}
               onDraftDown={(id, e) => startDrag(id, "board", e)}
             />
           </div>
         )}
+        <AnimatePresence>
+          {bingoKey !== null && <Bingo key={bingoKey} />}
+        </AnimatePresence>
       </div>
 
       {finished ? (
@@ -275,6 +343,7 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
             swapping={swapping}
             dragging={drag?.from === "rack" ? drag.id : null}
             slot={slot}
+            hop={hop}
             onDown={(id, e) => startDrag(id, "rack", e)}
           />
           <Actions
@@ -287,12 +356,27 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
             swapping={swapping}
             setSwapping={setSwapping}
             bagCount={state.bag}
-            onShuffle={() => setOrder(shuffled(inRack.map((t) => t.id)))}
-            onRecall={() => setPlaced([])}
+            onShuffle={() => {
+              setOrder(shuffled(inRack.map((t) => t.id)));
+              setHop((h) => h + 1);
+              sfx("shuffle");
+            }}
+            onRecall={() => {
+              setPlaced([]);
+              sfx("recall");
+            }}
             onPlay={async () => {
-              const score = await play({ id: match._id, tiles: placed });
+              const count = placed.length;
+              let score: number;
+              try {
+                score = await play({ id: match._id, tiles: placed });
+              } catch (e) {
+                setShake((n) => n + 1);
+                sfx("invalid");
+                throw e;
+              }
               setDraft((d) => ({ ...d, placed: [] }));
-              if (evaluation?.ok && evaluation.bingo) toast.success(`Bingo! +${score}`);
+              sfx(evaluation?.ok && evaluation.bingo ? "bingo" : "play", { count, score });
             }}
           />
         </>
@@ -306,7 +390,10 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
         draggedTile &&
         createPortal(
           <div ref={ghost} className="pointer-events-none fixed left-0 top-0 z-50 drop-shadow-xl" style={{ transform: "translate3d(-200px,-200px,0)" }}>
-            <LetterTile letter={draftTiles.find((d) => d.id === drag.id)?.letter ?? draggedTile.letter} blank={draggedTile.letter === "?"} size={52} />
+            {/* A held tile jiggles in your fingers. */}
+            <motion.span className="block" initial={{ scale: 1 }} animate={{ scale: 1.12, rotate: [0, -4, 4, -3, 3, 0] }} transition={{ scale: { type: "spring", bounce: 0.5, duration: 0.3 }, rotate: { duration: 0.5, repeat: Infinity, repeatDelay: 0.4 } }}>
+              <LetterTile letter={draftTiles.find((d) => d.id === drag.id)?.letter ?? draggedTile.letter} blank={draggedTile.letter === "?"} size={52} />
+            </motion.span>
           </div>,
           document.body,
         )}
@@ -323,6 +410,20 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
   );
 }
 
+// BINGO, spelled in tiles over the board for a moment.
+function Bingo() {
+  return (
+    <motion.div
+      className="pointer-events-none absolute inset-0 z-30 grid place-items-center"
+      initial={{ opacity: 0, scale: 0.6 }}
+      animate={{ opacity: [0, 1, 1, 0], scale: [0.6, 1.1, 1, 1.05] }}
+      transition={{ duration: 2.2, times: [0, 0.15, 0.8, 1] }}
+    >
+      <Tiles word="BINGO" states={["green", "yellow", "green", "yellow", "green"]} size="lg" flip label="Bingo" />
+    </motion.div>
+  );
+}
+
 function shuffled<T>(xs: T[]) {
   const a = [...xs];
   for (let i = a.length - 1; i > 0; i--) {
@@ -334,11 +435,11 @@ function shuffled<T>(xs: T[]) {
 
 // --- Scores ---
 
-function Scoreboard({ match, state, meId }: { match: MatchView; state: ScrabbleState; meId: Id<"users"> | undefined }) {
-  const planning = useQuery(api.scrabble.planning, match.status === "active" ? { id: match._id } : "skip");
+function Scoreboard({ match, state, meId, planning }: { match: MatchView; state: ScrabbleState; meId: Id<"users"> | undefined; planning: { userId: Id<"users">; count: number }[] | undefined }) {
   return (
     <LayoutGroup id={`scores-${match._id}`}>
-      <ol className="-mx-4 flex h-[60px] snap-x gap-1.5 overflow-x-auto px-4 [scrollbar-width:none]" aria-label="Scores">
+      {/* Scrolling sideways clips up and down too, so the strip leaves room for the turn ring. */}
+      <ol className="-mx-4 flex h-[68px] snap-x scroll-px-4 gap-1.5 overflow-x-auto px-4 py-1 [scrollbar-width:none]" aria-label="Scores">
         {match.players.map((p, seat) => (
           <Score key={p.userId} player={p} seat={seat} state={state} isMe={p.userId === meId} active={match.status === "active"} planning={planning?.find((x) => x.userId === p.userId)?.count ?? 0} />
         ))}
@@ -354,7 +455,7 @@ function Score({ player, seat, state, isMe, active, planning }: { player: MatchV
   const color = SEAT_COLORS[player.color ?? ""];
   return (
     <li className={cn("relative flex min-w-[96px] shrink-0 snap-start items-center gap-2 rounded-lg px-2.5", out && "opacity-45")} aria-current={up ? "true" : undefined} data-seat={seat}>
-      {up && <motion.span layoutId="turn" className="absolute inset-0 rounded-lg bg-card ring-2 ring-primary" transition={{ type: "spring", bounce: 0.15, duration: 0.4 }} />}
+      {up && <motion.span layoutId="turn" className="absolute inset-0 rounded-lg bg-card ring-2 ring-inset ring-primary" transition={{ type: "spring", bounce: 0.15, duration: 0.4 }} />}
       <span className="relative shrink-0">
         <PlayerAvatar name={player.name} image={player.image} frame={player.frame} frameColor={player.frameColor} size={32} />
         <span className="absolute -bottom-0.5 -right-0.5 [--dot-ring:var(--background)]">
@@ -367,7 +468,7 @@ function Score({ player, seat, state, isMe, active, planning }: { player: MatchV
           <span className="max-w-[72px] truncate">{isMe ? "You" : player.name}</span>
         </span>
         <span className="flex items-center gap-1.5">
-          <motion.span key={state.scores[seat]} initial={{ y: -6, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="font-display text-body tabular-nums" aria-label={`${state.scores[seat]} points`}>
+          <motion.span key={state.scores[seat]} initial={{ y: -10, opacity: 0, scale: 1.4 }} animate={{ y: 0, opacity: 1, scale: 1 }} transition={{ type: "spring", bounce: 0.5, duration: 0.5 }} className="origin-left font-display text-body tabular-nums" aria-label={`${state.scores[seat]} points`}>
             {state.scores[seat]}
           </motion.span>
           {planning > 0 && !isMe && (
@@ -395,14 +496,21 @@ function StatusLine({ match, state, meId, myTurn }: { match: MatchView; state: S
   return (
     <div className="flex h-12 flex-col justify-center px-1">
       <div className="flex items-center gap-2">
-        <p className="min-w-0 flex-1 truncate font-display text-body" aria-live="polite">
+        <motion.p
+          key={myTurn ? "mine" : (up?.userId ?? "over")}
+          initial={{ opacity: 0, y: 6, scale: myTurn ? 0.9 : 1 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ type: "spring", bounce: myTurn ? 0.5 : 0, duration: 0.4 }}
+          className={cn("min-w-0 flex-1 origin-left truncate font-display text-body", myTurn && "text-primary")}
+          aria-live="polite"
+        >
           {!up ? "Final scores" : myTurn ? "Your turn" : here ? `${up.name} is on it` : `Waiting for ${up.name}`}
           {up && !myTurn && here && (
             <span className="ml-2 inline-flex align-middle">
               <ThinkingDots />
             </span>
           )}
-        </p>
+        </motion.p>
         {state.deadline !== null && match.status === "active" && <Countdown deadline={state.deadline} mine={myTurn} />}
       </div>
       <p className="truncate text-footnote text-muted-foreground">
@@ -422,6 +530,12 @@ function Countdown({ deadline, mine }: { deadline: number; mine: boolean }) {
   }, []);
   const left = Math.max(0, Math.ceil((deadline - now) / 1000));
   const urgent = left <= 10;
+  // The last five seconds of your own turn tick.
+  const ticked = useRef(left);
+  useEffect(() => {
+    if (mine && left !== ticked.current && left > 0 && left <= 5) sfx("tick");
+    ticked.current = left;
+  }, [left, mine]);
   return (
     <span
       className={cn("rounded-full px-2.5 py-1 font-display text-callout tabular-nums", urgent ? "bg-[var(--tile-hit)] text-[var(--tile-hit-ink)]" : mine ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}
@@ -442,6 +556,7 @@ const Rack = ({
   swapping,
   dragging,
   slot,
+  hop,
   onDown,
 }: {
   ref: React.Ref<HTMLDivElement>;
@@ -451,6 +566,7 @@ const Rack = ({
   swapping: number[] | null;
   dragging: number | null;
   slot: number | null;
+  hop: number;
   onDown: (id: number, e: ReactPointerEvent) => void;
 }) => {
   // While a tile is dragged over the rack, the others part to show where it'll go.
@@ -467,23 +583,38 @@ const Rack = ({
             key={t.id}
             layout
             type="button"
-            transition={{ type: "spring", bounce: 0.2, duration: 0.3 }}
+            initial={{ scale: 0.4, y: 14, opacity: 0 }}
+            animate={{ scale: 1, y: 0, opacity: 1 }}
+            transition={{ type: "spring", bounce: 0.35, duration: 0.4, delay: i * 0.03 }}
             aria-label={t.letter === "?" ? "Blank tile" : `Tile ${t.letter}`}
             aria-pressed={swapping ? swapping.includes(t.id) : selected === t.id}
             className={cn("grid touch-none place-items-center", (selected === t.id || swapping?.includes(t.id)) && "-translate-y-1.5")}
             style={{ transition: "translate 120ms ease-out" }}
             onPointerDown={(e) => onDown(t.id, e)}
           >
-            <LetterTile
-              letter={t.letter}
-              size={46}
-              className="w-full max-w-[46px]"
-              style={{
-                height: "auto",
-                aspectRatio: "1",
-                outline: selected === t.id ? "3px solid var(--primary)" : swapping?.includes(t.id) ? "3px solid var(--tile-hit)" : undefined,
-              }}
-            />
+            {/* Shuffling makes every tile hop; a picked-up tile jiggles until you put it somewhere. */}
+            <motion.span key={hop} className="grid w-full place-items-center" animate={hop ? { y: [0, -14, 0] } : undefined} transition={{ duration: 0.35, delay: i * 0.035, ease: "easeOut" }}>
+              <motion.span
+                className="grid w-full place-items-center"
+                animate={selected === t.id ? { rotate: [0, -5, 5, -4, 4, 0] } : { rotate: 0 }}
+                transition={selected === t.id ? { duration: 0.5, repeat: Infinity, repeatDelay: 0.5 } : { duration: 0.15 }}
+              >
+                <LetterTile
+                  letter={t.letter}
+                  size={46}
+                  className="w-full max-w-[46px]"
+                  style={{
+                    height: "auto",
+                    aspectRatio: "1",
+                    // Keeps the tile's own edge and shadow, and adds the ring.
+                    boxShadow:
+                      selected === t.id ? "inset 0 -3px 0 #cdb07c, 0 0 0 3px var(--primary), 0 8px 14px rgb(0 0 0 / 0.28)"
+                      : swapping?.includes(t.id) ? "inset 0 -3px 0 #cdb07c, 0 0 0 3px var(--tile-hit)"
+                      : undefined,
+                  }}
+                />
+              </motion.span>
+            </motion.span>
           </motion.button>
         ),
       )}

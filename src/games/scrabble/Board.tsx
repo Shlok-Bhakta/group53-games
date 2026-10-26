@@ -1,5 +1,5 @@
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from "react";
-import { animate, motion } from "motion/react";
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { AnimatePresence, animate, motion } from "motion/react";
 import { layout, type Placed } from "../../../convex/scrabble/engine";
 import { cn } from "@/lib/utils";
 import { LetterTile, PREMIUM_STYLE } from "./Tile";
@@ -32,6 +32,12 @@ type Props = {
   zoomOnDoubleTap: boolean;
   // Squares to bring into view when `key` changes: a word someone just played.
   reveal?: { key: number; cells: [number, number][] };
+  // Where whoever's turn it is has laid tiles out, face down, in their color.
+  ghosts: { cells: [number, number][]; color: string } | null;
+  // The latest play's score, floating up off its last tile.
+  scored: { key: number; x: number; y: number; text: string; color: string } | null;
+  // Bumped to shake my tiles when they don't make real words.
+  shake: number;
   onCellTap: (x: number, y: number) => void;
   onDraftDown: (id: number, e: ReactPointerEvent) => void;
 };
@@ -43,7 +49,9 @@ const key = (x: number, y: number) => `${x},${y}`;
 // The board: pinch or double-tap to zoom, drag to look around. Moves happen in the DOM directly, not
 // through React, so panning stays smooth on a full board.
 export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoard(props, ref) {
-  const { size, px, tiles, draft, seatColor, fresh, freshSeat, target, tone, bubble, hidden, focus, zoomOnDoubleTap, reveal, onCellTap, onDraftDown } = props;
+  const { size, px, tiles, draft, seatColor, fresh, freshSeat, target, tone, bubble, hidden, focus, zoomOnDoubleTap, reveal, ghosts, scored, shake, onCellTap, onDraftDown } = props;
+  // Fresh tiles land in reading order, one after another, in time with the notes of the play sound.
+  const freshOrder = useMemo(() => new Map([...fresh].sort((a, b) => a.split(",").map(Number).reduce((s, v) => s + v, 0) - b.split(",").map(Number).reduce((s, v) => s + v, 0)).map((k, i) => [k, i])), [fresh]);
   const base = px / size;
   const maxScale = Math.max(1, MAX_CELL / base);
   const startScale = Math.min(maxScale, Math.max(1, START_CELL / base));
@@ -243,31 +251,59 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
               data-letter={tile.letter}
               className="absolute grid place-items-center rounded-[3px]"
               style={{ left: tile.x * base, top: tile.y * base, width: base, height: base, background: isFresh && freshSeat !== null ? `color-mix(in oklch, ${seatColor(freshSeat)} 55%, transparent)` : undefined }}
-              initial={isFresh ? { scale: 0.3, opacity: 0 } : false}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: "spring", bounce: 0.4, duration: 0.45, delay: isFresh ? 0.05 * ((tile.x + tile.y) % 7) : 0 }}
             >
-              <LetterTile
-                letter={tile.letter}
-                blank={tile.blank}
-                size={base - 2}
-                seat={seatColor(tile.seat)}
-                style={isFresh ? { scale: "0.9" } : undefined}
-              />
+              <motion.span
+                className="grid place-items-center"
+                initial={isFresh ? { y: -base * 0.8, scale: 0.6, opacity: 0 } : false}
+                animate={isFresh ? { y: [-base * 0.8, 0, -base * 0.28, 0], scale: [0.6, 1.08, 1, 0.9], opacity: [0, 1, 1, 1] } : { y: 0, scale: 1, opacity: 1 }}
+                transition={{ duration: 0.62, times: [0, 0.42, 0.7, 1], ease: "easeOut", delay: 0.07 * (freshOrder.get(k) ?? 0) }}
+              >
+                <LetterTile letter={tile.letter} blank={tile.blank} size={base - 2} seat={seatColor(tile.seat)} />
+              </motion.span>
             </motion.div>
           );
         })}
+        <AnimatePresence>
+          {ghosts?.cells
+            .filter(([x, y]) => !tiles.some((t) => t.x === x && t.y === y))
+            .map(([x, y]) => (
+              <motion.div
+                key={`g${x},${y}`}
+                data-ghost={key(x, y)}
+                className="pointer-events-none absolute grid place-items-center"
+                style={{ left: x * base, top: y * base, width: base, height: base }}
+                initial={{ scale: 0.3, opacity: 0, rotate: -12 }}
+                animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                exit={{ scale: 0.4, opacity: 0, rotate: 10 }}
+                transition={{ type: "spring", bounce: 0.45, duration: 0.4 }}
+              >
+                {/* Face down: a solid tile back in the player's color, so nothing shows through. */}
+                <LetterTile letter="?" size={base - 2} seat={ghosts.color} style={{ background: `linear-gradient(color-mix(in oklch, ${ghosts.color} 30%, #fbf0d6), color-mix(in oklch, ${ghosts.color} 42%, #efdcb4))` }} />
+              </motion.div>
+            ))}
+        </AnimatePresence>
+        <Puffs cells={ghosts?.cells ?? []} base={base} color={ghosts?.color ?? "var(--muted-foreground)"} />
         {draft.map((d) => (
-          <div
+          <motion.div
             key={`d${d.id}`}
             data-draft={d.id}
             data-cell={key(d.x, d.y)}
             data-letter={d.letter}
-            className={cn("absolute grid touch-none place-items-center", d.id === hidden && "opacity-0")}
-            style={{ left: d.x * base, top: d.y * base, width: base, height: base }}
+            className={cn("absolute grid touch-none place-items-center rounded-[4px]", d.id === hidden && "opacity-0")}
+            style={{ width: base, height: base, boxShadow: `inset 0 0 0 2px ${ring}` }}
+            initial={{ left: d.x * base, top: d.y * base, scale: 1.3 }}
+            animate={{ left: d.x * base, top: d.y * base, scale: 1 }}
+            transition={{ type: "spring", bounce: 0.5, duration: 0.3 }}
           >
-            <LetterTile letter={d.letter} blank={d.blank} size={base - 2} style={{ outline: `2px solid ${ring}`, outlineOffset: 0, transform: "translateY(-1px)" }} />
-          </div>
+            <motion.span
+              key={tone === "bad" ? shake : 0}
+              className="grid place-items-center"
+              animate={tone === "bad" && shake ? { x: [0, -base * 0.12, base * 0.12, -base * 0.08, base * 0.06, 0] } : { x: 0 }}
+              transition={{ duration: 0.38 }}
+            >
+              <LetterTile letter={d.letter} blank={d.blank} size={base - 4} />
+            </motion.span>
+          </motion.div>
         ))}
         {target && (
           <div
@@ -275,6 +311,22 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
             style={{ left: target[0] * base, top: target[1] * base, width: base, height: base, background: "color-mix(in oklch, var(--primary) 25%, transparent)" }}
           />
         )}
+        <AnimatePresence>
+          {scored && (
+            <motion.div
+              key={scored.key}
+              className="pointer-events-none absolute z-20"
+              style={{ left: (scored.x + 0.5) * base, top: scored.y * base }}
+              initial={{ opacity: 0, y: 0 }}
+              animate={{ opacity: [0, 1, 1, 0], y: [0, -base * 0.9, -base * 1.3, -base * 1.8] }}
+              transition={{ duration: 1.8, times: [0, 0.2, 0.7, 1], delay: 0.35 }}
+            >
+              <span className="block -translate-x-1/2 rounded-full px-2.5 py-1 font-display text-callout tabular-nums text-white shadow-lg" style={{ scale: "calc(1 / var(--s, 1))", background: scored.color }}>
+                {scored.text}
+              </span>
+            </motion.div>
+          )}
+        </AnimatePresence>
         {bubble && (
           <motion.div
             key={`${bubble.x},${bubble.y}`}
@@ -296,6 +348,49 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
     </div>
   );
 });
+
+// Little puffs of smoke where face-down tiles appear or vanish.
+function Puffs({ cells, base, color }: { cells: [number, number][]; base: number; color: string }) {
+  const prev = useRef(new Set<string>());
+  const [puffs, setPuffs] = useState<{ id: number; x: number; y: number }[]>([]);
+  const nextId = useRef(0);
+  const sig = cells.map(([x, y]) => key(x, y)).sort().join("|");
+  useEffect(() => {
+    const now = new Set(sig ? sig.split("|") : []);
+    const changed = [...now].filter((k) => !prev.current.has(k)).concat([...prev.current].filter((k) => !now.has(k)));
+    prev.current = now;
+    if (!changed.length) return;
+    const added = changed.map((k) => {
+      const [x, y] = k.split(",").map(Number);
+      return { id: nextId.current++, x, y };
+    });
+    setPuffs((p) => [...p, ...added]);
+    const ids = new Set(added.map((a) => a.id));
+    const t = setTimeout(() => setPuffs((p) => p.filter((q) => !ids.has(q.id))), 700);
+    return () => clearTimeout(t);
+  }, [sig]);
+  return (
+    <>
+      {puffs.map((p) => (
+        <span key={p.id} className="pointer-events-none absolute z-10" style={{ left: (p.x + 0.5) * base, top: (p.y + 0.5) * base }}>
+          {[0, 1, 2, 3, 4, 5].map((i) => {
+            const a = (i / 6) * Math.PI * 2 + 0.4;
+            return (
+              <motion.span
+                key={i}
+                className="absolute -left-1 -top-1 size-2 rounded-full"
+                style={{ background: color }}
+                initial={{ x: 0, y: 0, opacity: 0.7, scale: 0.6 }}
+                animate={{ x: Math.cos(a) * base * 0.75, y: Math.sin(a) * base * 0.75, opacity: 0, scale: 1.6 }}
+                transition={{ duration: 0.55, ease: "easeOut" }}
+              />
+            );
+          })}
+        </span>
+      ))}
+    </>
+  );
+}
 
 // The empty squares and their bonuses. Never changes during a game, so it's drawn once.
 const Squares = memo(function Squares({ size, base }: { size: number; base: number }) {

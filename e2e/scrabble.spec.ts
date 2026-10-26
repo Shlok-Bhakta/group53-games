@@ -38,6 +38,8 @@ async function tapSquare(page: Page, x: number, y: number) {
   await page.mouse.click(box.x + pt.x, box.y + pt.y);
 }
 
+const sounds = (page: Page) => page.evaluate(() => (window as unknown as { __sfx: string[] }).__sfx);
+
 // Two phones in a started classic game. Returns them in seat order.
 async function twoPlayerGame(browser: Browser, context: Parameters<typeof phone>[0], mode = "classic") {
   const [a, b] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
@@ -100,8 +102,8 @@ test.describe("Scrabble", () => {
     await expect(other.page.getByRole("heading", { name: "Waiting for Shlok to start" })).toBeVisible();
     await pa.getByRole("button", { name: "Settings" }).click();
     await pa.getByRole("radiogroup", { name: "Board" }).getByRole("radio", { name: "21×21" }).click();
-    await pa.getByRole("radiogroup", { name: "Bonus squares" }).getByRole("radio", { name: "Wild" }).click();
-    await expect(other.page.getByRole("list", { name: "Settings" })).toHaveText(/21×21 board.*Wild bonuses/);
+    await pa.getByRole("radiogroup", { name: "Rules" }).getByRole("radio", { name: "Letter League" }).click();
+    await expect(other.page.getByRole("list", { name: "Settings" })).toHaveText(/21×21 board.*Letter League rules/);
     await pa.getByRole("button", { name: "Start with 2" }).click();
     await expect(other.page.getByRole("group", { name: "Board" })).toBeVisible();
     expect((await getMatch(id)).state.size).toBe(21);
@@ -122,14 +124,23 @@ test.describe("Scrabble", () => {
     await place(p1, "A", 7, 7);
     await place(p1, "T", 8, 7);
     await expect(p1.getByRole("button", { name: "Play CAT for 10" })).toBeEnabled();
-    // The other phone sees that a plan is in progress, but not where.
+    expect(await sounds(p1)).toEqual(expect.arrayContaining(["pick", "place"]));
+    // The game screen has music on, once you've touched it.
+    await expect.poll(() => p1.evaluate(() => (window as unknown as { __music?: string }).__music)).toBe("lofi");
+    // The other phone sees face-down tiles where they're trying things, never the letters.
     await expect(p2.getByLabel("Planning 3 tiles")).toBeVisible();
+    await expect(p2.locator("[data-ghost]")).toHaveCount(3);
+    await expect(p2.locator('[data-ghost="7,7"]')).toBeVisible();
+    expect((await p2.locator("[data-ghost]").allTextContents()).join("")).toBe("");
     await p1.reload();
     await expect(p1.getByRole("button", { name: "Play CAT for 10" })).toBeEnabled();
     await p1.getByRole("button", { name: "Play CAT for 10" }).click();
+    await expect.poll(() => sounds(p1)).toContain("play");
 
     // It lands on the other phone, scores, and passes the turn.
     await expect(p2.locator('[data-cell="7,7"]')).toHaveAttribute("data-letter", "A");
+    await expect(p2.locator("[data-ghost]")).toHaveCount(0);
+    await expect.poll(() => sounds(p2)).toEqual(expect.arrayContaining(["land", "turn"]));
     await expect(p2.getByText("Your turn")).toBeVisible();
     await expect(p2.getByRole("list", { name: "Scores" }).getByLabel("10 points")).toBeVisible();
     await expect(p1.getByLabel("Your tiles").getByRole("button")).toHaveCount(7);
@@ -148,6 +159,36 @@ test.describe("Scrabble", () => {
     await place(p1, "S", 9, 7);
     await expect(p1.getByRole("button", { name: "Planned: CATS, 6" })).toBeDisabled();
     await close();
+  });
+
+  test("the turn ring sits inside the score strip, never clipped", async ({ context, browser }) => {
+    const { first, close } = await twoPlayerGame(browser, context);
+    const strip = (await first.page.getByRole("list", { name: "Scores" }).boundingBox())!;
+    const up = (await first.page.locator('[aria-current="true"]').boundingBox())!;
+    expect(up.y).toBeGreaterThanOrEqual(strip.y);
+    expect(up.y + up.height).toBeLessThanOrEqual(strip.y + strip.height);
+    await close();
+  });
+
+  test("sound settings: pick music and an effects pack, and they stick", async ({ context }) => {
+    const me = await createPlayer("Shlok");
+    const page = await phone(context, { player: me, notifications: "granted" });
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.goto("/you");
+    const music = page.getByRole("radiogroup", { name: "Music" });
+    const effects = page.getByRole("radiogroup", { name: "Sound effects" });
+    await expect(music.getByRole("radio", { name: "Lo-fi" })).toBeChecked();
+    await expect(effects.getByRole("radio", { name: "Wood" })).toBeChecked();
+    await music.getByRole("radio", { name: "Rain" }).click();
+    await effects.getByRole("radio", { name: "Arcade" }).click();
+    expect(await sounds(page)).toContain("preview");
+    await page.reload();
+    await expect(page.getByRole("radiogroup", { name: "Music" }).getByRole("radio", { name: "Rain" })).toBeChecked();
+    await expect(page.getByRole("radiogroup", { name: "Sound effects" }).getByRole("radio", { name: "Arcade" })).toBeChecked();
+    await page.getByRole("radiogroup", { name: "Music" }).getByRole("radio", { name: "Off" }).click();
+    expect(JSON.parse((await page.evaluate(() => localStorage.getItem("sound")))!)).toMatchObject({ music: "off", sfx: "arcade" });
+    expect(errors).toEqual([]);
   });
 
   test("tiles drag from the rack onto the board and back", async ({ context, browser }) => {

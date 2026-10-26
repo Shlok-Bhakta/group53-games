@@ -32,7 +32,8 @@ const SCRABBLE: Setting[] = [
   { key: "rack", label: "Tiles in hand", short: "{} tiles", options: [{ value: 5, label: "5" }, { value: 7, label: "7" }, { value: 9, label: "9" }], default: 7 },
   { key: "bag", label: "Tiles in the bag", short: "{} bag", options: [{ value: 50, label: "Half" }, { value: 100, label: "100" }, { value: 150, label: "150" }, { value: 200, label: "200" }], default: 100 },
   { key: "board", label: "Board", short: "{} board", options: [{ value: 15, label: "15×15" }, { value: 21, label: "21×21" }], default: 15 },
-  { key: "wild", label: "Bonus squares", short: "{} bonuses", options: [{ value: 0, label: "Classic" }, { value: 1, label: "Wild" }], default: 0 },
+  // Scrabble's official rules, or Letter League's (see convex/scrabble/engine.ts for what changes).
+  { key: "rules", label: "Rules", short: "{} rules", options: [{ value: 0, label: "Scrabble" }, { value: 1, label: "Letter League" }], default: 0 },
   { key: "rounds", label: "Rounds", short: "{} rounds", options: [{ value: 0, label: "No limit" }, { value: 5, label: "5" }, { value: 10, label: "10" }, { value: 15, label: "15" }], default: 0 },
 ];
 
@@ -147,7 +148,7 @@ export const settingLabel = (mode: string, key: string, value: number) => {
   const s = isMode(mode) ? (MODES[mode].settings as readonly Setting[]).find((x) => x.key === key) : undefined;
   return s?.options.find((o) => o.value === value)?.label ?? String(value);
 };
-// The changed settings in a few words each: ["21×21 board", "Wild bonuses"].
+// The changed settings in a few words each: ["21×21 board", "Letter League rules"].
 export function settingsSummary(mode: string, raw?: Settings | null): string[] {
   const changed = changedSettings(mode, raw);
   const defs = isMode(mode) ? (MODES[mode].settings as readonly Setting[]) : [];

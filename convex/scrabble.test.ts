@@ -232,7 +232,9 @@ describe("plans", () => {
     await seats[1].as.mutation(api.scrabble.saveDraft, { id, placed: [{ id: 0, x: 3, y: 3 }, { id: 1, x: 4, y: 3 }], order: [3, 2, 1, 0] });
     expect(await seats[1].as.query(api.scrabble.draft, { id })).toEqual({ placed: [{ id: 0, x: 3, y: 3 }, { id: 1, x: 4, y: 3 }], order: [3, 2, 1, 0] });
     expect(await seats[0].as.query(api.scrabble.draft, { id })).toBeNull();
-    expect((await seats[0].as.query(api.scrabble.planning, { id })).map((p) => [p.userId, p.count])).toEqual([[seats[1].userId, 2]]);
+    expect((await seats[0].as.query(api.scrabble.planning, { id })).map((p) => [p.userId, p.count, p.cells])).toEqual([[seats[1].userId, 2, [[3, 3], [4, 3]]]]);
+    // Where, but never which letters.
+    expect(JSON.stringify(await seats[0].as.query(api.scrabble.planning, { id }))).not.toMatch(/"id"|letter/);
     await seats[0].as.mutation(api.scrabble.saveDraft, { id, placed: lay("CAT", 6, 7), order: [] });
     await seats[0].as.mutation(api.scrabble.play, { id, tiles: lay("CAT", 6, 7) });
     expect(await seats[0].as.query(api.scrabble.draft, { id })).toEqual({ placed: [], order: [] });
@@ -300,5 +302,74 @@ describe("rematch", () => {
     expect(m.settings).toEqual({ rack: 9 });
     expect((m.state as ScrabbleState).racks).toEqual([9, 9]);
     expect(m.players[0].userId).toBe(seats[1].userId);
+  });
+});
+
+describe("notifications", () => {
+  const scheduledFns = async (t: T, name: string) => (await scheduled(t)).filter((f) => f.name === name && f.state.kind === "pending");
+
+  test("async: every turn pushes the next player, reminds them every 8 hours, and stale reminders stay quiet", async () => {
+    const t = setup();
+    const { id, seats } = await game(t, 3);
+    const url = `/scrabble/${id}`;
+    // The game starting tells everyone, and the first player it's on them.
+    const start = (await pushes(t)).filter((p) => !p.title.includes("wants") && !p.title.includes("joined"));
+    expect(start.find((p) => p.userId === seats[0].userId)).toMatchObject({ title: "You go first", url });
+    expect(start.filter((p) => p.userId !== seats[0].userId).map((p) => p.title)).toEqual(["Classic Scrabble is on", "Classic Scrabble is on"]);
+    await clearPushes(t);
+
+    await setRack(t, id, seats[0].userId, "CATSXYZ");
+    await seats[0].as.mutation(api.scrabble.play, { id, tiles: lay("CAT", 6, 7) });
+    const name = (await t.run((ctx) => ctx.db.get(seats[0].userId)))!.name;
+    expect(await pushes(t)).toEqual([expect.objectContaining({ userId: seats[1].userId, title: `${name} played CAT for 10`, body: "Your move.", url })]);
+    await clearPushes(t);
+
+    // The reminder for this move is armed 8 hours out and nags the right person.
+    const reminder = (await scheduledFns(t, "matches:remind")).find((f) => (f.args[0] as { moveCount: number }).moveCount === 1)!;
+    expect(reminder.scheduledTime - Date.now()).toBeGreaterThan(REMINDER_MS - 1000);
+    await t.mutation(internal.matches.remind, reminder.args[0] as { id: Id<"matches">; moveCount: number });
+    expect(await pushes(t)).toEqual([expect.objectContaining({ userId: seats[1].userId, title: "Still your move", url })]);
+    await clearPushes(t);
+
+    // Once they've moved, that reminder fizzles.
+    await seats[1].as.mutation(api.scrabble.pass, { id });
+    await clearPushes(t);
+    await t.mutation(internal.matches.remind, { id, moveCount: 1 });
+    expect(await pushes(t)).toEqual([]);
+  });
+
+  test("nobody gets a push for a game they're looking at", async () => {
+    const t = setup();
+    const { id, seats } = await game(t, 2);
+    await clearPushes(t);
+    await t.run((ctx) => ctx.db.insert("presence", { userId: seats[1].userId, online: true, lastSeen: Date.now(), path: `/scrabble/${id}` }));
+    await seats[0].as.mutation(api.scrabble.pass, { id });
+    expect(await pushes(t)).toEqual([]);
+  });
+
+  test("the end of the game tells everyone how they did", async () => {
+    const t = setup();
+    const { id, seats } = await game(t, 2);
+    await setRack(t, id, seats[0].userId, "QZ");
+    await setRack(t, id, seats[1].userId, "AE");
+    await clearPushes(t);
+    for (let i = 0; i < 4; i++) await seats[i % 2].as.mutation(api.scrabble.pass, { id });
+    const end = (await pushes(t)).filter((p) => p.title.startsWith("You"));
+    expect(end.find((p) => p.userId === seats[1].userId)!.title).toMatch(/^You won \(\+\d+\)$/);
+    expect(end.find((p) => p.userId === seats[0].userId)!.title).toMatch(/^You lost \(-\d+\)$/);
+    expect(end.every((p) => p.url === `/scrabble/${id}`)).toBe(true);
+  });
+
+  test("live: the next player is pushed too, and challenges reach the people invited", async () => {
+    const t = setup();
+    const { id, seats } = await game(t, 2, "scrabble:live");
+    await clearPushes(t);
+    await seats[0].as.mutation(api.scrabble.pass, { id });
+    expect((await pushes(t)).map((p) => [p.userId, p.body])).toEqual([[seats[1].userId, "Your move."]]);
+
+    const [a, b] = await crew(t, 2);
+    await clearPushes(t);
+    const cid = await a.as.mutation(api.matches.challenge, { mode: "scrabble:classic", opponents: [b.userId] });
+    expect(await pushes(t)).toEqual([expect.objectContaining({ userId: b.userId, title: "Shlok challenged you", url: `/scrabble/${cid}?accept=1` })]);
   });
 });

@@ -5,6 +5,8 @@ import {
   BellRingingIcon,
   CaretRightIcon,
   CheckIcon,
+  MusicNotesIcon,
+  SpeakerHighIcon,
   PaletteIcon,
   PaperPlaneTiltIcon,
   PencilSimpleIcon,
@@ -35,6 +37,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useNotifications } from "@/notifications";
+import { MUSIC_TRACKS, SFX_PACKS, previewMusic, setSound, sfx, useSoundSettings, type MusicTrack, type SfxPack } from "@/sound";
 import { useTheme } from "@/theme";
 import { FONTS, PALETTES } from "@/themes";
 import { cn } from "@/lib/utils";
@@ -56,6 +59,7 @@ export function You() {
       {mine && <CardEditor open={editing} onOpenChange={setEditing} player={mine} />}
 
       <NotificationsGroup />
+      <SoundGroup />
       <AppearanceGroup />
       <AccountGroup />
     </div>
@@ -91,6 +95,49 @@ function NotificationsGroup() {
           onClick={() => void push.sendTest().then(() => toast.success("Sent. It should land in a few seconds."))}
         />
       )}
+    </Group>
+  );
+}
+
+// Music plays in games; effects play as you place and play tiles. Picking one plays a taste of it.
+function SoundGroup() {
+  const sound = useSoundSettings();
+  return (
+    <Group title="Sound">
+      <div className="flex flex-col gap-2.5 px-4 py-3">
+        <span className="flex items-center gap-3 font-medium">
+          <span className="grid size-[30px] shrink-0 place-items-center rounded-sm text-white" style={{ background: "#bf5af2" }}>
+            <MusicNotesIcon size={18} weight="fill" />
+          </span>
+          Music
+        </span>
+        <Segmented
+          label="Music"
+          value={sound.music}
+          options={MUSIC_TRACKS}
+          onChange={(v: MusicTrack) => {
+            setSound({ music: v });
+            if (v !== "off") previewMusic();
+          }}
+        />
+      </div>
+      <div className="flex flex-col gap-2.5 px-4 py-3">
+        <span className="flex items-center gap-3 font-medium">
+          <span className="grid size-[30px] shrink-0 place-items-center rounded-sm text-white" style={{ background: "#ff9f0a" }}>
+            <SpeakerHighIcon size={18} weight="fill" />
+          </span>
+          Sound effects
+        </span>
+        <Segmented
+          label="Sound effects"
+          value={sound.sfx}
+          options={SFX_PACKS}
+          onChange={(v: SfxPack) => {
+            setSound({ sfx: v });
+            sfx("preview");
+          }}
+        />
+      </div>
     </Group>
   );
 }

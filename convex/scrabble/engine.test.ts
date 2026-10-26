@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { BINGO, bagLetters, centre, evaluate, layout, nextSeat, premiumAt, standings, type Placed, type ScrabbleState, type Tile } from "./engine";
 import { isWord } from "./dictionary";
 
-const rules = { size: 15, rack: 7, wild: false };
+const rules = { size: 15, rack: 7, league: false };
 const rackOf = (letters: string): Tile[] => [...letters].map((letter, i) => ({ id: i, letter }));
 // Lays `word` out from (x, y), across or down, using rack tiles in order.
 const lay = (word: string, x: number, y: number, down = false, from = 0) => [...word].map((_, i) => ({ id: from + i, x: down ? x : x + i, y: down ? y + i : y }));
@@ -73,11 +73,19 @@ describe("evaluate", () => {
     expect(down.ok && down.words.map((w) => w.word)).toEqual(["HAT"]);
   });
 
-  test("bonus squares count once in classic, and keep counting in wild", () => {
+  test("bonus squares count once in Scrabble, and stay with their tile in Letter League", () => {
     // CAT across the centre star (double word), then COW down from its C.
     const board = onBoard("CAT", 7, 7);
     expect(evaluate(board, lay("OW", 7, 8, true), rackOf("OW"), rules)).toMatchObject({ ok: true, score: 8 });
-    expect(evaluate(board, lay("OW", 7, 8, true), rackOf("OW"), { ...rules, wild: true })).toMatchObject({ ok: true, score: 16 });
+    expect(evaluate(board, lay("OW", 7, 8, true), rackOf("OW"), { ...rules, league: true })).toMatchObject({ ok: true, score: 16 });
+  });
+
+  test("in Letter League, an S on a doubled word doubles it again", () => {
+    // CAT on the centre star scored (3+1+1)x2 = 10. CATS: official 6, Letter League (3+1+1+1)x2 = 12.
+    const board = onBoard("CAT", 6, 7);
+    const s = [{ id: 0, x: 9, y: 7 }];
+    expect(evaluate(board, s, rackOf("S"), rules)).toMatchObject({ ok: true, score: 6 });
+    expect(evaluate(board, s, rackOf("S"), { ...rules, league: true })).toMatchObject({ ok: true, score: 12 });
   });
 
   test("the big board plays by the same rules, centred on its own star", () => {

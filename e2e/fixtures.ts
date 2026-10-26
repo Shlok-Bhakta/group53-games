@@ -38,6 +38,8 @@ export async function phone(context: BrowserContext, opts: PhoneOptions = {}): P
   await context.addInitScript(
     ([installed, ns, token, refresh, notifications]) => {
       if (installed) Object.defineProperty(navigator, "standalone", { get: () => true });
+      // src/sound.ts logs every effect it's asked to play here, so tests can hear them.
+      (window as unknown as { __sfx: string[] }).__sfx = [];
       if (token && !sessionStorage.getItem("e2e-seeded")) {
         localStorage.setItem(`__convexAuthJWT_${ns}`, token);
         localStorage.setItem(`__convexAuthRefreshToken_${ns}`, refresh);
