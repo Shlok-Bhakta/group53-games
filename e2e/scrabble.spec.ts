@@ -161,6 +161,35 @@ test.describe("Scrabble", () => {
     await close();
   });
 
+  test("a game link opened in Discord's browser sends the game to your phone", async ({ context, browser }) => {
+    const [a, b, c] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris"), createPlayer("Sam")]);
+    const pa = await phone(context, { player: a, notifications: "granted" });
+    await enablePush(pa);
+    const chris = await otherPhone(browser, b);
+    await enablePush(chris.page);
+    void c;
+    await pa.goto("/scrabble/mode/classic");
+    await pa.getByRole("button", { name: "Open a game" }).click();
+    await expect(pa.getByRole("heading", { name: "Waiting for players" })).toBeVisible();
+    const id = matchIdOf(pa);
+
+    // Someone opens the shared link in a browser: not the app, and not signed in.
+    const linkCtx = await browser.newContext({ viewport: { width: 393, height: 852 }, isMobile: true, hasTouch: true, userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Discord/250.0" });
+    const link = await phone(linkCtx, { installed: false });
+    await link.goto(`/scrabble/${id}?accept=1`);
+    await expect(link.getByRole("heading", { name: "Shlok wants Scrabble" })).toBeVisible();
+    await link.getByRole("button", { name: "I'm Chris" }).click();
+    await expect(link.getByRole("status")).toHaveText("Sent to your phone. Tap the notification to jump in.");
+    if (process.env.SCREENS) await link.screenshot({ path: "e2e/.state/screens/scrabble-link.png", fullPage: true });
+    // Sam never turned notifications on, so he's told how to get there instead.
+    await link.getByRole("button", { name: "I'm Sam" }).click();
+    await expect(link.getByRole("status")).toContainText("Your notifications are off");
+    // The install steps are still there for anyone new.
+    await expect(link.getByRole("heading", { name: /New here/ })).toBeVisible();
+    await linkCtx.close();
+    await chris.context.close();
+  });
+
   test("the turn ring sits inside the score strip, never clipped", async ({ context, browser }) => {
     const { first, close } = await twoPlayerGame(browser, context);
     const strip = (await first.page.getByRole("list", { name: "Scores" }).boundingBox())!;

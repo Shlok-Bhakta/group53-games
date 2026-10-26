@@ -16,6 +16,7 @@ import type * as chess_realtime from "../chess/realtime.js";
 import type * as crons from "../crons.js";
 import type * as games from "../games.js";
 import type * as http from "../http.js";
+import type * as links from "../links.js";
 import type * as matches from "../matches.js";
 import type * as modes from "../modes.js";
 import type * as notifications from "../notifications.js";
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   games: typeof games;
   http: typeof http;
+  links: typeof links;
   matches: typeof matches;
   modes: typeof modes;
   notifications: typeof notifications;

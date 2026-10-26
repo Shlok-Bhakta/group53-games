@@ -3,27 +3,25 @@ import { CheckIcon as Check, CopyIcon as Copy, DotsThreeVerticalIcon as Ellipsis
 import { Tiles } from "@/Tiles";
 import { Button } from "@/components/ui/button";
 import { GAMES } from "../convex/modes";
+import { LinkHandoff } from "@/components/LinkHandoff";
 import { inAppBrowser, platform, useInstallPrompt, useStandalone } from "./install";
 
 // Phones only get in from the installed app, because web push on iOS only works there.
 export function InstallGate({ children }: { children: ReactNode }) {
   const standalone = useStandalone();
   if (standalone || platform === "desktop") return <>{children}</>;
+  // A game link: let people who already have the app send it there. Everyone else gets the install steps.
+  const gameLink = Object.values(GAMES).some((g) => new RegExp(`^${g.path}/[a-z0-9]+$`).test(location.pathname)) ? location.pathname + location.search : null;
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-7 px-5 pb-10 pt-[calc(env(safe-area-inset-top)+40px)]">
       <Tiles word="53" states={["green", "yellow"]} size="lg" flip label="Group 53" />
+      {gameLink && <LinkHandoff path={gameLink} />}
       <div>
-        <h1 className="font-display text-title">Put Group 53 on your home screen</h1>
+        <h1 className={gameLink ? "font-display text-heading" : "font-display text-title"}>{gameLink ? "New here? Put Group 53 on your home screen" : "Put Group 53 on your home screen"}</h1>
         <p className="mt-3 text-callout text-muted-foreground">
           The games run as an app so they can ping you when it's your turn or someone comes for you. It takes about ten seconds.
         </p>
       </div>
-      {Object.values(GAMES).some((g) => location.pathname.startsWith(`${g.path}/`)) && (
-        <p className="rounded-lg bg-primary/10 p-4 text-callout ring-2 ring-primary/40">
-          <span className="font-semibold">Already installed?</span> Open Group 53 from your home screen. Links can't open the app directly, but this game is waiting in
-          the inbox on its home screen.
-        </p>
-      )}
       {inAppBrowser ? <OpenInBrowser /> : platform === "ios" ? <IosSteps /> : <AndroidSteps />}
     </div>
   );

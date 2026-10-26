@@ -145,7 +145,7 @@ export const playAs = internalMutation({
   },
 });
 
-const TABLES = ["taps", "rtCommands", "rtSnapshots", "secrets", "drafts", "matches", "ratings", "presence", "pushSubscriptions", "profiles", "authRefreshTokens", "authSessions", "authAccounts", "users"] as const;
+const TABLES = ["handoffs", "taps", "rtCommands", "rtSnapshots", "secrets", "drafts", "matches", "ratings", "presence", "pushSubscriptions", "profiles", "authRefreshTokens", "authSessions", "authAccounts", "users"] as const;
 
 // Wipes everything. Refuses if any real (non-test) player exists, so it can't touch prod data.
 export const reset = internalMutation({
@@ -174,7 +174,7 @@ export const removeTestData = internalMutation({
       await ctx.db.delete(m._id);
       removed++;
     }
-    for (const table of ["ratings", "presence", "taps", "profiles", "pushSubscriptions"] as const) {
+    for (const table of ["ratings", "presence", "taps", "profiles", "pushSubscriptions", "handoffs"] as const) {
       for (const doc of await ctx.db.query(table).collect()) if (testIds.has(doc.userId)) await ctx.db.delete(doc._id);
     }
     for (const s of await ctx.db.query("authSessions").collect()) {

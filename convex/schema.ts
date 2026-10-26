@@ -101,6 +101,9 @@ export default defineSchema({
   // A player's plan for their next turn (tiles laid out on the board, rack order), saved as they go so it's
   // there when they come back. Private to them; others only see that they're planning.
   drafts: defineTable({ matchId: v.id("matches"), userId: v.id("users"), data: v.any(), count: v.number(), at: v.number() }).index("by_match_user", ["matchId", "userId"]),
+  // Game links opened outside the app, sent on to the player's phone as a push (convex/links.ts). Kept
+  // to rate-limit them.
+  handoffs: defineTable({ userId: v.id("users"), matchId: v.id("matches"), at: v.number() }).index("by_user", ["userId"]),
   // Elo per mode.
   ratings: defineTable({
     userId: v.id("users"),
