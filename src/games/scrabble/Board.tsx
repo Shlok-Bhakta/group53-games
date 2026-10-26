@@ -14,7 +14,9 @@ type Props = {
   // The board's side on screen at its smallest, in px, and the window it's seen through (which can be
   // taller than the board, so it fills the screen and you pan around it).
   px: number;
-  view?: { width: number; height: number; padTop?: number };
+  // `padTop` and `padBottom` are what floats over the board's edges (a top bar, a dock): the board runs
+  // underneath them, but any square can be brought out into the open part between.
+  view?: { width: number; height: number; padTop?: number; padBottom?: number };
   tiles: Placed[];
   draft: DraftTile[];
   seatColor: (seat: number) => string;
@@ -44,8 +46,8 @@ type Props = {
   onDraftDown: (id: number, e: ReactPointerEvent) => void;
 };
 
-const MAX_CELL = 52;
-const START_CELL = 38;
+const MAX_CELL = 64;
+const START_CELL = 44;
 const key = (x: number, y: number) => `${x},${y}`;
 
 // The board: pinch or double-tap to zoom, drag to look around. Moves happen in the DOM directly, not
@@ -64,16 +66,20 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
   const vw = view?.width ?? px;
   const vh = view?.height ?? px;
   const padTop = view?.padTop ?? 0;
-  // Keeps the board in view: smaller than the window, it sits in the middle; bigger, its edges can't be
-  // dragged past the window's (the top can come down far enough to clear anything floating over it).
+  const padBottom = view?.padBottom ?? 0;
+  // Keeps the board in view. Smaller than the open part of the window, it sits in the middle of it; bigger,
+  // it can be dragged until its edge meets the edge of the open part, never further.
   const clamp = useCallback(
     (s: number, tx: number, ty: number) => {
       const sc = Math.min(maxScale, Math.max(1, s));
       const side = px * sc;
-      const axis = (v: number, dim: number, pad = 0) => (side + pad <= dim ? pad + (dim - pad - side) / 2 : Math.min(pad, Math.max(dim - side, v)));
-      return { s: sc, tx: axis(tx, vw), ty: axis(ty, vh, padTop) };
+      const axis = (v: number, dim: number, lo = 0, hi = 0) => {
+        const open = dim - lo - hi;
+        return side <= open ? lo + (open - side) / 2 : Math.min(lo, Math.max(dim - hi - side, v));
+      };
+      return { s: sc, tx: axis(tx, vw), ty: axis(ty, vh, padTop, padBottom) };
     },
-    [maxScale, px, vw, vh, padTop],
+    [maxScale, px, vw, vh, padTop, padBottom],
   );
   const apply = useCallback((next: { s: number; tx: number; ty: number }) => {
     t.current = next;
@@ -82,12 +88,16 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
     el.style.transform = `translate3d(${next.tx}px, ${next.ty}px, 0) scale(${next.s})`;
     el.style.setProperty("--s", String(next.s));
   }, []);
-  const centredOn = useCallback((s: number, cx: number, cy: number) => clamp(s, vw / 2 - (cx + 0.5) * base * s, (vh + padTop) / 2 - (cy + 0.5) * base * s), [base, clamp, vw, vh, padTop]);
+  const centredOn = useCallback(
+    (s: number, cx: number, cy: number) => clamp(s, vw / 2 - (cx + 0.5) * base * s, (vh + padTop - padBottom) / 2 - (cy + 0.5) * base * s),
+    [base, clamp, vw, vh, padTop, padBottom],
+  );
 
   // Start zoomed in on the action, once we know how big the board is.
   const started = useRef<string>("");
   useLayoutEffect(() => {
-    const k = `${px}:${size}:${vw}:${vh}`;
+    // Not keyed on the pads: the dock changing height (swap mode) mustn't jump the view.
+    const k = `${px}:${size}:${vw}`;
     if (!px || started.current === k) return;
     started.current = k;
     apply(centredOn(startScale, focus[0], focus[1]));
@@ -126,26 +136,27 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
     const seen = ([x, y]: [number, number]) => {
       const sx = tx + (x + 0.5) * base * s;
       const sy = ty + (y + 0.5) * base * s;
-      return sx > 0 && sy > padTop && sx < vw && sy < vh;
+      return sx > 0 && sy > padTop && sx < vw && sy < vh - padBottom;
     };
     if (reveal.cells.every(seen)) return;
     const cx = reveal.cells.reduce((a, [x]) => a + x, 0) / reveal.cells.length;
     const cy = reveal.cells.reduce((a, [, y]) => a + y, 0) / reveal.cells.length;
     zoomTo(centredOn(s, cx, cy));
-  }, [reveal, px, base, zoomTo, centredOn, padTop, vw, vh]);
+  }, [reveal, px, base, zoomTo, centredOn, padTop, padBottom, vw, vh]);
 
   const cellAt = useCallback(
     (clientX: number, clientY: number): [number, number] | null => {
       const el = viewport.current;
       if (!el) return null;
       const r = el.getBoundingClientRect();
-      if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) return null;
+      // Only the open part counts: a tile over the dock is over the rack, not the squares under it.
+      if (clientX < r.left || clientX > r.right || clientY < r.top + padTop || clientY > r.bottom - padBottom) return null;
       const { s, tx, ty } = t.current;
       const x = Math.floor((clientX - r.left - tx) / s / base);
       const y = Math.floor((clientY - r.top - ty) / s / base);
       return x >= 0 && y >= 0 && x < size && y < size ? [x, y] : null;
     },
-    [base, size],
+    [base, size, padTop, padBottom],
   );
   useImperativeHandle(ref, () => ({ cellAt }), [cellAt]);
 

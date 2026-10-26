@@ -280,20 +280,31 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
   // dock, and you pan around it; once it's over it's a square above the result. ---
   const area = useRef<HTMLDivElement>(null);
   const topBar = useRef<HTMLDivElement>(null);
-  const [box, setBox] = useState({ w: 0, h: 0, pad: 0 });
+  const dock = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 0, h: 0, top: 0, bottom: 0 });
   useLayoutEffect(() => {
     const el = area.current;
     if (!el) return;
     const measure = () => {
       const bar = topBar.current;
-      setBox({ w: el.clientWidth, h: el.clientHeight || el.clientWidth, pad: bar ? bar.offsetTop + bar.offsetHeight + 6 : 0 });
+      const d = dock.current;
+      setBox({ w: el.clientWidth, h: el.clientHeight || el.clientWidth, top: bar ? bar.offsetTop + bar.offsetHeight + 6 : 0, bottom: d ? d.offsetHeight + 6 : 0 });
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
+    if (dock.current) ro.observe(dock.current);
     return () => ro.disconnect();
   }, [finished]);
-  const px = Math.floor(finished ? Math.min(box.w, box.h) : Math.min(box.w, box.h - box.pad));
+  const px = Math.floor(finished ? Math.min(box.w, box.h) : Math.min(box.w, box.h));
+
+  // The board runs right up under the status bar here, so the solid strip that normally covers that band
+  // steps aside (see TopEdge).
+  useEffect(() => {
+    if (finished) return;
+    document.documentElement.dataset.fullbleed = "";
+    return () => void delete document.documentElement.dataset.fullbleed;
+  }, [finished]);
   const [menu, setMenu] = useState(false);
   const [bagOpen, setBagOpen] = useState(false);
   const draggedTile = drag ? rackById.get(drag.id) : undefined;
@@ -312,7 +323,7 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
               ref={board}
               size={state.size}
               px={px}
-              view={finished ? undefined : { width: box.w, height: box.h, padTop: box.pad }}
+              view={finished ? undefined : { width: box.w, height: box.h, padTop: box.top, padBottom: box.bottom }}
               tiles={state.tiles}
               draft={draftTiles}
               seatColor={seatColor}
@@ -341,18 +352,18 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
     );
   }
 
-  // A game in progress takes the whole screen, Letter League style: the board, buttons floating over its
-  // top, and your rack in a dock at the bottom.
+  // A game in progress takes the whole screen, Letter League style: the board is the background, with
+  // buttons floating over its top and your rack in a see-through dock over its bottom.
   return (
-    <div className="relative -mx-4 -mb-[calc(env(safe-area-inset-bottom)+16px)] flex h-[100dvh] flex-col overflow-hidden">
-      <div ref={area} className="relative min-h-0 flex-1">
+    <div className="relative -mx-4 -mb-[calc(env(safe-area-inset-bottom)+16px)] h-[100dvh] overflow-hidden bg-background [background-image:radial-gradient(color-mix(in_oklch,var(--foreground)_8%,transparent)_1px,transparent_1px)] [background-size:16px_16px]">
+      <div ref={area} className="absolute inset-0">
         {px > 0 && (
           <div className="absolute inset-0">
             <ScrabbleBoard
               ref={board}
               size={state.size}
               px={px}
-              view={finished ? undefined : { width: box.w, height: box.h, padTop: box.pad }}
+              view={finished ? undefined : { width: box.w, height: box.h, padTop: box.top, padBottom: box.bottom }}
               tiles={state.tiles}
               draft={draftTiles}
               seatColor={seatColor}
@@ -379,7 +390,7 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
         </AnimatePresence>
       </div>
 
-      <div className="relative z-10 flex flex-col gap-2.5 rounded-t-3xl bg-card px-3 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-3 shadow-[0_-8px_24px_rgb(0_0_0/0.18)]">
+      <div ref={dock} className="absolute inset-x-0 bottom-0 z-10 flex flex-col gap-2.5 rounded-t-3xl bg-card/80 px-3 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-3 shadow-[0_-8px_24px_rgb(0_0_0/0.18)] backdrop-blur-xl">
         {playing ? (
           <>
             <Rack

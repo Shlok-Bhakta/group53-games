@@ -6,7 +6,8 @@ export const TOP_CLEAR = "calc(env(safe-area-inset-top) + 32px)";
 
 export function TopEdge() {
   return (
-    <div aria-hidden="true" className="pointer-events-none fixed inset-x-0 top-0 z-40">
+    // Full-bleed screens (a Scrabble game) put their board under the status bar on purpose.
+    <div aria-hidden="true" className="pointer-events-none fixed inset-x-0 top-0 z-40 [[data-fullbleed]_&]:hidden">
       <div className="bg-background" style={{ height: "calc(env(safe-area-inset-top) + 28px)" }} />
       <div className="h-3 bg-gradient-to-b from-background to-transparent" />
     </div>
