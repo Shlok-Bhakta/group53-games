@@ -59,13 +59,11 @@ export const TopBar = forwardRef<HTMLDivElement, { match: MatchView; state: Scra
         type="button"
         onClick={onMenu}
         aria-label="Players and scores"
-        className="pointer-events-auto flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-full bg-card/90 py-1 pl-1 pr-3 text-left shadow-md backdrop-blur-md"
+        // The whole pill is edged in the color of whoever's turn it is.
+        className="pointer-events-auto flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-full border-2 bg-card/90 py-1 pl-1 pr-3 text-left shadow-md backdrop-blur-md transition-colors duration-300"
+        style={{ borderColor: up ? SEAT_COLORS[up.color ?? ""] : "transparent" }}
       >
-        {up && (
-          <span className="relative shrink-0 rounded-full" style={{ boxShadow: `0 0 0 2px ${SEAT_COLORS[up.color ?? ""]}` }}>
-            <PlayerAvatar name={up.name} image={up.image} size={34} />
-          </span>
-        )}
+        {up && <PlayerAvatar name={up.name} image={up.image} frame={up.frame} frameColor={up.frameColor} size={34} className="shrink-0" />}
         <span className="min-w-0 flex-1">
           <motion.span
             key={myTurn ? "mine" : (up?.userId ?? "")}
