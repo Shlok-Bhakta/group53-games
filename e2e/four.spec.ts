@@ -51,7 +51,7 @@ test.describe("4-player chess", () => {
     const page = await phone(context, { player: me, notifications: "granted" });
     await enablePush(page);
     await page.goto("/games");
-    await page.getByRole("link", { name: "Play" }).click();
+    await page.getByRole("link", { name: "Play Chess" }).click();
     await expect(page).toHaveURL(/\/chess$/);
     const async = page.getByRole("region", { name: "Async" });
     const realtime = page.getByRole("region", { name: "Real-time" });

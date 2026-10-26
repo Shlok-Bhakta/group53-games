@@ -50,6 +50,9 @@ export default defineSchema({
     invited: v.array(v.id("users")),
     // A challenge that invited fewer players than it has seats: anyone can take the rest.
     openSeats: v.optional(v.boolean()),
+    // The host's choices from the mode's settings (convex/modes.ts), only the ones that differ from the
+    // defaults. Read them with settingsOf().
+    settings: v.optional(v.record(v.string(), v.number())),
     state: v.any(),
     // Async modes: whose move it is, and how many moves have been made (reminders check it hasn't changed).
     turn: v.optional(v.id("users")),
@@ -92,6 +95,12 @@ export default defineSchema({
   }).index("by_match_tick", ["matchId", "tick"]),
   // A settled board state for each real-time game, advanced by chess:rtTick, so replays start near now.
   rtSnapshots: defineTable({ matchId: v.id("matches"), state: v.any() }).index("by_match", ["matchId"]),
+  // What players mustn't see: a player's own hand (`userId` set; a Scrabble rack) or the game's (no
+  // `userId`; the tile bag). Only ever returned to its owner.
+  secrets: defineTable({ matchId: v.id("matches"), userId: v.optional(v.id("users")), data: v.any() }).index("by_match_user", ["matchId", "userId"]),
+  // A player's plan for their next turn (tiles laid out on the board, rack order), saved as they go so it's
+  // there when they come back. Private to them; others only see that they're planning.
+  drafts: defineTable({ matchId: v.id("matches"), userId: v.id("users"), data: v.any(), count: v.number(), at: v.number() }).index("by_match_user", ["matchId", "userId"]),
   // Elo per mode.
   ratings: defineTable({
     userId: v.id("users"),

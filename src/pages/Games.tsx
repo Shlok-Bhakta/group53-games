@@ -2,8 +2,6 @@ import { Link } from "react-router";
 import { motion } from "motion/react";
 import { HammerIcon, LockSimpleIcon, PlayIcon, ShareNetworkIcon } from "@phosphor-icons/react";
 import { games } from "@/games";
-import { ChessBanner } from "@/games/chess/ChessBanner";
-import { Tiles } from "@/Tiles";
 import { Button } from "@/components/ui/button";
 import { LargeTitle } from "@/components/AppHeader";
 import { NotificationBanner } from "@/components/NotificationBanner";
@@ -31,7 +29,7 @@ export function Games() {
           className="overflow-hidden rounded-lg bg-card"
         >
           <div className="relative grid place-items-center bg-muted/60 px-4 py-9 [background-image:radial-gradient(color-mix(in_oklch,var(--foreground)_9%,transparent)_1px,transparent_1px)] [background-size:14px_14px]">
-            {g.art === "chess" ? <ChessBanner /> : <Tiles word={g.tiles.word} states={g.tiles.states} flip label={g.name} />}
+            {g.banner()}
           </div>
           <div className="p-5">
             <div className="flex items-center justify-between gap-3">
@@ -56,7 +54,7 @@ export function Games() {
                 </Button>
               ) : (
                 <Button size="xl" className="flex-1" asChild>
-                  <Link to={g.path}>
+                  <Link to={g.path} aria-label={`Play ${g.name}`}>
                     <PlayIcon weight="fill" /> Play
                   </Link>
                 </Button>

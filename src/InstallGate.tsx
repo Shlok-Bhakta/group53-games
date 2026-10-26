@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { CheckIcon as Check, CopyIcon as Copy, DotsThreeVerticalIcon as EllipsisVertical, DownloadSimpleIcon as Download, ExportIcon as Share, PlusSquareIcon as SquarePlus } from "@phosphor-icons/react";
 import { Tiles } from "@/Tiles";
 import { Button } from "@/components/ui/button";
+import { GAMES } from "../convex/modes";
 import { inAppBrowser, platform, useInstallPrompt, useStandalone } from "./install";
 
 // Phones only get in from the installed app, because web push on iOS only works there.
@@ -17,7 +18,7 @@ export function InstallGate({ children }: { children: ReactNode }) {
           The games run as an app so they can ping you when it's your turn or someone comes for you. It takes about ten seconds.
         </p>
       </div>
-      {location.pathname.startsWith("/chess/") && (
+      {Object.values(GAMES).some((g) => location.pathname.startsWith(`${g.path}/`)) && (
         <p className="rounded-lg bg-primary/10 p-4 text-callout ring-2 ring-primary/40">
           <span className="font-semibold">Already installed?</span> Open Group 53 from your home screen. Links can't open the app directly, but this game is waiting in
           the inbox on its home screen.

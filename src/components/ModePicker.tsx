@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { motion } from "motion/react";
-import { HourglassMediumIcon, LightningIcon } from "@phosphor-icons/react";
+import { HourglassMediumIcon, LightningIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import { MODES, MODE_KEYS, modePath, type ModeKey } from "../../convex/modes";
 import { cn } from "@/lib/utils";
 
@@ -11,8 +11,12 @@ const KINDS = {
 } as const;
 const KIND_ORDER = ["async", "realtime"] as const;
 
-// "1v1", "4-Player": the section heading already says async or real-time.
-export const seatLabel = (mode: ModeKey) => (MODES[mode].players === 2 ? "1v1" : `${MODES[mode].players}-Player`);
+// "1v1", "4-Player", "2–8": the section heading already says async or real-time.
+export const seatLabel = (mode: ModeKey) => {
+  const m = MODES[mode];
+  if (m.minPlayers < m.players) return `${m.minPlayers}–${m.players}`;
+  return m.players === 2 ? "1v1" : `${m.players}-Player`;
+};
 
 type Props = {
   game: string;
@@ -23,9 +27,27 @@ type Props = {
 };
 
 // A game's modes, grouped by kind: a heading per kind, then a row of mode cards with my Elo on each. The
-// row scrolls sideways when a kind has more than two modes. Shared by every game.
+// row scrolls sideways when a kind has more than two modes. A game with one mode of each kind shows them side
+// by side, each card naming its kind. Shared by every game.
 export function ModePicker({ game, art, badge, rating }: Props) {
   const groups = KIND_ORDER.map((kind) => ({ kind, modes: MODE_KEYS.filter((m) => MODES[m].game === game && MODES[m].kind === kind) })).filter((g) => g.modes.length);
+  if (groups.every((g) => g.modes.length === 1)) {
+    return (
+      <div className="grid grid-cols-2 gap-3">
+        {groups.map(({ kind, modes: [mode] }, i) => (
+          <motion.section
+            key={kind}
+            aria-label={KINDS[kind].title}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: "spring", bounce: 0, duration: 0.45, delay: i * 0.05 }}
+          >
+            <ModeCard mode={mode} art={art(mode)} badge={badge?.(mode) ?? null} rating={rating?.(mode) ?? null} named />
+          </motion.section>
+        ))}
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-6">
       {groups.map(({ kind, modes }, gi) => (
@@ -53,23 +75,44 @@ export function ModePicker({ game, art, badge, rating }: Props) {
   );
 }
 
-function ModeCard({ mode, art, badge, rating }: { mode: ModeKey; art: ReactNode; badge: string | null; rating: { rating: number; games: number } | null }) {
+function ModeCard({ mode, art, badge, rating, named }: { mode: ModeKey; art: ReactNode; badge: string | null; rating: { rating: number; games: number } | null; named?: boolean }) {
   const m = MODES[mode];
   return (
     <Link
       to={modePath(mode)}
       className="relative flex min-h-44 flex-col gap-2 overflow-hidden rounded-lg bg-card p-3.5 transition-[transform,background-color] duration-100 ease-out active:scale-[0.97] active:bg-muted"
       aria-label={`${KINDS[m.kind].title} ${seatLabel(mode)}`}
+      data-mode={mode}
     >
       {art}
-      <span className="mt-auto flex items-end justify-between gap-2">
-        <span className="font-display text-heading">{seatLabel(mode)}</span>
-        {rating && (
-          <span className={cn("font-display text-heading tabular-nums", rating.games === 0 && "text-muted-foreground")} aria-label={`Your rating ${rating.rating}`}>
-            {rating.rating}
+      {named ? (
+        <span className="mt-auto flex flex-col gap-0.5">
+          <span className="flex items-center gap-1.5 font-display text-heading [&_svg]:size-[18px] [&_svg]:text-primary">
+            {KINDS[m.kind].icon}
+            {KINDS[m.kind].title}
           </span>
-        )}
-      </span>
+          <span className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1 text-footnote text-muted-foreground">
+              <UsersThreeIcon size={14} weight="fill" aria-hidden="true" />
+              {seatLabel(mode)}
+            </span>
+            {rating && (
+              <span className={cn("font-display text-body tabular-nums", rating.games === 0 && "text-muted-foreground")} aria-label={`Your rating ${rating.rating}`}>
+                {rating.rating}
+              </span>
+            )}
+          </span>
+        </span>
+      ) : (
+        <span className="mt-auto flex items-end justify-between gap-2">
+          <span className="font-display text-heading">{seatLabel(mode)}</span>
+          {rating && (
+            <span className={cn("font-display text-heading tabular-nums", rating.games === 0 && "text-muted-foreground")} aria-label={`Your rating ${rating.rating}`}>
+              {rating.rating}
+            </span>
+          )}
+        </span>
+      )}
       {badge && (
         <motion.span
           initial={{ scale: 0.8, opacity: 0 }}

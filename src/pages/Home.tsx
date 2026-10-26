@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { GameControllerIcon } from "@phosphor-icons/react";
 import { api } from "../../convex/_generated/api";
 import { MODES, MODE_KEYS, modeBySlug, modePath } from "../../convex/modes";
-import { Chip, InviteCard, MatchRow, Section, TurnChip } from "@/games/chess/parts";
+import { Chip, InviteCard, MatchRow, Section, TurnChip, fullModeLabel } from "@/components/parts";
 import { Tiles } from "@/Tiles";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -93,7 +93,7 @@ function useLegacyNewGameLink() {
   const slug = params.get("new");
   useEffect(() => {
     if (slug === null) return;
-    const mode = modeBySlug(slug);
+    const mode = modeBySlug("chess", slug);
     navigate(mode ? modePath(mode) : "/games", { replace: true });
   }, [slug, navigate]);
 }
@@ -123,7 +123,7 @@ function Stats() {
         {played.map((m, i) => {
           const r = ratings[m]!;
           return (
-            <StatCard key={m} to={modePath(m)} delay={i * 0.04} label={MODES[m].name} value={r.rating}>
+            <StatCard key={m} to={modePath(m)} delay={i * 0.04} label={fullModeLabel(m)} value={r.rating}>
               {r.wins}–{r.losses}
               {r.draws ? `–${r.draws}` : ""}
             </StatCard>

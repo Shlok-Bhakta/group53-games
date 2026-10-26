@@ -3,63 +3,74 @@ import { Link, Navigate, useNavigate, useParams } from "react-router";
 import { useMutation, useQuery } from "convex/react";
 import { AnimatePresence, motion } from "motion/react";
 import { CaretRightIcon, CheckIcon, MagnifyingGlassIcon, SpinnerGapIcon, SwordIcon } from "@phosphor-icons/react";
-import { api } from "../../../convex/_generated/api";
-import type { Id } from "../../../convex/_generated/dataModel";
-import { MODES, modeBySlug, type ModeKey } from "../../../convex/modes";
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
+import { MODES, flexibleSeats, matchPath, modeBySlug, type ModeKey, type Settings } from "../../convex/modes";
 import { NavBar } from "@/components/AppHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AsyncButton, usePending } from "@/components/AsyncButton";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { Rules } from "@/components/Rules";
+import { SettingsSection, useModeSettings } from "@/components/SettingsPicker";
+import { Chip, Group, Leaderboard, MatchRow, ResultChip, Section, TurnChip } from "@/components/parts";
+import type { GameUI } from "@/games";
 import { OnlineDot, usePresence } from "@/presence";
 import { cn } from "@/lib/utils";
-import { Rules } from "./Rules";
-import { Chip, Group, Leaderboard, MatchRow, ResultChip, Section, TurnChip } from "./parts";
 
-// One mode, as a full page: find a game or challenge people right here, the rules, games in this mode,
-// and its leaderboard. Challenges sent to you wait on Home.
-export function ModePage() {
+// One mode, as a full page: settings, find a game or challenge people right here, the rules, games in this
+// mode, and its leaderboard. Challenges sent to you wait on Home.
+export function ModePage({ game }: { game: GameUI }) {
   const { slug } = useParams<{ slug: string }>();
-  const mode = modeBySlug(slug ?? "");
-  const lobby = useQuery(api.matches.lobby, mode ? { mode } : "skip");
+  const mode = modeBySlug(game.key, slug ?? "");
+  if (!mode) return <Navigate to={game.path} replace />;
+  return <ModeScreen key={mode} game={game} mode={mode} />;
+}
+
+function ModeScreen({ game, mode }: { game: GameUI; mode: ModeKey }) {
+  const lobby = useQuery(api.matches.lobby, { mode });
   const me = useQuery(api.users.me);
   const ratings = useQuery(api.ratings.mine);
   const queue = useMutation(api.matches.queue);
   const navigate = useNavigate();
-  if (!mode) return <Navigate to="/chess" replace />;
+  const [settings, setSettings] = useModeSettings(mode);
   const info = MODES[mode];
   const seats = info.players;
+  const flexible = flexibleSeats(mode);
   const mine = lobby?.waiting[0];
 
   return (
     <div className="flex flex-col gap-7">
-      <NavBar title={info.name} back="/chess" />
+      <NavBar title={info.name} back={game.path} />
 
       {lobby === undefined || lobby === null ? (
         <Skeleton className="h-14 rounded-lg" />
       ) : mine ? (
-        <Link to={`/chess/${mine._id}`} className="flex min-h-16 items-center gap-3 rounded-lg bg-primary/10 px-4 py-3 ring-2 ring-primary/50 transition-transform duration-100 active:scale-[0.98]">
+        <Link to={matchPath(mine)} className="flex min-h-16 items-center gap-3 rounded-lg bg-primary/10 px-4 py-3 ring-2 ring-primary/50 transition-transform duration-100 active:scale-[0.98]">
           <span className="grid size-11 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
             <MagnifyingGlassIcon size={22} weight="bold" />
           </span>
           <span className="flex-1 font-semibold">
-            {seats > 2 ? `${mine.players.length} of ${seats} in` : mine.invited.length ? "Challenge sent" : "Looking for an opponent"}
+            {flexible ? `${mine.players.length} in, waiting to start` : seats > 2 ? `${mine.players.length} of ${seats} in` : mine.invited.length ? "Challenge sent" : "Looking for an opponent"}
           </span>
           <CaretRightIcon size={18} weight="bold" className="text-muted-foreground" />
         </Link>
       ) : (
-        <AsyncButton
-          size="xl"
-          className="w-full"
-          icon={<MagnifyingGlassIcon weight="bold" />}
-          onClick={async () => navigate(`/chess/${await queue({ mode })}`)}
-        >
-          {lobby.open.length ? "Join a game" : "Find a game"}
-        </AsyncButton>
+        <div className="flex flex-col gap-2">
+          <AsyncButton
+            size="xl"
+            className="w-full"
+            icon={<MagnifyingGlassIcon weight="bold" />}
+            onClick={async () => navigate(matchPath({ _id: await queue({ mode, settings }), mode }))}
+          >
+            {lobby.open.length ? "Join a game" : flexible ? "Open a game" : "Find a game"}
+          </AsyncButton>
+          <SettingsSection mode={mode} value={settings} onChange={setSettings} />
+        </div>
       )}
 
-      {!mine && <Challenge mode={mode} meId={me?._id} />}
+      {!mine && <Challenge mode={mode} meId={me?._id} settings={settings} />}
 
-      {ratings && <Rules mode={mode} defaultOpen={!ratings[mode]?.games} />}
+      {ratings && <Rules rules={game.rules(mode, settings)} defaultOpen={!ratings[mode]?.games} />}
 
       {lobby && lobby.open.length > 0 && (
         <Section title="Open seats">
@@ -100,8 +111,8 @@ export function ModePage() {
 }
 
 // Challenge people from the crew, right on the page. Two-player modes send on one tap; bigger games let you
-// pick several, and seats you leave empty are open to the rest of the crew.
-function Challenge({ mode, meId }: { mode: ModeKey; meId?: Id<"users"> }) {
+// pick several. In fixed-size games the seats you leave empty are open to the crew.
+function Challenge({ mode, meId, settings }: { mode: ModeKey; meId?: Id<"users">; settings: Settings }) {
   const crew = useQuery(api.profiles.crew);
   const challenge = useMutation(api.matches.challenge);
   const { isOnline } = usePresence();
@@ -111,6 +122,7 @@ function Challenge({ mode, meId }: { mode: ModeKey; meId?: Id<"users"> }) {
   const [picked, setPicked] = useState<Id<"users">[]>([]);
   const m = MODES[mode];
   const multi = m.players > 2;
+  const flexible = flexibleSeats(mode);
   const max = m.players - 1;
   const others = (crew ?? []).filter((p) => p._id !== meId).sort((a, b) => Number(isOnline(b._id)) - Number(isOnline(a._id)) || a.name.localeCompare(b.name));
   if (crew && others.length === 0) return null;
@@ -119,7 +131,7 @@ function Challenge({ mode, meId }: { mode: ModeKey; meId?: Id<"users"> }) {
     run(async () => {
       setBusy(opponents.length === 1 && !multi ? opponents[0] : "send");
       try {
-        navigate(`/chess/${await challenge({ mode, opponents })}`);
+        navigate(matchPath({ _id: await challenge({ mode, opponents, settings }), mode }));
       } finally {
         setBusy(null);
       }
@@ -176,7 +188,7 @@ function Challenge({ mode, meId }: { mode: ModeKey; meId?: Id<"users"> }) {
         {multi && picked.length > 0 && (
           <motion.div key="send" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ type: "spring", bounce: 0, duration: 0.3 }} className="overflow-hidden">
             <AsyncButton size="xl" className="mt-0.5 w-full" icon={<SwordIcon weight="bold" />} onClick={() => send(picked)}>
-              {free > 0 ? `Challenge ${picked.length}, open ${free} seat${free > 1 ? "s" : ""}` : "Send challenge"}
+              {flexible ? `Challenge ${picked.length}` : free > 0 ? `Challenge ${picked.length}, open ${free} seat${free > 1 ? "s" : ""}` : "Send challenge"}
             </AsyncButton>
           </motion.div>
         )}

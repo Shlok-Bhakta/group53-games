@@ -4,10 +4,11 @@ import { Chess } from "chess.js";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { finish, loadMatch, scheduleReminder } from "./matches";
-import { MODES, REALTIME_COUNTDOWN_MS, matchPath, type ModeKey } from "./modes";
+import { finish, loadMatch, opponentsOf, scheduleReminder } from "./matches";
+import { MODES, REALTIME_COUNTDOWN_MS, matchPath, settingsOf, type ModeKey } from "./modes";
 import { displayName, notify } from "./notify";
-import { TICK_MS, initialState as initialRtState, simulate, type Color, type Command, type State, type Variant } from "./chess/realtime";
+import type { GameHooks } from "./games";
+import { TICK_MS, initialState as initialRtState, paceFromSettings, simulate, type Color, type Command, type State, type Variant } from "./chess/realtime";
 import { COLORS4, SIZE as SIZE4, type Color4 } from "./chess/four/board";
 import { initialFour, move4, retire4, type FourState } from "./chess/four/classic";
 
@@ -48,6 +49,31 @@ const colorOf = (match: Doc<"matches">, userId: Id<"users">) => match.players.fi
 const playerWith = (match: Doc<"matches">, color: Color) => match.players.find((p) => p.color === color)!.userId;
 const COLOR_NAMES: Record<string, string> = { w: "white", b: "black", red: "red", blue: "blue", yellow: "yellow", green: "green" };
 
+const paceOfMatch = (match: Doc<"matches">) => paceFromSettings(settingsOf(match.mode, match.settings));
+
+export const chessHooks: GameHooks = {
+  seats: (mode) => seatColors(mode),
+  start: async (ctx, match) => {
+    const state = initialState(match.mode as ModeKey);
+    await ctx.db.patch(match._id, { state });
+    await onStart(ctx, { ...match, state });
+  },
+  resign: async (ctx, match, userId) => {
+    if (match.mode === "chess:four") return await retireFour(ctx, match, userId, "resign");
+    if (match.mode === "chess:realtime4") {
+      // Before the clock starts there's no game to leave behind, so it's called off for everyone.
+      if (!(await resignRealtime4(ctx, match, userId))) await ctx.db.patch(match._id, { status: "cancelled", lastActivityAt: Date.now() });
+      return;
+    }
+    await finish(ctx, match, { winners: opponentsOf(match, userId), draw: false, reason: "resign" });
+  },
+  timeout: async (ctx, match, userId) => {
+    if (match.mode === "chess:four") return await retireFour(ctx, match, userId, "timeout");
+    await finish(ctx, match, { winners: opponentsOf(match, userId), draw: false, reason: "timeout" });
+  },
+  timeoutWarning: "or you time out",
+};
+
 // Called once every seat is filled.
 export async function onStart(ctx: MutationCtx, match: Doc<"matches">) {
   if (match.mode === "chess:classic") {
@@ -56,7 +82,7 @@ export async function onStart(ctx: MutationCtx, match: Doc<"matches">) {
     // Rematches start with both players on the page already, so they don't need a push.
     if (!match.rematchOf) {
       const black = await displayName(ctx, playerWith(match, "b"));
-      await notify(ctx, white, { title: "You're white", body: `Your move against ${black}.`, url: matchPath(match._id), tag: `match:${match._id}` });
+      await notify(ctx, white, { title: "You're white", body: `Your move against ${black}.`, url: matchPath(match), tag: `match:${match._id}` });
     }
     await scheduleReminder(ctx, match._id, 0);
   }
@@ -69,7 +95,7 @@ export async function onStart(ctx: MutationCtx, match: Doc<"matches">) {
         await notify(ctx, p.userId, {
           title: p.userId === red ? "You're red. Your move" : `You're ${color}`,
           body: p.userId === red ? "4-player chess is on and red goes first." : "4-player chess is on. Red goes first, then clockwise.",
-          url: matchPath(match._id),
+          url: matchPath(match),
           tag: `match:${match._id}`,
         });
       }
@@ -120,7 +146,7 @@ export const move = mutation({
     await notify(ctx, opponent, {
       title: chess.inCheck() ? `${name} played ${played.san}. Check!` : `${name} played ${played.san}`,
       body: "Your move.",
-      url: matchPath(id),
+      url: matchPath(match),
       tag: `match:${id}`,
     });
     await scheduleReminder(ctx, id, moveCount);
@@ -160,7 +186,7 @@ async function applyFour(ctx: MutationCtx, match: Doc<"matches">, next: FourStat
   await ctx.db.patch(match._id, { state: next, moveCount, turn, lastActivityAt: now });
   const updated = { ...match, state: next, moveCount, turn };
 
-  const url = matchPath(match._id);
+  const url = matchPath(match);
   const tag = `match:${match._id}`;
   const name = await displayName(ctx, actor);
   if (next.result) {
@@ -224,7 +250,7 @@ export const ready = mutation({
     const startAt = everyone ? Date.now() + REALTIME_COUNTDOWN_MS : null;
     await ctx.db.patch(id, { state: { ...state, ready: readyIds, startAt }, lastActivityAt: Date.now() });
     if (startAt !== null) {
-      await ctx.db.insert("rtSnapshots", { matchId: id, state: initialRtState(variantOf(match.mode)) });
+      await ctx.db.insert("rtSnapshots", { matchId: id, state: initialRtState(variantOf(match.mode), paceOfMatch(match)) });
       await ctx.scheduler.runAt(startAt + RT_TICK_MS, internal.chess.rtTick, { id });
     }
   },
@@ -308,7 +334,7 @@ export const rtTick = internalMutation({
       .query("rtSnapshots")
       .withIndex("by_match", (q) => q.eq("matchId", id))
       .unique();
-    const from = (snap?.state as State | undefined) ?? initialRtState(variantOf(match.mode));
+    const from = (snap?.state as State | undefined) ?? initialRtState(variantOf(match.mode), paceOfMatch(match));
     // Nothing can be stamped earlier than this any more, so everything before it is settled.
     const settledTick = serverTick - MAX_LAG_TICKS - 2;
     const commands = settledTick > from.tick ? await commandsFrom(ctx, id, from.tick, settledTick) : [];

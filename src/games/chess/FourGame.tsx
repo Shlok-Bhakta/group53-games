@@ -13,7 +13,8 @@ import { cn } from "@/lib/utils";
 
 // The armies' colors, matching the piece art (scripts/gen-four-pieces.mjs). They're the pieces' own colors,
 // so they stay the same in every theme.
-export const SEAT_COLORS: Record<string, string> = { red: "#e0503f", blue: "#3f7be0", yellow: "#e8b928", green: "#3faa5a", dead: "#9aa0a6" };
+import { SEAT_COLORS } from "../seats";
+export { SEAT_COLORS };
 
 export function FourGame({ match, meId, overlay, below }: { match: MatchView; meId: Id<"users"> | undefined; overlay?: ReactNode; below?: ReactNode }) {
   const state = match.state as FourState;

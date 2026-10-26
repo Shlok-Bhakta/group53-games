@@ -71,7 +71,7 @@ function useEdgeSwipe(x: MotionValue<number>, onBack: (() => void) | null) {
       const t = e.touches[0];
       start = null;
       if (e.touches.length !== 1 || t.clientX > EDGE) return;
-      if ((e.target as Element | null)?.closest?.("[role=grid], [role=dialog], [role=alertdialog], [data-vaul-drawer]")) return;
+      if ((e.target as Element | null)?.closest?.("[role=grid], [data-board], [role=dialog], [role=alertdialog], [data-vaul-drawer]")) return;
       start = { x: t.clientX, y: t.clientY };
       engaged = false;
       samples = [{ x: t.clientX, t: e.timeStamp }];

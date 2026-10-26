@@ -38,6 +38,18 @@ for (const [i, from, to] of [[0, "e2", "e4"], [1, "b5", "d5"], [2, "f13", "f11"]
   await four[i].client.mutation(anyApi.chess.fourMove, { id: fid, fromX: f.x, fromY: f.y, toX: t.x, toY: t.y });
 }
 
+// A three-player Scrabble game with two words down.
+const sid = await a.client.mutation(anyApi.matches.queue, { mode: "scrabble:classic" });
+await c.client.mutation(anyApi.matches.queue, { mode: "scrabble:classic" });
+await s4.client.mutation(anyApi.matches.queue, { mode: "scrabble:classic" });
+await a.client.mutation(anyApi.matches.startGame, { id: sid });
+const sm = await admin.query(anyApi.testing.getMatch, { id: sid });
+for (const [seat, word, cells] of [[0, "QUIZ", [[6, 7], [7, 7], [8, 7], [9, 7]]], [1, "ONE", [[9, 8], [9, 9], [9, 10]]]]) {
+  const userId = sm.players[seat].userId;
+  const rack = await admin.mutation(anyApi.testing.setRack, { id: sid, userId, letters: word.padEnd(7, "E") });
+  await admin.mutation(anyApi.testing.playAs, { id: sid, userId, tiles: cells.map(([x, y], i) => ({ id: rack[i].id, x, y })) });
+}
+
 mkdirSync("e2e/.state", { recursive: true });
 writeFileSync("e2e/.state/admin_key", b.adminKey);
 const pieces = spawn("python3", ["-m", "http.server", "8789", "-d", "public"], { stdio: "ignore" });
@@ -55,6 +67,11 @@ try {
   console.log(html4.split("\n").filter((l) => /og:(title|description)"/.test(l)).join("\n"));
   const img4 = html4.match(/og\/match\/[a-z0-9]+\.png\?v=[a-z0-9]+/)[0];
   writeFileSync("e2e/.state/og-four.png", Buffer.from(await (await fetch(`http://127.0.0.1:8788/${img4}`)).arrayBuffer()));
+  const htmlS = await (await fetch(`http://127.0.0.1:8788/scrabble/${sid}`)).text();
+  console.log(htmlS.split("\n").filter((l) => /og:(title|description)"/.test(l)).join("\n"));
+  const imgS = htmlS.match(/og\/match\/[a-z0-9]+\.png\?v=[a-z0-9]+/)[0];
+  writeFileSync("e2e/.state/og-scrabble-match.png", Buffer.from(await (await fetch(`http://127.0.0.1:8788/${imgS}`)).arrayBuffer()));
+  writeFileSync("e2e/.state/og-scrabble.png", Buffer.from(await (await fetch("http://127.0.0.1:8788/og/image/scrabble.png")).arrayBuffer()));
   writeFileSync("e2e/.state/og-chess.png", Buffer.from(await (await fetch("http://127.0.0.1:8788/og/image/chess.png")).arrayBuffer()));
 } finally {
   og.kill();

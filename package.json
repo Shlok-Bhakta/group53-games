@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@auth/core": "^0.41.3",
+    "@bglowacki/bingo-engine": "0.1.0",
     "@convex-dev/auth": "^0.0.96",
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@fontsource-variable/lexend": "^5.3.0",

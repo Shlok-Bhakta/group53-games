@@ -8,24 +8,26 @@ import type { RealtimeState } from "../../../convex/chess";
 import type { MatchView } from "../../../convex/matches";
 import {
   CELL,
-  COOLDOWN_TICKS,
   TICK_MS,
   initialState,
+  paceFromSettings,
+  paceOf,
   legalTargets,
   positionAt,
   premoveTargets,
   simulate,
   type Command,
+  type Pace,
   type Piece,
   type State,
   type Variant,
 } from "../../../convex/chess/realtime";
-import { MODES, type ModeKey } from "../../../convex/modes";
+import { MODES, settingsOf, type ModeKey } from "../../../convex/modes";
 import { useServerClock } from "./clock";
 import { nearest, pieceSrc, pointToScreen, same, viewFor, type Sq, type View } from "./geometry";
 import { cn } from "@/lib/utils";
 import { errorText } from "@/lib/errors";
-import { listNames } from "./text";
+import { listNames } from "@/lib/text";
 
 const FILES = "abcdefgh";
 // A finger this close to a square's center (in squares) picks it on the 14x14 board.
@@ -45,7 +47,7 @@ const COLORS = {
 const CATCH_UP_TICKS = 10;
 
 // Replays from the server's settled snapshot, continuing from the last frame when nothing earlier changed.
-function useEngine(snapshot: State | null, commands: Command[], variant: Variant) {
+function useEngine(snapshot: State | null, commands: Command[], variant: Variant, pace: Pace) {
   const cache = useRef<{ base: State | null; commands: Command[]; state: State } | null>(null);
   return useCallback(
     (toTick: number): State => {
@@ -58,11 +60,11 @@ function useEngine(snapshot: State | null, commands: Command[], variant: Variant
         c.commands.every((x, i) => x === commands[i] || (x.tick === commands[i].tick && x.pieceId === commands[i].pieceId && x.toX === commands[i].toX && x.toY === commands[i].toY && x.kind === commands[i].kind));
       const fresh = commands.slice(c?.commands.length ?? 0);
       const resume = c && prefixOk && fresh.every((x) => x.tick >= c.state.tick) && c.state.tick <= toTick;
-      const state = resume ? simulate(commands, toTick, c!.state) : simulate(commands, toTick, base ?? initialState(variant));
+      const state = resume ? simulate(commands, toTick, c!.state) : simulate(commands, toTick, base ?? initialState(variant, pace));
       cache.current = { base, commands, state };
       return state;
     },
-    [snapshot, commands, variant],
+    [snapshot, commands, variant, pace],
   );
 }
 
@@ -85,7 +87,8 @@ export function RealtimeGame({ match, meId, above, below, overlay }: { match: Ma
   const view = useMemo(() => viewFor(variant, myColor), [variant, myColor]);
   const ready = useMutation(api.chess.ready);
   const commands = useMemo(() => rt?.commands ?? [], [rt?.commands]);
-  const run = useEngine((rt?.snapshot as State | null) ?? null, commands, variant);
+  const pace = useMemo(() => paceFromSettings(settingsOf(match.mode, match.settings)), [match.mode, match.settings]);
+  const run = useEngine((rt?.snapshot as State | null) ?? null, commands, variant, pace);
 
   const rtMove = useMutation(api.chess.rtMove).withOptimisticUpdate((store, args) => {
     const current = store.getQuery(api.chess.rtState, { id: args.id });
@@ -118,7 +121,7 @@ export function RealtimeGame({ match, meId, above, below, overlay }: { match: Ma
   const displayTick = useCallback(() => (startAt === null ? -1 : (clock.now() - startAt) / TICK_MS), [clock, startAt]);
 
   // React state: the board's structure, refreshed only when it changes.
-  const [sim, setSim] = useState<State>(() => initialState(variant));
+  const [sim, setSim] = useState<State>(() => initialState(variant, pace));
   const [countdown, setCountdown] = useState<number | null>(null);
   const structure = useRef("");
   const pieceEls = useRef(new Map<number, HTMLDivElement>());
@@ -155,7 +158,7 @@ export function RealtimeGame({ match, meId, above, below, overlay }: { match: Ma
         const [c, r] = view.toScreen(pos.x / CELL, pos.y / CELL);
         el.style.transform = `translate(${c * 100}%, ${r * 100}%)`;
         const cd = cooldownEls.current.get(p.id);
-        if (cd) cd.style.height = p.status === "cooldown" ? `${Math.max(0, Math.min(1, (p.readyAt! - tick) / COOLDOWN_TICKS)) * 100}%` : "0%";
+        if (cd) cd.style.height = p.status === "cooldown" ? `${Math.max(0, Math.min(1, (p.readyAt! - tick) / paceOf(s).cooldown)) * 100}%` : "0%";
       }
       raf = requestAnimationFrame(frame);
     };
@@ -210,7 +213,7 @@ export function RealtimeGame({ match, meId, above, below, overlay }: { match: Ma
       ) : (
         showHint && match.status === "active" && (
           <p className="px-1 text-center text-footnote text-muted-foreground">
-            Move any piece any time; it rests 5 seconds after landing. Drag a resting piece to premove it, tap it to cancel.
+            Move any piece any time; it rests {Math.round(pace.cooldown / 30)} seconds after landing. Drag a resting piece to premove it, tap it to cancel.
           </p>
         )
       )}

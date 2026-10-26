@@ -5,6 +5,7 @@ import { CELL, TICK_MS, positionAt, simulate, type Command, type State } from ".
 import { DEFAULT_PROFILE } from "./profileOptions";
 import { SIZE as SIZE4, onBoard as onBoard4, setup as setup4 } from "./chess/four/board";
 import type { FourState } from "./chess/four/classic";
+import { layout, type ScrabbleState } from "./scrabble/engine";
 
 // Read by the og/ preview service with the admin key, so none of this is public.
 export const crew = internalQuery({
@@ -41,6 +42,31 @@ export const match = internalQuery({
         return { userId: p.userId, name: u?.name ?? "Player", image: u?.image ?? null, color: p.color ?? null };
       }),
     );
+    if (m.mode.startsWith("scrabble:")) {
+      const st = m.state as ScrabbleState | null;
+      const size = st?.size ?? m.settings?.board ?? 15;
+      const winners = m.result?.winners ?? [];
+      return {
+        mode: m.mode,
+        status: m.status,
+        seats: m.players.length,
+        points: null,
+        players,
+        board: [],
+        toMove: m.status === "active" && st ? (players[st.turn]?.color ?? null) : null,
+        moveCount: m.moveCount,
+        scrabble: {
+          size,
+          premium: layout(size),
+          tiles: (st?.tiles ?? []).map((t) => ({ x: t.x, y: t.y, letter: t.letter, blank: !!t.blank, seat: t.seat })),
+          scores: st?.scores ?? [],
+          last: st?.moves.at(-1)?.kind === "play" ? st.moves.at(-1)!.words![0] : null,
+        },
+        result: m.result
+          ? { draw: m.result.draw, reason: m.result.reason, winner: players.filter((p) => winners.includes(p.userId)).map((p) => p.name).join(" and ") || null }
+          : null,
+      };
+    }
     // Rows top first (rank 8, or 14, at the top, as red or white sees it). Each square is a piece code
     // ("wK", "four/redQ", "four/deadP"), "" when empty, or null when it isn't part of the board (the
     // four-player board's cut corners).

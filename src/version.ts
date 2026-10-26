@@ -1,12 +1,13 @@
 import { useEffect } from "react";
 import { useLocation } from "react-router";
 import { toast } from "sonner";
+import { GAMES } from "../convex/modes";
 
 declare const __BUILD_ID__: string;
 
 const CHECK_EVERY_MS = 60_000;
 // In a game, never yank the page out from under the player; offer the update instead.
-const inGame = (path: string) => /^\/chess\/[a-z0-9]+$/.test(path);
+const inGame = (path: string) => Object.values(GAMES).some((g) => new RegExp(`^${g.path}/[a-z0-9]+$`).test(path));
 
 // Reload at most once per new build; if the page still disagrees afterwards (say a stale cache), offer
 // the update instead of looping.

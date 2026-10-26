@@ -2,6 +2,7 @@
 // unless the deployment sets ALLOW_TEST_HELPERS=1, which only the throwaway test backend does.
 import { v } from "convex/values";
 import { initialFour } from "./chess/four/classic";
+import { playTiles } from "./scrabble";
 import { SignJWT, importPKCS8 } from "jose";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
@@ -113,7 +114,38 @@ export const insertFour = internalMutation({
   },
 });
 
-const TABLES = ["taps", "rtCommands", "rtSnapshots", "matches", "ratings", "presence", "pushSubscriptions", "profiles", "authRefreshTokens", "authSessions", "authAccounts", "users"] as const;
+// Sets a player's Scrabble rack, so tests know what they can spell.
+export const setRack = internalMutation({
+  args: { id: v.id("matches"), userId: v.id("users"), letters: v.string() },
+  handler: async (ctx, { id, userId, letters }) => {
+    assertTestDeployment();
+    const rack = [...letters].map((letter, i) => ({ id: 1000 + i + Math.floor(Math.random() * 1e6) * 100, letter }));
+    const row = await ctx.db.query("secrets").withIndex("by_match_user", (q) => q.eq("matchId", id).eq("userId", userId)).unique();
+    if (row) await ctx.db.patch(row._id, { data: { rack } });
+    else await ctx.db.insert("secrets", { matchId: id, userId, data: { rack } });
+    return rack;
+  },
+});
+
+export const rackOf = internalQuery({
+  args: { id: v.id("matches"), userId: v.id("users") },
+  handler: async (ctx, { id, userId }) => {
+    assertTestDeployment();
+    const row = await ctx.db.query("secrets").withIndex("by_match_user", (q) => q.eq("matchId", id).eq("userId", userId)).unique();
+    return row?.data.rack ?? [];
+  },
+});
+
+// Plays a word for a player, for screenshots that need a board with something on it.
+export const playAs = internalMutation({
+  args: { id: v.id("matches"), userId: v.id("users"), tiles: v.array(v.object({ id: v.number(), x: v.number(), y: v.number(), letter: v.optional(v.string()) })) },
+  handler: async (ctx, { id, userId, tiles }) => {
+    assertTestDeployment();
+    return await playTiles(ctx, id, tiles, userId);
+  },
+});
+
+const TABLES = ["taps", "rtCommands", "rtSnapshots", "secrets", "drafts", "matches", "ratings", "presence", "pushSubscriptions", "profiles", "authRefreshTokens", "authSessions", "authAccounts", "users"] as const;
 
 // Wipes everything. Refuses if any real (non-test) player exists, so it can't touch prod data.
 export const reset = internalMutation({
@@ -137,6 +169,8 @@ export const removeTestData = internalMutation({
       if (!m.players.some((p) => testIds.has(p.userId)) && !testIds.has(m.createdBy)) continue;
       for (const c of await ctx.db.query("rtCommands").withIndex("by_match_tick", (q) => q.eq("matchId", m._id)).collect()) await ctx.db.delete(c._id);
       for (const s of await ctx.db.query("rtSnapshots").withIndex("by_match", (q) => q.eq("matchId", m._id)).collect()) await ctx.db.delete(s._id);
+      for (const s of await ctx.db.query("secrets").withIndex("by_match_user", (q) => q.eq("matchId", m._id)).collect()) await ctx.db.delete(s._id);
+      for (const d of await ctx.db.query("drafts").withIndex("by_match_user", (q) => q.eq("matchId", m._id)).collect()) await ctx.db.delete(d._id);
       await ctx.db.delete(m._id);
       removed++;
     }

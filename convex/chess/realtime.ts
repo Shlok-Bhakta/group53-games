@@ -1,7 +1,8 @@
 // Real-time chess (Kung Fu Chess), matching rtchess.org.
 //
 // There are no turns. Any ready piece can move at any moment. Pieces travel at one square per second
-// (Chebyshev distance, so diagonals cost the same), then rest on a 5 second cooldown. Captures happen by
+// (Chebyshev distance, so diagonals cost the same), then rest on a 5 second cooldown; games can change
+// both (`State.pace`). Captures happen by
 // collision: a moving piece takes a stationary one, and when both are moving the one that started first
 // wins. Capturing the king wins; both kings falling on the same tick is a draw, as is 90 seconds with no
 // capture or pawn move. No check, no en passant, and pawns always promote to a queen.
@@ -18,6 +19,7 @@
 export const TICKS_PER_SECOND = 30;
 export const TICK_MS = 1000 / TICKS_PER_SECOND;
 export const CELL = 120; // position units per square
+// The default pace. Games can set their own (`State.pace`, from the mode's settings).
 export const TICKS_PER_SQUARE = 30;
 export const COOLDOWN_TICKS = 150;
 export const NO_PROGRESS_TICKS = 90 * TICKS_PER_SECOND;
@@ -82,8 +84,20 @@ export type Result = { winner: Color | null; reason: "king" | "both_kings" | "no
 
 export type Capture = { tick: number; pieceId: number; by: number; x: number; y: number };
 
+// Ticks a piece takes per square, and ticks it rests after landing.
+export type Pace = { square: number; cooldown: number };
+export const DEFAULT_PACE: Pace = { square: TICKS_PER_SQUARE, cooldown: COOLDOWN_TICKS };
+export const paceOf = (state: { pace?: Pace }) => state.pace ?? DEFAULT_PACE;
+// From a game's settings: cooldown in seconds, speed in ticks per square.
+export const paceFromSettings = (settings: Record<string, number>): Pace => ({
+  square: settings.speed ?? TICKS_PER_SQUARE,
+  cooldown: (settings.cooldown ?? COOLDOWN_TICKS / TICKS_PER_SECOND) * TICKS_PER_SECOND,
+});
+
 export type State = {
   variant: Variant;
+  // Missing on games from before pace was a setting.
+  pace?: Pace;
   // Four-player: colors that are out, in the order they went (several can go on one tick).
   out: { color: Color; tick: number }[];
   tick: number; // the next tick to process
@@ -110,8 +124,8 @@ export function initialPieces(variant: Variant = "two"): Piece[] {
   return pieces;
 }
 
-export function initialState(variant: Variant = "two"): State {
-  return { variant, out: [], tick: 0, pieces: initialPieces(variant), captures: [], lastProgressTick: 0, result: null, endTick: null };
+export function initialState(variant: Variant = "two", pace?: Pace): State {
+  return { variant, ...(pace ? { pace } : {}), out: [], tick: 0, pieces: initialPieces(variant), captures: [], lastProgressTick: 0, result: null, endTick: null };
 }
 
 // Where a piece is at a (possibly fractional) tick, in position units.
@@ -241,9 +255,8 @@ export function premoveTargets(piece: Piece, variant: Variant = "two"): [number,
   return out;
 }
 
-function startMove(p: Piece, toX: number, toY: number, tick: number, duration?: number): Piece {
-  const dist = Math.max(Math.abs(toX - p.x), Math.abs(toY - p.y));
-  return { ...p, status: "moving", toX, toY, startTick: tick, duration: duration ?? dist * TICKS_PER_SQUARE, firstMove: false, readyAt: undefined, pending: undefined };
+function startMove(p: Piece, toX: number, toY: number, tick: number, duration: number): Piece {
+  return { ...p, status: "moving", toX, toY, startTick: tick, duration, firstMove: false, readyAt: undefined, pending: undefined };
 }
 
 // Applies a command if it's legal at this moment; returns false (and changes nothing) otherwise.
@@ -275,17 +288,19 @@ function startReadyMove(state: State, piece: Piece, toX: number, toY: number): b
   const cmd = { toX, toY };
   if (!legalTargets(state.pieces, piece, state.variant).some(([x, y]) => x === cmd.toX && y === cmd.toY)) return false;
   const tick = state.tick;
+  const perSquare = paceOf(state).square;
 
   if (state.variant === "two" && piece.kind === "K" && Math.abs(cmd.toX - piece.x) === 2) {
-    // Castling: king and rook leave together and land together (2s kingside, 3s queenside).
+    // Castling: king and rook leave together and land together (2 squares' time kingside, 3 queenside).
     const kingside = cmd.toX === 6;
     const rook = state.pieces.find((p) => p.kind === "R" && p.color === piece.color && p.y === piece.y && p.x === (kingside ? 7 : 0))!;
-    const duration = kingside ? 2 * TICKS_PER_SQUARE : 3 * TICKS_PER_SQUARE;
+    const duration = (kingside ? 2 : 3) * perSquare;
     state.pieces = state.pieces.map((p) =>
       p.id === piece.id ? startMove(p, cmd.toX, cmd.toY, tick, duration) : p.id === rook.id ? startMove(p, kingside ? 5 : 3, p.y, tick, duration) : p,
     );
   } else {
-      state.pieces = state.pieces.map((p) => (p.id === piece.id ? startMove(p, cmd.toX, cmd.toY, tick) : p));
+    const duration = Math.max(Math.abs(cmd.toX - piece.x), Math.abs(cmd.toY - piece.y)) * perSquare;
+    state.pieces = state.pieces.map((p) => (p.id === piece.id ? startMove(p, cmd.toX, cmd.toY, tick, duration) : p));
   }
   if (piece.kind === "P") state.lastProgressTick = tick;
   return true;
@@ -348,10 +363,11 @@ function stepTick(state: State) {
   }
 
   // Landings and cooldowns.
+  const cooldown = paceOf(state).cooldown;
   state.pieces = state.pieces.map((p) => {
     if (p.status === "moving" && t >= p.startTick! + p.duration!) {
       const kind: Kind = p.kind === "P" && promotesAt(state.variant, p.color, p.toX!, p.toY!) ? "Q" : p.kind;
-      return { id: p.id, color: p.color, kind, x: p.toX!, y: p.toY!, firstMove: p.firstMove, status: "cooldown", readyAt: t + COOLDOWN_TICKS, pending: p.pending };
+      return { id: p.id, color: p.color, kind, x: p.toX!, y: p.toY!, firstMove: p.firstMove, status: "cooldown", readyAt: t + cooldown, pending: p.pending };
     }
     if (p.status === "cooldown" && t >= p.readyAt!) return { id: p.id, color: p.color, kind: p.kind, x: p.x, y: p.y, firstMove: p.firstMove, status: "ready", pending: p.pending, dead: p.dead };
     return p;

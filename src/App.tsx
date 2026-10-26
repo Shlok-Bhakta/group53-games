@@ -3,9 +3,7 @@ import { Authenticated, AuthLoading, Unauthenticated, useQuery } from "convex/re
 import { AnimatePresence, MotionConfig } from "motion/react";
 import { api } from "../convex/_generated/api";
 import { Wordle } from "./games/wordle/Wordle";
-import { ChessHub } from "./games/chess/ChessHub";
-import { ChessMatch } from "./games/chess/ChessMatch";
-import { ModePage } from "./games/chess/ModePage";
+import { GAME_UI } from "./games";
 import { InstallGate } from "./InstallGate";
 import { TAB_BAR_SPACE, TabBar } from "@/components/TabBar";
 import { TopEdge } from "@/components/TopEdge";
@@ -15,6 +13,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/sonner";
 import { Crew } from "@/pages/Crew";
 import { Games } from "@/pages/Games";
+import { GameHub } from "@/pages/GameHub";
+import { MatchScreen } from "@/pages/MatchScreen";
+import { ModePage } from "@/pages/ModePage";
 import { Home } from "@/pages/Home";
 import { SignIn } from "@/pages/SignIn";
 import { You } from "@/pages/You";
@@ -74,9 +75,11 @@ function SignedIn() {
                 <Route path="/you" element={<You />} />
                 <Route path="/settings" element={<Navigate to="/you" replace />} />
                 <Route path="/wordle" element={<Wordle />} />
-                <Route path="/chess" element={<NotificationsRequired><ChessHub /></NotificationsRequired>} />
-                <Route path="/chess/mode/:slug" element={<NotificationsRequired><ModePage /></NotificationsRequired>} />
-                <Route path="/chess/:id" element={<NotificationsRequired><ChessMatch /></NotificationsRequired>} />
+                {Object.values(GAME_UI).flatMap((g) => [
+                  <Route key={g.key} path={g.path} element={<NotificationsRequired><GameHub game={g} /></NotificationsRequired>} />,
+                  <Route key={`${g.key}-mode`} path={`${g.path}/mode/:slug`} element={<NotificationsRequired><ModePage game={g} /></NotificationsRequired>} />,
+                  <Route key={`${g.key}-match`} path={`${g.path}/:id`} element={<NotificationsRequired><MatchScreen game={g} /></NotificationsRequired>} />,
+                ])}
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </div>

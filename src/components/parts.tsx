@@ -3,19 +3,23 @@ import { Link, useNavigate } from "react-router";
 import { useMutation, useQuery } from "convex/react";
 import { motion } from "motion/react";
 import { SwordIcon } from "@phosphor-icons/react";
-import { api } from "../../../convex/_generated/api";
-import type { Id } from "../../../convex/_generated/dataModel";
-import type { MatchView } from "../../../convex/matches";
-import type { ClassicState } from "../../../convex/chess";
-import type { FourState } from "../../../convex/chess/four/classic";
-import { MODES, type ModeKey } from "../../../convex/modes";
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
+import type { MatchView } from "../../convex/matches";
+import { GAMES, MODES, flexibleSeats, matchPath, type ModeKey } from "../../convex/modes";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { AsyncButton } from "@/components/AsyncButton";
-import { listNames, ordinal, reasonText } from "./text";
+import { lastMove } from "@/games/summary";
+import { listNames, ordinal, reasonText } from "@/lib/text";
 
-// A mode's one name, the same everywhere: "Classic", "4-Player", "Real-time", "Real-time 4-Player".
+// A mode's one name, the same everywhere: "Classic", "4-Player", "Real-time", "Real-time 4-Player". Lists that
+// can mix games put the game first: "Chess Classic", "Scrabble Live".
 export const modeLabel = (mode: string) => MODES[mode as ModeKey]?.name ?? mode;
+export const fullModeLabel = (mode: string) => {
+  const m = MODES[mode as ModeKey];
+  return m ? `${GAMES[m.game].name} ${m.name}` : mode;
+};
 
 // A titled group of rows. The heading carries the section; the group is a single flat surface.
 export function Section({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
@@ -61,20 +65,16 @@ const ago = (at: number) => {
 
 // The line under a game's names: its mode, the last move, and how long ago.
 function detail(match: MatchView) {
-  const parts: string[] = [modeLabel(match.mode)];
+  const parts: string[] = [fullModeLabel(match.mode)];
   const seats = MODES[match.mode as ModeKey]?.players ?? 2;
   if (match.status === "waiting") {
-    if (seats > 2) parts.push(`${match.players.length} of ${seats} in`);
+    if (flexibleSeats(match.mode)) parts.push(`${match.players.length} in`);
+    else if (seats > 2) parts.push(`${match.players.length} of ${seats} in`);
     return parts.join(", ");
   }
   if (match.status === "active") {
-    if (match.mode === "chess:classic") {
-      const last = (match.state as ClassicState).moves.at(-1);
-      if (last) parts.push(last.san);
-    } else if (match.mode === "chess:four") {
-      const last = (match.state as FourState).moves.at(-1);
-      if (last) parts.push(last.text);
-    }
+    const last = lastMove(match);
+    if (last) parts.push(last);
     if (MODES[match.mode as ModeKey]?.kind === "async") parts.push(ago(match.lastActivityAt));
   }
   return parts.join(", ");
@@ -86,7 +86,7 @@ export function MatchRow({ match, meId, status, vs }: { match: MatchView; meId?:
   const label = others.map((p) => p.name).join(vs && others.length === 2 ? " vs " : ", ");
   const stacked = others.length > 1;
   return (
-    <Link to={`/chess/${match._id}`} className="flex min-h-16 items-center gap-3 px-4 py-2.5 transition-colors active:bg-muted">
+    <Link to={matchPath(match)} className="flex min-h-16 items-center gap-3 px-4 py-2.5 transition-colors active:bg-muted">
       <span className="flex shrink-0 -space-x-2.5">
         {others.slice(0, 3).map((p) => (
           <PlayerAvatar key={p.userId} name={p.name} image={p.image} frame={p.frame} frameColor={p.frameColor} size={stacked ? 32 : 40} className="rounded-full ring-2 ring-card" />
@@ -149,7 +149,7 @@ export function InviteCard({ match }: { match: MatchView }) {
         <p className="min-w-0 flex-1">
           <span className="block truncate font-semibold">{host.name} challenged you</span>
           <span className="block truncate text-footnote text-muted-foreground">
-            {modeLabel(match.mode)}
+            {fullModeLabel(match.mode)}
             {m.players > 2 && alsoAsked > 0 ? `, with ${alsoAsked} other${alsoAsked > 1 ? "s" : ""}` : ""}
           </span>
         </p>
@@ -163,7 +163,7 @@ export function InviteCard({ match }: { match: MatchView }) {
           icon={<SwordIcon weight="bold" />}
           onClick={async () => {
             await join({ id: match._id });
-            navigate(`/chess/${match._id}`);
+            navigate(matchPath(match));
           }}
         >
           Accept
