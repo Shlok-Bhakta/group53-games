@@ -95,7 +95,61 @@ Run both suites before shipping, and add tests with every feature.
 - Convex data lives on kiwi's SSD (`/home/shlok/ssd-data/group53/convex-data`). The 5TB USB disk (`usb1`) is an SMR spinning drive. On it, commits stalled for 0.5–1.2s and logins took seconds, so never put a database there.
 - Every async button uses `AsyncButton` or `usePending` (`src/components/AsyncButton.tsx`). They lock while running and show a spinner, so double taps can't duplicate actions. Mutations that create things should also be idempotent on the server, like `challenge`.
 - New deploys reach phones on their own: `version.json` carries the build ID and `src/version.ts` reloads (once per build) or, inside a game, offers an Update button.
-- `.env.local` points the Convex CLI at the kiwi deployment over Tailscale. Push functions with `npx convex deploy -y`.
-- Ship the web app and backend together. Removing or renaming a Convex function before the new frontend is live crashes the deployed app. Deploy additive backend changes first, the web app next, and removals last.
-- Deploy with `npm run deploy` (`scripts/deploy.sh`). It refuses to run with uncommitted changes, pushes the Convex functions, rsyncs the repo to `kiwi:Services/group53/` (skipping `node_modules`, `dist`, `.git`, `secrets`, `.env*`, `.convex`), rebuilds `web` and `og` with `docker compose up -d --build`, prunes the untagged images each rebuild leaves behind, and checks the site answers. Work happens one agent at a time on `main`: when a feature is done and the tests pass, commit, push, and deploy.
 - Discord OAuth needs `issuer: "https://discord.com"` on the provider (`convex/auth.ts`), or every sign-in fails on the `iss` check.
+
+## Shipping
+
+Work happens one agent at a time on `main`. When a feature is done: run both test suites, commit, push to `origin main`, then deploy. The user has said to do all of that without asking.
+
+### Before the first deploy
+
+- The repo is at `~/Projects/group53-games` (T3 also sees it as `~/.t3/projects/group53-games`, a symlink). GitHub: `git@github.com:Shlok-Bhakta/group53-games.git`.
+- `.env.local` (gitignored, only on this machine) holds `CONVEX_SELF_HOSTED_URL`, `CONVEX_SELF_HOSTED_ADMIN_KEY` and `VITE_CONVEX_URL`, pointing the Convex CLI at kiwi over Tailscale (`http://100.88.30.127:38441`). If it's missing, the admin key is in `kiwi:~/Services/group53/secrets/admin_key`.
+- `ssh kiwi` must work without a prompt (an alias in `~/.ssh/config`: user `shlok` at `100.88.30.127`, so Tailscale has to be up). Check with `ssh -o BatchMode=yes kiwi true`.
+
+### Deploy
+
+```sh
+npm test && npm run test:e2e   # both must pass
+git add -A && git commit && git push origin main
+npm run deploy
+```
+
+`npm run deploy` (`scripts/deploy.sh`) refuses to run with uncommitted changes (`-- --dirty` overrides; don't use it for real releases). It then:
+
+1. pushes the Convex functions (`npx convex deploy -y`);
+2. rsyncs the repo to `kiwi:~/Services/group53/`, skipping `node_modules`, `dist`, `.git`, `secrets`, `.env*`, `.convex` and test output;
+3. rebuilds and restarts the `web` and `og` containers (`docker compose up -d --build web og`);
+4. prunes the untagged images each rebuild leaves behind, plus build cache older than a week;
+5. checks `/`, `/version.json` and `/sw.js` on `https://group53.shlokbhakta.dev` answer 200 and prints the live build ID.
+
+It's done when it prints `Live: {"id":"..."}` and the log shows `✔ Deployed Convex functions`. Phones pick up the new build on their own (`src/version.ts`): they reload once, or offer an Update button mid-game.
+
+### Order of changes
+
+Convex functions go live before the web app does. Additive backend changes (new functions, new optional args, new fields) are safe in one deploy. Removing or renaming a function, or making an arg required, crashes phones still running the old app: ship the frontend that stops using it first, then remove the function in a later deploy. Schema changes that drop or retype fields need a migration first.
+
+### On kiwi
+
+The stack is `~/Services/group53` (a copy, not a git checkout): `compose.yaml` runs `convex`, `dashboard`, `web`, `og` and `tunnel` (Cloudflare Tunnel `group53-games`). Deploys only rebuild `web` and `og`; the other three keep running.
+
+```sh
+ssh kiwi 'cd Services/group53 && docker compose ps'                    # what's running
+ssh kiwi 'cd Services/group53 && docker compose logs --tail 100 web'   # or og, convex, tunnel
+ssh kiwi 'cd Services/group53 && docker compose restart og'            # restart one service
+```
+
+Convex function logs: `npx convex logs` from this repo. The dashboard is on the tailnet at `http://100.88.30.127:38443` (log in with the admin key). Data is on the SSD at `/home/shlok/ssd-data/group53/convex-data`; never move it to the USB disk.
+
+### Convex environment variables
+
+Set on the deployment, not in files: `npx convex env list`, `npx convex env set NAME value`. In use: `JWT_PRIVATE_KEY`, `JWKS`, `SITE_URL`, `AUTH_DISCORD_ID`, `AUTH_DISCORD_SECRET`, `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`. `ALLOW_TEST_HELPERS` must stay unset on kiwi (see Testing).
+
+### Rolling back
+
+Revert the bad commit (`git revert <sha>`), push, and run `npm run deploy` again. It's a full redeploy of that tree, backend included, so the same ordering rules apply: if the bad commit removed a function the old app needs, reverting brings it back.
+
+### Link previews
+
+If a change touches `og/` or `convex/previews.ts`, check the cards after deploying with `node e2e/og-preview.mjs`.
+
