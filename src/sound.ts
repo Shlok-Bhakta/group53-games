@@ -6,8 +6,11 @@ import { useSyncExternalStore } from "react";
 // whole game sounds. Music tracks are generative: a few bars of chords and patterns scheduled a moment
 // ahead, looping for as long as you're in a game. Both are chosen on the You tab and remembered on the phone.
 //
-// iOS: audio only starts after a tap, so the context unlocks on the first touch. The audio session is
-// "ambient", which mixes with whatever else is playing and goes quiet with the silent switch.
+// iOS: audio only starts from a tap (a whole tap: touchend or click, not the touch going down), so the
+// context unlocks on the first one, and again after iOS interrupts it (a call, leaving the app). With
+// "Play on silent" on (the default) the audio session is "playback", which plays with the ringer off but
+// pauses other audio like Spotify; off, it's "ambient", which mixes with other audio and goes quiet with
+// the silent switch.
 
 export const SFX_PACKS = [
   { value: "off", label: "Off" },
@@ -23,12 +26,12 @@ export const MUSIC_TRACKS = [
 ] as const;
 export type SfxPack = (typeof SFX_PACKS)[number]["value"];
 export type MusicTrack = (typeof MUSIC_TRACKS)[number]["value"];
-export type SoundSettings = { sfx: SfxPack; music: MusicTrack; lastMusic: Exclude<MusicTrack, "off"> };
+export type SoundSettings = { sfx: SfxPack; music: MusicTrack; lastMusic: Exclude<MusicTrack, "off">; onSilent: boolean };
 
 // --- Settings store ---
 
 const KEY = "sound";
-const DEFAULTS: SoundSettings = { sfx: "wood", music: "lofi", lastMusic: "lofi" };
+const DEFAULTS: SoundSettings = { sfx: "wood", music: "lofi", lastMusic: "lofi", onSilent: true };
 let settings: SoundSettings = (() => {
   try {
     return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) ?? "{}") };
@@ -42,6 +45,7 @@ export function setSound(next: Partial<SoundSettings>) {
   if (next.music && next.music !== "off") settings.lastMusic = next.music;
   localStorage.setItem(KEY, JSON.stringify(settings));
   listeners.forEach((l) => l());
+  applySession();
   music.refresh();
 }
 export function useSoundSettings() {
@@ -61,9 +65,10 @@ function audio() {
   if (ctx) return ctx;
   const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AC) return null;
-  const nav = navigator as Navigator & { audioSession?: { type: string } };
-  if (nav.audioSession) nav.audioSession.type = "ambient";
+  applySession();
   ctx = new AC();
+  // Starting, or coming back after iOS interrupted it: pick the music back up.
+  ctx.onstatechange = () => music.refresh();
   const master = ctx.createDynamicsCompressor();
   master.threshold.value = -14;
   master.ratio.value = 4;
@@ -77,18 +82,32 @@ function audio() {
   return ctx;
 }
 
-// Browsers keep audio locked until a tap.
+function applySession() {
+  const nav = navigator as Navigator & { audioSession?: { type: string } };
+  if (nav.audioSession) nav.audioSession.type = settings.onSilent ? "playback" : "ambient";
+}
+
+// Gets the context running, from inside a tap. iOS also wants a sound to actually start in that tap
+// before it counts the context as unlocked, so a silent one plays.
+function wake() {
+  const c = audio();
+  if (!c) return null;
+  if (c.state !== "running") {
+    const silent = c.createBufferSource();
+    silent.buffer = c.createBuffer(1, 1, c.sampleRate);
+    silent.connect(c.destination);
+    silent.start();
+    void c.resume().then(() => music.refresh()).catch(() => {});
+  }
+  return c;
+}
+
 if (typeof window !== "undefined") {
-  const unlock = () => {
-    const c = audio();
-    if (c?.state === "suspended") void c.resume();
-    music.refresh();
-  };
-  window.addEventListener("pointerdown", unlock, { capture: true, passive: true });
+  for (const type of ["touchend", "click", "keydown", "pointerdown"]) window.addEventListener(type, wake, { capture: true, passive: true });
   document.addEventListener("visibilitychange", () => {
     if (!ctx) return;
     if (document.hidden) void ctx.suspend();
-    else void ctx.resume();
+    else void ctx.resume().catch(() => {});
   });
 }
 
@@ -185,8 +204,13 @@ export type SfxName = "pick" | "place" | "recall" | "shuffle" | "play" | "bingo"
 export function sfx(name: SfxName, opts: { count?: number; score?: number } = {}) {
   (window as unknown as { __sfx?: string[] }).__sfx?.push(name);
   if (settings.sfx === "off") return;
-  const c = audio();
-  if (!c || c.state !== "running") return;
+  const c = wake();
+  if (!c) return;
+  // Asked for in the same tap that unlocks audio: play it the moment the context is up.
+  if (c.state !== "running") {
+    void c.resume().then(() => c.state === "running" && sfx(name, opts)).catch(() => {});
+    return;
+  }
   const v = VOICES[settings.sfx];
   const t = c.currentTime + 0.005;
   const n = Math.max(1, Math.min(9, opts.count ?? 1));
@@ -234,11 +258,18 @@ export function sfx(name: SfxName, opts: { count?: number; score?: number } = {}
     case "lose":
       [76, 72, 69, 64].forEach((m, i) => v.note(c, t + i * 0.16, m, 0.45, 0.7));
       return;
-    case "preview":
-      v.click(c, t, 1, 0.7);
-      v.thump(c, t, 0.6);
-      [0, 1, 2].forEach((i) => v.note(c, t + 0.12 + i * 0.08, PENTA[i + 2], 0.6));
+    case "preview": {
+      // A little game in two seconds: pick a tile up, put three down, play the word, and score big.
+      v.click(c, t, 1.25, 0.5);
+      for (let i = 0; i < 3; i++) {
+        v.click(c, t + 0.22 + i * 0.16, 1, 0.8);
+        v.thump(c, t + 0.22 + i * 0.16, 0.6);
+      }
+      const at = t + 0.85;
+      for (let i = 0; i < 4; i++) v.note(c, at + i * 0.07, PENTA[i], 0.7);
+      [0, 2, 4].forEach((k) => v.note(c, at + 0.35, PENTA[k + 3], 0.45, 1));
       return;
+    }
   }
 }
 
@@ -393,7 +424,7 @@ const music = (() => {
     const track = TRACKS[id];
     playing = id;
     musicBus.gain.cancelScheduledValues(c.currentTime);
-    musicBus.gain.setTargetAtTime(0.5 * track.volume, c.currentTime, 0.8);
+    musicBus.gain.setTargetAtTime(0.5 * track.volume, c.currentTime, 0.12);
     stopBed = track.bed?.(c, musicBus) ?? null;
     next = c.currentTime + 0.1;
     bar = 0;

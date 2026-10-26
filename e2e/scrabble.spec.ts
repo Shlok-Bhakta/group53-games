@@ -209,6 +209,8 @@ test.describe("Scrabble", () => {
     const effects = page.getByRole("radiogroup", { name: "Sound effects" });
     await expect(music.getByRole("radio", { name: "Lo-fi" })).toBeChecked();
     await expect(effects.getByRole("radio", { name: "Wood" })).toBeChecked();
+    // On by default, so the game makes noise with the ringer off.
+    await expect(page.getByRole("switch", { name: "Play on silent" })).toBeChecked();
     await music.getByRole("radio", { name: "Rain" }).click();
     await effects.getByRole("radio", { name: "Arcade" }).click();
     expect(await sounds(page)).toContain("preview");
@@ -216,7 +218,8 @@ test.describe("Scrabble", () => {
     await expect(page.getByRole("radiogroup", { name: "Music" }).getByRole("radio", { name: "Rain" })).toBeChecked();
     await expect(page.getByRole("radiogroup", { name: "Sound effects" }).getByRole("radio", { name: "Arcade" })).toBeChecked();
     await page.getByRole("radiogroup", { name: "Music" }).getByRole("radio", { name: "Off" }).click();
-    expect(JSON.parse((await page.evaluate(() => localStorage.getItem("sound")))!)).toMatchObject({ music: "off", sfx: "arcade" });
+    await page.getByRole("switch", { name: "Play on silent" }).click();
+    expect(JSON.parse((await page.evaluate(() => localStorage.getItem("sound")))!)).toMatchObject({ music: "off", sfx: "arcade", onSilent: false });
     expect(errors).toEqual([]);
   });
 

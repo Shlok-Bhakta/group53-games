@@ -5,6 +5,7 @@ import {
   BellRingingIcon,
   CaretRightIcon,
   CheckIcon,
+  BellSlashIcon,
   MusicNotesIcon,
   SpeakerHighIcon,
   PaletteIcon,
@@ -103,7 +104,7 @@ function NotificationsGroup() {
 function SoundGroup() {
   const sound = useSoundSettings();
   return (
-    <Group title="Sound">
+    <Group title="Sound" footer={sound.onSilent ? "Plays with your ringer off. Other audio, like Spotify, pauses while you play." : "Goes quiet when your ringer is off, and plays alongside other audio."}>
       <div className="flex flex-col gap-2.5 px-4 py-3">
         <span className="flex items-center gap-3 font-medium">
           <span className="grid size-[30px] shrink-0 place-items-center rounded-sm text-white" style={{ background: "#bf5af2" }}>
@@ -138,6 +139,9 @@ function SoundGroup() {
           }}
         />
       </div>
+      <Row icon={BellSlashIcon} tint="#8e8e93" label="Play on silent" htmlFor="silent-switch">
+        <Switch id="silent-switch" checked={sound.onSilent} onCheckedChange={(v) => setSound({ onSilent: v })} />
+      </Row>
     </Group>
   );
 }
