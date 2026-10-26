@@ -55,6 +55,29 @@ test.describe("signed out", () => {
   });
 });
 
+test.describe("updates", () => {
+  test("a new build covers the app with Updating, reloads, and says so when it's back", async ({ context }) => {
+    const me = await createPlayer("Shlok");
+    const page = await phone(context, { player: me });
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
+    const real = (await (await page.request.get("/version.json")).json()).id as string;
+    // Pretend a newer build just went out.
+    await page.route("**/version.json*", (r) => r.fulfill({ json: { id: "newer-build" } }));
+    await page.getByRole("link", { name: "Games" }).click();
+    await expect(page.getByRole("status", { name: "Updating" })).toBeVisible();
+    await page.waitForEvent("load");
+    // The reload didn't land on the new build (it doesn't exist), so it offers instead of looping.
+    await expect(page.getByText("A new version is ready")).toBeVisible();
+    await page.unroute("**/version.json*");
+    // Back on the build it was updating to: a little "you're up to date".
+    await page.evaluate((id) => sessionStorage.setItem("updating-to", id), real);
+    await page.reload();
+    await expect(page.getByText("You're up to date")).toBeVisible();
+    await expect(page.getByText("You're up to date")).toHaveCount(0, { timeout: 6000 });
+  });
+});
+
 test.describe("signed in", () => {
   test("games stay locked until notifications are on, then unlock in one tap", async ({ context }) => {
     const me = await createPlayer("Shlok");

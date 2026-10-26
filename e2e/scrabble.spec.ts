@@ -205,22 +205,50 @@ test.describe("Scrabble", () => {
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto("/you");
-    const music = page.getByRole("radiogroup", { name: "Music" });
-    const effects = page.getByRole("radiogroup", { name: "Sound effects" });
-    await expect(music.getByRole("radio", { name: "Lo-fi" })).toBeChecked();
-    await expect(effects.getByRole("radio", { name: "Wood" })).toBeChecked();
+    const musicRow = page.getByRole("button", { name: /^Music/ });
+    const sfxRow = page.getByRole("button", { name: /^Sound effects/ });
+    await expect(musicRow).toContainText("Lo-fi");
+    await expect(sfxRow).toContainText("Wood");
     // On by default, so the game makes noise with the ringer off.
     await expect(page.getByRole("switch", { name: "Play on silent" })).toBeChecked();
-    await music.getByRole("radio", { name: "Rain" }).click();
-    await effects.getByRole("radio", { name: "Arcade" }).click();
+    // Music plays everywhere, not just in games, once you've tapped; picking a track switches to it.
+    await musicRow.click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __music?: string }).__music)).toBe("lofi");
+    await page.getByRole("dialog").getByRole("radio", { name: /Late night/ }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __music?: string }).__music)).toBe("nightcap");
+    await page.keyboard.press("Escape");
+    await sfxRow.click();
+    await page.getByRole("dialog").getByRole("radio", { name: /Thock/ }).click();
     expect(await sounds(page)).toContain("preview");
+    await page.keyboard.press("Escape");
     await page.reload();
-    await expect(page.getByRole("radiogroup", { name: "Music" }).getByRole("radio", { name: "Rain" })).toBeChecked();
-    await expect(page.getByRole("radiogroup", { name: "Sound effects" }).getByRole("radio", { name: "Arcade" })).toBeChecked();
-    await page.getByRole("radiogroup", { name: "Music" }).getByRole("radio", { name: "Off" }).click();
+    await expect(page.getByRole("button", { name: /^Music/ })).toContainText("Late night");
+    await expect(page.getByRole("button", { name: /^Sound effects/ })).toContainText("Thock");
     await page.getByRole("switch", { name: "Play on silent" }).click();
-    expect(JSON.parse((await page.evaluate(() => localStorage.getItem("sound")))!)).toMatchObject({ music: "off", sfx: "arcade", onSilent: false });
+    expect(JSON.parse((await page.evaluate(() => localStorage.getItem("sound")))!)).toMatchObject({ music: "nightcap", sfx: "keys", onSilent: false });
     expect(errors).toEqual([]);
+  });
+
+  test("every effects pack and music track makes sound, and none of it clips", async ({ context }) => {
+    test.setTimeout(240_000);
+    const me = await createPlayer("Shlok");
+    const page = await phone(context, { player: me });
+    await page.goto("/you");
+    const report = await page.evaluate(async () => {
+      type Lab = { packs: string[]; tracks: string[]; sfx: (p: string, n: string) => Promise<{ peak: number; rms: number }>; music: (t: string, s: number) => Promise<{ peak: number; rms: number }> };
+      const lab = (window as unknown as { __soundLab: Lab }).__soundLab;
+      const names = ["pick", "place", "recall", "shuffle", "play", "bingo", "invalid", "turn", "ghost", "land", "tick", "win", "lose", "preview"];
+      const out: Record<string, { peak: number; rms: number }> = {};
+      for (const p of lab.packs) for (const n of names) out[`sfx ${p} ${n}`] = await lab.sfx(p, n);
+      for (const t of lab.tracks) out[`music ${t}`] = await lab.music(t, 10);
+      return out;
+    });
+    const silent = Object.entries(report).filter(([k, r]) => r.peak < (k.includes("ghost") ? 0.002 : 0.01)).map(([k]) => k);
+    const clipping = Object.entries(report).filter(([, r]) => r.peak >= 0.99).map(([k]) => k);
+    expect(silent).toEqual([]);
+    expect(clipping).toEqual([]);
+    // Music sits under the game: there, but never loud.
+    for (const [k, r] of Object.entries(report)) if (k.startsWith("music")) expect(r.rms, k).toBeLessThan(0.2);
   });
 
   test("tiles drag from the rack onto the board and back", async ({ context, browser }) => {

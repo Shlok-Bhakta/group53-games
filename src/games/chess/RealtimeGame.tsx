@@ -28,6 +28,7 @@ import { nearest, pieceSrc, pointToScreen, same, viewFor, type Sq, type View } f
 import { cn } from "@/lib/utils";
 import { errorText } from "@/lib/errors";
 import { listNames } from "@/lib/text";
+import { useHoldUpdates } from "@/version";
 
 const FILES = "abcdefgh";
 // A finger this close to a square's center (in squares) picks it on the 14x14 board.
@@ -117,6 +118,8 @@ export function RealtimeGame({ match, meId, above, below, overlay }: { match: Ma
   }, [needsReady, match._id, ready]);
 
   const startAt = state.startAt;
+  // A reload mid-game would cost the player seconds of play; updates wait until it's over.
+  useHoldUpdates(match.status === "active" && !!me);
   const live = clock.ready && startAt !== null && rt !== undefined;
   const displayTick = useCallback(() => (startAt === null ? -1 : (clock.now() - startAt) / TICK_MS), [clock, startAt]);
 

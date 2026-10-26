@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router";
 import { Authenticated, AuthLoading, Unauthenticated, useQuery } from "convex/react";
 import { AnimatePresence, MotionConfig } from "motion/react";
@@ -21,7 +22,8 @@ import { SignIn } from "@/pages/SignIn";
 import { You } from "@/pages/You";
 import { ArrivalPills, TapLayer, usePresenceReporter } from "@/presence";
 import { Page, TAB_ROUTES, useAppBadge, useNavDirection, useScrollMemory } from "@/shell";
-import { useVersionCheck } from "@/version";
+import { UpdateOverlay, useVersionCheck } from "@/version";
+import { wantMusic } from "@/sound";
 import { useDeepLinks } from "@/deepLinks";
 
 export function App() {
@@ -43,7 +45,9 @@ export function App() {
         <Authenticated>
           <SignedIn />
         </Authenticated>
-        <Toaster position="top-center" offset={{ top: "calc(env(safe-area-inset-top) + 40px)" }} />
+        {/* Phones use mobileOffset, not offset. Toasts sit below the band iOS blurs under the status bar. */}
+        <Toaster position="top-center" offset={{ top: "calc(env(safe-area-inset-top) + 44px)" }} mobileOffset={{ top: "calc(env(safe-area-inset-top) + 44px)" }} />
+        <UpdateOverlay />
         <TopEdge />
       </InstallGate>
     </MotionConfig>
@@ -61,6 +65,11 @@ function SignedIn() {
   useDeepLinks();
   useScrollMemory(direction);
   useAppBadge();
+  // Music plays all over the app once you're signed in, not just in games.
+  useEffect(() => {
+    wantMusic(true);
+    return () => wantMusic(false);
+  }, []);
 
   return (
     <>
