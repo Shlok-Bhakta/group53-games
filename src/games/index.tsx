@@ -23,6 +23,8 @@ export type GameUI = {
   rules: (mode: ModeKey, settings: Settings) => string[];
   // A game that's started or finished, below the nav bar.
   Game: ComponentType<{ match: MatchView; meId: Id<"users"> | undefined }>;
+  // Games that draw their own top bar and take the whole screen while they're on.
+  fullscreen?: (match: MatchView) => boolean;
 };
 
 export const GAME_UI: Record<GameKey, GameUI> = {
@@ -45,6 +47,7 @@ export const GAME_UI: Record<GameKey, GameUI> = {
     modeArt: (mode) => <ScrabbleModeArt mode={mode} />,
     rules: scrabbleRules,
     Game: ScrabbleGame,
+    fullscreen: (m) => m.status === "active",
   },
 };
 

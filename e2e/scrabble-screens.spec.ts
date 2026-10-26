@@ -71,7 +71,7 @@ for (const scheme of ["dark", "light"] as const) {
         (el, [x, y]) => {
           const layer = el.firstElementChild as HTMLElement;
           const mm = new DOMMatrix(getComputedStyle(layer).transform);
-          const base = el.clientWidth / 15;
+          const base = layer.offsetWidth / 15;
           const r = el.getBoundingClientRect();
           return { x: r.left + mm.e + (x + 0.5) * base * mm.a, y: r.top + mm.f + (y + 0.5) * base * mm.d };
         },
@@ -80,6 +80,12 @@ for (const scheme of ["dark", "light"] as const) {
       await next.mouse.click(pt.x, pt.y);
     }
     await shot("planning", next);
+    await next.getByRole("button", { name: "Menu" }).click();
+    await shot("menu", next);
+    await next.keyboard.press("Escape");
+    await next.getByRole("button", { name: /^Bag/ }).click();
+    await shot("bag", next);
+    await next.keyboard.press("Escape");
     await shot("watching-turn", pageOf(1));
     for (const c of ctxs) await c.close();
   });

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { createPortal } from "react-dom";
 import { useMutation, useQuery } from "convex/react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
-import { ArrowCounterClockwiseIcon, ArrowsClockwiseIcon, HandIcon, PencilSimpleIcon, ShuffleIcon, SkipForwardIcon } from "@phosphor-icons/react";
+import { ToteSimpleIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -29,6 +29,7 @@ import { SEAT_COLORS } from "@/games/seats";
 import { errorText } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { ScrabbleBoard, type BoardHandle, type DraftTile } from "./Board";
+import { BagSheet, DockActions, GameMenu, TopBar } from "./Chrome";
 import { LetterTile } from "./Tile";
 import { Tiles } from "@/Tiles";
 import { sfx } from "@/sound";
@@ -273,37 +274,85 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated.current]);
 
-  // --- Board size: as big as fits between the scores and the rack ---
+  const finished = match.status === "finished";
+
+  // --- Board size. In a game in progress the board fills the screen between the floating top bar and the
+  // dock, and you pan around it; once it's over it's a square above the result. ---
   const area = useRef<HTMLDivElement>(null);
-  const [px, setPx] = useState(0);
+  const topBar = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 0, h: 0, pad: 0 });
   useLayoutEffect(() => {
     const el = area.current;
     if (!el) return;
-    const measure = () => setPx(Math.floor(Math.min(el.clientWidth, el.clientHeight || el.clientWidth)));
+    const measure = () => {
+      const bar = topBar.current;
+      setBox({ w: el.clientWidth, h: el.clientHeight || el.clientWidth, pad: bar ? bar.offsetTop + bar.offsetHeight + 6 : 0 });
+    };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
-
-  const finished = match.status === "finished";
+  }, [finished]);
+  const px = Math.floor(finished ? Math.min(box.w, box.h) : Math.min(box.w, box.h - box.pad));
+  const [menu, setMenu] = useState(false);
+  const [bagOpen, setBagOpen] = useState(false);
   const draggedTile = drag ? rackById.get(drag.id) : undefined;
   const draftTiles: DraftTile[] = placed.map((p) => {
     const tile = rackById.get(p.id)!;
     return { id: p.id, x: p.x, y: p.y, letter: tile.letter === "?" ? (p.letter ?? "?").toUpperCase() : tile.letter, blank: tile.letter === "?" };
   });
 
-  return (
-    <div className="flex flex-1 flex-col gap-2 pb-1">
-      <Scoreboard match={match} state={state} meId={meId} planning={planning} />
-      <StatusLine match={match} state={state} meId={meId} myTurn={myTurn} />
-      <div ref={area} className={cn("relative flex justify-center", finished ? "aspect-square w-full" : "min-h-[240px] flex-1")}>
-        {px > 0 && (
-          <div className={cn("absolute inset-0 flex justify-center", finished ? "items-start" : "items-center")}>
+  if (finished) {
+    return (
+      <div className="flex flex-1 flex-col gap-2 pb-1">
+        <div ref={area} className="relative aspect-square w-full">
+          {px > 0 && (
+            <div className="absolute inset-0 flex items-start justify-center">
             <ScrabbleBoard
               ref={board}
               size={state.size}
               px={px}
+              view={finished ? undefined : { width: box.w, height: box.h, padTop: box.pad }}
+              tiles={state.tiles}
+              draft={draftTiles}
+              seatColor={seatColor}
+              fresh={fresh}
+              freshSeat={last?.kind === "play" ? last.seat : null}
+              target={target}
+              tone={tone}
+              bubble={bubble}
+              hidden={drag?.from === "board" ? drag.id : null}
+              focus={focus}
+              zoomOnDoubleTap={selected === null}
+              reveal={{ key: state.moves.length, cells: [...fresh].map((k) => k.split(",").map(Number) as [number, number]) }}
+              ghosts={ghosts}
+              scored={scored}
+              shake={shake}
+              onCellTap={onCellTap}
+              onDraftDown={(id, e) => startDrag(id, "board", e)}
+            />
+            </div>
+          )}
+        </div>
+        <div className="pt-4">
+          <Result match={match} meId={meId} />
+        </div>
+      </div>
+    );
+  }
+
+  // A game in progress takes the whole screen, Letter League style: the board, buttons floating over its
+  // top, and your rack in a dock at the bottom.
+  return (
+    <div className="relative -mx-4 -mb-[calc(env(safe-area-inset-bottom)+16px)] flex h-[100dvh] flex-col overflow-hidden">
+      <div ref={area} className="relative min-h-0 flex-1">
+        {px > 0 && (
+          <div className="absolute inset-0">
+            <ScrabbleBoard
+              ref={board}
+              size={state.size}
+              px={px}
+              view={finished ? undefined : { width: box.w, height: box.h, padTop: box.pad }}
               tiles={state.tiles}
               draft={draftTiles}
               seatColor={seatColor}
@@ -324,67 +373,74 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
             />
           </div>
         )}
+        <TopBar ref={topBar} match={match} state={state} meId={meId} myTurn={myTurn} onMenu={() => setMenu(true)} />
         <AnimatePresence>
           {bingoKey !== null && <Bingo key={bingoKey} />}
         </AnimatePresence>
       </div>
 
-      {finished ? (
-        <div className="pt-4">
-          <Result match={match} meId={meId} />
-        </div>
-      ) : playing ? (
-        <>
-          <Rack
-            ref={rackEl}
-            tiles={inRack}
-            size={rules.rack}
-            selected={selected}
-            swapping={swapping}
-            dragging={drag?.from === "rack" ? drag.id : null}
-            slot={slot}
-            hop={hop}
-            onDown={(id, e) => startDrag(id, "rack", e)}
-          />
-          <Actions
-            match={match}
-            myTurn={myTurn}
-            placed={placed}
-            evaluation={evaluation}
-            bad={bad}
-            checking={checking}
-            swapping={swapping}
-            setSwapping={setSwapping}
-            bagCount={state.bag}
-            onShuffle={() => {
-              setOrder(shuffled(inRack.map((t) => t.id)));
-              setHop((h) => h + 1);
-              sfx("shuffle");
-            }}
-            onRecall={() => {
-              setPlaced([]);
-              sfx("recall");
-            }}
-            onPlay={async () => {
-              const count = placed.length;
-              let score: number;
-              try {
-                score = await play({ id: match._id, tiles: placed });
-              } catch (e) {
-                setShake((n) => n + 1);
-                sfx("invalid");
-                throw e;
-              }
-              setDraft((d) => ({ ...d, placed: [] }));
-              sfx(evaluation?.ok && evaluation.bingo ? "bingo" : "play", { count, score });
-            }}
-          />
-        </>
-      ) : mySeat >= 0 ? (
-        <p className="py-3 text-center text-callout text-muted-foreground">You're out. Stick around to see who wins.</p>
-      ) : (
-        <p className="py-3 text-center text-callout text-muted-foreground">You're watching.</p>
-      )}
+      <div className="relative z-10 flex flex-col gap-2.5 rounded-t-3xl bg-card px-3 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-3 shadow-[0_-8px_24px_rgb(0_0_0/0.18)]">
+        {playing ? (
+          <>
+            <Rack
+              ref={rackEl}
+              tiles={inRack}
+              size={rules.rack}
+              selected={selected}
+              swapping={swapping}
+              dragging={drag?.from === "rack" ? drag.id : null}
+              slot={slot}
+              hop={hop}
+              onDown={(id, e) => startDrag(id, "rack", e)}
+            />
+            <DockActions
+              match={match}
+              myTurn={myTurn}
+              placed={placed}
+              evaluation={evaluation}
+              bad={bad}
+              checking={checking}
+              swapping={swapping}
+              setSwapping={setSwapping}
+              bagCount={state.bag}
+              onBag={() => setBagOpen(true)}
+              onShuffle={() => {
+                setOrder(shuffled(inRack.map((t) => t.id)));
+                setHop((h) => h + 1);
+                sfx("shuffle");
+              }}
+              onRecall={() => {
+                setPlaced([]);
+                sfx("recall");
+              }}
+              onPlay={async () => {
+                const count = placed.length;
+                let score: number;
+                try {
+                  score = await play({ id: match._id, tiles: placed });
+                } catch (e) {
+                  setShake((n) => n + 1);
+                  sfx("invalid");
+                  throw e;
+                }
+                setDraft((d) => ({ ...d, placed: [] }));
+                sfx(evaluation?.ok && evaluation.bingo ? "bingo" : "play", { count, score });
+              }}
+            />
+          </>
+        ) : (
+          <div className="flex items-center gap-3">
+            <Button variant="secondary" className="h-14 w-14 shrink-0 flex-col gap-0.5 rounded-lg px-0 text-caption" onClick={() => setBagOpen(true)} aria-label={`Bag, ${state.bag} left`}>
+              <ToteSimpleIcon weight="fill" className="size-[22px]" />
+              <span className="font-display tabular-nums">{state.bag}</span>
+            </Button>
+            <p className="text-callout text-muted-foreground">{mySeat >= 0 ? "You're out. Stick around to see who wins." : "You're watching."}</p>
+          </div>
+        )}
+      </div>
+
+      <GameMenu open={menu} onOpenChange={setMenu} match={match} state={state} meId={meId} planning={planning} playing={playing} />
+      <BagSheet open={bagOpen} onOpenChange={setBagOpen} match={match} state={state} rack={rack ?? undefined} />
 
       {drag &&
         draggedTile &&
@@ -433,119 +489,6 @@ function shuffled<T>(xs: T[]) {
   return a;
 }
 
-// --- Scores ---
-
-function Scoreboard({ match, state, meId, planning }: { match: MatchView; state: ScrabbleState; meId: Id<"users"> | undefined; planning: { userId: Id<"users">; count: number }[] | undefined }) {
-  return (
-    <LayoutGroup id={`scores-${match._id}`}>
-      {/* Scrolling sideways clips up and down too, so the strip leaves room for the turn ring. */}
-      <ol className="-mx-4 flex h-[68px] snap-x scroll-px-4 gap-1.5 overflow-x-auto px-4 py-1 [scrollbar-width:none]" aria-label="Scores">
-        {match.players.map((p, seat) => (
-          <Score key={p.userId} player={p} seat={seat} state={state} isMe={p.userId === meId} active={match.status === "active"} planning={planning?.find((x) => x.userId === p.userId)?.count ?? 0} />
-        ))}
-      </ol>
-    </LayoutGroup>
-  );
-}
-
-function Score({ player, seat, state, isMe, active, planning }: { player: MatchView["players"][number]; seat: number; state: ScrabbleState; isMe: boolean; active: boolean; planning: number }) {
-  const { online } = useHere(player.userId);
-  const up = active && state.turn === seat;
-  const out = state.out.includes(seat);
-  const color = SEAT_COLORS[player.color ?? ""];
-  return (
-    <li className={cn("relative flex min-w-[96px] shrink-0 snap-start items-center gap-2 rounded-lg px-2.5", out && "opacity-45")} aria-current={up ? "true" : undefined} data-seat={seat}>
-      {up && <motion.span layoutId="turn" className="absolute inset-0 rounded-lg bg-card ring-2 ring-inset ring-primary" transition={{ type: "spring", bounce: 0.15, duration: 0.4 }} />}
-      <span className="relative shrink-0">
-        <PlayerAvatar name={player.name} image={player.image} frame={player.frame} frameColor={player.frameColor} size={32} />
-        <span className="absolute -bottom-0.5 -right-0.5 [--dot-ring:var(--background)]">
-          <OnlineDot online={online} />
-        </span>
-      </span>
-      <span className="relative min-w-0">
-        <span className="flex items-center gap-1 text-footnote font-semibold">
-          <span className="size-2 shrink-0 rounded-full" style={{ background: color }} />
-          <span className="max-w-[72px] truncate">{isMe ? "You" : player.name}</span>
-        </span>
-        <span className="flex items-center gap-1.5">
-          <motion.span key={state.scores[seat]} initial={{ y: -10, opacity: 0, scale: 1.4 }} animate={{ y: 0, opacity: 1, scale: 1 }} transition={{ type: "spring", bounce: 0.5, duration: 0.5 }} className="origin-left font-display text-body tabular-nums" aria-label={`${state.scores[seat]} points`}>
-            {state.scores[seat]}
-          </motion.span>
-          {planning > 0 && !isMe && (
-            <span className="flex items-center gap-0.5 text-caption font-semibold text-muted-foreground" aria-label={`Planning ${planning} tiles`}>
-              <PencilSimpleIcon weight="fill" size={11} />
-              {planning}
-            </span>
-          )}
-        </span>
-      </span>
-    </li>
-  );
-}
-
-// Whose turn it is, live, and the clock on live games.
-function StatusLine({ match, state, meId, myTurn }: { match: MatchView; state: ScrabbleState; meId: Id<"users"> | undefined; myTurn: boolean }) {
-  const up = match.status === "active" ? match.players[state.turn] : undefined;
-  const { here } = useHere(up?.userId ?? ("" as Id<"users">));
-  const last = state.moves.at(-1);
-  const lastBy = last ? match.players[last.seat] : undefined;
-  const lastText =
-    !last || !lastBy ? null
-    : last.kind === "play" ? `${lastBy.userId === meId ? "You" : lastBy.name}: ${last.words!.map((w) => w.word).join(", ")} +${last.score}`
-    : `${lastBy.userId === meId ? "You" : lastBy.name} ${last.kind === "swap" ? `swapped ${last.count}` : last.kind === "pass" ? "passed" : last.kind === "timeout" ? "ran out of time" : "resigned"}`;
-  return (
-    <div className="flex h-12 flex-col justify-center px-1">
-      <div className="flex items-center gap-2">
-        <motion.p
-          key={myTurn ? "mine" : (up?.userId ?? "over")}
-          initial={{ opacity: 0, y: 6, scale: myTurn ? 0.9 : 1 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ type: "spring", bounce: myTurn ? 0.5 : 0, duration: 0.4 }}
-          className={cn("min-w-0 flex-1 origin-left truncate font-display text-body", myTurn && "text-primary")}
-          aria-live="polite"
-        >
-          {!up ? "Final scores" : myTurn ? "Your turn" : here ? `${up.name} is on it` : `Waiting for ${up.name}`}
-          {up && !myTurn && here && (
-            <span className="ml-2 inline-flex align-middle">
-              <ThinkingDots />
-            </span>
-          )}
-        </motion.p>
-        {state.deadline !== null && match.status === "active" && <Countdown deadline={state.deadline} mine={myTurn} />}
-      </div>
-      <p className="truncate text-footnote text-muted-foreground">
-        {lastText}
-        {lastText && " · "}
-        {state.bag} in the bag, round {state.round}
-      </p>
-    </div>
-  );
-}
-
-function Countdown({ deadline, mine }: { deadline: number; mine: boolean }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(t);
-  }, []);
-  const left = Math.max(0, Math.ceil((deadline - now) / 1000));
-  const urgent = left <= 10;
-  // The last five seconds of your own turn tick.
-  const ticked = useRef(left);
-  useEffect(() => {
-    if (mine && left !== ticked.current && left > 0 && left <= 5) sfx("tick");
-    ticked.current = left;
-  }, [left, mine]);
-  return (
-    <span
-      className={cn("rounded-full px-2.5 py-1 font-display text-callout tabular-nums", urgent ? "bg-[var(--tile-hit)] text-[var(--tile-hit-ink)]" : mine ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}
-      aria-label={`${left} seconds left`}
-    >
-      {Math.floor(left / 60)}:{String(left % 60).padStart(2, "0")}
-    </span>
-  );
-}
-
 // --- Rack and actions ---
 
 const Rack = ({
@@ -574,7 +517,7 @@ const Rack = ({
   const items: (Tile | null)[] = [...shown];
   if (slot !== null) items.splice(Math.min(slot, items.length), 0, null);
   return (
-    <div ref={ref} className="grid h-[60px] items-center gap-1.5 rounded-lg bg-card px-2" style={{ gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))` }} aria-label="Your tiles">
+    <div ref={ref} className="grid h-[62px] items-center gap-1.5 rounded-lg bg-muted/60 px-2" style={{ gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))` }} aria-label="Your tiles">
       {items.map((t, i) =>
         t === null ? (
           <span key="slot" className="aspect-square rounded-sm border-2 border-dashed border-primary/50" />
@@ -625,119 +568,6 @@ const Rack = ({
 
 // Empty places in the rack keep the tiles from stretching.
 const pad = (n: number) => Array.from({ length: Math.max(0, n) }, (_, i) => <span key={`pad${i}`} />);
-
-function Actions({
-  match,
-  myTurn,
-  placed,
-  evaluation,
-  bad,
-  checking,
-  swapping,
-  setSwapping,
-  bagCount,
-  onShuffle,
-  onRecall,
-  onPlay,
-}: {
-  match: MatchView;
-  myTurn: boolean;
-  placed: Placement[];
-  evaluation: ReturnType<typeof evaluate> | null;
-  bad: string[];
-  checking: boolean;
-  swapping: number[] | null;
-  setSwapping: (s: number[] | null) => void;
-  bagCount: number;
-  onShuffle: () => void;
-  onRecall: () => void;
-  onPlay: () => Promise<void>;
-}) {
-  const swap = useMutation(api.scrabble.swap);
-  const pass = useMutation(api.scrabble.pass);
-  const small = "h-14 w-14 shrink-0 flex-col gap-0.5 rounded-lg px-0 text-caption [&_svg:not([class*='size-'])]:size-[22px]";
-
-  if (swapping) {
-    return (
-      <div className="flex gap-2">
-        <Button size="xl" variant="secondary" onClick={() => setSwapping(null)}>
-          Cancel
-        </Button>
-        <AsyncButton
-          size="xl"
-          className="flex-1"
-          disabled={swapping.length === 0 || swapping.length > bagCount}
-          icon={<ArrowsClockwiseIcon weight="bold" />}
-          onClick={async () => {
-            await swap({ id: match._id, tileIds: swapping });
-            setSwapping(null);
-          }}
-        >
-          {swapping.length === 0 ? "Pick tiles to swap" : swapping.length > bagCount ? `Only ${bagCount} in the bag` : `Swap ${swapping.length}`}
-        </AsyncButton>
-      </div>
-    );
-  }
-
-  const label =
-    !evaluation ? (myTurn ? "Play" : "Your turn's next")
-    : !evaluation.ok ? evaluation.error
-    : bad.length ? (bad.length === 1 ? `${bad[0]} isn't a word` : `${bad.length} aren't words`)
-    : checking ? `${evaluation.score} points`
-    : myTurn ? `Play ${evaluation.words[0].word} for ${evaluation.score}`
-    : `Planned: ${evaluation.words[0].word}, ${evaluation.score}`;
-  const canPlay = myTurn && !!evaluation?.ok && bad.length === 0 && !checking;
-
-  return (
-    <div className="flex items-stretch gap-2">
-      {placed.length > 0 ? (
-        <Button variant="secondary" className={small} onClick={onRecall} aria-label="Recall tiles">
-          <ArrowCounterClockwiseIcon weight="bold" />
-          Recall
-        </Button>
-      ) : (
-        <Button variant="secondary" className={small} onClick={onShuffle} aria-label="Shuffle tiles">
-          <ShuffleIcon weight="bold" />
-          Shuffle
-        </Button>
-      )}
-      {myTurn ? (
-        <>
-          <Button variant="secondary" className={small} disabled={bagCount === 0} onClick={() => setSwapping([])} aria-label="Swap tiles">
-            <ArrowsClockwiseIcon weight="bold" />
-            Swap
-          </Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="secondary" className={small} aria-label="Pass">
-                <SkipForwardIcon weight="bold" />
-                Pass
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Pass this turn?</AlertDialogTitle>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Keep thinking</AlertDialogCancel>
-                <AlertDialogAction onClick={() => void pass({ id: match._id }).catch((e) => toast.error(errorText(e)))}>Pass</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </>
-      ) : (
-        <ResignButton
-          match={match}
-          className={small}
-          detail={match.players.length > 2 ? "Your tiles go back in the bag and the others play on. You place last." : "The other player wins and gets the rating points."}
-        />
-      )}
-      <AsyncButton size="xl" className="min-w-0 flex-1 px-3" disabled={!canPlay} icon={myTurn ? <HandIcon weight="fill" /> : undefined} onClick={onPlay}>
-        <span className="truncate">{label}</span>
-      </AsyncButton>
-    </div>
-  );
-}
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 

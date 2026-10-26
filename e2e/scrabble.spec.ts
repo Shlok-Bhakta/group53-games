@@ -30,7 +30,7 @@ async function tapSquare(page: Page, x: number, y: number) {
     (el, [x, y, size]) => {
       const layer = el.firstElementChild as HTMLElement;
       const m = new DOMMatrix(getComputedStyle(layer).transform);
-      const base = el.clientWidth / size;
+      const base = layer.offsetWidth / size;
       return { x: m.e + (x + 0.5) * base * m.a, y: m.f + (y + 0.5) * base * m.d };
     },
     [x, y, 15] as const,
@@ -128,7 +128,6 @@ test.describe("Scrabble", () => {
     // The game screen has music on, once you've touched it.
     await expect.poll(() => p1.evaluate(() => (window as unknown as { __music?: string }).__music)).toBe("lofi");
     // The other phone sees face-down tiles where they're trying things, never the letters.
-    await expect(p2.getByLabel("Planning 3 tiles")).toBeVisible();
     await expect(p2.locator("[data-ghost]")).toHaveCount(3);
     await expect(p2.locator('[data-ghost="7,7"]')).toBeVisible();
     expect((await p2.locator("[data-ghost]").allTextContents()).join("")).toBe("");
@@ -142,7 +141,9 @@ test.describe("Scrabble", () => {
     await expect(p2.locator("[data-ghost]")).toHaveCount(0);
     await expect.poll(() => sounds(p2)).toEqual(expect.arrayContaining(["land", "turn"]));
     await expect(p2.getByText("Your turn")).toBeVisible();
+    await p2.getByRole("button", { name: "Menu" }).click();
     await expect(p2.getByRole("list", { name: "Scores" }).getByLabel("10 points")).toBeVisible();
+    await p2.keyboard.press("Escape");
     await expect(p1.getByLabel("Your tiles").getByRole("button")).toHaveCount(7);
 
     // Made-up words can't be played.
@@ -190,12 +191,43 @@ test.describe("Scrabble", () => {
     await chris.context.close();
   });
 
-  test("the turn ring sits inside the score strip, never clipped", async ({ context, browser }) => {
-    const { first, close } = await twoPlayerGame(browser, context);
-    const strip = (await first.page.getByRole("list", { name: "Scores" }).boundingBox())!;
-    const up = (await first.page.locator('[aria-current="true"]').boundingBox())!;
-    expect(up.y).toBeGreaterThanOrEqual(strip.y);
-    expect(up.y + up.height).toBeLessThanOrEqual(strip.y + strip.height);
+  test("the board fills the screen; the dock has the bag, Swap, Play and Shuffle, and the menu has scores, words and Resign", async ({ context, browser }) => {
+    const { id, first, second, close } = await twoPlayerGame(browser, context);
+    const p = first.page;
+    const board = (await p.getByRole("group", { name: "Board" }).boundingBox())!;
+    expect(board.width).toBeGreaterThanOrEqual(390);
+    expect(board.height).toBeGreaterThan(500);
+    const dock = p.getByLabel("Your tiles").locator("..");
+    await expect(dock.getByRole("button", { name: /^Bag, \d+ left$/ })).toBeVisible();
+    await expect(dock.getByRole("button", { name: "Swap or pass" })).toBeVisible();
+    await expect(dock.getByRole("button", { name: "Shuffle tiles" })).toBeVisible();
+    // Resign lives in the menu now, far from Shuffle.
+    await expect(p.getByRole("button", { name: "Resign" })).toHaveCount(0);
+
+    // The bag shows what's left.
+    await p.getByRole("button", { name: /^Bag/ }).click();
+    await expect(p.getByRole("heading", { name: "86 in the bag" })).toBeVisible();
+    await expect(p.getByRole("list", { name: "Unseen letters" }).getByRole("listitem")).toHaveCount(27);
+    await p.keyboard.press("Escape");
+
+    // Swap with nothing picked passes the turn.
+    await p.getByRole("button", { name: "Swap or pass" }).click();
+    await p.getByRole("button", { name: "Pass turn" }).click();
+    await expect(second.page.getByText("Your turn")).toBeVisible();
+
+    await setRack(id, second.player.userId, "CATSXYZ");
+    await place(second.page, "C", 6, 7);
+    await place(second.page, "A", 7, 7);
+    await place(second.page, "T", 8, 7);
+    await second.page.getByRole("button", { name: "Play CAT for 10" }).click();
+
+    // The menu: everyone's score, who's up, the words played, and Resign.
+    await p.getByRole("button", { name: "Menu" }).click();
+    const menu = p.getByRole("dialog");
+    await expect(menu.getByRole("list", { name: "Scores" }).getByRole("listitem")).toHaveCount(2);
+    await expect(menu.getByRole("list", { name: "Scores" }).locator('[aria-current="true"]')).toContainText("Your turn");
+    await expect(menu.getByRole("region", { name: "Words played" }).getByRole("button", { name: "CAT" })).toBeVisible();
+    await expect(menu.getByRole("button", { name: "Resign" })).toBeVisible();
     await close();
   });
 
@@ -262,7 +294,7 @@ test.describe("Scrabble", () => {
     const target = await p.getByRole("group", { name: "Board" }).evaluate((el) => {
       const layer = el.firstElementChild as HTMLElement;
       const m = new DOMMatrix(getComputedStyle(layer).transform);
-      const base = el.clientWidth / 15;
+      const base = layer.offsetWidth / 15;
       return { x: m.e + 7.5 * base * m.a, y: m.f + 7.5 * base * m.d };
     });
     await p.mouse.move(from.x + from.width / 2, from.y + from.height / 2);

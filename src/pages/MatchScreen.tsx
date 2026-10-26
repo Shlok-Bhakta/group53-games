@@ -44,6 +44,7 @@ export function MatchScreen({ game }: { game: GameUI }) {
     </Button>
   );
   const Game = game.Game;
+  if (match.status === "active" && game.fullscreen?.(match)) return <Game match={match} meId={me?._id} />;
 
   return (
     <div className="flex min-h-[calc(100svh-env(safe-area-inset-bottom)-16px)] flex-col">

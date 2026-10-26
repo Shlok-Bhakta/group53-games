@@ -11,8 +11,10 @@ export type BoardHandle = {
 };
 type Props = {
   size: number;
-  // The board's side on screen, in px.
+  // The board's side on screen at its smallest, in px, and the window it's seen through (which can be
+  // taller than the board, so it fills the screen and you pan around it).
   px: number;
+  view?: { width: number; height: number; padTop?: number };
   tiles: Placed[];
   draft: DraftTile[];
   seatColor: (seat: number) => string;
@@ -49,7 +51,7 @@ const key = (x: number, y: number) => `${x},${y}`;
 // The board: pinch or double-tap to zoom, drag to look around. Moves happen in the DOM directly, not
 // through React, so panning stays smooth on a full board.
 export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoard(props, ref) {
-  const { size, px, tiles, draft, seatColor, fresh, freshSeat, target, tone, bubble, hidden, focus, zoomOnDoubleTap, reveal, ghosts, scored, shake, onCellTap, onDraftDown } = props;
+  const { size, px, view, tiles, draft, seatColor, fresh, freshSeat, target, tone, bubble, hidden, focus, zoomOnDoubleTap, reveal, ghosts, scored, shake, onCellTap, onDraftDown } = props;
   // Fresh tiles land in reading order, one after another, in time with the notes of the play sound.
   const freshOrder = useMemo(() => new Map([...fresh].sort((a, b) => a.split(",").map(Number).reduce((s, v) => s + v, 0) - b.split(",").map(Number).reduce((s, v) => s + v, 0)).map((k, i) => [k, i])), [fresh]);
   const base = px / size;
@@ -59,13 +61,19 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
   const layer = useRef<HTMLDivElement>(null);
   const t = useRef({ s: 1, tx: 0, ty: 0 });
 
+  const vw = view?.width ?? px;
+  const vh = view?.height ?? px;
+  const padTop = view?.padTop ?? 0;
+  // Keeps the board in view: smaller than the window, it sits in the middle; bigger, its edges can't be
+  // dragged past the window's (the top can come down far enough to clear anything floating over it).
   const clamp = useCallback(
     (s: number, tx: number, ty: number) => {
       const sc = Math.min(maxScale, Math.max(1, s));
-      const min = px - px * sc;
-      return { s: sc, tx: Math.min(0, Math.max(min, tx)), ty: Math.min(0, Math.max(min, ty)) };
+      const side = px * sc;
+      const axis = (v: number, dim: number, pad = 0) => (side + pad <= dim ? pad + (dim - pad - side) / 2 : Math.min(pad, Math.max(dim - side, v)));
+      return { s: sc, tx: axis(tx, vw), ty: axis(ty, vh, padTop) };
     },
-    [maxScale, px],
+    [maxScale, px, vw, vh, padTop],
   );
   const apply = useCallback((next: { s: number; tx: number; ty: number }) => {
     t.current = next;
@@ -74,12 +82,12 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
     el.style.transform = `translate3d(${next.tx}px, ${next.ty}px, 0) scale(${next.s})`;
     el.style.setProperty("--s", String(next.s));
   }, []);
-  const centredOn = useCallback((s: number, cx: number, cy: number) => clamp(s, px / 2 - (cx + 0.5) * base * s, px / 2 - (cy + 0.5) * base * s), [base, clamp, px]);
+  const centredOn = useCallback((s: number, cx: number, cy: number) => clamp(s, vw / 2 - (cx + 0.5) * base * s, (vh + padTop) / 2 - (cy + 0.5) * base * s), [base, clamp, vw, vh, padTop]);
 
   // Start zoomed in on the action, once we know how big the board is.
   const started = useRef<string>("");
   useLayoutEffect(() => {
-    const k = `${px}:${size}`;
+    const k = `${px}:${size}:${vw}:${vh}`;
     if (!px || started.current === k) return;
     started.current = k;
     apply(centredOn(startScale, focus[0], focus[1]));
@@ -118,13 +126,13 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
     const seen = ([x, y]: [number, number]) => {
       const sx = tx + (x + 0.5) * base * s;
       const sy = ty + (y + 0.5) * base * s;
-      return sx > 0 && sy > 0 && sx < px && sy < px;
+      return sx > 0 && sy > padTop && sx < vw && sy < vh;
     };
     if (reveal.cells.every(seen)) return;
     const cx = reveal.cells.reduce((a, [x]) => a + x, 0) / reveal.cells.length;
     const cy = reveal.cells.reduce((a, [, y]) => a + y, 0) / reveal.cells.length;
     zoomTo(centredOn(s, cx, cy));
-  }, [reveal, px, base, zoomTo, centredOn]);
+  }, [reveal, px, base, zoomTo, centredOn, padTop, vw, vh]);
 
   const cellAt = useCallback(
     (clientX: number, clientY: number): [number, number] | null => {
@@ -232,14 +240,14 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
       data-board
       role="group"
       aria-label="Board"
-      className="relative touch-none overflow-hidden rounded-sm bg-border select-none"
-      style={{ width: px, height: px }}
+      className={cn("relative touch-none overflow-hidden select-none", !view && "rounded-sm")}
+      style={{ width: vw, height: vh }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
     >
-      <div ref={layer} className="absolute left-0 top-0 origin-top-left" style={{ width: px, height: px }}>
+      <div ref={layer} className="absolute left-0 top-0 origin-top-left rounded-[3px] bg-border" style={{ width: px, height: px }}>
         <Squares size={size} base={base} />
         {tiles.map((tile) => {
           const k = key(tile.x, tile.y);
