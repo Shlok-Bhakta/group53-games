@@ -1,33 +1,23 @@
 import { BALL_R, CUP_R, rng, type Course, type Sim, type Vec } from "./engine";
 
-// Bumper Plains' look: a mini golf board floating in the void. The void is a dark dot grid; the board
-// is a thick green slab with a shadow under it, chunky cream walls you can see the sides of, and red
-// bumpers that pop when the ball hits them. Everything is drawn straight to the screen each frame.
+// Bumper Plains' look: flat and straight down, like GamePigeon's mini golf. A green board on a dark dot
+// grid, plain walls, flat round bumpers that flash when hit. No depth, no shadows.
 
 type Ctx = CanvasRenderingContext2D;
 
 const C = {
-  void: "#14161c",
-  dot: "#2a2e38",
-  slab: "#3f8f3c", // the board's sides
-  slabDark: "#2f6e2e",
-  carpet: "#6fcf5f",
-  stripe: "rgba(255,255,255,0.07)",
-  wallTop: "#fff6e2",
-  wallSide: "#d8c49e",
-  bumperTop: "#ff5a4e",
-  bumperSide: "#b83a32",
+  void: "#15171d",
+  dot: "#2b2f39",
+  carpet: "#56b947",
+  stripe: "rgba(255,255,255,0.06)",
+  wall: "#f2efe6",
+  bumper: "#f05545",
   bumperRing: "#ffffff",
-  cup: "#123214",
-  flag: "#ff4b4b",
-  box: "#ffcd4d",
-  boxSide: "#e0a32a",
+  cup: "#16301a",
+  box: "#ffc93c",
   ball: "#ffffff",
   ui: "#ffffff",
 };
-const SLAB = 0.9; // how thick the board looks
-const WALL_UP = 0.32; // how much of a wall's side shows
-const BUMP_UP = 0.4;
 
 export type Camera = { x: number; y: number; s: number; ox: number; oy: number }; // screen = (world - xy) * s + o
 export type Fx = { kind: "ring" | "splash" | "puff" | "spark" | "confetti"; x: number; y: number; t: number; color?: string; seed: number };
@@ -76,23 +66,6 @@ export function drawFrame(ctx: Ctx, f: Frame) {
   ctx.lineJoin = "round";
 
   const boards = c.greens.map((g) => g.poly);
-  // A soft shadow on the void, then the slab's sides, then its top.
-  ctx.save();
-  ctx.shadowColor = "rgba(0,0,0,0.55)";
-  ctx.shadowBlur = cam.s * dpr * 1.2;
-  ctx.shadowOffsetY = cam.s * dpr * 1.4;
-  ctx.fillStyle = C.slabDark;
-  for (const b of boards) {
-    path(ctx, b, 0, SLAB);
-    ctx.fill();
-  }
-  ctx.restore();
-  ctx.fillStyle = C.slab;
-  for (const b of boards)
-    for (let d = SLAB; d > 0; d -= 0.08) {
-      path(ctx, b, 0, d);
-      ctx.fill();
-    }
   for (const b of boards) {
     path(ctx, b);
     ctx.fillStyle = C.carpet;
@@ -112,36 +85,25 @@ export function drawFrame(ctx: Ctx, f: Frame) {
 
   // The cup.
   const cupR = CUP_R * sim.cupScale;
-  circ(ctx, c.cup.x, c.cup.y, cupR + 0.1);
-  ctx.fillStyle = "rgba(255,255,255,0.75)";
+  circ(ctx, c.cup.x, c.cup.y, cupR + 0.12);
+  ctx.fillStyle = "#ffffff";
   ctx.fill();
   circ(ctx, c.cup.x, c.cup.y, cupR);
   ctx.fillStyle = C.cup;
   ctx.fill();
-  ctx.save();
-  circ(ctx, c.cup.x, c.cup.y, cupR);
-  ctx.clip();
-  circ(ctx, c.cup.x, c.cup.y + cupR * 0.5, cupR);
-  ctx.fillStyle = "#081a09";
-  ctx.fill();
-  ctx.restore();
 
   drawFx(ctx, f.fx, t, true);
 
-  // Walls: the board's edge and any baffles, chunky, side first then top.
-  const walls = [...boards.map((pts) => ({ pts, w: 0.55, closed: true })), ...c.walls.map((w) => ({ pts: w.pts, w: Math.max(0.5, w.w), closed: !!w.closed }))];
-  for (const w of walls) {
-    ctx.strokeStyle = C.wallSide;
-    ctx.lineWidth = w.w;
-    path(ctx, w.pts, 0, WALL_UP, w.closed);
-    ctx.stroke();
-    path(ctx, w.pts, 0, WALL_UP / 2, w.closed);
+  // Walls: the board's edge and any baffles, one flat line each.
+  ctx.strokeStyle = C.wall;
+  for (const b of boards) {
+    ctx.lineWidth = 0.6;
+    path(ctx, b);
     ctx.stroke();
   }
-  for (const w of walls) {
-    ctx.strokeStyle = C.wallTop;
-    ctx.lineWidth = w.w;
-    path(ctx, w.pts, 0, 0, w.closed);
+  for (const w of c.walls) {
+    ctx.lineWidth = Math.max(0.5, w.w);
+    path(ctx, w.pts, 0, 0, !!w.closed);
     ctx.stroke();
   }
 
@@ -162,79 +124,34 @@ export function drawFrame(ctx: Ctx, f: Frame) {
   const by = sinking ? sim.y + (c.cup.y - sim.y) * sinking : sim.y;
   if (sinking < 1 && out < 1) {
     const R = BALL_R * (1 + sim.z * 0.18) * (1 - sinking * 0.5) * (1 - out);
-    circ(ctx, bx + 0.12 + sim.z * 0.3, by + 0.22 + sim.z * 0.5, BALL_R * (1 - out));
-    ctx.fillStyle = "rgba(0,0,0,0.25)";
-    ctx.fill();
-    const lift = sim.z * 0.5;
-    const g = ctx.createRadialGradient(bx - R * 0.35, by - lift - R * 0.4, R * 0.1, bx, by - lift, R);
-    g.addColorStop(0, "#ffffff");
-    g.addColorStop(1, "#d9dde2");
-    circ(ctx, bx, by - lift, R);
-    ctx.fillStyle = g;
+    circ(ctx, bx, by, R);
+    ctx.fillStyle = C.ball;
     ctx.fill();
   }
 
-  // Bumpers: red cylinders with a white ring on top. Hit, they swell and flash.
+  // Bumpers: flat red discs with a white ring. Hit, they swell and flash.
   c.bumpers.forEach((b, i) => {
     const age = t - (f.hits.get(i) ?? -9);
     const pop = age < 0.25 ? Math.sin((age / 0.25) * Math.PI) : 0;
-    const r = b.r * (1 + pop * 0.22);
-    circ(ctx, b.at.x + 0.15, b.at.y + 0.35, b.r);
-    ctx.fillStyle = "rgba(0,0,0,0.3)";
-    ctx.fill();
-    ctx.fillStyle = C.bumperSide;
-    circ(ctx, b.at.x, b.at.y + BUMP_UP, r);
-    ctx.fill();
-    ctx.fillRect(b.at.x - r, b.at.y, r * 2, BUMP_UP);
+    const r = b.r * (1 + pop * 0.2);
     circ(ctx, b.at.x, b.at.y, r);
-    ctx.fillStyle = pop > 0.5 ? "#ffffff" : C.bumperTop;
+    ctx.fillStyle = pop > 0.5 ? "#ffffff" : C.bumper;
     ctx.fill();
-    ctx.lineWidth = r * 0.22;
+    ctx.lineWidth = r * 0.2;
     ctx.strokeStyle = C.bumperRing;
-    circ(ctx, b.at.x, b.at.y, r * 0.62);
+    circ(ctx, b.at.x, b.at.y, r * 0.6);
     ctx.stroke();
-    circ(ctx, b.at.x - r * 0.3, b.at.y - r * 0.32, r * 0.14);
-    ctx.fillStyle = "rgba(255,255,255,0.8)";
-    ctx.fill();
   });
 
-  // Mystery boxes: a little cube that bobs.
+  // Mystery boxes: flat yellow squares.
   c.boxes.forEach((b, i) => {
     if (sim.boxes[i]) return;
-    const s = 1.1, lift = 0.25 + Math.sin(t * 3 + i) * 0.1;
-    circ(ctx, b.x + 0.15, b.y + 0.4, s * 0.45);
-    ctx.fillStyle = "rgba(0,0,0,0.25)";
-    ctx.fill();
-    ctx.fillStyle = C.boxSide;
-    ctx.fillRect(b.x - s / 2, b.y - lift, s, 0.4);
+    const sz = 1.1;
     ctx.fillStyle = C.box;
     ctx.beginPath();
-    ctx.roundRect(b.x - s / 2, b.y - lift - s * 0.85, s, s * 0.85, 0.12);
+    ctx.roundRect(b.x - sz / 2, b.y - sz / 2, sz, sz, 0.15);
     ctx.fill();
   });
-
-  // The flag, gone once the ball's close.
-  const near = Math.hypot(sim.x - c.cup.x, sim.y - c.cup.y);
-  const flagA = sim.mode === "sunk" ? 0 : Math.max(0, Math.min(1, (near - 1.5) / 1.5));
-  if (flagA > 0) {
-    ctx.globalAlpha = flagA;
-    const top = { x: c.cup.x, y: c.cup.y - 2.2 };
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 0.12;
-    ctx.beginPath();
-    ctx.moveTo(c.cup.x, c.cup.y);
-    ctx.lineTo(top.x, top.y);
-    ctx.stroke();
-    const wave = Math.sin(t * 4) * 0.08;
-    ctx.beginPath();
-    ctx.moveTo(top.x, top.y);
-    ctx.lineTo(top.x + 1.2, top.y + 0.35 + wave);
-    ctx.lineTo(top.x, top.y + 0.75);
-    ctx.closePath();
-    ctx.fillStyle = C.flag;
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  }
 
   drawFx(ctx, f.fx, t, false);
 
@@ -246,8 +163,7 @@ export function drawFrame(ctx: Ctx, f: Frame) {
   ctx.fillStyle = "#7a4a00";
   c.boxes.forEach((b, i) => {
     if (sim.boxes[i]) return;
-    const lift = 0.25 + Math.sin(t * 3 + i) * 0.1;
-    ctx.fillText("?", (b.x - cam.x) * cam.s + cam.ox, (b.y - lift - 0.45 - cam.y) * cam.s + cam.oy);
+    ctx.fillText("?", (b.x - cam.x) * cam.s + cam.ox, (b.y - cam.y) * cam.s + cam.oy + 1);
   });
 
   if (f.aim && sim.mode === "aim") {
@@ -294,7 +210,7 @@ function holeArrow(ctx: Ctx, f: Frame) {
   const x = cx + dx * k, y = cy + dy * k;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   circ(ctx, x, y, 17);
-  ctx.fillStyle = C.flag;
+  ctx.fillStyle = C.bumper;
   ctx.fill();
   ctx.strokeStyle = "#ffffff";
   ctx.lineWidth = 2.5;
