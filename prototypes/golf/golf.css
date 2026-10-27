@@ -730,3 +730,24 @@ html[data-framed="true"] .g-toast {
 .g-over {
   color: #e98a7a;
 }
+
+.g-seg {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  background: var(--card);
+}
+.g-seg-item {
+  flex: 1;
+  min-height: 40px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.g-seg-on {
+  background: var(--card-2);
+  color: var(--fg);
+}

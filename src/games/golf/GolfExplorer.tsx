@@ -24,7 +24,7 @@ import { GREEN_HILLS } from "./courses";
 import { DT, INSTANT, MAX_STROKES, activate, brake, compile, groundAt, newSim, preview, scoreName, shoot, step, type Power, type Sim } from "./engine";
 import { generate, type GenHole } from "./gen";
 import { clockLabel, lightKey, sunAt, type Light } from "./light";
-import { buildLayers, buildLight, buildTall, drawFrame, still, stepMotes, type Camera, type Fx, type Layers, type Mote } from "./render";
+import { STYLES, buildLayers, drawFrame, lookOf, still, type Camera, type Fx, type Layers, type Style } from "./render";
 
 // Golf, one course for now: Green Hills, nine generated holes. Single player, no server. There's also
 // the generator: page through seeds, play any of them, and pin the good ones.
@@ -72,7 +72,7 @@ function useLight(hour: number | null): Light {
   return useMemo(() => sunAt(now, hour), [now, hour]);
 }
 
-type Round = { seeds: number[]; index: number; scores: number[]; attempt: number };
+type Round = { seeds: number[]; start: number; index: number; scores: number[]; attempt: number };
 
 export function GolfExplorer() {
   const [screen, setScreen] = useState<"home" | "browse" | "play">("home");
@@ -81,6 +81,11 @@ export function GolfExplorer() {
   const [course, setCourse] = useState<number[]>(() => store.get("golf:course", GREEN_HILLS));
   const [pins, setPins] = useState<number[]>(() => store.get("golf:pins", []));
   const [muted, setMuted] = useState(false);
+  const [style, setStyleState] = useState<Style>(() => store.get("golf:style", "flat"));
+  const setStyle = (st: Style) => {
+    setStyleState(st);
+    store.set("golf:style", st);
+  };
   const light = useLight(hour);
   useEffect(() => sound.setNight(light.night), [light.night]);
   useEffect(() => () => sound.stop(), []);
@@ -99,12 +104,12 @@ export function GolfExplorer() {
     setMuted(!muted);
   };
   const play = (seeds: number[], index = 0) => {
-    setRound({ seeds, index, scores: [], attempt: 0 });
+    setRound({ seeds, start: index, index, scores: [], attempt: 0 });
     setScreen("play");
   };
-  const chrome = { light, hour, setHour, muted, toggleMute };
+  const chrome = { light, hour, setHour, muted, toggleMute, style, setStyle };
 
-  if (screen === "play" && round && round.scores.length === round.seeds.length) return <Scorecard round={round} onHome={() => setScreen("home")} />;
+  if (screen === "play" && round && round.scores.length === round.seeds.length - round.start) return <Scorecard round={round} onHome={() => setScreen("home")} />;
   if (screen === "play" && round) {
     const seed = round.seeds[round.index];
     return (
@@ -127,24 +132,28 @@ export function GolfExplorer() {
   return <Home {...chrome} course={course} onPlay={play} onBrowse={() => setScreen("browse")} />;
 }
 
-type Chrome = { light: Light; hour: number | null; setHour: (h: number | null) => void; muted: boolean; toggleMute: () => void };
+type Chrome = { light: Light; hour: number | null; setHour: (h: number | null) => void; muted: boolean; toggleMute: () => void; style: Style; setStyle: (s: Style) => void };
 
-function Thumb({ seed, light, width }: { seed: number; light: Light; width: number }) {
+function Thumb({ seed, light, width, style }: { seed: number; light: Light; width: number; style: Style }) {
   const [src, setSrc] = useState<string | null>(null);
   const key = lightKey(light);
   useEffect(() => {
     let live = true;
     const id = setTimeout(() => {
       const h = hole(seed);
-      if (h && live) setSrc(still(h, width, light).toDataURL("image/jpeg", 0.85));
+      if (h && live) setSrc(still(h, width, light, style).toDataURL("image/jpeg", 0.85));
     }, 20 + Math.random() * 200);
     return () => {
       live = false;
       clearTimeout(id);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seed, key, width]);
-  return <div className="g-thumb">{src && <img src={src} alt="" draggable={false} />}</div>;
+  }, [seed, key, width, style]);
+  return (
+    <div className="g-thumb" style={{ background: lookOf(style).bg }}>
+      {src && <img src={src} alt="" draggable={false} />}
+    </div>
+  );
 }
 
 function Home({ course, onPlay, onBrowse, ...chrome }: Chrome & { course: number[]; onPlay: (seeds: number[], i?: number) => void; onBrowse: () => void }) {
@@ -159,6 +168,13 @@ function Home({ course, onPlay, onBrowse, ...chrome }: Chrome & { course: number
           <TimeChip {...chrome} />
         </div>
       </header>
+      <div className="g-seg" role="radiogroup" aria-label="Look">
+        {STYLES.map((st) => (
+          <button key={st.id} type="button" role="radio" aria-checked={chrome.style === st.id} className={`g-seg-item ${chrome.style === st.id ? "g-seg-on" : ""}`} onClick={() => chrome.setStyle(st.id)}>
+            {st.name}
+          </button>
+        ))}
+      </div>
       <button type="button" className="g-btn g-btn-big g-btn-primary g-play-all" onClick={() => onPlay(course)}>
         Play {course.length} holes · Par {par}
       </button>
@@ -168,7 +184,7 @@ function Home({ course, onPlay, onBrowse, ...chrome }: Chrome & { course: number
             <li key={`${seed}-${i}`}>
               <button type="button" className="g-hole-row" onClick={() => onPlay(course, i)}>
                 <span className="g-display g-hole-num">{i + 1}</span>
-                <Thumb seed={seed} light={chrome.light} width={120} />
+                <Thumb seed={seed} light={chrome.light} width={120} style={chrome.style} />
                 <span className="g-hole-text">
                   <span className="g-display g-card-name">{h?.name ?? `Seed ${seed}`}</span>
                   <span className="g-footnote">
@@ -266,7 +282,7 @@ function Browse({ pins, togglePin, onBack, onPlay, useAsCourse, ...chrome }: Chr
             return (
               <div key={s} className="g-card">
                 <button type="button" className="g-card-main" onClick={() => onPlay(s)} aria-label={`Play ${h.name}`}>
-                  <Thumb seed={s} light={chrome.light} width={170} />
+                  <Thumb seed={s} light={chrome.light} width={170} style={chrome.style} />
                   <span className="g-card-text">
                     <span className="g-display g-card-name">{h.name}</span>
                     <span className="g-footnote">
@@ -346,8 +362,6 @@ function Play({
   const aim = useRef<{ angle: number; power: number; line: { x: number; y: number }[]; from?: { x: number; y: number }; to?: { x: number; y: number } } | null>(null);
   const fx = useRef<Fx[]>([]);
   const trail = useRef<{ x: number; y: number }[]>([]);
-  const motes = useRef<Mote[]>([]);
-  const rolled = useRef({ dist: 0, dx: 1, dy: 0 });
   const [hud, setHud] = useState<Hud>({ strokes: 0, mode: "aim", bag: [], armed: null, shot: null });
   const [toast, setToast] = useState<{ text: string; key: number } | null>(null);
   const [done, setDone] = useState(false);
@@ -355,11 +369,7 @@ function Play({
   const [intro, setIntro] = useState(true);
   const say = (text: string) => setToast({ text, key: Date.now() });
 
-  const layers = useMemo<Layers>(() => buildLayers(course, Math.min(26, 3400 / Math.max(course.w + 20, course.h + 20))), [course]);
-  const wind = useMemo(() => {
-    const a = (seed * 2.399) % (Math.PI * 2);
-    return { x: Math.cos(a), y: Math.sin(a) };
-  }, [seed]);
+  const layers = useMemo<Layers>(() => buildLayers(course, Math.min(24, 3200 / Math.max(course.w + 20, course.h + 20)), chrome.style), [course, chrome.style]);
 
   const PAD_TOP = 84, PAD_BOTTOM = 104;
   useEffect(() => {
@@ -390,15 +400,12 @@ function Play({
 
   useEffect(() => {
     const ctx = cv.current!.getContext("2d")!;
-    const lightCanvas = document.createElement("canvas");
     let raf = 0;
     let last = performance.now();
     let acc = 0;
     let t = 0;
     let lastHud = "";
     let lastKnock = 0;
-    let lk = "";
-    let pending: ReturnType<typeof setTimeout> | null = null;
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
       const dt = Math.min(0.1, (now - last) / 1000);
@@ -476,11 +483,6 @@ function Play({
         const lp = tr[tr.length - 1];
         if (!lp || Math.hypot(lp.x - s.x, lp.y - s.y) > 0.2) tr.push({ x: s.x, y: s.y });
         if (tr.length > 26) tr.shift();
-        if (speed > 0.01 && s.z <= 0) {
-          rolled.current.dist += speed * dt;
-          rolled.current.dx = s.vx / speed;
-          rolled.current.dy = s.vy / speed;
-        }
       }
       sound.rolling(s.mode === "roll" && s.z <= 0 ? speed : 0, s.mode === "roll" ? groundAt(world, s) : null);
 
@@ -518,23 +520,7 @@ function Play({
         c.y += (follow.y - c.y) * k;
       }
 
-      stepMotes({ motes: motes.current, cam: c, wind, t }, dt, v, lightRef.current.night > 0.5);
       const L = lightRef.current;
-      const key = lightKey(L) + Math.round(L.night * 20);
-      if (key !== lk) {
-        // Redraw the light and everything standing up, but not more than a few times a second.
-        if (!lk || !pending) {
-          const build = () => {
-            const LL = lightRef.current;
-            layers.light = buildLight(course, LL);
-            layers.tall = buildTall(course, layers.ppu, LL);
-            lk = lightKey(LL) + Math.round(LL.night * 20);
-            pending = null;
-          };
-          if (!lk) build();
-          else pending = setTimeout(build, 120);
-        }
-      }
       drawFrame(ctx, {
         c: course,
         sim: s,
@@ -543,12 +529,8 @@ function Play({
         cam: c,
         dpr: cv.current!.width / Math.max(1, v.w),
         t,
-        roll: rolled.current,
         trail: trail.current,
         fx: fx.current,
-        motes: motes.current,
-        wind,
-        lightCanvas,
         aim: aim.current,
       });
 
@@ -561,11 +543,10 @@ function Play({
     raf = requestAnimationFrame(frame);
     return () => {
       cancelAnimationFrame(raf);
-      if (pending) clearTimeout(pending);
       sound.rolling(0, null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [world]);
+  }, [world, layers]);
 
   // --- Touch: pull back anywhere to aim; two fingers to look around and zoom ---
   const pointers = useRef(new Map<number, { x: number; y: number }>());
@@ -693,8 +674,8 @@ function Play({
     if (p && INSTANT.includes(p)) sound.pickup();
   };
 
-  const totalPar = round.seeds.slice(0, round.index).reduce((a, s) => a + (hole(s)?.par ?? 0), 0);
-  const totalStrokes = round.scores.slice(0, round.index).reduce((a, b) => a + b, 0);
+  const totalPar = round.seeds.slice(round.start, round.index).reduce((a, s) => a + (hole(s)?.par ?? 0), 0);
+  const totalStrokes = round.scores.reduce((a, b) => a + b, 0);
   const vsPar = totalStrokes - totalPar;
   return (
     <div ref={wrap} className="g-play">
@@ -708,7 +689,7 @@ function Play({
           {number !== null && <span className="g-display g-hole-no">{number}</span>}
           <span className="g-display g-hole-name">{course.name}</span>
           <span className="g-muted">Par {course.par}</span>
-          {number !== null && number > 1 && <span className="g-muted g-vspar">{vsPar === 0 ? "E" : vsPar > 0 ? `+${vsPar}` : vsPar}</span>}
+          {number !== null && round.scores.length > 0 && <span className="g-muted g-vspar">{vsPar === 0 ? "E" : vsPar > 0 ? `+${vsPar}` : vsPar}</span>}
           <span className="g-display g-strokes" aria-label={`${hud.strokes} strokes`}>
             {hud.strokes}
           </span>
@@ -817,7 +798,7 @@ function Result({ title, sub, tone, primary, onPrimary, onSecondary }: { title: 
 }
 
 function Scorecard({ round, onHome }: { round: Round; onHome: () => void }) {
-  const pars = round.seeds.map((s) => hole(s)?.par ?? 0);
+  const pars = round.seeds.slice(round.start).map((s) => hole(s)?.par ?? 0);
   const total = round.scores.reduce((a, b) => a + b, 0);
   const par = pars.reduce((a, b) => a + b, 0);
   const diff = total - par;
@@ -840,7 +821,7 @@ function Scorecard({ round, onHome }: { round: Round; onHome: () => void }) {
             <tr>
               <th>Hole</th>
               {pars.map((_, i) => (
-                <th key={i}>{i + 1}</th>
+                <th key={i}>{round.start + i + 1}</th>
               ))}
             </tr>
           </thead>
