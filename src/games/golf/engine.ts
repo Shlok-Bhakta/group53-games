@@ -587,7 +587,7 @@ export function step(sim: Sim, world: World, dt = DT) {
 
   // Mystery boxes.
   c.boxes.forEach((b, i) => {
-    if (sim.boxes[i] || sim.z > 1.6 || len(sim.x - b.x, sim.y - b.y) > 0.95) return;
+    if (sim.boxes[i] || sim.z > 1.6 || len(sim.x - b.x, sim.y - b.y) > 1.1) return;
     if (sim.bag.length >= BAG_SIZE) return;
     sim.boxes[i] = true;
     const r = rng(sim.seed * 977 + i * 131 + sim.strokes * 7)();
