@@ -19,6 +19,6 @@ createRoot(document.getElementById("root")!).render(<GolfExplorer />);
 
 // For review screenshots: a whole hole as one picture.
 (window as unknown as { __golfStill: unknown }).__golfStill = (seed: number, width: number, hour: number, style: "flat" | "ink" | "mono") => {
-  const h = generate(seed);
+  const h = generate(seed, "hills", { keep: true });
   return h ? still(h, width, sunAt(new Date(), hour), style).toDataURL("image/png") : null;
 };

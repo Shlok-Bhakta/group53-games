@@ -21,6 +21,8 @@ export const STYLES: { id: Style; name: string }[] = [
 type Look = {
   bg: string;
   course: string;
+  rough: string;
+  stripes: string | null; // mowing stripes on the fairway
   wall: string;
   wallW: number;
   shadow: string | null; // hard drop shadows, down and to the right
@@ -48,6 +50,8 @@ const LOOKS: Record<Style, Look> = {
   flat: {
     bg: "#4c9f50",
     course: "#7fd65a",
+    rough: "#62b84c",
+    stripes: "rgba(255,255,255,0.08)",
     wall: "#ffffff",
     wallW: 0.5,
     shadow: "rgba(16,64,24,0.3)",
@@ -73,6 +77,8 @@ const LOOKS: Record<Style, Look> = {
   ink: {
     bg: "#bfe6a6",
     course: "#eaf8cc",
+    rough: "#d3eeb2",
+    stripes: "rgba(255,255,255,0.45)",
     wall: "#ffffff",
     wallW: 0.5,
     shadow: null,
@@ -98,6 +104,8 @@ const LOOKS: Record<Style, Look> = {
   mono: {
     bg: "#1d222c",
     course: "#2e3544",
+    rough: "#262c39",
+    stripes: null,
     wall: "#e8e2d4",
     wallW: 0.24,
     shadow: null,
@@ -247,6 +255,14 @@ function drawCourse(ctx: Ctx, c: Course, style: Style, view: Box) {
   loops(ctx, P.greens);
   ctx.fillStyle = L.course;
   ctx.fill("evenodd");
+  if (L.stripes && !c.zones.some((z) => z.kind === "rough")) {
+    ctx.save();
+    loops(ctx, P.greens);
+    ctx.clip("evenodd");
+    ctx.fillStyle = L.stripes;
+    for (let y = Math.floor(view.y0 / 6) * 6; y < view.y1; y += 6) ctx.fillRect(view.x0, y, view.x1 - view.x0, 3);
+    ctx.restore();
+  }
   for (const h of P.islands) {
     path(ctx, h);
     ctx.fillStyle = L.bed;
@@ -256,6 +272,27 @@ function drawCourse(ctx: Ctx, c: Course, style: Style, view: Box) {
   c.zones.forEach((z, i) => {
     if (!near(P.zoneBoxes[i])) return;
     switch (z.kind) {
+      case "rough":
+        path(ctx, z.poly);
+        ctx.fillStyle = L.rough;
+        ctx.fill();
+        break;
+      case "green": {
+        path(ctx, z.poly);
+        ctx.fillStyle = L.course;
+        ctx.fill();
+        outline(0.06);
+        if (L.stripes) {
+          ctx.save();
+          path(ctx, z.poly);
+          ctx.clip();
+          ctx.fillStyle = L.stripes;
+          const bb = P.zoneBoxes[i];
+          for (let y = Math.floor(bb.y0 / 6) * 6; y < bb.y1; y += 6) ctx.fillRect(bb.x0, y, bb.x1 - bb.x0, 3);
+          ctx.restore();
+        }
+        break;
+      }
       case "sand":
         path(ctx, z.poly);
         ctx.fillStyle = L.sand;
@@ -381,6 +418,7 @@ export type Frame = {
   fx: Fx[];
   aim: { angle: number; power: number; line: Vec[]; from?: Vec; to?: Vec } | null;
   map?: { x: number; y: number; w: number; h: number } | null; // the minimap, in screen points
+  inset?: { top: number; bottom: number }; // how much of the screen the bars cover
 };
 
 export function drawFrame(ctx: Ctx, f: Frame) {
@@ -519,6 +557,7 @@ export function drawFrame(ctx: Ctx, f: Frame) {
   }
 
   if (f.map) minimap(ctx, f, L);
+  if (f.inset) holeArrow(ctx, f, L);
 
   // The aim: where the finger went down, and a dotted line out to the first bounce.
   if (f.aim && sim.mode === "aim") {
@@ -549,6 +588,51 @@ export function drawFrame(ctx: Ctx, f: Frame) {
     ctx.arc(sim.x, sim.y, BALL_R + 0.35, -Math.PI / 2, -Math.PI / 2 + power * Math.PI * 2);
     ctx.stroke();
   }
+}
+
+// When the cup is off screen, an arrow at the edge points to it, with how far it is.
+function holeArrow(ctx: Ctx, f: Frame, L: Look) {
+  const { c, sim, cam, dpr } = f;
+  if (sim.mode === "sunk") return;
+  const sw = ctx.canvas.width / dpr, sh = ctx.canvas.height / dpr;
+  const pad = 30;
+  const box = { x0: pad, y0: f.inset!.top + pad, x1: sw - pad, y1: sh - f.inset!.bottom - pad };
+  const sx = (c.cup.x - cam.x) * cam.s + cam.ox, sy = (c.cup.y - cam.y) * cam.s + cam.oy;
+  if (sx > box.x0 && sx < box.x1 && sy > box.y0 && sy < box.y1) return;
+  const cx = (box.x0 + box.x1) / 2, cy = (box.y0 + box.y1) / 2;
+  const dx = sx - cx, dy = sy - cy;
+  const k = Math.min(Math.abs((dx > 0 ? box.x1 - cx : box.x0 - cx) / (dx || 1e-9)), Math.abs((dy > 0 ? box.y1 - cy : box.y0 - cy) / (dy || 1e-9)));
+  const x = cx + dx * k, y = cy + dy * k;
+  const ang = Math.atan2(dy, dx);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  circ(ctx, x, y, 17);
+  ctx.fillStyle = L.flag;
+  ctx.fill();
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(ang);
+  ctx.beginPath();
+  ctx.moveTo(8, 0);
+  ctx.lineTo(-4, -6.5);
+  ctx.lineTo(-1.5, 0);
+  ctx.lineTo(-4, 6.5);
+  ctx.closePath();
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.restore();
+  const d = Math.round(Math.hypot(c.cup.x - sim.x, c.cup.y - sim.y));
+  ctx.font = "700 12px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const ty = y + (y > sh / 2 ? -27 : 27);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "rgba(0,0,0,0.45)";
+  ctx.strokeText(`${d}m`, x, ty);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(`${d}m`, x, ty);
 }
 
 // The whole hole small in a corner: where you are, where the cup is, what's in view.

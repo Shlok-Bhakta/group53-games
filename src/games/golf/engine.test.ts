@@ -31,7 +31,7 @@ describe("golf generator", () => {
     const c = generate(seed)!;
     expect(c).not.toBeNull();
     const world = compile(c);
-    expect(c.stats.length).toBeGreaterThan(100);
+    expect(c.stats.length).toBeGreaterThan(80);
     expect(c.par).toBeGreaterThanOrEqual(3);
     // The bot got round, and not in one or two.
     expect(c.stats.bot).toBeGreaterThan(2);

@@ -14,6 +14,7 @@ import {
   type Bumper,
   type Course,
   type Prop,
+  type Sim,
   type Theme,
   type Vec,
   type Wall,
@@ -75,6 +76,16 @@ class Field {
     this.stamp(a.x, a.y, b.x, b.y, Math.max(ra, rb) + k + 2, (x, y) => {
       const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / l2));
       return ra + (rb - ra) * t - Math.hypot(x - a.x - dx * t, y - a.y - dy * t);
+    }, op);
+  }
+  // A straight piece with square ends: hard corners where pieces meet.
+  box(a: Vec, b: Vec, hw: number, ext: number, op: (old: number, val: number) => number) {
+    const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy) || 1e-9;
+    const ux = dx / L, uy = dy / L;
+    this.stamp(a.x, a.y, b.x, b.y, hw + ext + 2, (x, y) => {
+      const px = x - a.x, py = y - a.y;
+      const qx = Math.abs(px * ux + py * uy - L / 2) - (L / 2 + ext), qy = Math.abs(-px * uy + py * ux) - hw;
+      return -(Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0));
     }, op);
   }
   disk(c: Vec, r: number, op: (old: number, val: number) => number, k = 0) {
@@ -188,22 +199,11 @@ function simplify(loop: Vec[], eps: number): Vec[] {
 
 // --- The path ---
 
-type Sample = { x: number; y: number; w: number; s: number; tx: number; ty: number };
+type Sample = { x: number; y: number; w: number; pw: number; s: number; tx: number; ty: number };
+type Raw = { x: number; y: number; w: number; pw: number };
 
-function spline(ctl: { x: number; y: number; w: number }[]): Sample[] {
-  const raw: { x: number; y: number; w: number }[] = [];
-  const at = (i: number) => ctl[Math.max(0, Math.min(ctl.length - 1, i))];
-  for (let i = 0; i < ctl.length - 1; i++) {
-    const p0 = at(i - 1), p1 = at(i), p2 = at(i + 1), p3 = at(i + 2);
-    const steps = Math.ceil(Math.hypot(p2.x - p1.x, p2.y - p1.y) * 2);
-    for (let k = 0; k < steps; k++) {
-      const t = k / steps, t2 = t * t, t3 = t2 * t;
-      const cr = (a: number, b: number, c: number, d: number) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
-      raw.push({ x: cr(p0.x, p1.x, p2.x, p3.x), y: cr(p0.y, p1.y, p2.y, p3.y), w: p1.w + (p2.w - p1.w) * (t * t * (3 - 2 * t)) });
-    }
-  }
-  raw.push(ctl[ctl.length - 1]);
-  // Resample by arc length, one point per unit.
+// One point per unit of length, each with the way it's heading.
+function resample(raw: Raw[]): Sample[] {
   const out: Sample[] = [];
   let s = 0;
   let next = 0;
@@ -212,11 +212,239 @@ function spline(ctl: { x: number; y: number; w: number }[]): Sample[] {
     if (s >= next || i === raw.length - 1) {
       const a = raw[Math.max(0, i - 1)], b = raw[Math.min(raw.length - 1, i + 1)];
       const l = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-      out.push({ x: raw[i].x, y: raw[i].y, w: raw[i].w, s, tx: (b.x - a.x) / l, ty: (b.y - a.y) / l });
+      out.push({ ...raw[i], s, tx: (b.x - a.x) / l, ty: (b.y - a.y) / l });
       next = s + 1;
     }
   }
   return out;
+}
+const line = (a: Raw, b: Raw, out: Raw[]) => {
+  const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) * 2));
+  for (let k = 0; k < n; k++) {
+    const t = k / n;
+    out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, w: a.w + (b.w - a.w) * t, pw: a.pw + (b.pw - a.pw) * t });
+  }
+};
+
+// Through control points: curved legs as a smooth spline, hard legs as straight lines.
+function spline(ctl: Raw[], hard: boolean[] = []): Sample[] {
+  const raw: Raw[] = [];
+  const at = (i: number) => ctl[Math.max(0, Math.min(ctl.length - 1, i))];
+  for (let i = 0; i < ctl.length - 1; i++) {
+    if (hard[i]) {
+      line(ctl[i], ctl[i + 1], raw);
+      continue;
+    }
+    const p0 = at(i - 1), p1 = at(i), p2 = at(i + 1), p3 = at(i + 2);
+    const steps = Math.ceil(Math.hypot(p2.x - p1.x, p2.y - p1.y) * 2);
+    for (let k = 0; k < steps; k++) {
+      const t = k / steps, t2 = t * t, t3 = t2 * t;
+      const cr = (a: number, b: number, c: number, d: number) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+      const e = t * t * (3 - 2 * t);
+      raw.push({ x: cr(p0.x, p1.x, p2.x, p3.x), y: cr(p0.y, p1.y, p2.y, p3.y), w: p1.w + (p2.w - p1.w) * e, pw: p1.pw + (p2.pw - p1.pw) * e });
+    }
+  }
+  raw.push(ctl[ctl.length - 1]);
+  return resample(raw);
+}
+
+// --- Shapes ---
+//
+// Every hole is one of four shapes. Each lays out the way through (the path the features go along)
+// and draws its fairway (F) and everything playable (P, the fairway plus rough) into fields.
+
+export type Shape = "bends" | "switchback" | "spiral" | "loop";
+type Layout = {
+  shape: Shape;
+  path: Sample[];
+  stamp: (F: Field, P: Field) => void;
+  extent: Vec[]; // points the course reaches, with room
+  cupAtEnd: boolean;
+  menu: string[];
+  ctl?: Raw[];
+  ramps?: { at: Vec; dir: Vec }[];
+  posts?: Vec[];
+};
+type Rand = { r: () => number; R: (a: number, b: number) => number };
+
+// Doglegs: three to five legs, some curving with rough along them, some straight with hard corners.
+function bends({ r, R }: Rand): Layout | null {
+  const legs = 3 + Math.floor(r() * 3);
+  let heading = -Math.PI / 2 + R(-0.35, 0.35);
+  let side = r() < 0.5 ? 1 : -1;
+  const hard: boolean[] = [];
+  const w0 = R(6, 7.5);
+  const ctl: Raw[] = [{ x: 0, y: 0, w: w0, pw: w0 + R(0, 3) }];
+  for (let i = 0; i < legs; i++) {
+    const isHard = r() < 0.4;
+    hard.push(isHard);
+    // Straight legs run at whole 45 degree angles, like something built.
+    const h = isHard ? Math.max(-Math.PI * 0.75, Math.min(-Math.PI * 0.25, Math.round(heading / (Math.PI / 4)) * (Math.PI / 4))) : heading;
+    const L = R(30, 50);
+    const last = ctl[ctl.length - 1];
+    const w = R(5.5, 9);
+    ctl.push({ x: last.x + Math.cos(h) * L, y: last.y + Math.sin(h) * L, w, pw: w + (isHard ? 0 : r() < 0.75 ? R(2, 5) : 0) });
+    const turn = R(0.45, 1.15) * (r() < 0.7 ? side : -side);
+    side = -Math.sign(turn);
+    heading = Math.max(-Math.PI + 0.3, Math.min(-0.3, h + turn));
+  }
+  // A hard leg's ends have no rough, so its walls meet the curve's cleanly.
+  ctl.forEach((c, i) => {
+    if (hard[i] || hard[i - 1]) c.pw = c.w;
+  });
+  const path = spline(ctl, hard);
+  for (let i = 0; i < path.length; i += 2)
+    for (let j = i + 2; j < path.length; j += 2) {
+      const a = path[i], b = path[j];
+      if (j - i < (a.pw + b.pw) * 2.5 + 8) continue;
+      if (Math.hypot(a.x - b.x, a.y - b.y) < a.pw + b.pw + 7) return null;
+    }
+  return {
+    shape: "bends",
+    path,
+    ctl,
+    cupAtEnd: false,
+    menu: ["pond", "island", "stream", "gate", "slope", "chamber", "hill", "boost"],
+    extent: path.flatMap((p) => [v(p.x - p.pw - 16, p.y - p.pw - 16), v(p.x + p.pw + 16, p.y + p.pw + 16)]),
+    stamp: (F, P) => {
+      for (let i = 1; i < path.length; i++) {
+        F.capsule(path[i - 1], path[i], path[i - 1].w, path[i].w, union);
+        P.capsule(path[i - 1], path[i], path[i - 1].pw, path[i].pw, union);
+      }
+      // Straight legs again as boxes, for their square corners.
+      for (let i = 0; i < legs; i++)
+        if (hard[i]) {
+          const ext = Math.min(ctl[i].w, ctl[i + 1].w);
+          F.box(ctl[i], ctl[i + 1], Math.min(ctl[i].w, ctl[i + 1].w), ext, union);
+          P.box(ctl[i], ctl[i + 1], Math.min(ctl[i].w, ctl[i + 1].w), ext, union);
+        }
+    },
+  };
+}
+
+// Switchbacks: parallel lanes joined at alternate ends by square hairpin turns. Ramps can jump a lane.
+function switchback({ r, R }: Rand): Layout {
+  const n = r() < 0.5 ? 3 : 4;
+  const Ln = R(36, 52), w = R(4.8, 6.2), gap = R(3.2, 5);
+  const pitch = 2 * w + gap;
+  const flip = r() < 0.5 ? -1 : 1;
+  const corners: Raw[] = [];
+  for (let k = 0; k < n; k++) {
+    const y = -k * pitch;
+    const [xa, xb] = k % 2 ? [Ln, 0] : [0, Ln];
+    corners.push({ x: xa * flip, y, w, pw: w }, { x: xb * flip, y, w, pw: w });
+  }
+  const raw: Raw[] = [];
+  for (let i = 0; i < corners.length - 1; i++) line(corners[i], corners[i + 1], raw);
+  raw.push(corners[corners.length - 1]);
+  const path = resample(raw);
+  const ramps: { at: Vec; dir: Vec }[] = [];
+  for (let k = 0; k < n - 1; k++)
+    if (r() < 0.5) ramps.push({ at: v(R(Ln * 0.3, Ln * 0.7) * flip, -k * pitch - w * 0.35), dir: v(0, -1) });
+  return {
+    shape: "switchback",
+    path,
+    cupAtEnd: false,
+    menu: ["slope", "boost", "gate", "stream"],
+    ramps,
+    extent: corners.flatMap((c) => [v(c.x - w - 16, c.y - w - 16), v(c.x + w + 16, c.y + w + 16)]),
+    stamp: (F, P) => {
+      for (let i = 0; i < corners.length - 1; i++)
+        for (const f of [F, P]) f.box(corners[i], corners[i + 1], w, w, union);
+    },
+  };
+}
+
+// A spiral coiling in to a round green in the middle. Ramps on the outer arms jump the wall inward.
+function spiral({ r, R }: Rand): Layout {
+  const R0 = R(25, 31), sp = R(14, 16), w = Math.min(R(5, 6), (sp - 3.5) / 2);
+  const g = R(6, 7.5), rEnd = g + 1;
+  const turns = (R0 - rEnd) / sp;
+  const dir = r() < 0.5 ? 1 : -1, a0 = Math.PI / 2 + R(-0.5, 0.5);
+  const at = (th: number, rad: number): Raw => ({ x: Math.cos(a0 + dir * th) * rad, y: Math.sin(a0 + dir * th) * rad, w, pw: w });
+  const raw: Raw[] = [];
+  for (let th = 0; th < turns * Math.PI * 2; ) {
+    const rad = R0 - (sp * th) / (Math.PI * 2);
+    raw.push(at(th, rad));
+    th += 0.5 / rad;
+  }
+  raw.push({ x: 0, y: 0, w, pw: w });
+  const path = resample(raw);
+  // Ramps pointing at the middle, where there's an arm inside to land on.
+  const ramps: { at: Vec; dir: Vec }[] = [];
+  for (const frac of [0.2, 0.45]) {
+    if (r() < 0.35) continue;
+    const p = path[Math.floor(path.length * frac)];
+    const d = Math.hypot(p.x, p.y);
+    if (d - sp < g + 2) continue;
+    ramps.push({ at: v(p.x * (1 - (w * 0.3) / d), p.y * (1 - (w * 0.3) / d)), dir: v(-p.x / d, -p.y / d) });
+  }
+  return {
+    shape: "spiral",
+    path,
+    cupAtEnd: true,
+    menu: ["slope", "boost", "gate", "stream"],
+    ramps,
+    extent: [v(-R0 - w - 16, -R0 - w - 16), v(R0 + w + 16, R0 + w + 16)],
+    stamp: (F, P) => {
+      for (const f of [F, P]) {
+        for (let i = 1; i < path.length; i++) f.capsule(path[i - 1], path[i], w, w, union);
+        f.disk(v(0, 0), g, smax(2));
+      }
+    },
+  };
+}
+
+// A loop round a walled green whose only gate faces away from the tee: you have to go all the way
+// round. Round or square. One side is clear; the other has posts to bank off.
+function loop({ r, R }: Rand): Layout {
+  const square = r() < 0.45;
+  const Rr = R(17, 23), w = R(4.5, 5.6), g = Math.min(R(5, 6.5), Rr - w - 4);
+  const gw = R(2.4, 3);
+  const L0 = R(24, 36);
+  const way = r() < 0.5 ? 1 : -1;
+  const rough = R(2, 4.5);
+  const raw: Raw[] = [];
+  line({ x: 0, y: Rr + L0, w, pw: w + rough }, { x: 0, y: Rr, w, pw: w }, raw);
+  const ring: Raw[] = [];
+  if (square) {
+    const c = [v(0, Rr), v(way * Rr, Rr), v(way * Rr, -Rr), v(0, -Rr)].map((p) => ({ ...p, w, pw: w }));
+    for (let i = 0; i < c.length - 1; i++) line(c[i], c[i + 1], raw);
+  } else
+    for (let a = 0; a <= Math.PI; a += 0.4 / Rr) raw.push({ x: Math.sin(a) * Rr * way, y: Math.cos(a) * Rr, w, pw: w });
+  line({ x: 0, y: -Rr, w: gw, pw: gw }, { x: 0, y: 0, w: gw, pw: gw }, raw);
+  raw.push({ x: 0, y: 0, w: gw, pw: gw });
+  for (let a = 0; a <= Math.PI * 2; a += 0.4 / Rr) ring.push({ x: Math.sin(a) * Rr, y: Math.cos(a) * Rr, w, pw: w });
+  const path = resample(raw);
+  const posts = [0.3, 0.5, 0.7].map((k) => {
+    const a = Math.PI * k;
+    return square ? v(-way * Rr, Rr - k * 2 * Rr) : v(-way * Math.sin(a) * Rr, Math.cos(a) * Rr);
+  });
+  return {
+    shape: "loop",
+    path,
+    cupAtEnd: true,
+    menu: ["slope", "boost", "gate", "stream"],
+    posts,
+    extent: [v(-Rr - w - 16, -Rr - w - 16), v(Rr + w + 16, Rr + L0 + 16)],
+    stamp: (F, P) => {
+      // The way in, with rough either side.
+      F.capsule(v(0, Rr + L0), v(0, Rr), w, w, union);
+      P.capsule(v(0, Rr + L0), v(0, Rr), w + rough, w, union);
+      for (const f of [F, P]) {
+        if (square) {
+          const c = [v(-Rr, Rr), v(Rr, Rr), v(Rr, -Rr), v(-Rr, -Rr)];
+          for (let i = 0; i < 4; i++) f.box(c[i], c[(i + 1) % 4], w, w, union);
+          f.box(v(-g, 0), v(g, 0), g, 0, union);
+          f.box(v(0, -Rr), v(0, -g), gw, 0, union);
+        } else {
+          for (let i = 1; i < ring.length; i++) f.capsule(ring[i - 1], ring[i], w, w, union);
+          f.disk(v(0, 0), g, union);
+          f.capsule(v(0, -Rr), v(0, -g + 0.5), gw, gw, union);
+        }
+      }
+    },
+  };
 }
 
 // --- Names ---
@@ -224,53 +452,52 @@ function spline(ctl: { x: number; y: number; w: number }[]): Sample[] {
 const FIRST = ["Maple", "Heron", "Willow", "Clover", "Foxglove", "Bramble", "Thistle", "Juniper", "Meadow", "Hollow", "Badger", "Kestrel", "Fern", "Mossy", "Oak", "Wren", "Lark", "Elder", "Hazel", "Sorrel"];
 const LAST = ["Bend", "Run", "Crossing", "Hollow", "Rise", "Dell", "Green", "Glen", "Reach", "Turn", "Brook", "Way", "Fold", "Knoll", "Corner", "Lane"];
 
+const SHAPE_WORDS: Partial<Record<Shape, string[]>> = {
+  spiral: ["Coil", "Spiral", "Whirl", "Swirl", "Snail"],
+  switchback: ["Switchback", "Zigzag", "Hairpins", "Ladder", "Stairs"],
+  loop: ["Loop", "Ring", "Roundabout", "Orbit", "Donut"],
+};
+
 // --- Generation ---
 
-export type HoleStats = { length: number; bot: number; features: string[] };
+export type HoleStats = { length: number; bot: number; features: string[]; shape: Shape };
 export type GenHole = Course & { seed: number; stats: HoleStats };
 
-export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
+// `debug`, if passed, is told the shape and what the bot scored, even for holes that get thrown out.
+export function generate(seed: number, theme: Theme = "hills", debug?: { shape?: Shape; bot?: number; keep?: boolean }): GenHole | null {
   const r = rng(seed * 7919 + 17);
   const R = (a: number, b: number) => a + r() * (b - a);
   const features: string[] = [];
 
-  // A path heading north with two to four bends. It never turns back on itself.
-  const legs = 3 + Math.floor(r() * 3);
-  let heading = -Math.PI / 2 + R(-0.35, 0.35);
-  let side = r() < 0.5 ? 1 : -1;
-  const ctl = [{ x: 0, y: 0, w: R(6, 7.5) }];
-  for (let i = 0; i < legs; i++) {
-    const L = R(30, 50);
-    const last = ctl[ctl.length - 1];
-    ctl.push({ x: last.x + Math.cos(heading) * L, y: last.y + Math.sin(heading) * L, w: R(5.5, 9) });
-    const turn = R(0.45, 1.15) * (r() < 0.7 ? side : -side);
-    side = -Math.sign(turn);
-    heading = Math.max(-Math.PI + 0.3, Math.min(-0.3, heading + turn));
-  }
-  const path = spline(ctl);
+  // The shape first: doglegs most often, then loops, spirals and switchbacks.
+  const roll = r();
+  const lay = roll < 0.36 ? bends({ r, R }) : roll < 0.58 ? loop({ r, R }) : roll < 0.8 ? spiral({ r, R }) : switchback({ r, R });
+  if (!lay) return null;
+  if (debug) debug.shape = lay.shape;
+  const path = lay.path;
   const total = path[path.length - 1].s;
   if (total < 100 || total > 240) return null;
-  // Parts of the path that pass close to each other would merge into one blob.
-  for (let i = 0; i < path.length; i += 2)
-    for (let j = i + 2; j < path.length; j += 2) {
-      const a = path[i], b = path[j];
-      if (j - i < (a.w + b.w) * 2.5 + 8) continue;
-      if (Math.hypot(a.x - b.x, a.y - b.y) < a.w + b.w + 7) return null;
-    }
   const at = (s: number): Sample => path[Math.max(0, Math.min(path.length - 1, Math.round(s)))];
   const normal = (p: Sample) => v(-p.ty, p.tx);
 
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const p of path) {
-    x0 = Math.min(x0, p.x - p.w - 16);
-    y0 = Math.min(y0, p.y - p.w - 16);
-    x1 = Math.max(x1, p.x + p.w + 16);
-    y1 = Math.max(y1, p.y + p.w + 16);
+  for (const p of lay.extent) {
+    x0 = Math.min(x0, p.x);
+    y0 = Math.min(y0, p.y);
+    x1 = Math.max(x1, p.x);
+    y1 = Math.max(y1, p.y);
   }
-  const P = Field.over({ x0, y0, x1, y1 }); // the fairway
+  const P = Field.over({ x0, y0, x1, y1 }); // everything playable
+  const F = P.copyShape(); // the fairway; the rest of P is rough
   const W = P.copyShape(); // water
   const S = P.copyShape(); // sand
-  for (let i = 1; i < path.length; i++) P.capsule(path[i - 1], path[i], path[i - 1].w, path[i].w, union);
+  lay.stamp(F, P);
+  // Widening the course widens both.
+  const both = {
+    disk: (c: Vec, rad: number, op: (a: number, b: number) => number) => (F.disk(c, rad, op), P.disk(c, rad, op)),
+    capsule: (a: Vec, b: Vec, ra: number, rb: number, op: (a: number, b: number) => number) => (F.capsule(a, b, ra, rb, op), P.capsule(a, b, ra, rb, op)),
+  };
+  const ctl = lay.ctl ?? [];
 
   const zones: Zone[] = [];
   const walls: Wall[] = [];
@@ -293,8 +520,8 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
     const left: Vec[] = [], right: Vec[] = [];
     for (let s = s0; s <= s1; s += 1) {
       const p = at(s), n = normal(p);
-      left.push(v(p.x + n.x * (p.w + extra), p.y + n.y * (p.w + extra)));
-      right.push(v(p.x - n.x * (p.w + extra), p.y - n.y * (p.w + extra)));
+      left.push(v(p.x + n.x * (p.pw + extra), p.y + n.y * (p.pw + extra)));
+      right.push(v(p.x - n.x * (p.pw + extra), p.y - n.y * (p.pw + extra)));
     }
     return [...left, ...right.reverse()];
   };
@@ -311,9 +538,9 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
 
   // The green: a bowl that helps, a crown that doesn't, or flat.
   const end = at(total - R(3.5, 5));
-  const cup = v(end.x + normal(end).x * R(-end.w * 0.3, end.w * 0.3), end.y + normal(end).y * R(-end.w * 0.3, end.w * 0.3));
-  P.disk(cup, R(5, 6.5), smax(3));
-  claim(total - 12, total);
+  const cup = lay.cupAtEnd ? v(path[path.length - 1].x, path[path.length - 1].y) : v(end.x + normal(end).x * R(-end.w * 0.3, end.w * 0.3), end.y + normal(end).y * R(-end.w * 0.3, end.w * 0.3));
+  if (!lay.cupAtEnd) both.disk(cup, R(5, 6.5), smax(3));
+  claim(total - (lay.cupAtEnd ? 24 : 12), total);
   const green = r();
   if (green < 0.4) zones.push({ kind: "mound", poly: circlePoly(cup, 5.5), center: cup, radius: 5.5, strength: -R(1.2, 2) });
   else if (green < 0.65) zones.push({ kind: "mound", poly: circlePoly(cup, 4.5), center: v(cup.x + R(-1, 1), cup.y + R(-1, 1)), radius: 4.5, strength: R(1.6, 2.6) });
@@ -322,7 +549,7 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
   claim(0, 9);
 
   // Features, three to five, no two on top of each other.
-  const menu = ["pond", "island", "stream", "gate", "slope", "chamber", "hill", "boost"];
+  const menu = lay.menu;
   const count = 3 + Math.floor(r() * 3);
   for (let n = 0; n < count * 3 && features.length < count; n++) {
     const kind = menu[Math.floor(r() * menu.length)];
@@ -338,7 +565,7 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
       const inward = turn > 0 ? 1 : -1;
       const radius = R(3.5, 6);
       const c = v(b.x + n0.x * inward * R(0.5, 2.5), b.y + n0.y * inward * R(0.5, 2.5));
-      P.disk(c, radius + R(5, 7), smax(4));
+      both.disk(c, radius + R(5, 7), smax(4));
       W.blob(c, radius, r, union);
       claim(b.s - 9, b.s + 9);
       features.push("pond");
@@ -363,8 +590,8 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
       const shift = R(-1.5, 1.5);
       const a = v(at(s - half).x + n0.x * shift, at(s - half).y + n0.y * shift);
       const b = v(at(s + half).x + n0.x * shift, at(s + half).y + n0.y * shift);
-      for (let t = s - half - 5; t <= s + half + 5; t += 1) P.disk(at(t), at(t).w + ir + R(3, 4), smax(3));
-      P.capsule(a, b, ir, ir, cut(1.5));
+      for (let t = s - half - 5; t <= s + half + 5; t += 1) both.disk(at(t), at(t).pw + ir + R(3, 4), smax(3));
+      both.capsule(a, b, ir, ir, cut(1.5));
       islands.push({ a, b, r: ir });
       claim(s - half - 6, s + half + 6);
       features.push("island");
@@ -380,9 +607,10 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
       if (s === null) continue;
       const p = at(s), n0 = normal(p);
       const half = R(0.9, 1.4);
-      W.capsule(v(p.x - n0.x * (p.w + 8), p.y - n0.y * (p.w + 8)), v(p.x + n0.x * (p.w + 8), p.y + n0.y * (p.w + 8)), half, half, union);
+      const reach = p.pw + (lay.shape === "bends" ? 8 : 0.8);
+      W.capsule(v(p.x - n0.x * reach, p.y - n0.y * reach), v(p.x + n0.x * reach, p.y + n0.y * reach), half, half, union);
       const off = R(-p.w * 0.45, p.w * 0.45);
-      const bw = R(2.6, 3.3);
+      const bw = Math.min(R(2.6, 3.3), p.w * 1.2);
       const bc = v(p.x + n0.x * off, p.y + n0.y * off);
       const along = v(p.tx, p.ty);
       const bl = half * 2 + 2.4;
@@ -410,7 +638,7 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
       const s = spot(0.2, 0.78, 8);
       if (s === null) continue;
       const p = at(s), n0 = normal(p);
-      const span = p.w + 1;
+      const span = p.pw + (lay.shape === "bends" ? 1 : 0.6);
       const gaps = r() < 0.5 ? [R(-span + 2.5, span - 2.5)] : [R(-span + 2.5, -1.5), R(1.5, span - 2.5)];
       const gw = R(2.6, 3.4);
       const cuts = [-span - 1, ...gaps.flatMap((g) => [g - gw / 2, g + gw / 2]), span + 1];
@@ -428,7 +656,7 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
       if (s === null) continue;
       const p = at(s), n0 = normal(p);
       const sign = r() < 0.5 ? 1 : -1;
-      zones.push({ kind: "slope", poly: ribbon(s - len / 2, s + len / 2, 2), dir: v(n0.x * sign, n0.y * sign), strength: R(2.2, 3.4) });
+      zones.push({ kind: "slope", poly: ribbon(s - len / 2, s + len / 2, lay.shape === "bends" ? 2 : 0.6), dir: v(n0.x * sign, n0.y * sign), strength: R(2.2, 3.4) });
       claim(s - len / 2, s + len / 2);
       features.push("slope");
     } else if (kind === "chamber") {
@@ -438,7 +666,7 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
       const p = at(s), n0 = normal(p);
       const c = v(p.x + n0.x * R(-2, 2), p.y + n0.y * R(-2, 2));
       const cr = p.w * R(1.4, 1.8);
-      P.disk(c, cr, smax(4));
+      both.disk(c, cr, smax(4));
       const k = 4 + Math.floor(r() * 4);
       const rot = r() * Math.PI;
       for (let i = 0; i < k; i++) {
@@ -468,13 +696,22 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
       const p = at(s), n0 = normal(p);
       const c = v(p.x + n0.x * R(-p.w * 0.5, p.w * 0.5), p.y + n0.y * R(-p.w * 0.5, p.w * 0.5));
       const hr = R(5, 8);
-      P.disk(c, hr * 0.9, smax(3));
+      both.disk(c, hr * 0.9, smax(3));
       zones.push({ kind: "mound", poly: circlePoly(c, hr), center: c, radius: hr, strength: R(2.6, 3.8) });
       claim(s - 6, s + 6);
       features.push("hill");
     }
   }
-  if (features.filter((f) => f !== "ramp").length < 3) return null;
+  // The shape's own ramps and posts.
+  for (const rp of lay.ramps ?? []) {
+    const deck = rect(rp.at, rp.dir, 2.6, 2.6);
+    if (deck.every((q) => P.at(q.x, q.y) > 0.6 && W.at(q.x, q.y) < -1.5)) {
+      zones.push({ kind: "ramp", poly: deck, dir: rp.dir, lift: 0.55 });
+      features.push("ramp");
+    }
+  }
+  for (const at0 of lay.posts ?? []) bumpers.push({ at: at0, r: R(0.6, 0.85), kick: 1.2 });
+  if (features.filter((f) => f !== "ramp").length < (lay.shape === "bends" ? 3 : 2)) return null;
 
   // Bunkers by the green, and maybe one out on the fairway.
   const nb = 1 + Math.floor(r() * 3);
@@ -494,11 +731,20 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
 
   // Outlines. Water reaches the walls; sand stays a little inside them and never touches the cup.
   const greenLoops = contours(P);
+  // Rough is whatever's playable but not fairway; the fairway sits on top of it.
+  const hasRough = path.some((p) => p.pw > p.w + 0.5);
+  const outer = greenLoops.filter((g, i) => !greenLoops.some((o, j) => j !== i && inPoly(g[0], o)));
+  const fairway = hasRough ? contours(F.combine(P, (f, pl) => Math.min(f, pl))) : [];
   const water = contours(W.combine(P, (w, p) => Math.min(w, p)));
   S.disk(cup, 1.6, cut(0.5));
   S.disk(v(tee.x, tee.y), 2.5, cut(0.5));
   const sand = contours(S.combine(P, (s, p) => Math.min(s, p - 0.8)).combine(W, (s, w) => Math.min(s, -w - 0.4)));
-  zones.unshift(...sand.map((poly) => ({ kind: "sand" as const, poly })), ...water.map((poly) => ({ kind: "water" as const, poly })));
+  zones.unshift(
+    ...(hasRough ? outer.map((poly) => ({ kind: "rough" as const, poly })) : []),
+    ...fairway.map((poly) => ({ kind: "green" as const, poly })),
+    ...sand.map((poly) => ({ kind: "sand" as const, poly })),
+    ...water.map((poly) => ({ kind: "water" as const, poly })),
+  );
   // Bridges go after the water so they win.
   zones.sort((a, b) => order(a.kind) - order(b.kind));
 
@@ -506,7 +752,7 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
   const ok = (p: Vec, clear: number) => P.at(p.x, p.y) > clear && W.at(p.x, p.y) < -1 && S.at(p.x, p.y) < -0.3;
   if (!ok(cup, 2) || !ok(tee, 2)) return null;
   const blocked = (p: Vec) => walls.some((w) => w.pts.some((q, i) => i > 0 && segDist(p, w.pts[i - 1], q) < w.w / 2 + BALL_R + 0.1)) || bumpers.some((b) => Math.hypot(p.x - b.at.x, p.y - b.at.y) < b.r + BALL_R + 0.1);
-  const route = shortest(P, W, bridges, blocked, tee, cup);
+  const route = geodesic(P, W, bridges, blocked, tee, cup);
   if (!route) return null;
   // Boxes all the way along, some on the line and some off it.
   for (const frac of [0.22, 0.42, 0.62, 0.82]) {
@@ -561,7 +807,7 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
   const course: GenHole = {
     seed,
     id: `gen-${seed}`,
-    name: `${FIRST[seed % FIRST.length]} ${LAST[Math.floor(seed / FIRST.length) % LAST.length]}`,
+    name: `${FIRST[seed % FIRST.length]} ${(SHAPE_WORDS[lay.shape] ?? LAST)[Math.floor(seed / FIRST.length) % (SHAPE_WORDS[lay.shape] ?? LAST).length]}`,
     course: "Green Hills",
     theme,
     par: 4,
@@ -581,22 +827,27 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
     wells: [],
     lamps: lamps.map(mv),
     boxes: boxes.map(mv),
-    stats: { length: Math.round(route.length), bot: 0, features },
+    stats: { length: Math.round(route.length), bot: 0, features, shape: lay.shape },
   };
   // A bot plays it. It has to get round, and it mustn't be able to hole out in one.
-  const hazard = (p: Vec) => {
-    const q = v(p.x - dx, p.y - dy);
-    return (W.at(q.x, q.y) > -0.4 && !bridges.some((b) => inPoly(q, b))) || S.at(q.x, q.y) > -0.2;
+  // A straight line the ball can roll along: well inside the walls, no water on the way.
+  const clearLine = (a: Vec, b: Vec) => {
+    const n = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 0.5);
+    for (let i = 1; i <= n; i++) {
+      const p = v(a.x + ((b.x - a.x) * i) / n, a.y + ((b.y - a.y) * i) / n);
+      if (P.at(p.x, p.y) < BALL_R + 0.5 || (W.at(p.x, p.y) > -0.3 && !bridges.some((br) => inPoly(p, br))) || blocked(p)) return false;
+    }
+    return true;
   };
-  const bot = botPlay(course, route.points.map(mv), hazard);
-  if (bot > 9 || bot <= 2) return null;
+  const bot = botPlay(course, route, v(dx, dy), clearLine);
+  if (debug) debug.bot = bot;
+  if ((bot > 8 || bot <= 2) && !debug?.keep) return null;
   course.stats.bot = bot;
-  course.par = Math.max(3, Math.min(7, Math.round(route.length / 45 + 1.4)));
-  if (bot > course.par + 2) return null;
+  course.par = Math.max(3, Math.min(7, Math.round(bot * 0.6 + (route.length / 45 + 1.4) * 0.4)));
   return course;
 }
 
-const order = (k: Zone["kind"]) => (k === "sand" ? 0 : k === "water" ? 1 : k === "bridge" ? 2 : 3);
+const order = (k: Zone["kind"]) => ["rough", "green", "sand", "water", "bridge"].indexOf(k) + 1 || 9;
 const norm = (p: Vec) => {
   const l = Math.hypot(p.x, p.y) || 1;
   return v(p.x / l, p.y / l);
@@ -610,8 +861,10 @@ function segDist(p: Vec, a: Vec, b: Vec) {
   return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t);
 }
 
-// The shortest way round on the ground, avoiding water (bridges are fine) and walls.
-function shortest(P: Field, W: Field, bridges: Vec[][], blocked: (p: Vec) => boolean, from: Vec, to: Vec) {
+// How far it is to the cup on the ground from everywhere, going round water (bridges are fine) and
+// walls: Dijkstra out from the cup on a one-unit grid. The route from the tee runs downhill on it.
+type Geo = { length: number; points: Vec[]; at: (p: Vec) => number; toward: (p: Vec, ahead: number) => Vec };
+function geodesic(P: Field, W: Field, bridges: Vec[][], blocked: (p: Vec) => boolean, from: Vec, to: Vec): Geo | null {
   const g = 1;
   const x0 = P.x0, y0 = P.y0;
   const nx = Math.ceil(((P.nx - 1) * G) / g), ny = Math.ceil(((P.ny - 1) * G) / g);
@@ -619,41 +872,109 @@ function shortest(P: Field, W: Field, bridges: Vec[][], blocked: (p: Vec) => boo
   for (let j = 0; j < ny; j++)
     for (let i = 0; i < nx; i++) {
       const p = v(x0 + i * g, y0 + j * g);
-      pass[j * nx + i] = +(P.at(p.x, p.y) > 0.8 && (W.at(p.x, p.y) < -0.2 || bridges.some((b) => inPoly(p, b))) && !blocked(p));
+      if (P.at(p.x, p.y) < 0.8) continue;
+      pass[j * nx + i] = +((W.at(p.x, p.y) < -0.2 || bridges.some((br) => inPoly(p, br))) && !blocked(p));
     }
-  const idx = (p: Vec) => Math.round((p.y - y0) / g) * nx + Math.round((p.x - x0) / g);
-  const start = idx(from), goal = idx(to);
+  const cell = (p: Vec) => Math.max(0, Math.min(ny - 1, Math.round((p.y - y0) / g))) * nx + Math.max(0, Math.min(nx - 1, Math.round((p.x - x0) / g)));
   const dist = new Float32Array(nx * ny).fill(Infinity);
-  const prev = new Int32Array(nx * ny).fill(-1);
-  dist[start] = 0;
-  // Dijkstra on a small grid; a sorted bucket queue is plenty.
-  const queue: number[] = [start];
+  const goal = cell(to);
+  dist[goal] = 0;
+  pass[goal] = 1;
+  // A binary heap of [distance, cell].
+  const heap: number[] = [goal];
+  const less = (a: number, b: number) => dist[heap[a]] < dist[heap[b]];
+  const push = (k: number) => {
+    heap.push(k);
+    for (let i = heap.length - 1; i > 0; ) {
+      const pi = (i - 1) >> 1;
+      if (!less(i, pi)) break;
+      [heap[i], heap[pi]] = [heap[pi], heap[i]];
+      i = pi;
+    }
+  };
+  const pop = () => {
+    const top = heap[0];
+    const last = heap.pop()!;
+    if (heap.length) {
+      heap[0] = last;
+      for (let i = 0; ; ) {
+        const l = i * 2 + 1, r = l + 1;
+        let m = i;
+        if (l < heap.length && less(l, m)) m = l;
+        if (r < heap.length && less(r, m)) m = r;
+        if (m === i) break;
+        [heap[i], heap[m]] = [heap[m], heap[i]];
+        i = m;
+      }
+    }
+    return top;
+  };
   const steps = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2]];
-  while (queue.length) {
-    let bi = 0;
-    for (let k = 1; k < queue.length; k++) if (dist[queue[k]] < dist[queue[bi]]) bi = k;
-    const cur = queue[bi];
-    queue[bi] = queue[queue.length - 1];
-    queue.pop();
-    if (cur === goal) break;
+  const done = new Uint8Array(nx * ny);
+  while (heap.length) {
+    const cur = pop();
+    if (done[cur]) continue;
+    done[cur] = 1;
     const ci = cur % nx, cj = Math.floor(cur / nx);
     for (const [di, dj, c] of steps) {
       const ni = ci + di, nj = cj + dj;
       if (ni < 0 || nj < 0 || ni >= nx || nj >= ny) continue;
       const k = nj * nx + ni;
-      if (!pass[k] && k !== goal) continue;
+      if (!pass[k]) continue;
       const d = dist[cur] + c * g;
       if (d < dist[k]) {
-        if (dist[k] === Infinity) queue.push(k);
         dist[k] = d;
-        prev[k] = cur;
+        push(k);
       }
     }
   }
-  if (dist[goal] === Infinity) return null;
+  // Anywhere the grid can't reach (right up against a wall), use the nearest cell that can.
+  const at = (p: Vec) => {
+    const k = cell(p);
+    if (dist[k] < Infinity) return dist[k];
+    let best = Infinity;
+    const ci = k % nx, cj = Math.floor(k / nx);
+    for (let dj = -2; dj <= 2; dj++)
+      for (let di = -2; di <= 2; di++) {
+        const ni = ci + di, nj = cj + dj;
+        if (ni >= 0 && nj >= 0 && ni < nx && nj < ny) best = Math.min(best, dist[nj * nx + ni] + Math.hypot(di, dj) * g);
+      }
+    return best;
+  };
+  // Downhill from a point toward the cup, `ahead` units along.
+  const toward = (p: Vec, ahead: number) => {
+    let k = cell(p);
+    if (dist[k] === Infinity) {
+      const ci = k % nx, cj = Math.floor(k / nx);
+      for (let dj = -2; dj <= 2; dj++)
+        for (let di = -2; di <= 2; di++) {
+          const ni = ci + di, nj = cj + dj;
+          if (ni >= 0 && nj >= 0 && ni < nx && nj < ny && dist[nj * nx + ni] < dist[k]) k = nj * nx + ni;
+        }
+    }
+    const start = dist[k];
+    while (dist[k] > 0 && start - dist[k] < ahead) {
+      const ci = k % nx, cj = Math.floor(k / nx);
+      let next = k;
+      for (const [di, dj] of steps) {
+        const ni = ci + di, nj = cj + dj;
+        if (ni >= 0 && nj >= 0 && ni < nx && nj < ny && dist[nj * nx + ni] < dist[next]) next = nj * nx + ni;
+      }
+      if (next === k) break;
+      k = next;
+    }
+    return v(x0 + (k % nx) * g, y0 + Math.floor(k / nx) * g);
+  };
+  const length = at(from);
+  if (length === Infinity) return null;
   const points: Vec[] = [];
-  for (let k = goal; k !== -1; k = prev[k]) points.push(v(x0 + (k % nx) * g, y0 + Math.floor(k / nx) * g));
-  return { length: dist[goal], points: points.reverse() };
+  for (let p = from, guard = 0; guard < 2000; guard++) {
+    points.push(p);
+    if (Math.hypot(p.x - to.x, p.y - to.y) < 1.5) break;
+    p = toward(p, 1);
+  }
+  points.push(to);
+  return { length, points, at, toward };
 }
 
 // How far a putt of a given power rolls on flat carpet, and the power for a given distance.
@@ -673,45 +994,49 @@ export function powerFor(distance: number) {
 }
 export const MAX_ROLL = rollDistance(1);
 
-// A decent but not perfect player: aims at the furthest point of the route it can see and reach.
-function botPlay(course: Course, route: Vec[], hazard: (p: Vec) => boolean): number {
+// A decent player: before each shot it tries several (at points further and further along the way to
+// the cup, and straight at the cup when it can see it), plays each out, and takes the one that ends
+// closest to the cup by the walking distance. Splashing in costs it, the way it costs a player.
+function botPlay(course: Course, geo: Geo, shift: Vec, clear: (a: Vec, b: Vec) => boolean): number {
   const world = compile(course);
-  const sim = newSim(course, 1);
-  const clear = (a: Vec, b: Vec) => {
-    const l = Math.hypot(b.x - a.x, b.y - a.y);
-    const n = Math.ceil(l / 0.4);
-    for (let i = 1; i <= n; i++) {
-      const p = v(a.x + ((b.x - a.x) * i) / n, a.y + ((b.y - a.y) * i) / n);
-      for (const s of nearSegs(world, p.x, p.y)) if (segDist(p, s.a, s.b) < s.r + BALL_R + 0.15) return false;
-      for (const b2 of course.bumpers) if (Math.hypot(p.x - b2.at.x, p.y - b2.at.y) < b2.r + BALL_R + 0.15) return false;
-      if (hazard(p)) return false;
-    }
-    return true;
+  let sim = newSim(course, 1);
+  const local = (p: Vec) => v(p.x - shift.x, p.y - shift.y);
+  const world2 = (p: Vec) => v(p.x + shift.x, p.y + shift.y);
+  const settle = (s: Sim) => {
+    for (let i = 0; i < 30 / DT && (s.mode === "roll" || s.mode === "out"); i++) step(s, world);
   };
   for (let shot = 0; shot < 10; shot++) {
     const here = v(sim.x, sim.y);
-    let target: Vec | null = null;
-    let putt = false;
-    if (Math.hypot(course.cup.x - here.x, course.cup.y - here.y) < MAX_ROLL * 0.85 && clear(here, course.cup)) {
-      target = course.cup;
-      putt = true;
-    } else {
-      for (let i = route.length - 1; i >= 0; i -= 2) {
-        const p = route[i];
-        if (Math.hypot(p.x - here.x, p.y - here.y) < MAX_ROLL * 0.7 && clear(here, p)) {
-          target = p;
-          break;
-        }
+    const tries: { angle: number; power: number }[] = [];
+    const aimAt = (p: Vec, extra = 0) => {
+      const d = Math.hypot(p.x - here.x, p.y - here.y);
+      if (d < 0.5) return;
+      for (const k of [0.92, 1.05]) tries.push({ angle: Math.atan2(p.y - here.y, p.x - here.x), power: Math.min(1, powerFor(d * k + extra)) });
+    };
+    const left = geo.at(local(here));
+    if (Math.hypot(course.cup.x - here.x, course.cup.y - here.y) < MAX_ROLL * 0.8 && left < MAX_ROLL) aimAt(course.cup, 0.8);
+    // The furthest few points along the way it can see, plus a couple of shorter safe ones.
+    const seen: Vec[] = [];
+    for (let ahead = 4; ahead < Math.min(left + 4, MAX_ROLL * 0.85); ahead += 3) {
+      const p = world2(geo.toward(local(here), ahead));
+      if (clear(local(here), local(p))) seen.push(p);
+    }
+    for (const p of seen.slice(-3)) aimAt(p);
+    for (const ahead of [8, 16]) if (ahead < left + 4) aimAt(world2(geo.toward(local(here), ahead)));
+    let best: Sim | null = null, bestScore = Infinity;
+    for (const t of tries) {
+      const s = structuredClone(sim);
+      s.events = [];
+      shoot(s, t.angle, t.power);
+      settle(s);
+      const score = s.mode === "sunk" ? -1 : geo.at(local(v(s.x, s.y))) + (s.strokes - sim.strokes - 1) * 25;
+      if (score < bestScore) {
+        bestScore = score;
+        best = s;
       }
     }
-    if (!target) {
-      // Nothing in sight: nudge along the route.
-      const nearest = route.reduce((bi, p, i) => (Math.hypot(p.x - here.x, p.y - here.y) < Math.hypot(route[bi].x - here.x, route[bi].y - here.y) ? i : bi), 0);
-      target = route[Math.min(route.length - 1, nearest + 6)];
-    }
-    const d = Math.hypot(target.x - here.x, target.y - here.y);
-    shoot(sim, Math.atan2(target.y - here.y, target.x - here.x), powerFor(putt ? d + 0.8 : d));
-    for (let i = 0; i < 40 / DT && (sim.mode === "roll" || sim.mode === "out"); i++) step(sim, world);
+    if (!best) return 99;
+    sim = best;
     if (sim.mode === "sunk") return sim.strokes;
   }
   return 99;

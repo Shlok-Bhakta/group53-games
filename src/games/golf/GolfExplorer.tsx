@@ -41,6 +41,7 @@ const POWER_UI: Record<Power, { name: string; icon: Icon }> = {
   jump: { name: "Jump", icon: ArrowFatLinesUpIcon },
   bouncy: { name: "Bouncy", icon: BasketballIcon },
 };
+const SHAPE_NAMES: Record<string, string> = { bends: "Doglegs", switchback: "Switchbacks", spiral: "Spiral", loop: "Loop" };
 const FEATURE_NAMES: Record<string, string> = { pond: "Pond", island: "Island", stream: "Stream", gate: "Hedge", slope: "Slope", chamber: "Posts", hill: "Hill", ramp: "Ramp", boost: "Speed pads" };
 
 const holeCache = new Map<number, GenHole | null>();
@@ -82,8 +83,8 @@ export function GolfExplorer() {
   const [screen, setScreen] = useState<"home" | "browse" | "play">("home");
   const [hour, setHour] = useState<number | null>(null);
   const [round, setRound] = useState<Round | null>(null);
-  const [course, setCourse] = useState<number[]>(() => store.get("golf:course2", GREEN_HILLS));
-  const [pins, setPins] = useState<number[]>(() => store.get("golf:pins2", []));
+  const [course, setCourse] = useState<number[]>(() => store.get("golf:course3", GREEN_HILLS));
+  const [pins, setPins] = useState<number[]>(() => store.get("golf:pins3", []));
   const [muted, setMuted] = useState(false);
   const [style, setStyleState] = useState<Style>(() => store.get("golf:style", "flat"));
   const setStyle = (st: Style) => {
@@ -96,11 +97,11 @@ export function GolfExplorer() {
   const togglePin = (seed: number) => {
     const next = pins.includes(seed) ? pins.filter((s) => s !== seed) : [...pins, seed];
     setPins(next);
-    store.set("golf:pins2", next);
+    store.set("golf:pins3", next);
   };
   const useAsCourse = (seeds: number[]) => {
     setCourse(seeds);
-    store.set("golf:course2", seeds);
+    store.set("golf:course3", seeds);
     setScreen("home");
   };
   const toggleMute = () => {
@@ -192,7 +193,7 @@ function Home({ course, onPlay, onBrowse, ...chrome }: Chrome & { course: number
                 <span className="g-hole-text">
                   <span className="g-display g-card-name">{h?.name ?? `Seed ${seed}`}</span>
                   <span className="g-footnote">
-                    Par {h?.par} · {h?.stats.features.map((f) => FEATURE_NAMES[f]).filter((x, k, a) => a.indexOf(x) === k).join(" · ")}
+                    Par {h?.par} · {h ? SHAPE_NAMES[h.stats.shape] : ""} · {h?.stats.features.map((f) => FEATURE_NAMES[f]).filter((x, k, a) => a.indexOf(x) === k).join(" · ")}
                   </span>
                 </span>
               </button>
@@ -292,7 +293,7 @@ function Browse({ pins, togglePin, onBack, onPlay, useAsCourse, ...chrome }: Chr
                     <span className="g-footnote">
                       #{s} · Par {h.par} · {h.stats.length}m
                     </span>
-                    <span className="g-footnote">{[...new Set(h.stats.features.map((f) => FEATURE_NAMES[f]))].join(" · ")}</span>
+                    <span className="g-footnote">{[SHAPE_NAMES[h.stats.shape], ...new Set(h.stats.features.map((f) => FEATURE_NAMES[f]))].join(" · ")}</span>
                   </span>
                 </button>
                 <button type="button" className={`g-pin ${pinned ? "g-pin-on" : ""}`} onClick={() => togglePin(s)} aria-label={pinned ? `Unpin ${h.name}` : `Pin ${h.name}`} aria-pressed={pinned}>
@@ -535,6 +536,7 @@ function Play({
         sim: s,
         style: styleRef.current,
         map: v.introOn || v.overview ? null : { x: v.w - 12 - 64, y: v.mapY, w: 64, h: 96 },
+        inset: v.introOn ? undefined : { top: v.mapY + 96, bottom: PAD_BOTTOM },
         light: L,
         cam: c,
         dpr: cv.current!.width / Math.max(1, v.w),
