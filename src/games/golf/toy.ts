@@ -1,4 +1,4 @@
-import { BALL_R, CUP_R, rng, type Course, type Sim, type Vec } from "./engine";
+import { BALL_R, CUP_R, LASER_R, newSim, rng, type Course, type Sim, type Vec } from "./engine";
 
 // Bumper Plains' look: flat and straight down, like GamePigeon's mini golf. A green board on a dark dot
 // grid, plain walls, flat round bumpers that flash when hit. No depth, no shadows.
@@ -15,12 +15,18 @@ const C = {
   bumperRing: "#ffffff",
   cup: "#16301a",
   box: "#ffc93c",
+  boost: "#ff8a3d",
+  ramp: "#4aa3ff",
+  sand: "#f2d48a",
+  mine: "#2b2f39",
   ball: "#ffffff",
   ui: "#ffffff",
 };
 
 export type Camera = { x: number; y: number; s: number; ox: number; oy: number }; // screen = (world - xy) * s + o
-export type Fx = { kind: "ring" | "splash" | "puff" | "spark" | "confetti"; x: number; y: number; t: number; color?: string; seed: number };
+export type Fx =
+  | { kind: "ring" | "splash" | "puff" | "spark" | "confetti" | "boom"; x: number; y: number; t: number; color?: string; seed: number }
+  | { kind: "rail"; x: number; y: number; x2: number; y2: number; t: number; color?: string; seed: number };
 export type Frame = {
   c: Course;
   sim: Sim;
@@ -31,6 +37,7 @@ export type Frame = {
   fx: Fx[];
   hits: Map<number, number>; // bumper index -> when it was last hit
   aim: { angle: number; power: number; line: Vec[]; from?: Vec; to?: Vec } | null;
+  target?: { kind: "laser" | "mine" | "railgun"; at: Vec | null } | null; // picking where an item goes
   inset?: { top: number; bottom: number };
 };
 
@@ -75,6 +82,50 @@ export function drawFrame(ctx: Ctx, f: Frame) {
     ctx.fillStyle = C.stripe;
     for (let y = Math.floor(vy0 / 4) * 4; y < vy1; y += 4) ctx.fillRect(vx0, y, vx1 - vx0, 2);
     ctx.restore();
+  }
+
+  // Speed pads and jump ramps: flat plates with arrows.
+  for (const z of c.zones) {
+    if (z.kind !== "boost" && z.kind !== "ramp" && z.kind !== "sand") continue;
+    path(ctx, z.poly);
+    ctx.fillStyle = z.kind === "boost" ? C.boost : z.kind === "ramp" ? C.ramp : C.sand;
+    ctx.fill();
+    if (z.kind !== "boost" && z.kind !== "ramp") continue;
+    const m = z.poly.reduce((a, p) => ({ x: a.x + p.x / z.poly.length, y: a.y + p.y / z.poly.length }), { x: 0, y: 0 });
+    ctx.save();
+    ctx.translate(m.x, m.y);
+    ctx.rotate(Math.atan2(z.dir.y, z.dir.x));
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 0.22;
+    const n = z.kind === "boost" ? 2 : 1;
+    for (let k = 0; k < n; k++) {
+      const o = (k - (n - 1) / 2) * 0.7 + (z.kind === "boost" ? ((t * 2) % 1) * 0.3 - 0.15 : 0);
+      ctx.beginPath();
+      ctx.moveTo(o - 0.35, -0.5);
+      ctx.lineTo(o + 0.2, 0);
+      ctx.lineTo(o - 0.35, 0.5);
+      ctx.stroke();
+    }
+    if (z.kind === "ramp") {
+      ctx.lineWidth = 0.12;
+      ctx.strokeStyle = "rgba(255,255,255,0.6)";
+      ctx.beginPath();
+      ctx.moveTo(0.9, -0.9);
+      ctx.lineTo(0.9, 0.9);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Landmines: dark discs with a blinking red light.
+  for (const m of sim.mines) {
+    if (!m.live) continue;
+    circ(ctx, m.x, m.y, 0.55);
+    ctx.fillStyle = C.mine;
+    ctx.fill();
+    circ(ctx, m.x, m.y, 0.18);
+    ctx.fillStyle = Math.sin(t * 6 + m.x) > 0 ? "#ff3b30" : "#7a1a14";
+    ctx.fill();
   }
 
   // Tee mat.
@@ -123,7 +174,7 @@ export function drawFrame(ctx: Ctx, f: Frame) {
   const bx = sinking ? sim.x + (c.cup.x - sim.x) * sinking : sim.x;
   const by = sinking ? sim.y + (c.cup.y - sim.y) * sinking : sim.y;
   if (sinking < 1 && out < 1) {
-    const R = BALL_R * (1 + sim.z * 0.18) * (1 - sinking * 0.5) * (1 - out);
+    const R = sim.r * (1 + sim.z * 0.18) * (1 - sinking * 0.5) * (1 - out);
     circ(ctx, bx, by, R);
     ctx.fillStyle = C.ball;
     ctx.fill();
@@ -131,6 +182,7 @@ export function drawFrame(ctx: Ctx, f: Frame) {
 
   // Bumpers: flat red discs with a white ring. Hit, they swell and flash.
   c.bumpers.forEach((b, i) => {
+    if (sim.gone[i]) return;
     const age = t - (f.hits.get(i) ?? -9);
     const pop = age < 0.25 ? Math.sin((age / 0.25) * Math.PI) : 0;
     const r = b.r * (1 + pop * 0.2);
@@ -193,6 +245,40 @@ export function drawFrame(ctx: Ctx, f: Frame) {
     ctx.arc(sim.x, sim.y, BALL_R + 0.4, -Math.PI / 2, -Math.PI / 2 + power * Math.PI * 2);
     ctx.stroke();
   }
+  // Lasers on their way: a target ring closing in.
+  T();
+  for (const st of sim.strikes) {
+    const k = Math.max(0, Math.min(1, (st.t - sim.t) / 0.9));
+    ctx.strokeStyle = "#ff3b30";
+    ctx.lineWidth = 0.15;
+    circ(ctx, st.x, st.y, LASER_R * (0.4 + k * 0.6));
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(st.x - 0.6, st.y);
+    ctx.lineTo(st.x + 0.6, st.y);
+    ctx.moveTo(st.x, st.y - 0.6);
+    ctx.lineTo(st.x, st.y + 0.6);
+    ctx.stroke();
+  }
+  // Picking where an item goes.
+  if (f.target?.at) {
+    const { kind, at } = f.target;
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 0.14;
+    ctx.setLineDash([0.4, 0.3]);
+    if (kind === "railgun") {
+      const dx = at.x - sim.x, dy = at.y - sim.y, d = Math.hypot(dx, dy) || 1;
+      ctx.beginPath();
+      ctx.moveTo(sim.x, sim.y);
+      ctx.lineTo(sim.x + (dx / d) * 80, sim.y + (dy / d) * 80);
+      ctx.stroke();
+    } else {
+      circ(ctx, at.x, at.y, kind === "laser" ? LASER_R : 0.6);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   if (f.inset) holeArrow(ctx, f);
 }
 
@@ -233,6 +319,32 @@ function drawFx(ctx: Ctx, fx: Fx[], t: number, ground: boolean) {
   for (const e of fx) {
     const age = t - e.t;
     const r = rng(e.seed);
+    if (e.kind === "boom") {
+      // A flash and a ring of debris.
+      const life = 0.6;
+      if (age > life || !ground) continue;
+      const k = age / life;
+      ctx.globalAlpha = 1 - k;
+      circ(ctx, e.x, e.y, (e.color === "big" ? LASER_R : 1.4) * (0.5 + k));
+      ctx.fillStyle = k < 0.25 ? "#fff2c4" : "#ff8a3d";
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      continue;
+    }
+    if (e.kind === "rail") {
+      const life = 0.5;
+      if (age > life || ground) continue;
+      const k = age / life;
+      ctx.globalAlpha = 1 - k;
+      ctx.strokeStyle = "#7df9ff";
+      ctx.lineWidth = 0.5 * (1 - k) + 0.1;
+      ctx.beginPath();
+      ctx.moveTo(e.x, e.y);
+      ctx.lineTo(e.x2, e.y2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      continue;
+    }
     const onGround = e.kind === "ring" || e.kind === "splash" || e.kind === "puff";
     if (onGround !== ground) continue;
     if (e.kind === "ring" || e.kind === "splash") {
@@ -269,7 +381,7 @@ export function still(c: Course, width: number): HTMLCanvasElement {
   el.height = Math.round(c.h * s);
   drawFrame(el.getContext("2d")!, {
     c,
-    sim: { x: c.tee.x, y: c.tee.y, z: 0, mode: "aim", modeT: 0, cupScale: 1, boxes: c.boxes.map(() => false) } as Sim,
+    sim: newSim(c),
     cam: { x: c.w / 2, y: c.h / 2, s, ox: el.width / 2, oy: el.height / 2 },
     dpr: 1,
     t: 0.5,

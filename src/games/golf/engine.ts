@@ -79,6 +79,7 @@ export type Course = {
   wells: Well[];
   lamps: Vec[];
   boxes: Vec[]; // mystery boxes: roll through one for a random power-up
+  mines?: Vec[]; // landmines: roll over one and it throws the ball
 };
 
 export const BALL_R = 0.38;
@@ -88,15 +89,25 @@ export const GRAVITY = 30;
 export const DT = 1 / 240;
 export const MAX_STROKES = 10;
 
-export type Power = "rocket" | "ghost" | "magnet" | "brake" | "mulligan" | "bigcup" | "jump" | "bouncy";
-export const POWERS: Power[] = ["rocket", "ghost", "magnet", "brake", "mulligan", "bigcup", "jump", "bouncy"];
+// The first eight are ours; the rest are Super Battle Golf's items, made to work on a ball on a board.
+// Air Horn, Flash Camera and Thunderstorm only make sense against other players, so they come with
+// multiplayer.
+export type Power =
+  | "rocket" | "ghost" | "magnet" | "brake" | "mulligan" | "bigcup" | "jump" | "bouncy"
+  | "spring" | "cart" | "jumbo" | "smoke" | "laser" | "mine" | "railgun";
+export const POWERS: Power[] = ["rocket", "ghost", "magnet", "brake", "mulligan", "bigcup", "jump", "bouncy", "spring", "cart", "jumbo", "smoke", "laser", "mine", "railgun"];
 export const BAG_SIZE = 3;
-// Instant power-ups happen when tapped; the rest are armed for the next shot.
+// Instant power-ups happen when tapped; targeted ones need a spot (or a direction) picked first; the
+// rest are armed for the next shot.
 export const INSTANT: Power[] = ["mulligan", "bigcup"];
+export const TARGETED: Power[] = ["laser", "mine", "railgun"];
+export const JUMBO = 2.2; // how much bigger a Jumbo Burger makes the ball
 
 export type Ev =
   | { type: "hit" | "bounce" | "bump" | "splash" | "sink" | "launch" | "land" | "warp" | "lip" | "stop"; x: number; y: number; power: number }
-  | { type: "box"; x: number; y: number; power: number; item: Power };
+  | { type: "box"; x: number; y: number; power: number; item: Power }
+  | { type: "boom" | "smash" | "mine"; x: number; y: number; power: number }
+  | { type: "rail"; x: number; y: number; x2: number; y2: number; power: number };
 
 type Seg = { a: Vec; b: Vec; r: number; h: number; bounce: number; rim: boolean };
 export type World = { course: Course; segs: Seg[]; cells: Map<number, Seg[]> };
@@ -131,6 +142,11 @@ export type Sim = {
   onRamp: boolean;
   ramp: Extract<Zone, { kind: "ramp" }> | null;
   lipT: number;
+  r: number; // the ball's radius: bigger after a Jumbo Burger
+  cartT: number; // seconds left of a Golf Cart's full speed
+  gone: boolean[]; // bumpers blown up
+  mines: { x: number; y: number; live: boolean }[];
+  strikes: { x: number; y: number; t: number }[]; // Orbital Lasers on their way
   outGround: Ground | null;
   history: Snapshot[];
   events: Ev[];
@@ -286,6 +302,11 @@ export function newSim(course: Course, seed = 53): Sim {
     onRamp: false,
     ramp: null,
     lipT: 0,
+    r: BALL_R,
+    cartT: 0,
+    gone: course.bumpers.map(() => false),
+    mines: (course.mines ?? []).map((m) => ({ ...m, live: true })),
+    strikes: [],
     outGround: null,
     history: [],
     events: [],
@@ -303,6 +324,13 @@ export function shoot(sim: Sim, angle: number, power: number) {
   sim.vy = Math.sin(angle) * speed;
   sim.shot = sim.armed;
   sim.armed = null;
+  // Spring Boots: up and over everything. Golf Cart: no slowing down for a moment. Jumbo: a big ball.
+  if (sim.shot === "spring") {
+    sim.vz = 6 + power * 8;
+    sim.z = 0.02;
+  }
+  if (sim.shot === "cart") sim.cartT = 1.6;
+  if (sim.shot === "jumbo") sim.r = BALL_R * JUMBO;
   sim.strokes++;
   sim.rest = { x: sim.x, y: sim.y };
   setMode(sim, "roll");
@@ -313,7 +341,7 @@ export function shoot(sim: Sim, angle: number, power: number) {
 export function activate(sim: Sim, i: number) {
   const p = sim.bag[i];
   if (!p) return;
-  if (sim.mode !== "aim") return;
+  if (sim.mode !== "aim" || TARGETED.includes(p)) return;
   if (p === "mulligan") {
     const last = sim.history.pop();
     if (!last) return;
@@ -330,7 +358,42 @@ export function activate(sim: Sim, i: number) {
   }
 }
 
-// The brake: stops the ball dead, once, during a shot it was armed for.
+export const LASER_R = 3;
+
+// Thrown away from a point, up into the air: a mine going off, or a laser landing close.
+function blast(sim: Sim, x: number, y: number, speed: number) {
+  const dx = sim.x - x, dy = sim.y - y, d = Math.hypot(dx, dy) || 1;
+  const a = d < 0.05 ? sim.seed : Math.atan2(dy, dx);
+  sim.vx = (d < 0.05 ? Math.cos(a) : dx / d) * speed;
+  sim.vy = (d < 0.05 ? Math.sin(a) : dy / d) * speed;
+  sim.vz = 8;
+  sim.z = 0.02;
+  if (sim.mode === "aim") setMode(sim, "roll");
+}
+
+// Targeted items: an Orbital Laser lands on a spot a moment later, a Landmine is dropped on one, and a
+// Rail Gun fires a line from the ball that takes out every bumper and mine along it.
+export function fireTargeted(sim: Sim, course: Course, i: number, at: Vec) {
+  const p = sim.bag[i];
+  if (!p || !TARGETED.includes(p) || sim.mode !== "aim") return;
+  sim.bag.splice(i, 1);
+  if (p === "laser") sim.strikes.push({ x: at.x, y: at.y, t: sim.t + 0.9 });
+  else if (p === "mine") sim.mines.push({ x: at.x, y: at.y, live: true });
+  else {
+    const dx = at.x - sim.x, dy = at.y - sim.y, d = Math.hypot(dx, dy) || 1;
+    const end = { x: sim.x + (dx / d) * 80, y: sim.y + (dy / d) * 80 };
+    course.bumpers.forEach((b, k) => {
+      const q = closest(b.at, sim, end);
+      if (Math.hypot(q.x - b.at.x, q.y - b.at.y) < b.r + 0.4) sim.gone[k] = true;
+    });
+    for (const m of sim.mines) {
+      const q = closest(m, sim, end);
+      if (Math.hypot(q.x - m.x, q.y - m.y) < 0.8) m.live = false;
+    }
+    sim.events.push({ type: "rail", x: sim.x, y: sim.y, x2: end.x, y2: end.y, power: 1 });
+  }
+}
+
 // Jump: a hop mid-roll, high enough to clear walls, hedges and water. Once per shot it's armed for.
 export function hop(sim: Sim) {
   if (sim.mode !== "roll" || sim.shot !== "jump" || sim.z > 0) return;
@@ -340,6 +403,7 @@ export function hop(sim: Sim) {
   sim.events.push({ type: "launch", x: sim.x, y: sim.y, power: 0.6 });
 }
 
+// The brake: stops the ball dead, once, during a shot it was armed for.
 export function brake(sim: Sim) {
   if (sim.mode !== "roll" || sim.shot !== "brake" || sim.z > 0) return;
   sim.vx = sim.vy = 0;
@@ -357,7 +421,7 @@ function collide(sim: Sim, a: Vec, b: Vec, r: number, bounce: number, vs?: Vec):
   const q = closest(sim, a, b);
   let dx = sim.x - q.x, dy = sim.y - q.y;
   const d = Math.hypot(dx, dy);
-  const R = r + BALL_R;
+  const R = r + sim.r;
   if (d >= R) return 0;
   if (d < 1e-6) {
     // Dead on the line: push out along its normal.
@@ -381,6 +445,8 @@ function collide(sim: Sim, a: Vec, b: Vec, r: number, bounce: number, vs?: Vec):
 
 function hazard(sim: Sim, g: Ground) {
   sim.outGround = g;
+  sim.r = BALL_R;
+  sim.cartT = 0;
   sim.strokes++;
   sim.vx = sim.vy = sim.vz = 0;
   setMode(sim, "out");
@@ -404,6 +470,18 @@ export function step(sim: Sim, world: World, dt = DT) {
     }
     return;
   }
+
+  // Orbital Lasers landing, whether the ball's moving or not.
+  for (const st of sim.strikes)
+    if (sim.t >= st.t) {
+      c.bumpers.forEach((b, i) => {
+        if (Math.hypot(b.at.x - st.x, b.at.y - st.y) < LASER_R + b.r) sim.gone[i] = true;
+      });
+      for (const m of sim.mines) if (Math.hypot(m.x - st.x, m.y - st.y) < LASER_R) m.live = false;
+      if (Math.hypot(sim.x - st.x, sim.y - st.y) < LASER_R + 1) blast(sim, st.x, st.y, 24);
+      sim.events.push({ type: "boom", x: st.x, y: st.y, power: 1 });
+    }
+  sim.strikes = sim.strikes.filter((st) => sim.t < st.t);
 
   const ghost = sim.shot === "ghost";
   // Moving obstacles push the ball even when it's sitting still.
@@ -496,7 +574,8 @@ export function step(sim: Sim, world: World, dt = DT) {
     sim.vx += ax * dt;
     sim.vy += ay * dt;
     // Rolling resistance acts on the ball's speed relative to the ground under it.
-    const decel = DECEL[g];
+    const decel = sim.cartT > 0 ? 0 : DECEL[g];
+    sim.cartT = Math.max(0, sim.cartT - dt);
     const rx = sim.vx - svx, ry = sim.vy - svy;
     const rs = Math.hypot(rx, ry);
     if (rs > 0) {
@@ -509,6 +588,7 @@ export function step(sim: Sim, world: World, dt = DT) {
       sim.vx = sim.vy = 0;
       sim.rest = { x: sim.x, y: sim.y };
       sim.shot = null;
+      sim.r = BALL_R;
       setMode(sim, "aim");
       return;
     }
@@ -540,12 +620,18 @@ export function step(sim: Sim, world: World, dt = DT) {
     hit = Math.max(hit, collide(sim, s.a, s.b, s.r, sim.shot === "bouncy" && !s.rim ? 1.35 : sim.shot === "bouncy" ? 1.15 : s.bounce));
   }
   if (hit > 1) sim.events.push({ type: "bounce", x: sim.x, y: sim.y, power: Math.min(1, hit / MAX_SPEED) });
-  for (const b of c.bumpers) {
-    if (sim.z > 0.8) continue;
+  c.bumpers.forEach((b, i) => {
+    if (sim.z > 0.8 || sim.gone[i] || sim.shot === "smoke") return;
     const dx = sim.x - b.at.x, dy = sim.y - b.at.y;
     const d = Math.hypot(dx, dy);
-    const R = b.r + BALL_R;
-    if (d < R && d > 0) {
+    const R = b.r + sim.r;
+    if (d < R && d > 0 && sim.shot === "jumbo") {
+      // Too big to bounce: it flattens the bumper and barely slows down.
+      sim.gone[i] = true;
+      sim.vx *= 0.85;
+      sim.vy *= 0.85;
+      sim.events.push({ type: "smash", x: b.at.x, y: b.at.y, power: 1 });
+    } else if (d < R && d > 0) {
       const nx = dx / d, ny = dy / d;
       sim.x = b.at.x + nx * R;
       sim.y = b.at.y + ny * R;
@@ -559,12 +645,21 @@ export function step(sim: Sim, world: World, dt = DT) {
       sim.vy += ny * kick;
       sim.events.push({ type: "bump", x: b.at.x, y: b.at.y, power: 1 });
     }
+  });
+
+  // Landmines.
+  for (const m of sim.mines) {
+    if (!m.live || sim.z > 0.5 || sim.shot === "smoke" || Math.hypot(sim.x - m.x, sim.y - m.y) > sim.r + 0.55) continue;
+    m.live = false;
+    blast(sim, m.x, m.y, 20);
+    sim.events.push({ type: "mine", x: m.x, y: m.y, power: 1 });
   }
+
   for (const pr of c.props) {
     if (!pr.solid || pr.h <= sim.z || ghost) continue;
     const dx = sim.x - pr.at.x, dy = sim.y - pr.at.y;
     const d = Math.hypot(dx, dy);
-    const R = pr.r + BALL_R;
+    const R = pr.r + sim.r;
     if (d < R && d > 0) {
       const nx = dx / d, ny = dy / d;
       sim.x = pr.at.x + nx * R;
@@ -631,7 +726,7 @@ export function step(sim: Sim, world: World, dt = DT) {
     sim.vx += (dx / d) * 6 * dt;
     sim.vy += (dy / d) * 6 * dt;
   }
-  if (sim.z < 0.35 && d < cupR - BALL_R * 0.45) {
+  if (sim.z < 0.35 && d < cupR - sim.r * 0.45 && sim.r <= BALL_R) {
     const limit = sim.cupScale > 1 ? 16 : 11;
     if (speed < limit || (d < cupR * 0.45 && speed < limit * 1.35)) {
       sim.vx = sim.vy = sim.vz = 0;

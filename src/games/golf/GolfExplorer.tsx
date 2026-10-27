@@ -4,6 +4,16 @@ import {
   ArrowFatLinesUpIcon,
   ArrowsOutIcon,
   BasketballIcon,
+  BombIcon,
+  CarProfileIcon,
+  CloudIcon,
+  CornersInIcon,
+  CornersOutIcon,
+  CrosshairIcon,
+  HamburgerIcon,
+  LightningIcon,
+  SneakerMoveIcon,
+  XIcon,
   CaretLeftIcon,
   ClockCounterClockwiseIcon,
   GhostIcon,
@@ -15,27 +25,40 @@ import {
   type Icon,
 } from "@phosphor-icons/react";
 import * as sound from "./audio";
-import { BAG_SIZE, DT, INSTANT, MAX_STROKES, activate, brake, compile, groundAt, hop, newSim, preview, scoreName, shoot, step, type Course, type Power, type Sim } from "./engine";
+import { BAG_SIZE, DT, INSTANT, MAX_STROKES, TARGETED, activate, brake, compile, groundAt, hop, newSim, preview, scoreName, shoot, step, fireTargeted, type Course, type Power, type Sim } from "./engine";
+import { BATTLE_GROUNDS } from "./battle";
 import { BUMPER_PLAINS } from "./plains";
 import { drawFrame, still, type Camera, type Fx } from "./toy";
 
-// Golf, one hand-made course: Bumper Plains, six holes. Single player, no server.
+// Golf, made by hand: Bumper Plains (six short holes, bumpers everywhere) and Battle Grounds (three big
+// holes after Super Battle Golf). Single player, no server.
 
-const POWER_UI: Record<Power, { name: string; icon: Icon }> = {
-  rocket: { name: "Rocket", icon: RocketLaunchIcon },
-  ghost: { name: "Ghost", icon: GhostIcon },
-  magnet: { name: "Magnet", icon: MagnetIcon },
-  brake: { name: "Brake", icon: HandPalmIcon },
-  mulligan: { name: "Mulligan", icon: ClockCounterClockwiseIcon },
-  bigcup: { name: "Big cup", icon: ArrowsOutIcon },
-  jump: { name: "Jump", icon: ArrowFatLinesUpIcon },
-  bouncy: { name: "Bouncy", icon: BasketballIcon },
+const POWER_UI: Record<Power, { name: string; short: string; icon: Icon }> = {
+  rocket: { name: "Rocket Driver", short: "Driver", icon: RocketLaunchIcon },
+  ghost: { name: "Ghost", short: "Ghost", icon: GhostIcon },
+  magnet: { name: "Magnet", short: "Magnet", icon: MagnetIcon },
+  brake: { name: "Brake", short: "Brake", icon: HandPalmIcon },
+  mulligan: { name: "Mulligan", short: "Mulligan", icon: ClockCounterClockwiseIcon },
+  bigcup: { name: "Big cup", short: "Big cup", icon: ArrowsOutIcon },
+  jump: { name: "Jump", short: "Jump", icon: ArrowFatLinesUpIcon },
+  bouncy: { name: "Bouncy", short: "Bouncy", icon: BasketballIcon },
+  spring: { name: "Spring Boots", short: "Spring", icon: SneakerMoveIcon },
+  cart: { name: "Golf Cart", short: "Cart", icon: CarProfileIcon },
+  jumbo: { name: "Jumbo Burger", short: "Jumbo", icon: HamburgerIcon },
+  smoke: { name: "Smoke Bomb", short: "Smoke", icon: CloudIcon },
+  laser: { name: "Orbital Laser", short: "Laser", icon: CrosshairIcon },
+  mine: { name: "Landmine", short: "Mine", icon: BombIcon },
+  railgun: { name: "Rail Gun", short: "Rail Gun", icon: LightningIcon },
 };
+// What to do with a targeted item, said on the chip while you pick.
+const TARGET_HINT: Partial<Record<Power, string>> = { laser: "Tap where to strike", mine: "Tap where to drop it", railgun: "Tap which way to fire" };
 
-const COURSE = BUMPER_PLAINS;
-const PAR = COURSE.reduce((a, c) => a + c.par, 0);
+const COURSES = [
+  { name: "Bumper Plains", holes: BUMPER_PLAINS },
+  { name: "Battle Grounds", holes: BATTLE_GROUNDS },
+];
 
-type Round = { start: number; index: number; scores: number[]; attempt: number };
+type Round = { course: number; start: number; index: number; scores: number[]; attempt: number };
 
 export function GolfExplorer() {
   const [round, setRound] = useState<Round | null>(null);
@@ -45,46 +68,54 @@ export function GolfExplorer() {
     sound.setMuted(!muted);
     setMuted(!muted);
   };
-  const play = (index = 0) => setRound({ start: index, index, scores: [], attempt: 0 });
+  const play = (course: number, index = 0) => setRound({ course, start: index, index, scores: [], attempt: 0 });
 
-  if (round && round.scores.length === COURSE.length - round.start) return <Scorecard round={round} onHome={() => setRound(null)} />;
-  if (round)
+  if (round) {
+    const { name, holes } = COURSES[round.course];
+    if (round.scores.length === holes.length - round.start) return <Scorecard name={name} holes={holes} round={round} onHome={() => setRound(null)} />;
     return (
       <Play
-        key={`${round.index}-${round.attempt}`}
-        course={COURSE[round.index]}
+        key={`${round.course}-${round.index}-${round.attempt}`}
+        holes={holes}
+        course={holes[round.index]}
         number={round.index + 1}
         round={round}
         onBack={() => setRound(null)}
-        onDone={(strokes) => setRound({ ...round, scores: [...round.scores, strokes], index: Math.min(round.index + 1, COURSE.length - 1), attempt: 0 })}
+        onDone={(strokes) => setRound({ ...round, scores: [...round.scores, strokes], index: Math.min(round.index + 1, holes.length - 1), attempt: 0 })}
         onAgain={() => setRound({ ...round, attempt: round.attempt + 1 })}
       />
     );
+  }
   return (
     <div className="g-menu">
       <header className="g-menu-head">
-        <h1 className="g-display g-title-lg">Bumper Plains</h1>
+        <h1 className="g-display g-title-lg">Golf</h1>
         <button type="button" className="g-icon-btn" onClick={toggleMute} aria-label={muted ? "Sound on" : "Sound off"}>
           {muted ? <SpeakerSlashIcon size={22} weight="fill" /> : <SpeakerHighIcon size={22} weight="fill" />}
         </button>
       </header>
-      <button type="button" className="g-btn g-btn-big g-btn-primary g-play-all" onClick={() => play()}>
-        Play {COURSE.length} holes · Par {PAR}
-      </button>
-      <ol className="g-holes">
-        {COURSE.map((c, i) => (
-          <li key={c.id}>
-            <button type="button" className="g-hole-row" onClick={() => play(i)}>
-              <span className="g-display g-hole-num">{i + 1}</span>
-              <Thumb c={c} />
-              <span className="g-hole-text">
-                <span className="g-display g-card-name">{c.name}</span>
-                <span className="g-footnote">Par {c.par}</span>
-              </span>
-            </button>
-          </li>
-        ))}
-      </ol>
+      {COURSES.map((co, ci) => (
+        <section key={co.name} className="g-section">
+          <h2 className="g-display g-heading">{co.name}</h2>
+          <button type="button" className="g-btn g-btn-big g-btn-primary g-play-all" onClick={() => play(ci)}>
+            Play {co.holes.length} holes · Par {co.holes.reduce((a, c) => a + c.par, 0)}
+          </button>
+          <ol className="g-holes">
+            {co.holes.map((c, i) => (
+              <li key={c.id}>
+                <button type="button" className="g-hole-row" onClick={() => play(ci, i)}>
+                  <span className="g-display g-hole-num">{i + 1}</span>
+                  <Thumb c={c} />
+                  <span className="g-hole-text">
+                    <span className="g-display g-card-name">{c.name}</span>
+                    <span className="g-footnote">Par {c.par}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </section>
+      ))}
     </div>
   );
 }
@@ -102,16 +133,22 @@ function Thumb({ c }: { c: Course }) {
 
 type Hud = { strokes: number; mode: Sim["mode"]; bag: Power[]; armed: Power | null; shot: Power | null };
 
-function Play({ course, number, round, onBack, onDone, onAgain }: { course: Course; number: number; round: Round; onBack: () => void; onDone: (strokes: number) => void; onAgain: () => void }) {
+function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes: Course[]; course: Course; number: number; round: Round; onBack: () => void; onDone: (strokes: number) => void; onAgain: () => void }) {
   const wrap = useRef<HTMLDivElement>(null);
   const cv = useRef<HTMLCanvasElement>(null);
   const world = useMemo(() => compile(course), [course]);
   const sim = useRef<Sim>(newSim(course, number));
   const cam = useRef<Camera>({ x: course.w / 2, y: course.h / 2, s: 10, ox: 0, oy: 0 });
-  const view = useRef({ w: 0, h: 0, fit: 10, panned: 0, zoomed: false, top: 84 });
+  const view = useRef({ w: 0, h: 0, fit: 10, play: 16, big: false, started: false, panned: 0, zoomed: false, top: 84 });
   const aim = useRef<{ angle: number; power: number; line: { x: number; y: number }[]; from?: { x: number; y: number }; to?: { x: number; y: number } } | null>(null);
   const fx = useRef<Fx[]>([]);
   const hits = useRef(new Map<number, number>());
+  // A targeted item waiting for its spot: which slot, and where the finger is.
+  const [target, setTarget] = useState<{ i: number; kind: Power } | null>(null);
+  const targetRef = useRef<{ i: number; kind: Power } | null>(null);
+  targetRef.current = target;
+  const targetAt = useRef<{ x: number; y: number } | null>(null);
+  const [overview, setOverview] = useState(false);
   const trail = useRef<{ x: number; y: number }[]>([]);
   const [hud, setHud] = useState<Hud>({ strokes: 0, mode: "aim", bag: [], armed: null, shot: null });
   const [toast, setToast] = useState<{ text: string; key: number } | null>(null);
@@ -148,6 +185,19 @@ function Play({ course, number, round, onBack, onDone, onAgain }: { course: Cour
       v.fit = Math.min((r.width - 24) / (bounds.x1 - bounds.x0), (r.height - top - PAD_BOTTOM) / (bounds.y1 - bounds.y0));
       cam.current.ox = r.width / 2;
       cam.current.oy = top + (r.height - top - PAD_BOTTOM) / 2;
+      // Big holes start close on the ball and follow it; small ones show the whole board.
+      v.play = Math.max(v.fit, r.width / 24);
+      v.big = v.fit < v.play * 0.8;
+      if (!v.started) {
+        v.started = true;
+        if (v.big) {
+          v.zoomed = true;
+          cam.current.s = v.play;
+          cam.current.x = sim.current.x;
+          cam.current.y = sim.current.y - 4;
+          setOverview(false);
+        }
+      }
       if (!v.zoomed) {
         cam.current.s = v.fit;
         cam.current.x = (bounds.x0 + bounds.x1) / 2;
@@ -220,6 +270,20 @@ function Play({ course, number, round, onBack, onDone, onAgain }: { course: Cour
             sound.knock(0.2);
             say("Lipped out");
             break;
+          case "boom":
+            sound.splash();
+            fx.current.push({ kind: "boom", x: e.x, y: e.y, t, seed, color: "big" });
+            break;
+          case "mine":
+          case "smash":
+            sound.land(1);
+            fx.current.push({ kind: "boom", x: e.x, y: e.y, t, seed });
+            if (e.type === "mine") say("Boom");
+            break;
+          case "rail":
+            sound.whoosh();
+            fx.current.push({ kind: "rail", x: e.x, y: e.y, x2: e.x2, y2: e.y2, t, seed });
+            break;
           case "stop":
             sound.land(0.4);
             break;
@@ -239,9 +303,12 @@ function Play({ course, number, round, onBack, onDone, onAgain }: { course: Cour
       // The whole hole stays on screen; zoomed in, the camera follows the ball.
       const c = cam.current, v = view.current;
       if (v.zoomed && now - v.panned > 1500) {
+        // Ahead of the ball: toward the cup while aiming, the way it's going while it rolls.
+        const dx = course.cup.x - s.x, dy = course.cup.y - s.y, d = Math.hypot(dx, dy) || 1;
+        const lean = s.mode === "roll" ? { x: s.vx * 0.35, y: s.vy * 0.35 } : { x: (dx / d) * Math.min(7, d * 0.3), y: (dy / d) * Math.min(7, d * 0.3) };
         const k = 1 - Math.exp(-dt * 3);
-        c.x += (s.x - c.x) * k;
-        c.y += (s.y - c.y) * k;
+        c.x += (s.x + lean.x - c.x) * k;
+        c.y += (s.y + lean.y - c.y) * k;
       }
       drawFrame(ctx, {
         c: course,
@@ -253,6 +320,7 @@ function Play({ course, number, round, onBack, onDone, onAgain }: { course: Cour
         fx: fx.current,
         hits: hits.current,
         aim: aim.current,
+        target: targetRef.current && (targetRef.current.kind === "laser" || targetRef.current.kind === "mine" || targetRef.current.kind === "railgun") ? { kind: targetRef.current.kind, at: targetAt.current } : null,
         inset: v.zoomed ? { top: v.top, bottom: PAD_BOTTOM } : undefined,
       });
 
@@ -272,7 +340,7 @@ function Play({ course, number, round, onBack, onDone, onAgain }: { course: Cour
 
   // --- Touch: pull back anywhere to aim; two fingers to zoom in and look around ---
   const pointers = useRef(new Map<number, { x: number; y: number }>());
-  const gesture = useRef<{ kind: "aim" | "pan" | "pinch"; start?: { x: number; y: number }; d0?: number; s0?: number; mid?: { x: number; y: number } } | null>(null);
+  const gesture = useRef<{ kind: "aim" | "pan" | "pinch" | "target"; start?: { x: number; y: number }; d0?: number; s0?: number; mid?: { x: number; y: number } } | null>(null);
   const local = (e: { clientX: number; clientY: number }) => {
     const r = cv.current!.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
@@ -281,7 +349,7 @@ function Play({ course, number, round, onBack, onDone, onAgain }: { course: Cour
   const maxPull = () => Math.min(190, view.current.w * 0.46);
   const setZoom = (s: number) => {
     const v = view.current;
-    cam.current.s = Math.max(v.fit, Math.min(v.fit * 3, s));
+    cam.current.s = Math.max(v.fit, Math.min(Math.max(v.fit * 3, v.play * 1.5), s));
     v.zoomed = cam.current.s > v.fit * 1.02;
     if (!v.zoomed) {
       cam.current.x = (bounds.x0 + bounds.x1) / 2;
@@ -304,6 +372,11 @@ function Play({ course, number, round, onBack, onDone, onAgain }: { course: Cour
     }
     if (s.mode === "roll" && s.shot === "brake") return brake(s);
     if (s.mode === "roll" && s.shot === "jump") return hop(s);
+    if (targetRef.current && s.mode === "aim") {
+      gesture.current = { kind: "target" };
+      targetAt.current = toWorld(p.x, p.y);
+      return;
+    }
     if (e.button === 2 || e.shiftKey || s.mode !== "aim") gesture.current = { kind: "pan" };
     else gesture.current = { kind: "aim", start: p };
   };
@@ -315,6 +388,10 @@ function Play({ course, number, round, onBack, onDone, onAgain }: { course: Cour
     const g = gesture.current;
     if (!g) return;
     const s = sim.current;
+    if (g.kind === "target") {
+      targetAt.current = toWorld(p.x, p.y);
+      return;
+    }
     if (g.kind === "aim" && g.start) {
       const dx = g.start.x - p.x, dy = g.start.y - p.y;
       const pull = Math.hypot(dx, dy);
@@ -348,6 +425,12 @@ function Play({ course, number, round, onBack, onDone, onAgain }: { course: Cour
       view.current.panned = 0;
     }
     if (g?.kind === "aim") aim.current = null;
+    if (g?.kind === "target" && targetRef.current && targetAt.current) {
+      fireTargeted(sim.current, course, targetRef.current.i, targetAt.current);
+      if (targetRef.current.kind === "mine") sound.knock(0.5);
+      targetAt.current = null;
+      setTarget(null);
+    }
     if (pointers.current.size === 0) gesture.current = null;
     else if (g?.kind === "pinch") gesture.current = { kind: "pan" };
   };
@@ -371,11 +454,15 @@ function Play({ course, number, round, onBack, onDone, onAgain }: { course: Cour
     const s = sim.current;
     const p = s.bag[i];
     activate(s, i);
+    if (p && TARGETED.includes(p)) {
+      setTarget(target?.i === i ? null : { i, kind: p });
+      return;
+    }
     if (p && INSTANT.includes(p)) sound.pickup();
   };
-  const totalPar = COURSE.slice(round.start, round.index).reduce((a, c) => a + c.par, 0);
+  const totalPar = holes.slice(round.start, round.index).reduce((a, c) => a + c.par, 0);
   const vsPar = round.scores.reduce((a, b) => a + b, 0) - totalPar;
-  const last = number === COURSE.length;
+  const last = number === holes.length;
 
   return (
     <div ref={wrap} className="g-play">
@@ -416,11 +503,23 @@ function Play({ course, number, round, onBack, onDone, onAgain }: { course: Cour
             return (
               <button key={i} type="button" className={`g-slot ${p ? "" : "g-slot-empty"}`} disabled={!p || hud.mode !== "aim"} onClick={() => tapPower(i)} aria-label={p ? `Use ${POWER_UI[p].name}` : "Empty power-up slot"}>
                 {IconC && <IconC size={22} weight="fill" />}
-                {p && <span>{POWER_UI[p].name}</span>}
+                {p && <span>{POWER_UI[p].short}</span>}
               </button>
             );
           })}
-          {hud.armed && (
+          {target && (
+            <div className="g-armed g-targeting">
+              {(() => {
+                const A = POWER_UI[target.kind].icon;
+                return <A size={18} weight="fill" />;
+              })()}
+              {TARGET_HINT[target.kind]}
+              <button type="button" className="g-chip-x" onClick={() => setTarget(null)} aria-label="Cancel">
+                <XIcon size={14} weight="bold" />
+              </button>
+            </div>
+          )}
+          {!target && hud.armed && (
             <div className="g-armed">
               {(() => {
                 const A = POWER_UI[hud.armed].icon;
@@ -437,6 +536,27 @@ function Play({ course, number, round, onBack, onDone, onAgain }: { course: Cour
           )}
         </div>
         <div className="g-dock-right">
+          {view.current.big && (
+            <button
+              type="button"
+              className="g-icon-btn"
+              onClick={() => {
+                const v = view.current;
+                if (overview) {
+                  setOverview(false);
+                  v.zoomed = true;
+                  cam.current.s = v.play;
+                  v.panned = 0;
+                } else {
+                  setOverview(true);
+                  setZoom(v.fit);
+                }
+              }}
+              aria-label={overview ? "Follow the ball" : "See the whole hole"}
+            >
+              {overview ? <CornersInIcon size={22} weight="bold" /> : <CornersOutIcon size={22} weight="bold" />}
+            </button>
+          )}
           <button type="button" className="g-icon-btn" onClick={onAgain} aria-label="Start the hole again">
             <ArrowCounterClockwiseIcon size={22} weight="bold" />
           </button>
@@ -490,15 +610,15 @@ function Result({ title, sub, tone, primary, onPrimary, onSecondary }: { title: 
   );
 }
 
-function Scorecard({ round, onHome }: { round: Round; onHome: () => void }) {
-  const holes = COURSE.slice(round.start);
+function Scorecard({ name, holes: all, round, onHome }: { name: string; holes: Course[]; round: Round; onHome: () => void }) {
+  const holes = all.slice(round.start);
   const total = round.scores.reduce((a, b) => a + b, 0);
   const par = holes.reduce((a, c) => a + c.par, 0);
   const diff = total - par;
   return (
     <div className="g-menu g-scorecard">
       <div>
-        <h1 className="g-display g-title-lg">Bumper Plains</h1>
+        <h1 className="g-display g-title-lg">{name}</h1>
         <div className="g-tiles g-tiles-left" aria-label={`${total} strokes`}>
           <div className="g-tile-row">
             {[...String(total)].map((ch, i) => (
