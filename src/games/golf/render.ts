@@ -6,8 +6,8 @@ import { bbox, centroid } from "./shapes";
 // pick from while we find the one: Flat (bright, white walls, hard little shadows), Ink (pastel with
 // dark outlines, like a sticker) and Mono (dark and minimal). The time of day is just a tint.
 //
-// Everything that doesn't move is drawn once into a world-sized layer; each frame draws the part of it
-// on screen, then the cup, flag, boxes and ball on top.
+// It's all simple shapes, so the course is drawn straight to the screen every frame (only what's in
+// view): sharp at any zoom, however big the hole.
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -32,6 +32,7 @@ type Look = {
   post: string;
   bridge: string;
   ramp: string;
+  boost: string;
   arrow: string;
   bed: string;
   tree: string | null;
@@ -58,6 +59,7 @@ const LOOKS: Record<Style, Look> = {
     post: "#ff6f59",
     bridge: "#d39a5a",
     ramp: "#ffcd4d",
+    boost: "#ff8a3d",
     arrow: "rgba(255,255,255,0.55)",
     bed: "#3f9147",
     tree: "#3b9046",
@@ -82,6 +84,7 @@ const LOOKS: Record<Style, Look> = {
     post: "#ff9580",
     bridge: "#f1c28d",
     ramp: "#ffd47a",
+    boost: "#ffab76",
     arrow: "rgba(38,51,58,0.35)",
     bed: "#a6d98c",
     tree: "#93d47f",
@@ -106,6 +109,7 @@ const LOOKS: Record<Style, Look> = {
     post: "#e8e2d4",
     bridge: "#3b4354",
     ramp: "#f2b84b",
+    boost: "#f2b84b",
     arrow: "rgba(232,226,212,0.3)",
     bed: "#1d222c",
     tree: null,
@@ -139,7 +143,7 @@ function circ(ctx: Ctx, x: number, y: number, r: number) {
   ctx.beginPath();
   ctx.arc(x, y, Math.max(0.001, r), 0, Math.PI * 2);
 }
-function arrow(ctx: Ctx, at: Vec, dir: Vec, size: number) {
+function chevron(ctx: Ctx, at: Vec, dir: Vec, size: number) {
   ctx.save();
   ctx.translate(at.x, at.y);
   ctx.rotate(Math.atan2(dir.y, dir.x));
@@ -151,24 +155,68 @@ function arrow(ctx: Ctx, at: Vec, dir: Vec, size: number) {
   ctx.restore();
 }
 
-// --- The course, drawn once ---
+// --- What's worth working out once per course ---
 
-export const MARGIN = 10;
-export type Layers = { ppu: number; style: Style; ground: HTMLCanvasElement };
+type Box = { x0: number; y0: number; x1: number; y1: number };
+type Prepared = {
+  greens: Vec[][];
+  islands: Vec[][];
+  trees: { at: Vec; r: number }[];
+  lines: { pts: Vec[]; closed: boolean; w: number; hedge: boolean; bb: Box }[];
+  arrows: Map<number, { at: Vec; dir: Vec }[]>; // per slope or mound zone
+  zoneBoxes: Box[];
+};
+const prepared = new WeakMap<Course, Prepared>();
+const grow = (b: Box, d: number): Box => ({ x0: b.x0 - d, y0: b.y0 - d, x1: b.x1 + d, y1: b.y1 + d });
+const meets = (a: Box, b: Box) => a.x0 <= b.x1 && a.x1 >= b.x0 && a.y0 <= b.y1 && a.y1 >= b.y0;
 
-function islandLoops(c: Course) {
-  return c.greens.filter((g, i) => c.greens.some((o, j) => j !== i && inPoly(g.poly[0], o.poly))).map((g) => g.poly);
+function prepare(c: Course): Prepared {
+  let p = prepared.get(c);
+  if (p) return p;
+  const greens = c.greens.map((g) => g.poly);
+  const islands = greens.filter((g, i) => greens.some((o, j) => j !== i && inPoly(g[0], o)));
+  const arrows = new Map<number, { at: Vec; dir: Vec }[]>();
+  c.zones.forEach((z, i) => {
+    if (z.kind === "slope") {
+      const bb = bbox(z.poly);
+      const list = [];
+      for (let x = bb.x0 + 1.2; x < bb.x1; x += 2.8)
+        for (let y = bb.y0 + 1.2; y < bb.y1; y += 2.8) {
+          const at = { x: x + (Math.round(y / 2.8) % 2) * 1.4, y };
+          if (inPoly(at, z.poly)) list.push({ at, dir: z.dir });
+        }
+      arrows.set(i, list);
+    } else if (z.kind === "mound") {
+      const list = [];
+      for (const [ring, n] of [[0.45, 6], [0.8, 10]] as const)
+        for (let k = 0; k < n; k++) {
+          const a = (k / n) * Math.PI * 2 + ring;
+          const at = { x: z.center.x + Math.cos(a) * z.radius * ring, y: z.center.y + Math.sin(a) * z.radius * ring };
+          if (greens.some((g) => inPoly(at, g))) list.push({ at, dir: { x: Math.cos(a) * Math.sign(z.strength), y: Math.sin(a) * Math.sign(z.strength) } });
+        }
+      arrows.set(i, list);
+    }
+  });
+  p = {
+    greens,
+    islands,
+    trees: c.props.filter((q) => q.kind === "tree").map((q) => ({ at: q.at, r: q.r })),
+    lines: [
+      ...greens.map((pts) => ({ pts, closed: true, w: 0, hedge: false, bb: bbox(pts) })),
+      ...c.walls.map((w) => ({ pts: w.pts, closed: !!w.closed, w: w.w, hedge: w.style === "hedge", bb: bbox(w.pts) })),
+    ],
+    arrows,
+    zoneBoxes: c.zones.map((z) => bbox(z.poly)),
+  };
+  prepared.set(c, p);
+  return p;
 }
 
-export function buildLayers(c: Course, ppu: number, style: Style = "flat"): Layers {
+// --- The course ---
+
+function drawCourse(ctx: Ctx, c: Course, style: Style, view: Box) {
   const L = LOOKS[style];
-  const el = document.createElement("canvas");
-  el.width = Math.ceil((c.w + MARGIN * 2) * ppu);
-  el.height = Math.ceil((c.h + MARGIN * 2) * ppu);
-  const ctx = el.getContext("2d")!;
-  ctx.setTransform(ppu, 0, 0, ppu, MARGIN * ppu, MARGIN * ppu);
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
+  const P = prepare(c);
   const inkW = 0.13;
   const outline = (w = inkW) => {
     if (!L.ink) return;
@@ -176,40 +224,37 @@ export function buildLayers(c: Course, ppu: number, style: Style = "flat"): Laye
     ctx.lineWidth = w;
     ctx.stroke();
   };
-
-  ctx.fillStyle = L.bg;
-  ctx.fillRect(-MARGIN, -MARGIN, c.w + MARGIN * 2, c.h + MARGIN * 2);
+  const near = (b: Box) => meets(grow(b, 3), view);
 
   // A few round trees around the outside.
   if (L.tree) {
-    const trees = c.props.filter((p, i) => p.kind === "tree" && i % L.treeEvery === 0);
+    const trees = P.trees.filter((t, i) => i % L.treeEvery === 0 && t.at.x > view.x0 - 4 && t.at.x < view.x1 + 4 && t.at.y > view.y0 - 4 && t.at.y < view.y1 + 4);
     if (L.shadow) {
       ctx.fillStyle = L.shadow;
-      for (const p of trees) {
-        circ(ctx, p.at.x + SHADOW.x * 2.5, p.at.y + SHADOW.y * 2.5, p.r);
+      for (const t of trees) {
+        circ(ctx, t.at.x + SHADOW.x * 2.5, t.at.y + SHADOW.y * 2.5, t.r);
         ctx.fill();
       }
     }
-    for (const p of trees) {
-      circ(ctx, p.at.x, p.at.y, p.r);
+    for (const t of trees) {
+      circ(ctx, t.at.x, t.at.y, t.r);
       ctx.fillStyle = L.tree;
       ctx.fill();
       outline();
     }
   }
 
-  const greens = c.greens.map((g) => g.poly);
-  // The course, and its walls' shadows falling on it.
-  loops(ctx, greens);
+  loops(ctx, P.greens);
   ctx.fillStyle = L.course;
   ctx.fill("evenodd");
-  for (const h of islandLoops(c)) {
+  for (const h of P.islands) {
     path(ctx, h);
     ctx.fillStyle = L.bed;
     ctx.fill();
   }
 
-  for (const z of c.zones) {
+  c.zones.forEach((z, i) => {
+    if (!near(P.zoneBoxes[i])) return;
     switch (z.kind) {
       case "sand":
         path(ctx, z.poly);
@@ -241,61 +286,35 @@ export function buildLayers(c: Course, ppu: number, style: Style = "flat"): Laye
         ctx.strokeStyle = "rgba(0,0,0,0.15)";
         ctx.lineWidth = 0.06;
         for (let t = 0.5; t < len; t += 0.5) {
-          const p = { x: a.x + ((b.x - a.x) / len) * t, y: a.y + ((b.y - a.y) / len) * t };
+          const q = { x: a.x + ((b.x - a.x) / len) * t, y: a.y + ((b.y - a.y) / len) * t };
           ctx.beginPath();
-          ctx.moveTo(p.x, p.y);
-          ctx.lineTo(p.x + d.x - a.x, p.y + d.y - a.y);
+          ctx.moveTo(q.x, q.y);
+          ctx.lineTo(q.x + d.x - a.x, q.y + d.y - a.y);
           ctx.stroke();
         }
         break;
       }
-      case "slope": {
-        // Just arrows, pointing downhill.
-        const bb = bbox(z.poly);
-        ctx.save();
-        path(ctx, z.poly);
-        ctx.clip();
+      case "slope":
+      case "mound":
         ctx.strokeStyle = L.arrow;
         ctx.lineWidth = 0.16;
-        for (let x = bb.x0 + 1.2; x < bb.x1; x += 2.6)
-          for (let y = bb.y0 + 1.2; y < bb.y1; y += 2.6) arrow(ctx, { x: x + (Math.round(y / 2.6) % 2) * 1.3, y }, z.dir, 0.7);
-        ctx.restore();
+        for (const ar of P.arrows.get(i) ?? []) chevron(ctx, ar.at, ar.dir, 0.7);
         break;
-      }
-      case "mound": {
-        // Rings: arrows pointing out from a hill, in toward a bowl.
-        ctx.save();
-        loops(ctx, greens);
-        ctx.clip("evenodd");
-        ctx.strokeStyle = L.arrow;
-        ctx.lineWidth = 0.12;
-        circ(ctx, z.center.x, z.center.y, z.radius * 0.85);
-        ctx.setLineDash([0.35, 0.45]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.lineWidth = 0.16;
-        for (let k = 0; k < 6; k++) {
-          const a = (k / 6) * Math.PI * 2 + 0.3;
-          const dir = { x: Math.cos(a) * Math.sign(z.strength), y: Math.sin(a) * Math.sign(z.strength) };
-          arrow(ctx, { x: z.center.x + Math.cos(a) * z.radius * 0.55, y: z.center.y + Math.sin(a) * z.radius * 0.55 }, dir, 0.6);
-        }
-        ctx.restore();
-        break;
-      }
-      case "ramp": {
+      case "ramp":
+      case "boost": {
         path(ctx, z.poly);
-        ctx.fillStyle = L.ramp;
+        ctx.fillStyle = z.kind === "ramp" ? L.ramp : L.boost;
         ctx.fill();
         outline(0.08);
-        ctx.strokeStyle = L.ink ?? "rgba(0,0,0,0.35)";
+        ctx.strokeStyle = L.ink ?? "rgba(255,255,255,0.85)";
         ctx.lineWidth = 0.2;
         const m = centroid(z.poly);
-        arrow(ctx, { x: m.x - z.dir.x * 0.4, y: m.y - z.dir.y * 0.4 }, z.dir, 0.9);
-        arrow(ctx, { x: m.x + z.dir.x * 0.4, y: m.y + z.dir.y * 0.4 }, z.dir, 0.9);
+        chevron(ctx, { x: m.x - z.dir.x * 0.45, y: m.y - z.dir.y * 0.45 }, z.dir, 0.9);
+        chevron(ctx, { x: m.x + z.dir.x * 0.45, y: m.y + z.dir.y * 0.45 }, z.dir, 0.9);
         break;
       }
     }
-  }
+  });
 
   // Tee mat.
   ctx.fillStyle = "rgba(0,0,0,0.08)";
@@ -304,16 +323,14 @@ export function buildLayers(c: Course, ppu: number, style: Style = "flat"): Laye
   ctx.fill();
 
   // Shadows, then walls, hedges and posts.
-  const lines: { pts: Vec[]; closed: boolean; w: number; color: string }[] = [
-    ...greens.map((pts) => ({ pts, closed: true, w: L.wallW, color: L.wall })),
-    ...c.walls.map((w) => ({ pts: w.pts, closed: !!w.closed, w: style === "mono" ? 0.4 : w.w, color: w.style === "hedge" ? L.hedge : L.wall })),
-  ];
+  const lines = P.lines.filter((l) => near(l.bb)).map((l) => ({ ...l, w: l.w || L.wallW, color: l.hedge ? L.hedge : L.wall }));
+  if (style === "mono") for (const l of lines) if (l.w > L.wallW) l.w = 0.4;
   if (L.shadow) {
     ctx.strokeStyle = L.shadow;
     ctx.fillStyle = L.shadow;
     for (const l of lines) {
       ctx.lineWidth = l.w;
-      path(ctx, l.pts.map((p) => ({ x: p.x + SHADOW.x, y: p.y + SHADOW.y })), l.closed);
+      path(ctx, l.pts.map((q) => ({ x: q.x + SHADOW.x, y: q.y + SHADOW.y })), l.closed);
       ctx.stroke();
     }
     for (const b of c.bumpers) {
@@ -345,7 +362,6 @@ export function buildLayers(c: Course, ppu: number, style: Style = "flat"): Laye
       ctx.fill();
     }
   }
-  return { ppu, style, ground: el };
 }
 
 // --- Frames ---
@@ -356,7 +372,7 @@ export type Fx = { kind: "ring" | "splash" | "puff" | "spark" | "confetti"; x: n
 export type Frame = {
   c: Course;
   sim: Sim;
-  layers: Layers;
+  style: Style;
   light: Light;
   cam: Camera;
   dpr: number;
@@ -364,11 +380,12 @@ export type Frame = {
   trail: Vec[];
   fx: Fx[];
   aim: { angle: number; power: number; line: Vec[]; from?: Vec; to?: Vec } | null;
+  map?: { x: number; y: number; w: number; h: number } | null; // the minimap, in screen points
 };
 
 export function drawFrame(ctx: Ctx, f: Frame) {
-  const { c, sim, layers, light, cam, dpr, t } = f;
-  const L = LOOKS[layers.style];
+  const { c, sim, cam, dpr, t, light, style } = f;
+  const L = LOOKS[style];
   const W = ctx.canvas.width, H = ctx.canvas.height;
   const T = () => ctx.setTransform(cam.s * dpr, 0, 0, cam.s * dpr, (cam.ox - cam.x * cam.s) * dpr, (cam.oy - cam.y * cam.s) * dpr);
 
@@ -378,15 +395,10 @@ export function drawFrame(ctx: Ctx, f: Frame) {
   ctx.fillStyle = L.bg;
   ctx.fillRect(0, 0, W, H);
   T();
-  // Only the part of the course layer that's on screen.
-  const vx0 = cam.x - cam.ox / cam.s, vy0 = cam.y - cam.oy / cam.s;
-  const vx1 = vx0 + W / dpr / cam.s, vy1 = vy0 + H / dpr / cam.s;
-  const k = layers.ground.width / (c.w + MARGIN * 2);
-  const x0 = Math.max(-MARGIN, vx0 - 1), y0 = Math.max(-MARGIN, vy0 - 1);
-  const x1 = Math.min(c.w + MARGIN, vx1 + 1), y1 = Math.min(c.h + MARGIN, vy1 + 1);
-  if (x1 > x0 && y1 > y0) ctx.drawImage(layers.ground, (x0 + MARGIN) * k, (y0 + MARGIN) * k, (x1 - x0) * k, (y1 - y0) * k, x0, y0, x1 - x0, y1 - y0);
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
+  const vx0 = cam.x - cam.ox / cam.s, vy0 = cam.y - cam.oy / cam.s;
+  drawCourse(ctx, c, style, { x0: vx0, y0: vy0, x1: vx0 + W / dpr / cam.s, y1: vy0 + H / dpr / cam.s });
   const ink = (w = 0.1) => {
     if (!L.ink) return;
     ctx.strokeStyle = L.ink;
@@ -405,7 +417,7 @@ export function drawFrame(ctx: Ctx, f: Frame) {
   // Mystery boxes: a square that bobs.
   c.boxes.forEach((b, i) => {
     if (sim.boxes[i]) return;
-    const s = 0.8 + Math.sin(t * 3 + i) * 0.05;
+    const s = 1.2 + Math.sin(t * 3 + i) * 0.06;
     ctx.save();
     ctx.translate(b.x, b.y);
     ctx.rotate(Math.sin(t * 1.2 + i) * 0.15);
@@ -423,14 +435,19 @@ export function drawFrame(ctx: Ctx, f: Frame) {
     ctx.restore();
   });
 
-  // The ball: in the air it grows and its shadow drops away.
+  // The ball: in the air it grows and its shadow drops away. Fast, it leaves a streak.
   const out = sim.mode === "out" ? Math.min(1, sim.modeT / 0.5) : 0;
   const sinking = sim.mode === "sunk" ? Math.min(1, sim.modeT / 0.25) : 0;
   if (f.trail.length > 1 && sim.mode === "roll") {
-    ctx.strokeStyle = layers.style === "mono" ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.35)";
-    ctx.lineWidth = BALL_R * 1.1;
-    path(ctx, f.trail, false);
-    ctx.stroke();
+    for (let i = 1; i < f.trail.length; i++) {
+      const k = i / f.trail.length;
+      ctx.strokeStyle = style === "mono" ? `rgba(255,255,255,${0.18 * k})` : `rgba(255,255,255,${0.5 * k})`;
+      ctx.lineWidth = BALL_R * 1.6 * k;
+      ctx.beginPath();
+      ctx.moveTo(f.trail[i - 1].x, f.trail[i - 1].y);
+      ctx.lineTo(f.trail[i].x, f.trail[i].y);
+      ctx.stroke();
+    }
   }
   if (sinking < 1 && out < 1) {
     const bx = sinking ? sim.x + (c.cup.x - sim.x) * sinking : sim.x;
@@ -448,9 +465,9 @@ export function drawFrame(ctx: Ctx, f: Frame) {
     ink(0.08);
   }
 
-  // The flag, flat on top: a pole and a pennant, gone once the ball's close.
-  const near = Math.hypot(sim.x - c.cup.x, sim.y - c.cup.y);
-  const flagA = sim.mode === "sunk" ? 0 : Math.max(0, Math.min(1, (near - 1.5) / 1.5));
+  // The flag: a pole and a pennant, gone once the ball's close.
+  const nearCup = Math.hypot(sim.x - c.cup.x, sim.y - c.cup.y);
+  const flagA = sim.mode === "sunk" ? 0 : Math.max(0, Math.min(1, (nearCup - 1.5) / 1.5));
   if (flagA > 0) {
     ctx.globalAlpha = flagA;
     const top = { x: c.cup.x, y: c.cup.y - 1.8 };
@@ -462,7 +479,7 @@ export function drawFrame(ctx: Ctx, f: Frame) {
       ctx.lineTo(top.x, top.y);
       ctx.stroke();
     }
-    ctx.strokeStyle = layers.style === "mono" ? L.wall : "#ffffff";
+    ctx.strokeStyle = style === "mono" ? L.wall : "#ffffff";
     ctx.lineWidth = 0.12;
     ctx.beginPath();
     ctx.moveTo(c.cup.x, c.cup.y);
@@ -484,8 +501,8 @@ export function drawFrame(ctx: Ctx, f: Frame) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.font = `800 ${Math.max(7, cam.s * 0.55)}px system-ui, sans-serif`;
-  ctx.fillStyle = L.ink ?? (layers.style === "mono" ? "#1d222c" : "#ffffff");
+  ctx.font = `800 ${Math.max(8, cam.s * 0.8)}px system-ui, sans-serif`;
+  ctx.fillStyle = L.ink ?? (style === "mono" ? "#1d222c" : "#ffffff");
   c.boxes.forEach((b, i) => {
     if (sim.boxes[i]) return;
     ctx.fillText("?", (b.x - cam.x) * cam.s + cam.ox, (b.y - cam.y) * cam.s + cam.oy + 1);
@@ -496,10 +513,12 @@ export function drawFrame(ctx: Ctx, f: Frame) {
   const warm = light.night < 0.5 ? Math.max(0, 1 - Math.abs(light.altitude) / 12) : 0;
   if (light.night > 0.02 || warm > 0.02) {
     ctx.globalCompositeOperation = "multiply";
-    ctx.fillStyle = light.night > 0.02 ? `rgba(70,84,150,${light.night * (layers.style === "mono" ? 0.25 : 0.4)})` : `rgba(255,190,130,${warm * 0.35})`;
+    ctx.fillStyle = light.night > 0.02 ? `rgba(70,84,150,${light.night * (style === "mono" ? 0.25 : 0.4)})` : `rgba(255,190,130,${warm * 0.35})`;
     ctx.fillRect(0, 0, W, H);
     ctx.globalCompositeOperation = "source-over";
   }
+
+  if (f.map) minimap(ctx, f, L);
 
   // The aim: where the finger went down, and a dotted line out to the first bounce.
   if (f.aim && sim.mode === "aim") {
@@ -530,6 +549,47 @@ export function drawFrame(ctx: Ctx, f: Frame) {
     ctx.arc(sim.x, sim.y, BALL_R + 0.35, -Math.PI / 2, -Math.PI / 2 + power * Math.PI * 2);
     ctx.stroke();
   }
+}
+
+// The whole hole small in a corner: where you are, where the cup is, what's in view.
+function minimap(ctx: Ctx, f: Frame, L: Look) {
+  const { c, sim, cam, dpr } = f;
+  const m = f.map!;
+  const P = prepare(c);
+  const s = Math.min(m.w / c.w, m.h / c.h);
+  const ox = m.x + (m.w - c.w * s) / 2, oy = m.y + (m.h - c.h * s) / 2;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = "rgba(17,19,24,0.55)";
+  ctx.beginPath();
+  ctx.roundRect(m.x - 6, m.y - 6, m.w + 12, m.h + 12, 12);
+  ctx.fill();
+  ctx.setTransform(s * dpr, 0, 0, s * dpr, ox * dpr, oy * dpr);
+  loops(ctx, P.greens);
+  ctx.fillStyle = L.course;
+  ctx.fill("evenodd");
+  for (const z of c.zones)
+    if (z.kind === "water") {
+      path(ctx, z.poly);
+      ctx.fillStyle = L.water;
+      ctx.fill();
+    }
+  // What's on screen now.
+  const vw = ctx.canvas.width / dpr / cam.s, vh = ctx.canvas.height / dpr / cam.s;
+  ctx.strokeStyle = "rgba(255,255,255,0.6)";
+  ctx.lineWidth = 1.2 / s;
+  ctx.strokeRect(cam.x - cam.ox / cam.s, cam.y - cam.oy / cam.s, vw, vh);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const at = (p: Vec) => ({ x: ox + p.x * s, y: oy + p.y * s });
+  const cup = at(c.cup), ball = at(sim);
+  circ(ctx, cup.x, cup.y, 3);
+  ctx.fillStyle = L.flag;
+  ctx.fill();
+  circ(ctx, ball.x, ball.y, 3.5);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.5)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
 }
 
 function drawFx(ctx: Ctx, fx: Fx[], t: number, L: Look) {
@@ -564,7 +624,7 @@ function drawFx(ctx: Ctx, fx: Fx[], t: number, L: Look) {
       for (let i = 0; i < n; i++) {
         const a = r() * Math.PI * 2, sp = 1.5 + r() * 2.5;
         const ease = 1 - (1 - k) ** 3;
-        ctx.fillStyle = e.kind === "confetti" ? ["#ff5a5a", "#ffd84a", "#4ae07a", "#4ab8ff", "#c07aff"][i % 5] : L.box;
+        ctx.fillStyle = e.kind === "confetti" ? ["#ff5a5a", "#ffd84a", "#4ae07a", "#4ab8ff", "#c07aff"][i % 5] : (e.color ?? L.box);
         ctx.fillRect(e.x + Math.cos(a) * sp * ease - 0.1, e.y + Math.sin(a) * sp * ease - 0.1, 0.2, 0.2);
       }
     }
@@ -575,14 +635,13 @@ function drawFx(ctx: Ctx, fx: Fx[], t: number, L: Look) {
 // A whole hole in one picture, for lists.
 export function still(c: Course, width: number, light: Light, style: Style = "flat"): HTMLCanvasElement {
   const s = width / c.w;
-  const layers = buildLayers(c, Math.max(3, s * 1.5), style);
   const el = document.createElement("canvas");
   el.width = Math.round(width);
   el.height = Math.round(c.h * s);
   drawFrame(el.getContext("2d")!, {
     c,
     sim: { x: c.tee.x, y: c.tee.y, z: 0, mode: "aim", modeT: 0, cupScale: 1, boxes: c.boxes.map(() => false) } as Sim,
-    layers,
+    style,
     light,
     cam: { x: c.w / 2, y: c.h / 2, s, ox: el.width / 2, oy: el.height / 2 },
     dpr: 1,
@@ -593,4 +652,3 @@ export function still(c: Course, width: number, light: Light, style: Style = "fl
   });
   return el;
 }
-

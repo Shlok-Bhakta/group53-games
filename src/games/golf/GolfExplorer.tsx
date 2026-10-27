@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
 import {
   ArrowCounterClockwiseIcon,
+  ArrowFatLinesUpIcon,
+  BasketballIcon,
   ArrowsOutIcon,
   CaretLeftIcon,
   ClockCounterClockwiseIcon,
@@ -21,10 +23,10 @@ import {
 } from "@phosphor-icons/react";
 import * as sound from "./audio";
 import { GREEN_HILLS } from "./courses";
-import { DT, INSTANT, MAX_STROKES, activate, brake, compile, groundAt, newSim, preview, scoreName, shoot, step, type Power, type Sim } from "./engine";
+import { BAG_SIZE, DT, INSTANT, MAX_STROKES, activate, brake, hop, compile, groundAt, newSim, preview, scoreName, shoot, step, type Power, type Sim } from "./engine";
 import { generate, type GenHole } from "./gen";
 import { clockLabel, lightKey, sunAt, type Light } from "./light";
-import { STYLES, buildLayers, drawFrame, lookOf, still, type Camera, type Fx, type Layers, type Style } from "./render";
+import { STYLES, drawFrame, lookOf, still, type Camera, type Fx, type Style } from "./render";
 
 // Golf, one course for now: Green Hills, nine generated holes. Single player, no server. There's also
 // the generator: page through seeds, play any of them, and pin the good ones.
@@ -36,8 +38,10 @@ const POWER_UI: Record<Power, { name: string; icon: Icon }> = {
   brake: { name: "Brake", icon: HandPalmIcon },
   mulligan: { name: "Mulligan", icon: ClockCounterClockwiseIcon },
   bigcup: { name: "Big cup", icon: ArrowsOutIcon },
+  jump: { name: "Jump", icon: ArrowFatLinesUpIcon },
+  bouncy: { name: "Bouncy", icon: BasketballIcon },
 };
-const FEATURE_NAMES: Record<string, string> = { pond: "Pond", island: "Island", stream: "Stream", gate: "Hedge", slope: "Slope", chamber: "Posts", hill: "Hill", ramp: "Ramp" };
+const FEATURE_NAMES: Record<string, string> = { pond: "Pond", island: "Island", stream: "Stream", gate: "Hedge", slope: "Slope", chamber: "Posts", hill: "Hill", ramp: "Ramp", boost: "Speed pads" };
 
 const holeCache = new Map<number, GenHole | null>();
 const hole = (seed: number) => {
@@ -78,8 +82,8 @@ export function GolfExplorer() {
   const [screen, setScreen] = useState<"home" | "browse" | "play">("home");
   const [hour, setHour] = useState<number | null>(null);
   const [round, setRound] = useState<Round | null>(null);
-  const [course, setCourse] = useState<number[]>(() => store.get("golf:course", GREEN_HILLS));
-  const [pins, setPins] = useState<number[]>(() => store.get("golf:pins", []));
+  const [course, setCourse] = useState<number[]>(() => store.get("golf:course2", GREEN_HILLS));
+  const [pins, setPins] = useState<number[]>(() => store.get("golf:pins2", []));
   const [muted, setMuted] = useState(false);
   const [style, setStyleState] = useState<Style>(() => store.get("golf:style", "flat"));
   const setStyle = (st: Style) => {
@@ -92,11 +96,11 @@ export function GolfExplorer() {
   const togglePin = (seed: number) => {
     const next = pins.includes(seed) ? pins.filter((s) => s !== seed) : [...pins, seed];
     setPins(next);
-    store.set("golf:pins", next);
+    store.set("golf:pins2", next);
   };
   const useAsCourse = (seeds: number[]) => {
     setCourse(seeds);
-    store.set("golf:course", seeds);
+    store.set("golf:course2", seeds);
     setScreen("home");
   };
   const toggleMute = () => {
@@ -338,7 +342,7 @@ function TimeChip({ light, hour, setHour, compact }: Chrome & { compact?: boolea
 
 // --- Playing a hole ---
 
-type Hud = { strokes: number; mode: Sim["mode"]; bag: Power[]; armed: Power | null; shot: Power | null };
+type Hud = { strokes: number; mode: Sim["mode"]; bag: Power[]; armed: Power | null; shot: Power | null; dist: number };
 
 function Play({
   seed,
@@ -358,18 +362,19 @@ function Play({
   const lightRef = useRef(light);
   lightRef.current = light;
   const cam = useRef<Camera>({ x: course.w / 2, y: course.h / 2, s: 10, ox: 0, oy: 0 });
-  const view = useRef({ w: 0, h: 0, fit: 10, play: 18, follow: true, overview: false, intro: 0, introOn: true, panned: 0 });
+  const view = useRef({ w: 0, h: 0, fit: 10, play: 18, follow: true, overview: false, intro: 0, introOn: true, panned: 0, mapY: 90 });
   const aim = useRef<{ angle: number; power: number; line: { x: number; y: number }[]; from?: { x: number; y: number }; to?: { x: number; y: number } } | null>(null);
   const fx = useRef<Fx[]>([]);
   const trail = useRef<{ x: number; y: number }[]>([]);
-  const [hud, setHud] = useState<Hud>({ strokes: 0, mode: "aim", bag: [], armed: null, shot: null });
+  const [hud, setHud] = useState<Hud>({ strokes: 0, mode: "aim", bag: [], armed: null, shot: null, dist: 0 });
   const [toast, setToast] = useState<{ text: string; key: number } | null>(null);
   const [done, setDone] = useState(false);
   const [overview, setOverview] = useState(false);
   const [intro, setIntro] = useState(true);
   const say = (text: string) => setToast({ text, key: Date.now() });
 
-  const layers = useMemo<Layers>(() => buildLayers(course, Math.min(24, 3200 / Math.max(course.w + 20, course.h + 20)), chrome.style), [course, chrome.style]);
+  const styleRef = useRef(chrome.style);
+  styleRef.current = chrome.style;
 
   const PAD_TOP = 84, PAD_BOTTOM = 104;
   useEffect(() => {
@@ -384,8 +389,11 @@ function Play({
         w: r.width,
         h: r.height,
         fit: Math.min((r.width - 16) / course.w, (r.height - PAD_TOP - PAD_BOTTOM) / (course.h + 3)),
-        play: Math.max(14, r.width / 24),
+        play: Math.max(14, r.width / 20),
       });
+      // The minimap sits just under the top bar, wherever the safe area puts it.
+      const bar = el.querySelector(".g-top")?.getBoundingClientRect();
+      view.current.mapY = bar ? bar.bottom - r.top + 10 : PAD_TOP + 6;
       cam.current.ox = r.width / 2;
       cam.current.oy = PAD_TOP + (r.height - PAD_TOP - PAD_BOTTOM) / 2;
       if (first) {
@@ -481,15 +489,16 @@ function Play({
       if (s.mode === "roll") {
         const tr = trail.current;
         const lp = tr[tr.length - 1];
-        if (!lp || Math.hypot(lp.x - s.x, lp.y - s.y) > 0.2) tr.push({ x: s.x, y: s.y });
-        if (tr.length > 26) tr.shift();
+        if (!lp || Math.hypot(lp.x - s.x, lp.y - s.y) > 0.3) tr.push({ x: s.x, y: s.y });
+        if (tr.length > 40) tr.shift();
       }
       sound.rolling(s.mode === "roll" && s.z <= 0 ? speed : 0, s.mode === "roll" ? groundAt(world, s) : null);
 
       // Camera: a look over the whole hole first, then down to the ball, which it follows a little ahead.
       const c = cam.current;
       const ease = (k: number) => k * k * (3 - 2 * k);
-      const follow = { x: s.x + s.vx * 0.3, y: s.y - 2.5 + s.vy * 0.3 };
+      // Ahead of the ball, more the faster it goes.
+      const follow = { x: s.x + s.vx * 0.4, y: s.y - 2 + s.vy * 0.4 };
       if (s.mode === "aim") {
         // Lean the view toward the cup.
         const dx = course.cup.x - s.x, dy = course.cup.y - s.y, d = Math.hypot(dx, dy) || 1;
@@ -514,7 +523,7 @@ function Play({
         c.y += (course.h / 2 - c.y) * k;
       } else if (v.follow && now - v.panned > 1200) {
         const k = 1 - Math.exp(-dt * (s.mode === "roll" ? 3 : 2));
-        const zoomOut = s.mode === "roll" ? Math.min(0.22, speed / 90) : 0;
+        const zoomOut = s.mode === "roll" ? Math.min(0.45, speed / 70) : 0;
         c.s += (v.play * (1 - zoomOut) - c.s) * (1 - Math.exp(-dt * 2));
         c.x += (follow.x - c.x) * k;
         c.y += (follow.y - c.y) * k;
@@ -524,7 +533,8 @@ function Play({
       drawFrame(ctx, {
         c: course,
         sim: s,
-        layers,
+        style: styleRef.current,
+        map: v.introOn || v.overview ? null : { x: v.w - 12 - 64, y: v.mapY, w: 64, h: 96 },
         light: L,
         cam: c,
         dpr: cv.current!.width / Math.max(1, v.w),
@@ -534,10 +544,11 @@ function Play({
         aim: aim.current,
       });
 
-      const h = `${s.strokes}|${s.mode}|${s.bag.join()}|${s.armed}|${s.shot}`;
+      const dist = Math.round(Math.hypot(course.cup.x - s.x, course.cup.y - s.y));
+      const h = `${s.strokes}|${s.mode}|${s.bag.join()}|${s.armed}|${s.shot}|${dist}`;
       if (h !== lastHud) {
         lastHud = h;
-        setHud({ strokes: s.strokes, mode: s.mode, bag: [...s.bag], armed: s.armed, shot: s.shot });
+        setHud({ strokes: s.strokes, mode: s.mode, bag: [...s.bag], armed: s.armed, shot: s.shot, dist });
       }
     };
     raf = requestAnimationFrame(frame);
@@ -546,7 +557,7 @@ function Play({
       sound.rolling(0, null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [world, layers]);
+  }, [world]);
 
   // --- Touch: pull back anywhere to aim; two fingers to look around and zoom ---
   const pointers = useRef(new Map<number, { x: number; y: number }>());
@@ -582,6 +593,10 @@ function Play({
     }
     if (s.mode === "roll" && s.shot === "brake") {
       brake(s);
+      return;
+    }
+    if (s.mode === "roll" && s.shot === "jump") {
+      hop(s);
       return;
     }
     if (e.button === 2 || e.shiftKey || s.mode !== "aim") gesture.current = { kind: "pan" };
@@ -688,7 +703,7 @@ function Play({
         <div className="g-pill g-hole-pill">
           {number !== null && <span className="g-display g-hole-no">{number}</span>}
           <span className="g-display g-hole-name">{course.name}</span>
-          <span className="g-muted">Par {course.par}</span>
+          <span className="g-muted">{hud.dist}m</span>
           {number !== null && round.scores.length > 0 && <span className="g-muted g-vspar">{vsPar === 0 ? "E" : vsPar > 0 ? `+${vsPar}` : vsPar}</span>}
           <span className="g-display g-strokes" aria-label={`${hud.strokes} strokes`}>
             {hud.strokes}
@@ -715,7 +730,7 @@ function Play({
 
       <div className="g-dock">
         <div className="g-bag">
-          {[0, 1].map((i) => {
+          {Array.from({ length: BAG_SIZE }, (_, i) => i).map((i) => {
             const p = hud.bag[i];
             const IconC = p ? POWER_UI[p].icon : null;
             return (
@@ -733,6 +748,11 @@ function Play({
               })()}
               {POWER_UI[hud.armed].name} next shot
             </div>
+          )}
+          {hud.mode === "roll" && hud.shot === "jump" && (
+            <button type="button" className="g-btn g-btn-on g-brake" onClick={() => hop(sim.current)}>
+              <ArrowFatLinesUpIcon size={22} weight="fill" /> Jump
+            </button>
           )}
           {hud.mode === "roll" && hud.shot === "brake" && (
             <button type="button" className="g-btn g-btn-on g-brake" onClick={() => brake(sim.current)}>

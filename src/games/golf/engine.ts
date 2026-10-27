@@ -83,13 +83,14 @@ export type Course = {
 
 export const BALL_R = 0.38;
 export const CUP_R = 0.72;
-export const MAX_SPEED = 24;
+export const MAX_SPEED = 32;
 export const GRAVITY = 30;
 export const DT = 1 / 240;
 export const MAX_STROKES = 10;
 
-export type Power = "rocket" | "ghost" | "magnet" | "brake" | "mulligan" | "bigcup";
-export const POWERS: Power[] = ["rocket", "ghost", "magnet", "brake", "mulligan", "bigcup"];
+export type Power = "rocket" | "ghost" | "magnet" | "brake" | "mulligan" | "bigcup" | "jump" | "bouncy";
+export const POWERS: Power[] = ["rocket", "ghost", "magnet", "brake", "mulligan", "bigcup", "jump", "bouncy"];
+export const BAG_SIZE = 3;
 // Instant power-ups happen when tapped; the rest are armed for the next shot.
 export const INSTANT: Power[] = ["mulligan", "bigcup"];
 
@@ -292,7 +293,7 @@ export function newSim(course: Course, seed = 53): Sim {
   };
 }
 
-export const maxSpeed = (sim: Sim) => MAX_SPEED * (sim.armed === "rocket" ? 1.55 : 1);
+export const maxSpeed = (sim: Sim) => MAX_SPEED * (sim.armed === "rocket" ? 1.8 : 1);
 
 export function shoot(sim: Sim, angle: number, power: number) {
   if (sim.mode !== "aim" || sim.strokes >= MAX_STROKES) return;
@@ -330,6 +331,15 @@ export function activate(sim: Sim, i: number) {
 }
 
 // The brake: stops the ball dead, once, during a shot it was armed for.
+// Jump: a hop mid-roll, high enough to clear walls, hedges and water. Once per shot it's armed for.
+export function hop(sim: Sim) {
+  if (sim.mode !== "roll" || sim.shot !== "jump" || sim.z > 0) return;
+  sim.vz = 11;
+  sim.z = 0.02;
+  sim.shot = null;
+  sim.events.push({ type: "launch", x: sim.x, y: sim.y, power: 0.6 });
+}
+
 export function brake(sim: Sim) {
   if (sim.mode !== "roll" || sim.shot !== "brake" || sim.z > 0) return;
   sim.vx = sim.vy = 0;
@@ -476,7 +486,7 @@ export function step(sim: Sim, world: World, dt = DT) {
     if (sim.onRamp && !inRamp && sim.ramp) {
       const along = sim.vx * sim.ramp.dir.x + sim.vy * sim.ramp.dir.y;
       if (along > 3) {
-        sim.vz = along * sim.ramp.lift;
+        sim.vz = Math.min(13, along * sim.ramp.lift);
         sim.z = 0.02;
         sim.events.push({ type: "launch", x: p.x, y: p.y, power: along / MAX_SPEED });
       }
@@ -526,7 +536,8 @@ export function step(sim: Sim, world: World, dt = DT) {
   for (const s of nearSegs(world, sim.x, sim.y)) {
     if (s.h <= sim.z) continue;
     if (ghost && !s.rim) continue;
-    hit = Math.max(hit, collide(sim, s.a, s.b, s.r, s.bounce));
+    // Bouncy: walls fire the ball back harder than it came in.
+    hit = Math.max(hit, collide(sim, s.a, s.b, s.r, sim.shot === "bouncy" && !s.rim ? 1.35 : sim.shot === "bouncy" ? 1.15 : s.bounce));
   }
   if (hit > 1) sim.events.push({ type: "bounce", x: sim.x, y: sim.y, power: Math.min(1, hit / MAX_SPEED) });
   for (const b of c.bumpers) {
@@ -543,8 +554,9 @@ export function step(sim: Sim, world: World, dt = DT) {
         sim.vx -= 2 * vn * nx;
         sim.vy -= 2 * vn * ny;
       }
-      sim.vx += nx * b.kick;
-      sim.vy += ny * b.kick;
+      const kick = b.kick * (sim.shot === "bouncy" ? 6 : 1);
+      sim.vx += nx * kick;
+      sim.vy += ny * kick;
       sim.events.push({ type: "bump", x: b.at.x, y: b.at.y, power: 1 });
     }
   }
@@ -566,10 +578,17 @@ export function step(sim: Sim, world: World, dt = DT) {
     }
   }
 
+  // Nothing gets faster than this, however many bouncy walls it meets.
+  const sp = Math.hypot(sim.vx, sim.vy), cap = MAX_SPEED * 2;
+  if (sp > cap) {
+    sim.vx *= cap / sp;
+    sim.vy *= cap / sp;
+  }
+
   // Mystery boxes.
   c.boxes.forEach((b, i) => {
     if (sim.boxes[i] || sim.z > 1.6 || len(sim.x - b.x, sim.y - b.y) > 0.95) return;
-    if (sim.bag.length >= 2) return;
+    if (sim.bag.length >= BAG_SIZE) return;
     sim.boxes[i] = true;
     const r = rng(sim.seed * 977 + i * 131 + sim.strokes * 7)();
     const item = POWERS[Math.floor(r * POWERS.length)];

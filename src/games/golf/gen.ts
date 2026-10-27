@@ -238,18 +238,18 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
   const legs = 3 + Math.floor(r() * 3);
   let heading = -Math.PI / 2 + R(-0.35, 0.35);
   let side = r() < 0.5 ? 1 : -1;
-  const ctl = [{ x: 0, y: 0, w: R(4.6, 5.6) }];
+  const ctl = [{ x: 0, y: 0, w: R(6, 7.5) }];
   for (let i = 0; i < legs; i++) {
-    const L = R(17, 30);
+    const L = R(30, 50);
     const last = ctl[ctl.length - 1];
-    ctl.push({ x: last.x + Math.cos(heading) * L, y: last.y + Math.sin(heading) * L, w: R(4.2, 6.6) });
+    ctl.push({ x: last.x + Math.cos(heading) * L, y: last.y + Math.sin(heading) * L, w: R(5.5, 9) });
     const turn = R(0.45, 1.15) * (r() < 0.7 ? side : -side);
     side = -Math.sign(turn);
     heading = Math.max(-Math.PI + 0.3, Math.min(-0.3, heading + turn));
   }
   const path = spline(ctl);
   const total = path[path.length - 1].s;
-  if (total < 60 || total > 140) return null;
+  if (total < 100 || total > 240) return null;
   // Parts of the path that pass close to each other would merge into one blob.
   for (let i = 0; i < path.length; i += 2)
     for (let j = i + 2; j < path.length; j += 2) {
@@ -322,7 +322,7 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
   claim(0, 9);
 
   // Features, three to five, no two on top of each other.
-  const menu = ["pond", "island", "stream", "gate", "slope", "chamber", "hill"];
+  const menu = ["pond", "island", "stream", "gate", "slope", "chamber", "hill", "boost"];
   const count = 3 + Math.floor(r() * 3);
   for (let n = 0; n < count * 3 && features.length < count; n++) {
     const kind = menu[Math.floor(r() * menu.length)];
@@ -336,15 +336,15 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
       const turn = before.tx * after.ty - before.ty * after.tx;
       const n0 = normal(b);
       const inward = turn > 0 ? 1 : -1;
-      const radius = R(2.8, 4.4);
+      const radius = R(3.5, 6);
       const c = v(b.x + n0.x * inward * R(0.5, 2.5), b.y + n0.y * inward * R(0.5, 2.5));
-      P.disk(c, radius + R(4.5, 6), smax(4));
+      P.disk(c, radius + R(5, 7), smax(4));
       W.blob(c, radius, r, union);
       claim(b.s - 9, b.s + 9);
       features.push("pond");
       // A ramp straight at the far side, for anyone brave.
       if (r() < 0.6) {
-        const from = at(b.s - R(10, 13));
+        const from = at(b.s - R(12, 16));
         const to = at(b.s + 10);
         const dir = norm(v(to.x - from.x, to.y - from.y));
         const deck = rect(from, dir, 2.6, 2.8);
@@ -359,11 +359,11 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
       const s = spot(0.25, 0.72, 20);
       if (s === null) continue;
       const p = at(s), n0 = normal(p);
-      const half = R(4, 6), ir = R(1.4, 2.3);
+      const half = R(6, 10), ir = R(1.8, 3.2);
       const shift = R(-1.5, 1.5);
       const a = v(at(s - half).x + n0.x * shift, at(s - half).y + n0.y * shift);
       const b = v(at(s + half).x + n0.x * shift, at(s + half).y + n0.y * shift);
-      for (let t = s - half - 5; t <= s + half + 5; t += 1) P.disk(at(t), at(t).w + ir + R(2.6, 3.2), smax(3));
+      for (let t = s - half - 5; t <= s + half + 5; t += 1) P.disk(at(t), at(t).w + ir + R(3, 4), smax(3));
       P.capsule(a, b, ir, ir, cut(1.5));
       islands.push({ a, b, r: ir });
       claim(s - half - 6, s + half + 6);
@@ -423,7 +423,7 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
       features.push("gate");
     } else if (kind === "slope") {
       // A side hill that pulls the ball one way.
-      const len = R(10, 16);
+      const len = R(14, 24);
       const s = spot(0.15, 0.75, len);
       if (s === null) continue;
       const p = at(s), n0 = normal(p);
@@ -437,9 +437,9 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
       if (s === null) continue;
       const p = at(s), n0 = normal(p);
       const c = v(p.x + n0.x * R(-2, 2), p.y + n0.y * R(-2, 2));
-      const cr = p.w * R(1.5, 1.9);
+      const cr = p.w * R(1.4, 1.8);
       P.disk(c, cr, smax(4));
-      const k = 3 + Math.floor(r() * 3);
+      const k = 4 + Math.floor(r() * 4);
       const rot = r() * Math.PI;
       for (let i = 0; i < k; i++) {
         const a = rot + (i / k) * Math.PI * 2;
@@ -449,12 +449,25 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
       claim(s - cr, s + cr);
       features.push("chamber");
       if (r() < 0.6) boxes.push(v(c.x + Math.cos(rot + Math.PI / k) * cr * 0.75, c.y + Math.sin(rot + Math.PI / k) * cr * 0.75));
+    } else if (kind === "boost") {
+      // A run of speed pads down a straight.
+      const s = spot(0.15, 0.7, 16);
+      if (s === null) continue;
+      const n = 2 + Math.floor(r() * 2);
+      const off = R(-0.35, 0.35);
+      for (let i = 0; i < n; i++) {
+        const p = at(s - 6 + i * 6), n0 = normal(p);
+        const c = v(p.x + n0.x * p.w * off, p.y + n0.y * p.w * off);
+        zones.push({ kind: "boost", poly: rect(c, v(p.tx, p.ty), 2.6, 2.6), dir: v(p.tx, p.ty), strength: 45 });
+      }
+      claim(s - 9, s + 9);
+      features.push("boost");
     } else if (kind === "hill") {
       const s = spot(0.2, 0.75, 12);
       if (s === null) continue;
       const p = at(s), n0 = normal(p);
       const c = v(p.x + n0.x * R(-p.w * 0.5, p.w * 0.5), p.y + n0.y * R(-p.w * 0.5, p.w * 0.5));
-      const hr = R(4, 6);
+      const hr = R(5, 8);
       P.disk(c, hr * 0.9, smax(3));
       zones.push({ kind: "mound", poly: circlePoly(c, hr), center: c, radius: hr, strength: R(2.6, 3.8) });
       claim(s - 6, s + 6);
@@ -475,7 +488,7 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
     if (s !== null) {
       const p = at(s), n0 = normal(p);
       const side = r() < 0.5 ? 1 : -1;
-      S.blob(v(p.x + n0.x * side * p.w * 0.55, p.y + n0.y * side * p.w * 0.55), R(1.5, 2.4), r, union);
+      S.blob(v(p.x + n0.x * side * p.w * 0.55, p.y + n0.y * side * p.w * 0.55), R(2, 3.2), r, union);
     }
   }
 
@@ -495,7 +508,14 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
   const blocked = (p: Vec) => walls.some((w) => w.pts.some((q, i) => i > 0 && segDist(p, w.pts[i - 1], q) < w.w / 2 + BALL_R + 0.1)) || bumpers.some((b) => Math.hypot(p.x - b.at.x, p.y - b.at.y) < b.r + BALL_R + 0.1);
   const route = shortest(P, W, bridges, blocked, tee, cup);
   if (!route) return null;
-  boxes.splice(0, boxes.length, ...boxes.filter((b) => ok(b, 1.2) && !blocked(b)).slice(0, 2));
+  // Boxes all the way along, some on the line and some off it.
+  for (const frac of [0.22, 0.42, 0.62, 0.82]) {
+    const q = route.points[Math.floor(route.points.length * frac)];
+    const p = at(total * frac), n0 = normal(p);
+    const off = R(-p.w * 0.5, p.w * 0.5);
+    boxes.push(v(q.x + n0.x * off, q.y + n0.y * off));
+  }
+  boxes.splice(0, boxes.length, ...boxes.filter((b) => ok(b, 1.2) && !blocked(b) && Math.hypot(b.x - tee.x, b.y - tee.y) > 8).slice(0, 6));
 
   // Scenery: trees crowd the edges, thinning out further away; lamps along the walls.
   const decor: Prop[] = [];
@@ -569,9 +589,9 @@ export function generate(seed: number, theme: Theme = "hills"): GenHole | null {
     return (W.at(q.x, q.y) > -0.4 && !bridges.some((b) => inPoly(q, b))) || S.at(q.x, q.y) > -0.2;
   };
   const bot = botPlay(course, route.points.map(mv), hazard);
-  if (bot > 8 || bot <= 2) return null;
+  if (bot > 9 || bot <= 2) return null;
   course.stats.bot = bot;
-  course.par = Math.max(3, Math.min(6, Math.round(route.length / 27 + 1.2)));
+  course.par = Math.max(3, Math.min(7, Math.round(route.length / 45 + 1.4)));
   if (bot > course.par + 2) return null;
   return course;
 }
