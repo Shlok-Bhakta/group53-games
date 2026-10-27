@@ -137,9 +137,10 @@ npm run deploy
 2. rsyncs the repo to `kiwi:~/Services/group53/`, skipping `node_modules`, `dist`, `.git`, `secrets`, `.env*`, `.convex` and test output;
 3. rebuilds and restarts the `web` and `og` containers (`docker compose up -d --build web og`);
 4. prunes the untagged images each rebuild leaves behind, plus build cache older than a week;
-5. checks `/`, `/version.json` and `/sw.js` on `https://group53.shlokbhakta.dev` answer 200 and prints the live build ID.
+5. checks `/`, `/version.json` and `/sw.js` on `https://group53.shlokbhakta.dev` answer 200;
+6. checks `/version.json` now names a different build than before the deploy, and fails if it doesn't. That new ID is what makes phones show "Updating" and reload.
 
-It's done when it prints `Live: {"id":"..."}` and the log shows `✔ Deployed Convex functions`. Phones pick up the new build on their own (`src/version.tsx`): an "Updating" overlay, a reload, then "You're up to date".
+It's done when it prints `Build <old> -> <new>` and `Live: {"id":"..."}`, and the log shows `✔ Deployed Convex functions`. Phones pick up the new build on their own (`src/version.tsx`): an "Updating" overlay, a reload, then "You're up to date".
 
 ### Order of changes
 

@@ -138,7 +138,9 @@ function Seat({ player: p, isMe, style, out, toMove, ready, winner, points }: { 
   return (
     <div data-seat={p.color} className="absolute flex h-[21.4%] w-[21.4%] flex-col items-center justify-center gap-0.5 text-center" style={style}>
       <span
-        className={cn("relative rounded-full transition-shadow duration-300", out && "opacity-50 grayscale")}
+        // flex, so the box is exactly the avatar: an inline avatar adds a line's descender below it and the
+        // turn ring comes out an oval.
+        className={cn("relative flex rounded-full transition-shadow duration-300", out && "opacity-50 grayscale")}
         style={{ boxShadow: toMove ? `0 0 0 2.5px var(--background), 0 0 0 5px ${color}` : undefined }}
       >
         <PlayerAvatar name={p.name} image={p.image} frame={p.frame} frameColor={p.frameColor} size={34} />

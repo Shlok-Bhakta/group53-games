@@ -137,6 +137,9 @@ test.describe("4-player chess", () => {
     // Red moves first; it shows up live for blue, whose turn it is next.
     await expect(g.red.getByText("Your move")).toBeVisible();
     await expect(g.blue.getByText(/^(\S+ is on it|Waiting for \D+)$/)).toBeVisible();
+    // The ring around whoever's up is a circle hugging their avatar.
+    const ring = await g.blue.locator('[data-seat="red"] > span').first().boundingBox();
+    expect(ring!.height).toBeCloseTo(ring!.width, 0);
     const before = await g.red.getByRole("grid").boundingBox();
     await tapMove(g.red, "e2", "e3");
     await expect(g.red.getByRole("button", { name: /^Confirm/ })).toBeVisible();

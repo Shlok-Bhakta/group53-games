@@ -18,8 +18,12 @@ fi
 
 step() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 
+liveBuild() { curl -s "$SITE/version.json?t=$(date +%s%N)" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p'; }
+before=$(liveBuild || true)
+
 step "Backend: Convex functions"
 npx convex deploy -y
+echo "Backend deployed."
 
 step "Copying the repo to $HOST:$DIR"
 # --delete keeps kiwi's copy identical to this one; excluded paths (secrets, env files) are left alone.
@@ -45,4 +49,19 @@ for path in / /version.json /sw.js; do
   echo "$path $code"
   [[ "$code" == 200 ]] || { echo "Site check failed for $path" >&2; exit 1; }
 done
-echo "Live: $(curl -s "$SITE/version.json")"
+
+# Phones update when /version.json names a build other than the one they run, so a deploy only counts once
+# a new ID is being served.
+step "Checking phones will update"
+after=""
+for _ in $(seq 1 30); do
+  after=$(liveBuild || true)
+  [[ -n "$after" && "$after" != "$before" ]] && break
+  sleep 2
+done
+if [[ -z "$after" || "$after" == "$before" ]]; then
+  echo "Still serving build ${before:-?}: the new web build isn't live, so phones won't update." >&2
+  exit 1
+fi
+echo "Build ${before:-none} -> $after. Phones show Updating within a minute, or as soon as they're opened."
+echo "Live: {\"id\":\"$after\"}"
