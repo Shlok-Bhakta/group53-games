@@ -11,6 +11,7 @@
     "test:e2e": "node e2e/run.mjs",
     "test:all": "vitest run && node e2e/run.mjs",
     "deploy": "scripts/deploy.sh",
+    "golf:build": "vite build --config prototypes/golf/vite.config.ts",
     "test:e2e:install": "PLAYWRIGHT_BROWSERS_PATH=0 playwright install chromium chromium-headless-shell"
   },
   "dependencies": {
