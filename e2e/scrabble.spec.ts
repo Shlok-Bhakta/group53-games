@@ -261,6 +261,39 @@ test.describe("Scrabble", () => {
     expect(errors).toEqual([]);
   });
 
+  test("sound survives leaving the app and coming straight back", async ({ context }) => {
+    const me = await createPlayer("Shlok");
+    const page = await phone(context, { player: me, notifications: "granted" });
+    await page.goto("/you");
+    await page.getByRole("heading", { name: "You" }).click();
+    type Audio = { state: () => string; rebuilds: () => number; break: () => void };
+    const audio = () => page.evaluate(() => (window as unknown as { __audio: Audio }).__audio.state());
+    const music = () => page.evaluate(() => (window as unknown as { __music?: string }).__music);
+    await expect.poll(audio).toBe("running");
+    await expect.poll(music).toBe("lofi");
+    // Away and back again before the pause has even finished.
+    const visible = (shown: boolean) =>
+      page.evaluate((shown) => {
+        Object.defineProperty(document, "hidden", { configurable: true, get: () => !shown });
+        Object.defineProperty(document, "visibilityState", { configurable: true, get: () => (shown ? "visible" : "hidden") });
+        document.dispatchEvent(new Event("visibilitychange"));
+      }, shown);
+    await visible(false);
+    await visible(true);
+    await expect.poll(audio).toBe("running");
+    await visible(false);
+    await expect.poll(audio).toBe("suspended");
+    await visible(true);
+    await expect.poll(audio).toBe("running");
+    expect(await music()).toBe("lofi");
+    // A context iOS has left dead is replaced on the next tap, and the music comes back on the new one.
+    await page.evaluate(() => (window as unknown as { __audio: Audio }).__audio.break());
+    await page.getByRole("heading", { name: "You" }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __audio: Audio }).__audio.rebuilds())).toBe(1);
+    await expect.poll(audio).toBe("running");
+    await expect.poll(music).toBe("lofi");
+  });
+
   test("every effects pack and music track makes sound, and none of it clips", async ({ context }) => {
     test.setTimeout(240_000);
     const me = await createPlayer("Shlok");
@@ -299,8 +332,8 @@ test.describe("Scrabble", () => {
     });
     await p.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
     await p.mouse.down();
-    // The tile floats above the finger, so aim the finger a little under the square.
-    for (let i = 1; i <= 8; i++) await p.mouse.move(from.x + ((board.x + target.x - from.x) * i) / 8, from.y + ((board.y + target.y + 44 - from.y) * i) / 8);
+    // The tile sits right under the finger, so it lands where the finger lets go.
+    for (let i = 1; i <= 8; i++) await p.mouse.move(from.x + ((board.x + target.x - from.x) * i) / 8, from.y + ((board.y + target.y - from.y) * i) / 8);
     await p.mouse.up();
     await expect(p.locator('[data-draft][data-cell="7,7"]')).toHaveAttribute("data-letter", "H");
     await place(p, "I", 8, 7);

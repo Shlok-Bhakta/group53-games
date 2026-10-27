@@ -36,8 +36,6 @@ import { sfx } from "@/sound";
 
 type Draft = { placed: Placement[]; order: number[] };
 const key = (x: number, y: number) => `${x},${y}`;
-// A dragged tile floats this far above the finger, so you can see where it's going.
-const LIFT = 44;
 
 // A Scrabble game: scores on top, the board in the middle, your rack and actions at the bottom. Lay tiles
 // out any time; it's a plan until it's your turn and you play it.
@@ -157,7 +155,7 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
     const place = (cx: number, cy: number) => {
       tilt = Math.max(-14, Math.min(14, tilt * 0.6 + (cx - lastX) * 0.9));
       lastX = cx;
-      if (ghost.current) ghost.current.style.transform = `translate3d(${cx}px, ${cy - LIFT}px, 0) translate(-50%, -50%) rotate(${tilt}deg)`;
+      if (ghost.current) ghost.current.style.transform = `translate3d(${cx}px, ${cy}px, 0) translate(-50%, -50%) rotate(${tilt}deg)`;
     };
     const move = (ev: PointerEvent) => {
       if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return;
@@ -168,10 +166,10 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
         sfx("pick");
       }
       place(ev.clientX, ev.clientY);
-      const c = board.current?.cellAt(ev.clientX, ev.clientY - LIFT) ?? null;
+      const c = board.current?.cellAt(ev.clientX, ev.clientY) ?? null;
       const free = c && !occupied.has(key(c[0], c[1])) && !placed.some((p) => p.x === c[0] && p.y === c[1] && p.id !== id) ? c : null;
       if (free?.[0] !== cell?.[0] || free?.[1] !== cell?.[1]) setTarget((cell = free));
-      const s = free ? null : rackSlotAt(ev.clientX, ev.clientY - LIFT / 2);
+      const s = free ? null : rackSlotAt(ev.clientX, ev.clientY);
       if (s !== at) setSlot((at = s));
     };
     const up = (ev: PointerEvent) => {

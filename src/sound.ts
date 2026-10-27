@@ -137,17 +137,27 @@ function input(c: Ctx, kind: "sfx" | "music", id: string, wet: number) {
 }
 
 let ctx: AudioContext | null = null;
+// Set when the context looks dead (iOS can leave one "running" with its clock stopped after the app was
+// in the background or another app took the audio). The next tap replaces it with a fresh one.
+let broken = false;
+let rebuilds = 0;
 
 function audio() {
   if (ctx) return ctx;
   const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AC) return null;
   applySession();
-  ctx = new AC();
-  graphFor(ctx);
-  // Starting, or coming back after iOS interrupted it: pick the music back up.
-  ctx.onstatechange = () => music.refresh();
-  return ctx;
+  const c = new AC();
+  ctx = c;
+  broken = false;
+  graphFor(c);
+  // Starting, or coming back after iOS interrupted it: pick the music back up, or get it running again.
+  c.onstatechange = () => {
+    if (c !== ctx) return;
+    music.refresh();
+    sync();
+  };
+  return c;
 }
 
 function applySession() {
@@ -155,12 +165,26 @@ function applySession() {
   if (nav.audioSession) nav.audioSession.type = settings.onSilent ? "playback" : "ambient";
 }
 
+// Throws away a dead context. Music starts again on the new one as soon as it's running.
+function rebuild() {
+  const old = ctx;
+  music.reset();
+  ctx = null;
+  rebuilds++;
+  if (old) {
+    old.onstatechange = null;
+    void old.close().catch(() => {});
+  }
+  return audio();
+}
+
 // Gets the context running, from inside a tap. iOS also wants a sound to actually start in that tap
 // before it counts the context as unlocked, so a silent one plays.
 function wake() {
-  const c = audio();
+  const c = broken ? rebuild() : audio();
   if (!c) return null;
   if (c.state !== "running") {
+    applySession();
     const silent = c.createBufferSource();
     silent.buffer = c.createBuffer(1, 1, c.sampleRate);
     silent.connect(c.destination);
@@ -170,13 +194,57 @@ function wake() {
   return c;
 }
 
+// Keeps the context running while the app is on screen and paused while it isn't. Called again whenever a
+// suspend or resume settles, so leaving and coming straight back can't strand it in the wrong state.
+let settling = false;
+function sync() {
+  const c = ctx;
+  if (!c || settling || c.state === "closed") return;
+  const want = !document.hidden;
+  if (want === (c.state === "running")) return;
+  settling = true;
+  (want ? c.resume() : c.suspend())
+    .catch(() => {})
+    .finally(() => {
+      settling = false;
+      if (c !== ctx) return;
+      // Still not running after resuming on screen: iOS wants a tap, and a new context if this one's gone bad.
+      if (want && !document.hidden && c.state !== "running") broken = true;
+      else sync();
+    });
+}
+
+// A running context whose clock has stopped makes no sound; notice, so the next tap replaces it.
+let lastClock = { audio: 0, wall: 0 };
+function watch() {
+  const c = ctx;
+  if (!c || document.hidden || c.state !== "running") {
+    lastClock = { audio: 0, wall: 0 };
+    return;
+  }
+  const now = performance.now();
+  if (lastClock.wall && now - lastClock.wall > 900 && c.currentTime - lastClock.audio < 0.05) broken = true;
+  lastClock = { audio: c.currentTime, wall: now };
+}
+
 if (typeof window !== "undefined") {
   for (const type of ["touchend", "click", "keydown", "pointerdown"]) window.addEventListener(type, wake, { capture: true, passive: true });
-  document.addEventListener("visibilitychange", () => {
-    if (!ctx) return;
-    if (document.hidden) void ctx.suspend();
-    else void ctx.resume().catch(() => {});
-  });
+  const back = () => {
+    lastClock = { audio: 0, wall: 0 };
+    sync();
+  };
+  document.addEventListener("visibilitychange", back);
+  window.addEventListener("pageshow", back);
+  window.addEventListener("focus", back);
+  window.setInterval(watch, 1000);
+  // For tests: the context's state, and how many times a dead one was replaced.
+  (window as unknown as { __audio?: unknown }).__audio = {
+    state: () => ctx?.state ?? "none",
+    rebuilds: () => rebuilds,
+    break: () => {
+      broken = true;
+    },
+  };
 }
 
 // --- Building blocks ---
@@ -717,6 +785,18 @@ const music = (() => {
   let bar = 0;
   let step = 0;
 
+  // The context it was playing on is gone: forget it without touching the old graph.
+  function reset() {
+    clearInterval(timer);
+    const old = bed;
+    bed = null;
+    try {
+      old?.stop();
+    } catch {
+      // Already stopped.
+    }
+    playing = "off";
+  }
   function stop() {
     if (!ctx || playing === "off") return;
     const g = graphFor(ctx).music.gain;
@@ -745,6 +825,13 @@ const music = (() => {
     const stepDur = 60 / track.bpm / 4;
     // Schedules a little ahead, so the timing holds even when the page is busy.
     timer = window.setInterval(() => {
+      // Timers stall in the background and when the app comes back; skip what was missed rather than
+      // playing it all at once.
+      while (next < c.currentTime - 0.05) {
+        next += stepDur;
+        step = (step + 1) % track.steps;
+        if (step === 0) bar++;
+      }
       while (next < c.currentTime + 0.25) {
         const swing = track.swing && step % 2 === 1 ? stepDur * track.swing : 0;
         track.play(c, next + swing, bar, step, out);
@@ -769,6 +856,7 @@ const music = (() => {
       refresh();
     },
     refresh,
+    reset,
   };
 })();
 
