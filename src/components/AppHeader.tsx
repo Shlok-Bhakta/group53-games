@@ -1,5 +1,5 @@
 import { useCallback, type ReactNode } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
 import { CaretLeftIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 
@@ -16,11 +16,12 @@ export function LargeTitle({ title, subtitle, action }: { title: string; subtitl
   );
 }
 
-// Back goes wherever you came from; opened straight from a link or a push, it goes to `fallback`.
+// Back goes wherever you came from; opened straight from a link or a push, it goes to `fallback`. The router
+// counts in-app history in `history.state.idx`, which a replace (like dropping `?accept=1`) keeps at 0, so a
+// screen opened fresh never steps back out of the app or onto nothing.
 export function useGoBack(fallback = "/") {
   const navigate = useNavigate();
-  const location = useLocation();
-  return useCallback(() => (location.key !== "default" ? navigate(-1) : navigate(fallback, { replace: true })), [location.key, navigate, fallback]);
+  return useCallback(() => ((window.history.state?.idx ?? 0) > 0 ? navigate(-1) : navigate(fallback, { replace: true })), [navigate, fallback]);
 }
 
 // The bar on screens pushed on top of a tab: back, a centered title, and one optional action. It scrolls with

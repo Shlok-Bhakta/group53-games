@@ -15,7 +15,7 @@ import {
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { MatchView } from "../../../convex/matches";
-import { modePath, settingsOf, type ModeKey } from "../../../convex/modes";
+import { settingsOf, type ModeKey } from "../../../convex/modes";
 import { bagLetters, evaluate, type Placement, type ScrabbleState, type Tile } from "../../../convex/scrabble/engine";
 import { useGoBack } from "@/components/AppHeader";
 import { AsyncButton } from "@/components/AsyncButton";
@@ -41,7 +41,7 @@ export const TopBar = forwardRef<HTMLDivElement, { match: MatchView; state: Scra
   { match, state, meId, myTurn, onMenu },
   ref,
 ) {
-  const goBack = useGoBack(modePath(match.mode as ModeKey));
+  const goBack = useGoBack("/");
   const up = match.players[state.turn];
   const { here } = useHere(up?.userId ?? ("" as Id<"users">));
   const last = state.moves.at(-1);

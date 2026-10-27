@@ -92,13 +92,22 @@ test.describe("chess", () => {
     await tapMove(g.white, "e2", "e3");
     await expect(g.white.getByRole("button", { name: /^Confirm/ })).toBeVisible();
     await expect.poll(() => pieceOn(g.white, "wP", "e3")).toBe(true);
-    const pendingY = (await grid.boundingBox())!.y;
+    // Measured on the page, not the screen, since tapping Cancel can scroll it into view. The screen can still
+    // be settling, so measure once it holds still.
+    const boardY = () => grid.evaluate((el) => el.getBoundingClientRect().y + window.scrollY);
+    let pendingY = NaN;
+    await expect.poll(async () => {
+      const y = await boardY();
+      const steady = Math.abs(y - pendingY) < 0.5;
+      pendingY = y;
+      return steady;
+    }, { intervals: [250] }).toBe(true);
     expect((await getMatch(g.id)).state.moves).toHaveLength(0);
     await expect.poll(() => pieceOn(g.black, "wP", "e2")).toBe(true);
     await expect(g.black.getByRole("button", { name: /^Confirm/ })).toHaveCount(0);
     await g.white.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect.poll(() => pieceOn(g.white, "wP", "e2")).toBe(true);
-    expect((await grid.boundingBox())!.y).toBeCloseTo(pendingY, 0);
+    expect(await boardY()).toBeCloseTo(pendingY, 0);
     // A waiting move leaves a faint copy at home. Moving the piece back there takes the move back, and
     // moving another piece replaces it, with no Cancel needed.
     const confirm = g.white.getByRole("button", { name: /^Confirm/ });
@@ -151,6 +160,27 @@ test.describe("chess", () => {
     await expect(board.getByRole("listitem").first()).toContainText("You");
     await expect(board.getByRole("listitem").first()).toContainText("1216");
     await expect(board).toContainText("1184");
+    await g.close();
+  });
+
+  test("a game opened from a push goes back to Home, and back again from there leaves nothing stuck", async ({ context, browser }) => {
+    const g = await startClassic(browser, context);
+    // The app opened cold on the game, the way a notification tap opens it.
+    const cold = await g.white.context().newPage();
+    await cold.goto(`/chess/${g.id}`);
+    await classicMove(cold, "e2", "e4");
+    await expect.poll(async () => (await getMatch(g.id)).state.fen).toContain(" b ");
+    await cold.getByRole("button", { name: "Back" }).click();
+    await expect(cold).toHaveURL(/\/$/);
+    await expect(cold.getByRole("heading", { name: "Home" })).toBeVisible();
+
+    // Opened from inside the app, Back still goes where you came from.
+    await cold.goto("/chess/mode/classic");
+    await cold.locator(`a[href="/chess/${g.id}"]`).first().click();
+    await expect(cold).toHaveURL(new RegExp(`/chess/${g.id}`));
+    await expect(cold.getByRole("button", { name: "Back" })).toHaveCount(1);
+    await cold.getByRole("button", { name: "Back" }).click();
+    await expect(cold).toHaveURL(/\/chess\/mode\/classic$/);
     await g.close();
   });
 

@@ -3,7 +3,7 @@ import { useQuery } from "convex/react";
 import { ShareNetworkIcon } from "@phosphor-icons/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import { MODES, gameOf, matchPath, modePath, type ModeKey } from "../../convex/modes";
+import { MODES, gameOf, matchPath, type ModeKey } from "../../convex/modes";
 import { NavBar } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -21,7 +21,7 @@ export function MatchScreen({ game }: { game: GameUI }) {
   if (match === undefined) {
     return (
       <div>
-        <NavBar title={game.name} back={game.path} />
+        <NavBar title={game.name} back="/" />
         <Skeleton className="mt-16 aspect-square w-full rounded-sm" />
       </div>
     );
@@ -29,7 +29,7 @@ export function MatchScreen({ game }: { game: GameUI }) {
   if (match === null) {
     return (
       <div>
-        <NavBar title={game.name} back={game.path} />
+        <NavBar title={game.name} back="/" />
         <p className="pt-4 text-callout text-muted-foreground">This game doesn't exist.</p>
       </div>
     );
@@ -48,7 +48,7 @@ export function MatchScreen({ game }: { game: GameUI }) {
 
   return (
     <div className="flex min-h-[calc(100svh-env(safe-area-inset-bottom)-16px)] flex-col">
-      <NavBar title={mode.name} back={modePath(match.mode as ModeKey)} action={share} />
+      <NavBar title={mode.name} back="/" action={share} />
       {match.status === "waiting" || match.status === "cancelled" ? (
         <Lobby match={match} meId={me?._id} onLeave={() => navigate("/", { replace: true })} />
       ) : (
