@@ -2,9 +2,8 @@ import { createRoot } from "react-dom/client";
 import "@fontsource-variable/oxanium/wght.css";
 import "./golf.css";
 import { GolfExplorer } from "@/games/golf/GolfExplorer";
-import { generate } from "@/games/golf/gen";
-import { sunAt } from "@/games/golf/light";
-import { still } from "@/games/golf/render";
+import { BUMPER_PLAINS } from "@/games/golf/plains";
+import { still } from "@/games/golf/toy";
 
 // The golf explorer on its own, built into a single HTML file (npm run golf:build). Inside a frame it
 // takes a fixed height; opened directly on a phone it takes the whole screen.
@@ -18,7 +17,4 @@ document.documentElement.dataset.framed = String(framed);
 createRoot(document.getElementById("root")!).render(<GolfExplorer />);
 
 // For review screenshots: a whole hole as one picture.
-(window as unknown as { __golfStill: unknown }).__golfStill = (seed: number, width: number, hour: number, style: "flat" | "ink" | "mono") => {
-  const h = generate(seed, "hills", { keep: true });
-  return h ? still(h, width, sunAt(new Date(), hour), style).toDataURL("image/png") : null;
-};
+(window as unknown as { __golfStill: unknown }).__golfStill = (i: number, width: number) => still(BUMPER_PLAINS[i], width).toDataURL("image/png");
