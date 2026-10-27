@@ -4,23 +4,30 @@ import {
   ArrowsOutIcon,
   CaretLeftIcon,
   ClockCounterClockwiseIcon,
+  CopyIcon,
   CornersInIcon,
   CornersOutIcon,
   GhostIcon,
   HandPalmIcon,
   MagnetIcon,
   MoonIcon,
+  PushPinIcon,
   RocketLaunchIcon,
+  ShuffleIcon,
+  SpeakerHighIcon,
+  SpeakerSlashIcon,
   SunIcon,
   type Icon,
 } from "@phosphor-icons/react";
-import { sfx } from "@/sound";
-import { COURSES, THEMES, courseById } from "./courses";
-import { BALL_R, DT, INSTANT, MAX_STROKES, brake, compile, newSim, preview, scoreName, shoot, step, activate, type Course, type Power, type Sim } from "./engine";
-import { clockLabel, lightFor, lightKey, sunAt, type Light } from "./light";
-import { buildGlow, buildLayers, buildLight, drawFrame, paletteOf, still, type Camera, type Fx, type Layers } from "./render";
+import * as sound from "./audio";
+import { GREEN_HILLS } from "./courses";
+import { DT, INSTANT, MAX_STROKES, activate, brake, compile, groundAt, newSim, preview, scoreName, shoot, step, type Power, type Sim } from "./engine";
+import { generate, type GenHole } from "./gen";
+import { clockLabel, lightKey, sunAt, type Light } from "./light";
+import { buildLayers, buildLight, buildTall, drawFrame, still, stepMotes, type Camera, type Fx, type Layers, type Mote } from "./render";
 
-// Single-player golf, for exploring the maps: pick a hole and play it. No server, no other players.
+// Golf, one course for now: Green Hills, nine generated holes. Single player, no server. There's also
+// the generator: page through seeds, play any of them, and pin the good ones.
 
 const POWER_UI: Record<Power, { name: string; icon: Icon }> = {
   rocket: { name: "Rocket", icon: RocketLaunchIcon },
@@ -29,6 +36,30 @@ const POWER_UI: Record<Power, { name: string; icon: Icon }> = {
   brake: { name: "Brake", icon: HandPalmIcon },
   mulligan: { name: "Mulligan", icon: ClockCounterClockwiseIcon },
   bigcup: { name: "Big cup", icon: ArrowsOutIcon },
+};
+const FEATURE_NAMES: Record<string, string> = { pond: "Pond", island: "Island", stream: "Stream", gate: "Hedge", slope: "Slope", chamber: "Posts", hill: "Hill", ramp: "Ramp" };
+
+const holeCache = new Map<number, GenHole | null>();
+const hole = (seed: number) => {
+  if (!holeCache.has(seed)) holeCache.set(seed, generate(seed));
+  return holeCache.get(seed)!;
+};
+
+const store = {
+  get<T>(key: string, fallback: T): T {
+    try {
+      return JSON.parse(localStorage.getItem(key) ?? "null") ?? fallback;
+    } catch {
+      return fallback;
+    }
+  },
+  set(key: string, value: unknown) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      // Storage can be off in a sandboxed frame; pins just won't stick.
+    }
+  },
 };
 
 function useLight(hour: number | null): Light {
@@ -41,98 +72,233 @@ function useLight(hour: number | null): Light {
   return useMemo(() => sunAt(now, hour), [now, hour]);
 }
 
+type Round = { seeds: number[]; index: number; scores: number[]; attempt: number };
+
 export function GolfExplorer() {
-  const [hole, setHole] = useState<string | null>(null);
+  const [screen, setScreen] = useState<"home" | "browse" | "play">("home");
   const [hour, setHour] = useState<number | null>(null);
+  const [round, setRound] = useState<Round | null>(null);
+  const [course, setCourse] = useState<number[]>(() => store.get("golf:course", GREEN_HILLS));
+  const [pins, setPins] = useState<number[]>(() => store.get("golf:pins", []));
+  const [muted, setMuted] = useState(false);
   const light = useLight(hour);
-  if (hole) {
-    const i = COURSES.findIndex((c) => c.id === hole);
+  useEffect(() => sound.setNight(light.night), [light.night]);
+  useEffect(() => () => sound.stop(), []);
+  const togglePin = (seed: number) => {
+    const next = pins.includes(seed) ? pins.filter((s) => s !== seed) : [...pins, seed];
+    setPins(next);
+    store.set("golf:pins", next);
+  };
+  const useAsCourse = (seeds: number[]) => {
+    setCourse(seeds);
+    store.set("golf:course", seeds);
+    setScreen("home");
+  };
+  const toggleMute = () => {
+    sound.setMuted(!muted);
+    setMuted(!muted);
+  };
+  const play = (seeds: number[], index = 0) => {
+    setRound({ seeds, index, scores: [], attempt: 0 });
+    setScreen("play");
+  };
+  const chrome = { light, hour, setHour, muted, toggleMute };
+
+  if (screen === "play" && round && round.scores.length === round.seeds.length) return <Scorecard round={round} onHome={() => setScreen("home")} />;
+  if (screen === "play" && round) {
+    const seed = round.seeds[round.index];
     return (
       <Play
-        key={hole}
-        course={courseById(hole)}
-        light={light}
-        hour={hour}
-        setHour={setHour}
-        onBack={() => setHole(null)}
-        onNext={() => setHole(COURSES[(i + 1) % COURSES.length].id)}
+        key={`${seed}-${round.index}-${round.attempt}`}
+        seed={seed}
+        number={round.seeds.length > 1 ? round.index + 1 : null}
+        round={round}
+        {...chrome}
+        onBack={() => setScreen(round.seeds.length > 1 ? "home" : "browse")}
+        onDone={(strokes) => {
+          const scores = [...round.scores, strokes];
+          setRound({ ...round, scores, index: Math.min(round.index + 1, round.seeds.length - 1), attempt: 0 });
+        }}
+        onAgain={() => setRound({ ...round, attempt: round.attempt + 1 })}
       />
     );
   }
-  return <Menu light={light} hour={hour} setHour={setHour} onPick={setHole} />;
+  if (screen === "browse") return <Browse {...chrome} pins={pins} togglePin={togglePin} onBack={() => setScreen("home")} onPlay={(s) => play([s])} useAsCourse={useAsCourse} />;
+  return <Home {...chrome} course={course} onPlay={play} onBrowse={() => setScreen("browse")} />;
 }
 
-// --- The course list ---
+type Chrome = { light: Light; hour: number | null; setHour: (h: number | null) => void; muted: boolean; toggleMute: () => void };
 
-function Menu({ light, hour, setHour, onPick }: { light: Light; hour: number | null; setHour: (h: number | null) => void; onPick: (id: string) => void }) {
-  const [thumbs, setThumbs] = useState<Record<string, string>>({});
+function Thumb({ seed, light, width }: { seed: number; light: Light; width: number }) {
+  const [src, setSrc] = useState<string | null>(null);
   const key = lightKey(light);
   useEffect(() => {
-    // One at a time, so the list shows up straight away and fills in.
-    let cancelled = false;
-    let i = 0;
-    const next = () => {
-      if (cancelled || i >= COURSES.length) return;
-      const c = COURSES[i++];
-      const url = still(c, c.open ? 150 : 220, lightFor(c.theme, light)).toDataURL("image/png");
-      setThumbs((t) => ({ ...t, [c.id]: url }));
-      setTimeout(next, 0);
-    };
-    const id = setTimeout(next, 30);
+    let live = true;
+    const id = setTimeout(() => {
+      const h = hole(seed);
+      if (h && live) setSrc(still(h, width, light).toDataURL("image/jpeg", 0.85));
+    }, 20 + Math.random() * 200);
     return () => {
-      cancelled = true;
+      live = false;
       clearTimeout(id);
     };
-    // Redraw only when the light really changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [seed, key, width]);
+  return <div className="g-thumb">{src && <img src={src} alt="" draggable={false} />}</div>;
+}
 
+function Home({ course, onPlay, onBrowse, ...chrome }: Chrome & { course: number[]; onPlay: (seeds: number[], i?: number) => void; onBrowse: () => void }) {
+  const holes = course.map((s) => ({ seed: s, h: hole(s) }));
+  const par = holes.reduce((a, x) => a + (x.h?.par ?? 0), 0);
   return (
     <div className="g-menu">
       <header className="g-menu-head">
-        <h1 className="g-display g-title-lg">Golf</h1>
-        <TimeChip light={light} hour={hour} setHour={setHour} />
+        <h1 className="g-display g-title-lg">Green Hills</h1>
+        <div className="g-row">
+          <MuteButton {...chrome} />
+          <TimeChip {...chrome} />
+        </div>
       </header>
-      {THEMES.slice(0, 4).map((t) => (
-        <section key={t.id} className="g-section">
-          <h2 className="g-display g-heading">{t.name}</h2>
-          <div className="g-grid">
-            {COURSES.filter((c) => c.theme === t.id).map((c) => (
-              <HoleCard key={c.id} c={c} src={thumbs[c.id]} onPick={onPick} />
+      <button type="button" className="g-btn g-btn-big g-btn-primary g-play-all" onClick={() => onPlay(course)}>
+        Play {course.length} holes · Par {par}
+      </button>
+      <section className="g-section">
+        <ol className="g-holes">
+          {holes.map(({ seed, h }, i) => (
+            <li key={`${seed}-${i}`}>
+              <button type="button" className="g-hole-row" onClick={() => onPlay(course, i)}>
+                <span className="g-display g-hole-num">{i + 1}</span>
+                <Thumb seed={seed} light={chrome.light} width={120} />
+                <span className="g-hole-text">
+                  <span className="g-display g-card-name">{h?.name ?? `Seed ${seed}`}</span>
+                  <span className="g-footnote">
+                    Par {h?.par} · {h?.stats.features.map((f) => FEATURE_NAMES[f]).filter((x, k, a) => a.indexOf(x) === k).join(" · ")}
+                  </span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ol>
+      </section>
+      <button type="button" className="g-btn g-btn-big" onClick={onBrowse}>
+        <ShuffleIcon size={20} weight="bold" /> Generator
+      </button>
+    </div>
+  );
+}
+
+function Browse({ pins, togglePin, onBack, onPlay, useAsCourse, ...chrome }: Chrome & { pins: number[]; togglePin: (s: number) => void; onBack: () => void; onPlay: (s: number) => void; useAsCourse: (s: number[]) => void }) {
+  const [start, setStart] = useState(() => store.get("golf:browse", 100));
+  const [seeds, setSeeds] = useState<number[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+  // Find the next eight seeds that make the cut, a few at a time so the page stays responsive.
+  useEffect(() => {
+    let live = true;
+    setSeeds([]);
+    setBusy(true);
+    let s = start;
+    const found: number[] = [];
+    const next = () => {
+      if (!live) return;
+      const until = performance.now() + 60;
+      while (performance.now() < until && found.length < 8) if (hole(s++)) found.push(s - 1);
+      setSeeds([...found]);
+      if (found.length < 8) setTimeout(next, 0);
+      else setBusy(false);
+    };
+    next();
+    return () => {
+      live = false;
+    };
+  }, [start]);
+  const more = () => {
+    const last = seeds[seeds.length - 1] ?? start;
+    setStart(last + 1);
+    store.set("golf:browse", last + 1);
+  };
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(pins.join(", "));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // No clipboard in this frame.
+    }
+  };
+  return (
+    <div className="g-menu">
+      <header className="g-menu-head">
+        <div className="g-row">
+          <button type="button" className="g-icon-btn g-icon-plain" onClick={onBack} aria-label="Back">
+            <CaretLeftIcon size={22} weight="bold" />
+          </button>
+          <h1 className="g-display g-title">Generator</h1>
+        </div>
+        <TimeChip {...chrome} />
+      </header>
+      {pins.length > 0 && (
+        <section className="g-section">
+          <h2 className="g-display g-heading">Pinned</h2>
+          <div className="g-pins">
+            {pins.map((s) => (
+              <button key={s} type="button" className="g-chip-btn" onClick={() => onPlay(s)}>
+                {hole(s)?.name ?? s} <span className="g-muted">#{s}</span>
+              </button>
             ))}
           </div>
+          <div className="g-row g-pin-actions">
+            <button type="button" className="g-btn" onClick={copy}>
+              <CopyIcon size={18} weight="bold" /> {copied ? "Copied" : "Copy seeds"}
+            </button>
+            <button type="button" className="g-btn g-btn-on" onClick={() => useAsCourse(pins.slice(0, 9))} disabled={pins.length === 0}>
+              Make these the course
+            </button>
+          </div>
         </section>
-      ))}
+      )}
       <section className="g-section">
-        <h2 className="g-display g-heading">Wild cards</h2>
+        <h2 className="g-display g-heading">From seed {start}</h2>
         <div className="g-grid">
-          {COURSES.filter((c) => !THEMES.slice(0, 4).some((t) => t.id === c.theme)).map((c) => (
-            <HoleCard key={c.id} c={c} src={thumbs[c.id]} onPick={onPick} />
-          ))}
+          {seeds.map((s) => {
+            const h = hole(s)!;
+            const pinned = pins.includes(s);
+            return (
+              <div key={s} className="g-card">
+                <button type="button" className="g-card-main" onClick={() => onPlay(s)} aria-label={`Play ${h.name}`}>
+                  <Thumb seed={s} light={chrome.light} width={170} />
+                  <span className="g-card-text">
+                    <span className="g-display g-card-name">{h.name}</span>
+                    <span className="g-footnote">
+                      #{s} · Par {h.par} · {h.stats.length}m
+                    </span>
+                    <span className="g-footnote">{[...new Set(h.stats.features.map((f) => FEATURE_NAMES[f]))].join(" · ")}</span>
+                  </span>
+                </button>
+                <button type="button" className={`g-pin ${pinned ? "g-pin-on" : ""}`} onClick={() => togglePin(s)} aria-label={pinned ? `Unpin ${h.name}` : `Pin ${h.name}`} aria-pressed={pinned}>
+                  <PushPinIcon size={20} weight={pinned ? "fill" : "bold"} />
+                </button>
+              </div>
+            );
+          })}
         </div>
+        <button type="button" className="g-btn g-btn-big g-more" onClick={more} disabled={busy}>
+          {busy ? "Generating…" : "Next eight"}
+        </button>
       </section>
     </div>
   );
 }
 
-function HoleCard({ c, src, onPick }: { c: Course; src?: string; onPick: (id: string) => void }) {
+function MuteButton({ muted, toggleMute }: Chrome) {
   return (
-    <button type="button" className="g-card" onClick={() => onPick(c.id)}>
-      <div className="g-thumb" style={{ background: paletteOf(c.theme).beyond }}>
-        {src && <img src={src} alt="" draggable={false} className={c.open ? "g-thumb-open" : ""} />}
-      </div>
-      <div className="g-card-text">
-        <span className="g-display g-card-name">{c.name}</span>
-        <span className="g-footnote">
-          {c.course === c.name ? THEMES.find((t) => t.id === c.theme)!.name : c.course} · Par {c.par}
-        </span>
-        {c.open && <span className="g-chip">Open world</span>}
-      </div>
+    <button type="button" className="g-icon-btn" onClick={toggleMute} aria-label={muted ? "Sound on" : "Sound off"}>
+      {muted ? <SpeakerSlashIcon size={22} weight="fill" /> : <SpeakerHighIcon size={22} weight="fill" />}
     </button>
   );
 }
 
-function TimeChip({ light, hour, setHour, compact }: { light: Light; hour: number | null; setHour: (h: number | null) => void; compact?: boolean }) {
+function TimeChip({ light, hour, setHour, compact }: Chrome & { compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const Icon = light.night > 0.5 ? MoonIcon : SunIcon;
   return (
@@ -140,21 +306,11 @@ function TimeChip({ light, hour, setHour, compact }: { light: Light; hour: numbe
       <button type="button" className={compact ? "g-icon-btn" : "g-pill g-time-chip"} onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={`Time of day: ${clockLabel(light.hour)}`}>
         <Icon size={compact ? 22 : 18} weight="fill" />
         {!compact && <span className="g-display">{clockLabel(light.hour)}</span>}
-        {!compact && <span className="g-muted">{light.phase}</span>}
       </button>
       {open && (
         <div className="g-time-panel">
           <span className="g-display g-time-label">{clockLabel(light.hour)}</span>
-          <input
-            type="range"
-            min={0}
-            max={24}
-            step={0.05}
-            value={light.hour}
-            aria-label="Time of day"
-            onChange={(e) => setHour(Number(e.target.value))}
-            className="g-range"
-          />
+          <input type="range" min={0} max={24} step={0.05} value={light.hour} aria-label="Time of day" onChange={(e) => setHour(Number(e.target.value))} className="g-range" />
           <button type="button" className={`g-btn ${hour === null ? "g-btn-on" : ""}`} onClick={() => setHour(null)}>
             Live
           </button>
@@ -168,64 +324,70 @@ function TimeChip({ light, hour, setHour, compact }: { light: Light; hour: numbe
 
 type Hud = { strokes: number; mode: Sim["mode"]; bag: Power[]; armed: Power | null; shot: Power | null };
 
-function Play({ course, light, hour, setHour, onBack, onNext }: { course: Course; light: Light; hour: number | null; setHour: (h: number | null) => void; onBack: () => void; onNext: () => void }) {
+function Play({
+  seed,
+  number,
+  round,
+  onBack,
+  onDone,
+  onAgain,
+  ...chrome
+}: Chrome & { seed: number; number: number | null; round: Round; onBack: () => void; onDone: (strokes: number) => void; onAgain: () => void }) {
+  const course = hole(seed)!;
+  const { light } = chrome;
   const wrap = useRef<HTMLDivElement>(null);
   const cv = useRef<HTMLCanvasElement>(null);
   const world = useMemo(() => compile(course), [course]);
-  const sim = useRef<Sim>(newSim(course));
-  const layers = useRef<Layers | null>(null);
+  const sim = useRef<Sim>(newSim(course, seed));
   const lightRef = useRef(light);
   lightRef.current = light;
   const cam = useRef<Camera>({ x: course.w / 2, y: course.h / 2, s: 10, ox: 0, oy: 0 });
-  const view = useRef({ w: 0, h: 0, fit: 10, follow: true, overview: false });
-  const aim = useRef<{ angle: number; power: number; line: { x: number; y: number }[] } | null>(null);
+  const view = useRef({ w: 0, h: 0, fit: 10, play: 18, follow: true, overview: false, intro: 0, introOn: true, panned: 0 });
+  const aim = useRef<{ angle: number; power: number; line: { x: number; y: number }[]; from?: { x: number; y: number }; to?: { x: number; y: number } } | null>(null);
   const fx = useRef<Fx[]>([]);
   const trail = useRef<{ x: number; y: number }[]>([]);
+  const motes = useRef<Mote[]>([]);
+  const rolled = useRef({ dist: 0, dx: 1, dy: 0 });
   const [hud, setHud] = useState<Hud>({ strokes: 0, mode: "aim", bag: [], armed: null, shot: null });
   const [toast, setToast] = useState<{ text: string; key: number } | null>(null);
   const [done, setDone] = useState(false);
   const [overview, setOverview] = useState(false);
-  const [shotOnce, setShotOnce] = useState(false);
-
+  const [intro, setIntro] = useState(true);
   const say = (text: string) => setToast({ text, key: Date.now() });
 
-  // Layers: the ground once, the light whenever the sun has moved enough to notice.
-  if (!layers.current) {
-    const ppu = course.open ? 30 : Math.min(56, 2048 / Math.max(course.w, course.h));
-    layers.current = { ...buildLayers(course, ppu) };
-    Object.assign(layers.current, buildGlow(course, layers.current));
-  }
+  const layers = useMemo<Layers>(() => buildLayers(course, Math.min(26, 3400 / Math.max(course.w + 20, course.h + 20))), [course]);
+  const wind = useMemo(() => {
+    const a = (seed * 2.399) % (Math.PI * 2);
+    return { x: Math.cos(a), y: Math.sin(a) };
+  }, [seed]);
 
-  const PAD_TOP = 84, PAD_BOTTOM = 112;
-  const fitScale = (w: number, h: number) => Math.min((w - 12) / course.w, (h - PAD_TOP - PAD_BOTTOM) / course.h);
-
+  const PAD_TOP = 84, PAD_BOTTOM = 104;
   useEffect(() => {
     const el = wrap.current!;
     const ro = new ResizeObserver(() => {
       const r = el.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
       cv.current!.width = Math.round(r.width * dpr);
       cv.current!.height = Math.round(r.height * dpr);
       const first = view.current.w === 0;
-      view.current.w = r.width;
-      view.current.h = r.height;
-      view.current.fit = fitScale(r.width, r.height);
+      Object.assign(view.current, {
+        w: r.width,
+        h: r.height,
+        fit: Math.min((r.width - 16) / course.w, (r.height - PAD_TOP - PAD_BOTTOM) / (course.h + 3)),
+        play: Math.max(14, r.width / 24),
+      });
       cam.current.ox = r.width / 2;
       cam.current.oy = PAD_TOP + (r.height - PAD_TOP - PAD_BOTTOM) / 2;
       if (first) {
-        if (course.open) {
-          cam.current.s = Math.max(view.current.fit, r.width / 20);
-          cam.current.x = sim.current.x;
-          cam.current.y = sim.current.y - 4;
-        } else cam.current.s = view.current.fit;
+        cam.current.s = view.current.fit;
+        cam.current.x = course.w / 2;
+        cam.current.y = course.h / 2;
       }
     });
     ro.observe(el);
     return () => ro.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [course]);
 
-  // The loop: fixed physics steps, then one frame.
   useEffect(() => {
     const ctx = cv.current!.getContext("2d")!;
     const lightCanvas = document.createElement("canvas");
@@ -234,127 +396,158 @@ function Play({ course, light, hour, setHour, onBack, onNext }: { course: Course
     let acc = 0;
     let t = 0;
     let lastHud = "";
-    let lastBounce = 0;
+    let lastKnock = 0;
     let lk = "";
+    let pending: ReturnType<typeof setTimeout> | null = null;
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
       const dt = Math.min(0.1, (now - last) / 1000);
+      const last0 = last;
       last = now;
       t += dt;
       const s = sim.current;
-      acc += dt;
-      while (acc >= DT) {
-        step(s, world, DT);
-        acc -= DT;
+      const v = view.current;
+      if (!v.introOn) {
+        acc += dt;
+        while (acc >= DT) {
+          step(s, world, DT);
+          acc -= DT;
+        }
       }
-      // What happened, as sound and little effects.
       for (const e of s.events) {
-        const seed = Math.floor(Math.random() * 1e6);
+        const fxSeed = Math.floor(Math.random() * 1e6);
         switch (e.type) {
           case "hit":
-            sfx("place");
+            sound.putt(e.power);
             trail.current = [];
             break;
           case "bounce":
-            if (e.power > 0.06 && now - lastBounce > 70) {
-              sfx("pick");
-              lastBounce = now;
-            }
+            if (now - lastKnock > 60) sound.knock(e.power);
+            lastKnock = now;
             break;
           case "bump":
-            if (now - lastBounce > 70) sfx("tick");
-            lastBounce = now;
-            fx.current.push({ kind: "ring", x: e.x, y: e.y, t, seed, color: "rgba(120,240,255,1)" });
+            if (now - lastKnock > 60) sound.bump();
+            lastKnock = now;
+            fx.current.push({ kind: "ring", x: e.x, y: e.y, t, seed: fxSeed });
             break;
-          case "splash": {
-            const g = s.outGround;
-            sfx("invalid");
-            const lava = g === "lava" || (g === "water" && course.theme === "volcano");
-            if (g !== "void") fx.current.push({ kind: "splash", x: e.x, y: e.y, t, seed, color: lava ? "#ffb02e" : g === "coolant" ? "#59f0ff" : undefined });
-            say(g === "void" ? "Lost it. +1" : lava ? "Melted. +1" : "Splash! +1");
+          case "splash":
+            if (s.outGround === "oob") say("Out of bounds. +1");
+            else {
+              sound.splash();
+              fx.current.push({ kind: "splash", x: e.x, y: e.y, t, seed: fxSeed });
+              say("Splash! +1");
+            }
             break;
-          }
           case "sink":
-            sfx(s.strokes === 1 ? "bingo" : s.strokes <= course.par ? "win" : "play", { count: 3 });
-            fx.current.push({ kind: "ring", x: e.x, y: e.y, t, seed });
-            if (s.strokes <= course.par) fx.current.push({ kind: "confetti", x: e.x, y: e.y, t, seed });
-            setTimeout(() => setDone(true), 700);
+            sound.plunk();
+            fx.current.push({ kind: "ring", x: e.x, y: e.y, t, seed: fxSeed });
+            if (s.strokes <= course.par) fx.current.push({ kind: "confetti", x: e.x, y: e.y - 1, t, seed: fxSeed });
+            setTimeout(() => setDone(true), 900);
             break;
           case "box":
-            sfx("turn");
-            fx.current.push({ kind: "spark", x: e.x, y: e.y - 0.35, t, seed });
+            sound.pickup();
+            fx.current.push({ kind: "spark", x: e.x, y: e.y - 1, t, seed: fxSeed });
             say(`Got ${POWER_UI[e.item].name}`);
             break;
           case "launch":
-            sfx("ghost");
+            sound.whoosh();
             break;
-          case "land": {
-            if (e.power > 0.15) sfx("land");
-            const g = world.course.zones.find((z) => (z.kind === "sand" || z.kind === "snow") && pointIn(e, z.poly));
-            if (g) fx.current.push({ kind: "puff", x: e.x, y: e.y, t, seed, color: g.kind === "snow" ? "#ffffff" : undefined });
+          case "land":
+            if (e.power > 0.1) sound.land(e.power);
+            if (groundAt(world, e) === "sand") fx.current.push({ kind: "puff", x: e.x, y: e.y, t, seed: fxSeed });
             break;
-          }
           case "warp":
-            sfx("ghost");
-            fx.current.push({ kind: "spark", x: e.x, y: e.y, t, seed, color: "#b49aff" });
+            fx.current.push({ kind: "spark", x: e.x, y: e.y, t, seed: fxSeed, color: "#b49aff" });
             break;
           case "lip":
-            sfx("tick");
+            sound.knock(0.2);
             say("Lipped out");
             break;
           case "stop":
-            sfx("land");
+            sound.land(0.4);
             break;
         }
       }
       s.events.length = 0;
-      fx.current = fx.current.filter((f) => t - f.t < 2);
+      fx.current = fx.current.filter((f) => t - f.t < 2.5);
+      const speed = Math.hypot(s.vx, s.vy);
       if (s.mode === "roll") {
         const tr = trail.current;
         const lp = tr[tr.length - 1];
-        if (!lp || Math.hypot(lp.x - s.x, lp.y - s.y) > 0.15) tr.push({ x: s.x, y: s.y });
-        if (tr.length > 22) tr.shift();
+        if (!lp || Math.hypot(lp.x - s.x, lp.y - s.y) > 0.2) tr.push({ x: s.x, y: s.y });
+        if (tr.length > 26) tr.shift();
+        if (speed > 0.01 && s.z <= 0) {
+          rolled.current.dist += speed * dt;
+          rolled.current.dx = s.vx / speed;
+          rolled.current.dy = s.vy / speed;
+        }
+      }
+      sound.rolling(s.mode === "roll" && s.z <= 0 ? speed : 0, s.mode === "roll" ? groundAt(world, s) : null);
+
+      // Camera: a look over the whole hole first, then down to the ball, which it follows a little ahead.
+      const c = cam.current;
+      const ease = (k: number) => k * k * (3 - 2 * k);
+      const follow = { x: s.x + s.vx * 0.3, y: s.y - 2.5 + s.vy * 0.3 };
+      if (s.mode === "aim") {
+        // Lean the view toward the cup.
+        const dx = course.cup.x - s.x, dy = course.cup.y - s.y, d = Math.hypot(dx, dy) || 1;
+        follow.x = s.x + (dx / d) * Math.min(5, d * 0.3);
+        follow.y = s.y - 1.5 + (dy / d) * Math.min(5, d * 0.3);
+      }
+      if (v.introOn) {
+        // Wall-clock time, so a slow first frame doesn't drag the look-over out.
+        v.intro += Math.min(0.25, (now - last0) / 1000);
+        const k = ease(Math.max(0, Math.min(1, (v.intro - 1.6) / 1.6)));
+        c.s = v.fit + (v.play - v.fit) * k;
+        c.x = course.w / 2 + (follow.x - course.w / 2) * k;
+        c.y = course.h / 2 + (follow.y - course.h / 2) * k;
+        if (v.intro > 3.2) {
+          v.introOn = false;
+          setIntro(false);
+        }
+      } else if (v.overview) {
+        const k = 1 - Math.exp(-dt * 6);
+        c.s += (v.fit - c.s) * k;
+        c.x += (course.w / 2 - c.x) * k;
+        c.y += (course.h / 2 - c.y) * k;
+      } else if (v.follow && now - v.panned > 1200) {
+        const k = 1 - Math.exp(-dt * (s.mode === "roll" ? 3 : 2));
+        const zoomOut = s.mode === "roll" ? Math.min(0.22, speed / 90) : 0;
+        c.s += (v.play * (1 - zoomOut) - c.s) * (1 - Math.exp(-dt * 2));
+        c.x += (follow.x - c.x) * k;
+        c.y += (follow.y - c.y) * k;
       }
 
-      // The camera follows the ball whenever there's more course than screen.
-      const c = cam.current, v = view.current;
-      const zoomed = c.s > v.fit * 1.05;
-      if (v.overview) {
-        c.s += (v.fit - c.s) * (1 - Math.exp(-dt * 8));
-        c.x += (course.w / 2 - c.x) * (1 - Math.exp(-dt * 8));
-        c.y += (course.h / 2 - c.y) * (1 - Math.exp(-dt * 8));
-      } else if (v.follow && (course.open || zoomed)) {
-        const k = 1 - Math.exp(-dt * (s.mode === "roll" ? 3.5 : 2.5));
-        c.x += (s.x - c.x) * k;
-        c.y += (s.y - (s.mode === "aim" ? 3 : 0) - c.y) * k;
-      } else if (!zoomed) {
-        c.x += (course.w / 2 - c.x) * (1 - Math.exp(-dt * 8));
-        c.y += (course.h / 2 - c.y) * (1 - Math.exp(-dt * 8));
-      }
-      // Keep the view on the course: past the edge only as far as the scenery goes.
-      const halfW = v.w / 2 / c.s, halfH = (v.h - PAD_TOP - PAD_BOTTOM) / 2 / c.s;
-      const keep = (at: number, half: number, size: number) => (size + 4 <= half * 2 ? size / 2 : Math.max(half - 2, Math.min(size - half + 2, at)));
-      if (!v.overview) {
-        c.x = keep(c.x, halfW, course.w);
-        c.y = keep(c.y, halfH, course.h);
-      }
-
-      const L = lightFor(course.theme, lightRef.current);
+      stepMotes({ motes: motes.current, cam: c, wind, t }, dt, v, lightRef.current.night > 0.5);
+      const L = lightRef.current;
       const key = lightKey(L) + Math.round(L.night * 20);
       if (key !== lk) {
-        lk = key;
-        layers.current!.light = buildLight(course, layers.current!, L);
+        // Redraw the light and everything standing up, but not more than a few times a second.
+        if (!lk || !pending) {
+          const build = () => {
+            const LL = lightRef.current;
+            layers.light = buildLight(course, LL);
+            layers.tall = buildTall(course, layers.ppu, LL);
+            lk = lightKey(LL) + Math.round(LL.night * 20);
+            pending = null;
+          };
+          if (!lk) build();
+          else pending = setTimeout(build, 120);
+        }
       }
       drawFrame(ctx, {
         c: course,
         sim: s,
-        layers: layers.current!,
+        layers,
         light: L,
         cam: c,
         dpr: cv.current!.width / Math.max(1, v.w),
         t,
+        roll: rolled.current,
         trail: trail.current,
         fx: fx.current,
+        motes: motes.current,
+        wind,
         lightCanvas,
         aim: aim.current,
       });
@@ -366,43 +559,52 @@ function Play({ course, light, hour, setHour, onBack, onNext }: { course: Course
       }
     };
     raf = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      if (pending) clearTimeout(pending);
+      sound.rolling(0, null);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [world]);
 
-  // --- Touch: drag back from the ball to aim, anywhere else to look around, two fingers to zoom ---
+  // --- Touch: pull back anywhere to aim; two fingers to look around and zoom ---
   const pointers = useRef(new Map<number, { x: number; y: number }>());
-  const gesture = useRef<{ kind: "aim" | "pan" | "pinch"; d0?: number; s0?: number; mid?: { x: number; y: number } } | null>(null);
-  const local = (e: RPointerEvent) => {
+  const gesture = useRef<{ kind: "aim" | "pan" | "pinch"; start?: { x: number; y: number }; d0?: number; s0?: number; mid?: { x: number; y: number } } | null>(null);
+  const local = (e: { clientX: number; clientY: number }) => {
     const r = cv.current!.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
-  const toScreen = (x: number, y: number) => ({ x: (x - cam.current.x) * cam.current.s + cam.current.ox, y: (y - cam.current.y) * cam.current.s + cam.current.oy });
   const toWorld = (x: number, y: number) => ({ x: (x - cam.current.ox) / cam.current.s + cam.current.x, y: (y - cam.current.oy) / cam.current.s + cam.current.y });
-  const maxPull = () => Math.min(170, view.current.w * 0.42);
+  const maxPull = () => Math.min(190, view.current.w * 0.46);
+  const skipIntro = () => {
+    const v = view.current;
+    if (v.introOn) v.intro = Math.max(v.intro, 1.6);
+  };
 
   const down = (e: RPointerEvent) => {
+    sound.unlock();
     cv.current!.setPointerCapture(e.pointerId);
     const p = local(e);
     pointers.current.set(e.pointerId, p);
     const s = sim.current;
+    if (view.current.introOn) {
+      skipIntro();
+      gesture.current = null;
+      return;
+    }
     if (pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()];
       aim.current = null;
       const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
       gesture.current = { kind: "pinch", d0: Math.hypot(a.x - b.x, a.y - b.y), s0: cam.current.s, mid: toWorld(mid.x, mid.y) };
-      view.current.follow = false;
       return;
     }
     if (s.mode === "roll" && s.shot === "brake") {
       brake(s);
       return;
     }
-    const ball = toScreen(s.x, s.y);
-    if (s.mode === "aim" && Math.hypot(p.x - ball.x, p.y - ball.y) < Math.max(64, BALL_R * 7 * cam.current.s)) {
-      gesture.current = { kind: "aim" };
-      aim.current = null;
-    } else gesture.current = { kind: "pan" };
+    if (e.button === 2 || e.shiftKey || s.mode !== "aim") gesture.current = { kind: "pan" };
+    else gesture.current = { kind: "aim", start: p };
   };
   const move = (e: RPointerEvent) => {
     const prev = pointers.current.get(e.pointerId);
@@ -412,31 +614,32 @@ function Play({ course, light, hour, setHour, onBack, onNext }: { course: Course
     const g = gesture.current;
     if (!g) return;
     const s = sim.current;
-    if (g.kind === "aim") {
-      const ball = toScreen(s.x, s.y);
-      const dx = p.x - ball.x, dy = p.y - ball.y;
+    const v = view.current;
+    if (g.kind === "aim" && g.start) {
+      const dx = g.start.x - p.x, dy = g.start.y - p.y;
       const pull = Math.hypot(dx, dy);
-      if (pull < 8) {
+      if (pull < 10) {
         aim.current = null;
         return;
       }
-      const power = Math.min(1, pull / maxPull());
-      const angle = Math.atan2(-dy, -dx);
-      aim.current = { angle, power, line: preview(world, s, angle, power, s.armed === "ghost") };
+      // Gentle at first, for putts; the last bit of the pull is where the power is.
+      const power = Math.min(1, pull / maxPull()) ** 1.35;
+      const angle = Math.atan2(dy, dx);
+      aim.current = { angle, power, line: preview(world, s, angle, power, s.armed === "ghost"), from: g.start, to: p };
     } else if (g.kind === "pan") {
       cam.current.x -= (p.x - prev.x) / cam.current.s;
       cam.current.y -= (p.y - prev.y) / cam.current.s;
-      view.current.follow = false;
-      view.current.overview = false;
+      v.panned = performance.now();
+      v.overview = false;
       setOverview(false);
     } else if (g.kind === "pinch" && pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()];
       const d = Math.hypot(a.x - b.x, a.y - b.y);
-      const v = view.current;
-      cam.current.s = Math.max(v.fit * 0.9, Math.min(v.fit * 4 + 30, g.s0! * (d / g.d0!)));
+      cam.current.s = Math.max(v.fit * 0.9, Math.min(v.play * 2.2, g.s0! * (d / g.d0!)));
       const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
       cam.current.x = g.mid!.x - (mid.x - cam.current.ox) / cam.current.s;
       cam.current.y = g.mid!.y - (mid.y - cam.current.oy) / cam.current.s;
+      v.panned = performance.now();
       v.overview = false;
       setOverview(false);
     }
@@ -444,10 +647,12 @@ function Play({ course, light, hour, setHour, onBack, onNext }: { course: Course
   const up = (e: RPointerEvent) => {
     pointers.current.delete(e.pointerId);
     const g = gesture.current;
-    if (g?.kind === "aim" && aim.current && aim.current.power > 0.05) {
+    if (g?.kind === "aim" && aim.current && aim.current.power > 0.01) {
       shoot(sim.current, aim.current.angle, aim.current.power);
       view.current.follow = true;
-      setShotOnce(true);
+      view.current.panned = 0;
+      view.current.overview = false;
+      setOverview(false);
     }
     if (g?.kind === "aim") aim.current = null;
     if (pointers.current.size === 0) gesture.current = null;
@@ -457,73 +662,69 @@ function Play({ course, light, hour, setHour, onBack, onNext }: { course: Course
     const el = cv.current!;
     const wheel = (e: WheelEvent) => {
       e.preventDefault();
-      const r = el.getBoundingClientRect();
-      const p = { x: e.clientX - r.left, y: e.clientY - r.top };
+      const p = local(e);
       const before = toWorld(p.x, p.y);
       const v = view.current;
-      cam.current.s = Math.max(v.fit * 0.9, Math.min(v.fit * 4 + 30, cam.current.s * Math.exp(-e.deltaY * 0.0015)));
+      cam.current.s = Math.max(v.fit * 0.9, Math.min(v.play * 2.2, cam.current.s * Math.exp(-e.deltaY * 0.0015)));
       cam.current.x = before.x - (p.x - cam.current.ox) / cam.current.s;
       cam.current.y = before.y - (p.y - cam.current.oy) / cam.current.s;
-      v.follow = false;
-      v.overview = false;
-      setOverview(false);
+      v.panned = performance.now();
     };
+    const menu = (e: Event) => e.preventDefault();
     el.addEventListener("wheel", wheel, { passive: false });
-    return () => el.removeEventListener("wheel", wheel);
+    el.addEventListener("contextmenu", menu);
+    return () => {
+      el.removeEventListener("wheel", wheel);
+      el.removeEventListener("contextmenu", menu);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const toggleOverview = () => {
     const v = view.current;
     v.overview = !v.overview;
+    if (!v.overview) v.panned = 0;
     setOverview(v.overview);
-    if (!v.overview) {
-      v.follow = true;
-      if (course.open) cam.current.s = Math.max(v.fit, v.w / 20);
-    }
-  };
-  const restart = () => {
-    sim.current = newSim(course);
-    trail.current = [];
-    setDone(false);
-    view.current.follow = true;
   };
   const tapPower = (i: number) => {
     const s = sim.current;
     const p = s.bag[i];
     activate(s, i);
-    if (p && INSTANT.includes(p)) sfx("recall");
-    else sfx("pick");
+    if (p && INSTANT.includes(p)) sound.pickup();
   };
 
-  const strokesLeft = MAX_STROKES - hud.strokes;
+  const totalPar = round.seeds.slice(0, round.index).reduce((a, s) => a + (hole(s)?.par ?? 0), 0);
+  const totalStrokes = round.scores.slice(0, round.index).reduce((a, b) => a + b, 0);
+  const vsPar = totalStrokes - totalPar;
   return (
     <div ref={wrap} className="g-play">
-      <canvas
-        ref={cv}
-        className="g-canvas"
-        onPointerDown={down}
-        onPointerMove={move}
-        onPointerUp={up}
-        onPointerCancel={up}
-        aria-label={`${course.name}, par ${course.par}`}
-      />
+      <canvas ref={cv} className="g-canvas" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} aria-label={`${course.name}, par ${course.par}`} />
 
       <div className="g-top">
         <button type="button" className="g-icon-btn" onClick={onBack} aria-label="Back">
           <CaretLeftIcon size={22} weight="bold" />
         </button>
         <div className="g-pill g-hole-pill">
+          {number !== null && <span className="g-display g-hole-no">{number}</span>}
           <span className="g-display g-hole-name">{course.name}</span>
           <span className="g-muted">Par {course.par}</span>
+          {number !== null && number > 1 && <span className="g-muted g-vspar">{vsPar === 0 ? "E" : vsPar > 0 ? `+${vsPar}` : vsPar}</span>}
           <span className="g-display g-strokes" aria-label={`${hud.strokes} strokes`}>
             {hud.strokes}
           </span>
         </div>
-        <TimeChip light={light} hour={hour} setHour={setHour} compact />
+        <TimeChip {...chrome} compact />
       </div>
 
-      {!shotOnce && hud.strokes === 0 && <div className="g-hint">Pull back from the ball</div>}
+      {intro && (
+        <div className="g-intro" key="intro">
+          {number !== null && <span className="g-display g-intro-no">Hole {number}</span>}
+          <span className="g-display g-intro-name">{course.name}</span>
+          <span className="g-intro-par">
+            Par {course.par} · {course.stats.length}m
+          </span>
+        </div>
+      )}
 
       {toast && (
         <div key={toast.key} className="g-toast" onAnimationEnd={() => setToast(null)}>
@@ -535,10 +736,10 @@ function Play({ course, light, hour, setHour, onBack, onNext }: { course: Course
         <div className="g-bag">
           {[0, 1].map((i) => {
             const p = hud.bag[i];
-            const Icon = p ? POWER_UI[p].icon : null;
+            const IconC = p ? POWER_UI[p].icon : null;
             return (
               <button key={i} type="button" className={`g-slot ${p ? "" : "g-slot-empty"}`} disabled={!p || hud.mode !== "aim"} onClick={() => tapPower(i)} aria-label={p ? `Use ${POWER_UI[p].name}` : "Empty power-up slot"}>
-                {Icon && <Icon size={22} weight="fill" />}
+                {IconC && <IconC size={22} weight="fill" />}
                 {p && <span>{POWER_UI[p].name}</span>}
               </button>
             );
@@ -546,8 +747,8 @@ function Play({ course, light, hour, setHour, onBack, onNext }: { course: Course
           {hud.armed && (
             <div className="g-armed">
               {(() => {
-                const Icon = POWER_UI[hud.armed].icon;
-                return <Icon size={18} weight="fill" />;
+                const A = POWER_UI[hud.armed].icon;
+                return <A size={18} weight="fill" />;
               })()}
               {POWER_UI[hud.armed].name} next shot
             </div>
@@ -562,38 +763,30 @@ function Play({ course, light, hour, setHour, onBack, onNext }: { course: Course
           <button type="button" className="g-icon-btn" onClick={toggleOverview} aria-label={overview ? "Follow the ball" : "See the whole hole"}>
             {overview ? <CornersInIcon size={22} weight="bold" /> : <CornersOutIcon size={22} weight="bold" />}
           </button>
-          <button type="button" className="g-icon-btn" onClick={restart} aria-label="Start the hole again">
+          <button type="button" className="g-icon-btn" onClick={onAgain} aria-label="Start the hole again">
             <ArrowCounterClockwiseIcon size={22} weight="bold" />
           </button>
         </div>
       </div>
 
-      {hud.mode === "aim" && strokesLeft <= 0 && !done && (
-        <Result title="PICKED UP" sub={`${MAX_STROKES} strokes`} tone="hit" onAgain={restart} onNext={onNext} />
+      {hud.mode === "aim" && hud.strokes >= MAX_STROKES && !done && (
+        <Result title="PICKED UP" sub={`${MAX_STROKES} strokes`} tone="hit" primary={number ? "Next hole" : "Again"} onPrimary={() => (number ? onDone(MAX_STROKES) : onAgain())} onSecondary={onAgain} />
       )}
       {done && (
         <Result
           title={scoreName(hud.strokes, course.par).toUpperCase()}
           sub={`${hud.strokes} ${hud.strokes === 1 ? "stroke" : "strokes"} · Par ${course.par}`}
           tone={hud.strokes < course.par ? "green" : hud.strokes === course.par ? "yellow" : "grey"}
-          onAgain={restart}
-          onNext={onNext}
+          primary={number !== null ? (number === round.seeds.length ? "Scorecard" : "Next hole") : "Again"}
+          onPrimary={() => (number !== null ? onDone(hud.strokes) : onAgain())}
+          onSecondary={onAgain}
         />
       )}
     </div>
   );
 }
 
-function pointIn(p: { x: number; y: number }, poly: { x: number; y: number }[]) {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const a = poly[i], b = poly[j];
-    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
-  }
-  return inside;
-}
-
-function Result({ title, sub, tone, onAgain, onNext }: { title: string; sub: string; tone: "green" | "yellow" | "grey" | "hit"; onAgain: () => void; onNext: () => void }) {
+function Result({ title, sub, tone, primary, onPrimary, onSecondary }: { title: string; sub: string; tone: "green" | "yellow" | "grey" | "hit"; primary: string; onPrimary: () => void; onSecondary: () => void }) {
   const words = title.split(" ");
   return (
     <div className="g-result">
@@ -602,7 +795,7 @@ function Result({ title, sub, tone, onAgain, onNext }: { title: string; sub: str
           {words.map((w, wi) => (
             <div key={wi} className="g-tile-row">
               {[...w].map((ch, i) => (
-                <span key={i} className={`g-tile g-tile-${tone === "hit" && wi === 0 && i === 0 ? "hit" : tone}`} style={{ animationDelay: `${(wi * 4 + i) * 60}ms` }}>
+                <span key={i} className={`g-tile g-tile-${tone === "hit" && wi === 0 && i === 0 ? "hit" : tone === "hit" ? "grey" : tone}`} style={{ animationDelay: `${(wi * 4 + i) * 60}ms` }}>
                   {ch}
                 </span>
               ))}
@@ -611,11 +804,66 @@ function Result({ title, sub, tone, onAgain, onNext }: { title: string; sub: str
         </div>
         <p className="g-muted g-result-sub">{sub}</p>
         <div className="g-result-actions">
-          <button type="button" className="g-btn g-btn-big" onClick={onAgain}>
+          <button type="button" className="g-btn g-btn-big" onClick={onSecondary}>
             Again
           </button>
-          <button type="button" className="g-btn g-btn-big g-btn-primary" onClick={onNext}>
-            Next hole
+          <button type="button" className="g-btn g-btn-big g-btn-primary" onClick={onPrimary}>
+            {primary}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Scorecard({ round, onHome }: { round: Round; onHome: () => void }) {
+  const pars = round.seeds.map((s) => hole(s)?.par ?? 0);
+  const total = round.scores.reduce((a, b) => a + b, 0);
+  const par = pars.reduce((a, b) => a + b, 0);
+  const diff = total - par;
+  return (
+    <div className="g-menu g-scorecard">
+      <div>
+        <h1 className="g-display g-title-lg">Green Hills</h1>
+        <div className="g-tiles g-tiles-left" aria-label={`${total} strokes`}>
+          <div className="g-tile-row">
+            {[...String(total)].map((ch, i) => (
+              <span key={i} className={`g-tile g-tile-${diff < 0 ? "green" : diff === 0 ? "yellow" : "grey"}`} style={{ animationDelay: `${i * 60}ms` }}>
+                {ch}
+              </span>
+            ))}
+          </div>
+        </div>
+        <p className="g-muted g-result-sub">{diff === 0 ? "Even par" : diff > 0 ? `${diff} over par` : `${-diff} under par`}</p>
+        <table className="g-card-table">
+          <thead>
+            <tr>
+              <th>Hole</th>
+              {pars.map((_, i) => (
+                <th key={i}>{i + 1}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th>Par</th>
+              {pars.map((p, i) => (
+                <td key={i}>{p}</td>
+              ))}
+            </tr>
+            <tr>
+              <th>You</th>
+              {round.scores.map((s, i) => (
+                <td key={i} className={s < pars[i] ? "g-under" : s > pars[i] ? "g-over" : ""}>
+                  {s}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+        <div className="g-result-actions">
+          <button type="button" className="g-btn g-btn-big g-btn-primary" onClick={onHome}>
+            Done
           </button>
         </div>
       </div>

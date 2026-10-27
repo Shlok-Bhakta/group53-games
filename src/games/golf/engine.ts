@@ -9,8 +9,9 @@ export type Vec = { x: number; y: number };
 export type Theme = "hills" | "desert" | "ice" | "volcano" | "arcade" | "orbit" | "server" | "zen";
 
 // What the ball rolls on. Hazards end the shot: one stroke penalty and back to where it was hit from.
-export type Ground = "green" | "fringe" | "rough" | "dune" | "sand" | "quicksand" | "snow" | "ice" | "bridge" | "stone" | "water" | "lava" | "void" | "coolant";
-export const HAZARDS: Ground[] = ["water", "lava", "void", "coolant"];
+export type Ground = "green" | "fringe" | "rough" | "dune" | "sand" | "quicksand" | "snow" | "ice" | "bridge" | "stone" | "water" | "lava" | "void" | "coolant" | "oob";
+// "oob" is everything outside the course's walls: only a ball in the air can get there.
+export const HAZARDS: Ground[] = ["water", "lava", "void", "coolant", "oob"];
 // Rolling resistance (units/s²). Green is a fast mini-golf carpet, ice barely slows anything.
 export const DECEL: Record<Ground, number> = {
   green: 4.6,
@@ -27,6 +28,7 @@ export const DECEL: Record<Ground, number> = {
   lava: 0,
   void: 0,
   coolant: 0,
+  oob: 0,
 };
 
 // Zones either set the ground (later zones win) or push the ball around on top of it.
@@ -96,7 +98,14 @@ export type Ev =
   | { type: "box"; x: number; y: number; power: number; item: Power };
 
 type Seg = { a: Vec; b: Vec; r: number; h: number; bounce: number; rim: boolean };
-export type World = { course: Course; segs: Seg[] };
+export type World = { course: Course; segs: Seg[]; cells: Map<number, Seg[]> };
+
+// Walls are bucketed into a coarse grid so a ball only checks the ones near it.
+const CELL = 4;
+const cellKey = (i: number, j: number) => i * 4096 + j;
+export function nearSegs(world: World, x: number, y: number): Seg[] {
+  return world.cells.get(cellKey(Math.floor(x / CELL), Math.floor(y / CELL))) ?? [];
+}
 
 type Snapshot = { x: number; y: number; strokes: number; bag: Power[]; boxes: boolean[]; cupScale: number };
 export type Sim = {
@@ -184,7 +193,25 @@ export function compile(course: Course): World {
   const m = 0.2;
   const box = [v(m, m), v(course.w - m, m), v(course.w - m, course.h - m), v(m, course.h - m)];
   for (const [a, b] of edges(box)) segs.push({ a, b, r: 0.2, h: 99, bounce: 0.6, rim: true });
-  return { course, segs };
+  // Each wall goes in every cell within reach of a ball touching it, including the cells next door.
+  const cells = new Map<number, Seg[]>();
+  for (const s of segs) {
+    const pad = s.r + BALL_R + 0.5;
+    const i0 = Math.floor((Math.min(s.a.x, s.b.x) - pad) / CELL) - 1, i1 = Math.floor((Math.max(s.a.x, s.b.x) + pad) / CELL) + 1;
+    const j0 = Math.floor((Math.min(s.a.y, s.b.y) - pad) / CELL) - 1, j1 = Math.floor((Math.max(s.a.y, s.b.y) + pad) / CELL) + 1;
+    for (let i = Math.max(-1, i0); i <= i1; i++)
+      for (let j = Math.max(-1, j0); j <= j1; j++) {
+        // Skip cells the segment's capsule doesn't come near.
+        const cx = (i + 0.5) * CELL, cy = (j + 0.5) * CELL;
+        const q = closest({ x: cx, y: cy }, s.a, s.b);
+        if (Math.hypot(q.x - cx, q.y - cy) > CELL * 1.5 + pad) continue;
+        const k = cellKey(i, j);
+        const list = cells.get(k);
+        if (list) list.push(s);
+        else cells.set(k, [s]);
+      }
+  }
+  return { course, segs, cells };
 }
 
 export function groundAt(world: World, p: Vec): Ground {
@@ -193,8 +220,10 @@ export function groundAt(world: World, p: Vec): Ground {
     const z = c.zones[i];
     if (z.kind in DECEL && inPoly(p, z.poly)) return z.kind as Ground;
   }
-  for (const g of c.greens) if (inPoly(p, g.poly)) return "green";
-  return c.off;
+  // Greens are even-odd: a loop inside another is a hole in it (an island in the fairway).
+  let inside = false;
+  for (const g of c.greens) if (inPoly(p, g.poly)) inside = !inside;
+  return inside ? "green" : c.off;
 }
 
 export type MoverPose =
@@ -494,7 +523,7 @@ export function step(sim: Sim, world: World, dt = DT) {
 
   // Walls, then everything round.
   let hit = 0;
-  for (const s of world.segs) {
+  for (const s of nearSegs(world, sim.x, sim.y)) {
     if (s.h <= sim.z) continue;
     if (ghost && !s.rim) continue;
     hit = Math.max(hit, collide(sim, s.a, s.b, s.r, s.bounce));
@@ -629,7 +658,7 @@ export function preview(world: World, from: Vec, angle: number, power: number, g
   while (left > 0) {
     const nx = p.x + dx * stepLen, ny = p.y + dy * stepLen;
     let hitN: Vec | null = null;
-    for (const s of world.segs) {
+    for (const s of nearSegs(world, nx, ny)) {
       if (ghost && !s.rim) continue;
       const q = closest({ x: nx, y: ny }, s.a, s.b);
       const ex = nx - q.x, ey = ny - q.y;

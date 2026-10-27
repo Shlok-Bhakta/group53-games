@@ -1,104 +1,124 @@
 import { describe, expect, test } from "vitest";
-import { COURSES, courseById } from "./courses";
-import { BALL_R, CUP_R, DT, HAZARDS, activate, closest, compile, groundAt, newSim, poseOf, shoot, step, type Sim, type World } from "./engine";
+import { GREEN_HILLS } from "./courses";
+import { BALL_R, CUP_R, DT, HAZARDS, activate, closest, compile, groundAt, newSim, poseOf, shoot, step, v, type Course, type Ground, type Sim, type World } from "./engine";
+import { MAX_ROLL, generate, powerFor } from "./gen";
 
-const settle = (sim: Sim, world: World, seconds = 30) => {
+const settle = (sim: Sim, world: World, seconds = 40) => {
   for (let i = 0; i < seconds / DT && (sim.mode === "roll" || sim.mode === "out"); i++) step(sim, world);
   return sim;
 };
-const aimAt = (sim: Sim, x: number, y: number) => Math.atan2(y - sim.y, x - sim.x);
+const box = (x0: number, y0: number, x1: number, y1: number) => [v(x0, y0), v(x1, y0), v(x1, y1), v(x0, y1)];
 
-describe("golf courses", () => {
-  test("sixteen maps: three per theme plus four wild cards, one open world per theme", () => {
-    expect(COURSES).toHaveLength(16);
-    expect(new Set(COURSES.map((c) => c.id)).size).toBe(16);
-    for (const theme of ["hills", "desert", "ice", "volcano"]) {
-      const of = COURSES.filter((c) => c.theme === theme);
-      expect(of).toHaveLength(3);
-      expect(of.filter((c) => c.open)).toHaveLength(1);
-    }
+// A plain walled green, 20 by 60, with whatever's added on top.
+function plain(extra: Partial<Course> = {}): Course {
+  return {
+    id: "test", name: "Test", course: "Test", theme: "hills", par: 3, w: 30, h: 70,
+    tee: v(15, 60), cup: v(15, 10), off: "oob",
+    greens: [{ poly: box(5, 5, 25, 65) }],
+    zones: [], walls: [], blocks: [], props: [], bumpers: [], movers: [], portals: [], wells: [], lamps: [], boxes: [],
+    ...extra,
+  };
+}
+
+describe("golf generator", () => {
+  test("the same seed always makes the same hole", () => {
+    const a = generate(GREEN_HILLS[0])!, b = generate(GREEN_HILLS[0])!;
+    expect(a).not.toBeNull();
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 
-  test.each(COURSES.map((c) => [c.id, c] as const))("%s: tee, cup and boxes sit on solid ground, clear of walls", (_, c) => {
+  test.each(GREEN_HILLS.map((s) => [s]))("Green Hills seed %i: a long hole that plays", (seed) => {
+    const c = generate(seed)!;
+    expect(c).not.toBeNull();
     const world = compile(c);
-    for (const p of [c.tee, c.cup, ...c.boxes]) {
-      expect(HAZARDS).not.toContain(groundAt(world, p));
-      expect(p.x).toBeGreaterThan(0);
-      expect(p.x).toBeLessThan(c.w);
-      expect(p.y).toBeGreaterThan(0);
-      expect(p.y).toBeLessThan(c.h);
-    }
+    expect(c.stats.length).toBeGreaterThan(60);
+    expect(c.par).toBeGreaterThanOrEqual(3);
+    // The bot got round, and not in one or two.
+    expect(c.stats.bot).toBeGreaterThan(2);
+    expect(c.stats.bot).toBeLessThanOrEqual(c.par + 2);
+    for (const p of [c.tee, c.cup, ...c.boxes]) expect(HAZARDS).not.toContain(groundAt(world, p));
     for (const p of [c.tee, c.cup])
       for (const s of world.segs) {
         const q = closest(p, s.a, s.b);
         expect(Math.hypot(p.x - q.x, p.y - q.y)).toBeGreaterThan(s.r + BALL_R);
       }
+    // Straight at the cup from the tee is never a hole in one.
+    const sim = newSim(c);
+    shoot(sim, Math.atan2(c.cup.y - c.tee.y, c.cup.x - c.tee.x), powerFor(Math.hypot(c.cup.x - c.tee.x, c.cup.y - c.tee.y)));
+    settle(sim, world);
+    expect(sim.mode).not.toBe("sunk");
   });
 
-  test.each(COURSES.map((c) => [c.id, c] as const))("%s: a shot from the tee rolls and comes to rest", (_, c) => {
-    const world = compile(c);
-    const sim = newSim(c);
-    shoot(sim, aimAt(sim, c.cup.x, c.cup.y), 0.35);
-    settle(sim, world);
-    expect(sim.mode === "aim" || sim.mode === "sunk").toBe(true);
-    expect(sim.strokes).toBeGreaterThanOrEqual(1);
-  });
+  test("most seeds are thrown out, but plenty make it", () => {
+    let made = 0;
+    for (let s = 500; s < 520; s++) if (generate(s)) made++;
+    expect(made).toBeGreaterThan(1);
+    expect(made).toBeLessThan(20);
+  }, 60_000);
 });
 
 describe("golf physics", () => {
-  const c = courseById("windmill");
-  const world = compile(c);
+  test("a full-power putt rolls about as far as the generator thinks", () => {
+    const c = plain({ greens: [{ poly: box(5, 5, 25, 200) }], h: 210, tee: v(15, 190) });
+    const sim = newSim(c);
+    shoot(sim, -Math.PI / 2, 1);
+    settle(sim, compile(c));
+    expect(190 - sim.y).toBeGreaterThan(MAX_ROLL * 0.9);
+    expect(190 - sim.y).toBeLessThan(MAX_ROLL * 1.1);
+  });
 
   test("a gentle putt drops; a hard one lips out and keeps going", () => {
+    const c = plain();
+    const world = compile(c);
     const soft = newSim(c);
-    Object.assign(soft, { x: c.cup.x, y: c.cup.y + 2.5 });
-    shoot(soft, -Math.PI / 2, 0.22);
+    Object.assign(soft, { x: 15, y: 13 });
+    shoot(soft, -Math.PI / 2, powerFor(3.4));
     settle(soft, world);
     expect(soft.mode).toBe("sunk");
 
     const hard = newSim(c);
-    Object.assign(hard, { x: c.cup.x + CUP_R * 0.6, y: c.cup.y + 1.5 });
+    Object.assign(hard, { x: 15 + CUP_R * 0.6, y: 12 });
     shoot(hard, -Math.PI / 2, 0.95);
     for (let i = 0; i < 0.3 / DT; i++) step(hard, world);
     expect(hard.mode).toBe("roll");
   });
 
   test("water costs a stroke and puts the ball back where it was hit from", () => {
+    const c = plain({ zones: [{ kind: "water", poly: box(5, 30, 25, 34) }] });
     const sim = newSim(c);
-    const pond = { x: 6.4, y: 25.6 };
-    const from = { x: sim.x, y: sim.y };
-    shoot(sim, aimAt(sim, pond.x, pond.y), 0.6);
-    settle(sim, world);
+    shoot(sim, -Math.PI / 2, 0.8);
+    settle(sim, compile(c));
     expect(sim.strokes).toBe(2);
     expect(sim.mode).toBe("aim");
-    expect(sim.x).toBeCloseTo(from.x);
-    expect(sim.y).toBeCloseTo(from.y);
+    expect(sim.y).toBeCloseTo(60);
   });
 
-  test("a ramp throws the ball over the stone wall", () => {
+  test("a ramp throws the ball over a stream; landing outside the walls is out of bounds", () => {
+    const c = plain({ zones: [{ kind: "water", poly: box(5, 38, 25, 42) }, { kind: "ramp", poly: box(13.7, 48, 16.3, 51), dir: v(0, -1), lift: 0.62 }] });
+    const world = compile(c);
     const sim = newSim(c);
-    Object.assign(sim, { x: 16.6, y: 21.5 });
-    shoot(sim, -Math.PI / 2, 0.8);
     let flew = 0;
+    shoot(sim, -Math.PI / 2, 0.9);
     for (let i = 0; i < 30 / DT && sim.mode === "roll"; i++) {
       step(sim, world);
       flew = Math.max(flew, sim.z);
     }
-    expect(flew).toBeGreaterThan(0.9);
-    expect(sim.y).toBeLessThan(13.1);
+    expect(flew).toBeGreaterThan(0.7);
+    expect(sim.strokes).toBe(1);
+    expect(sim.y).toBeLessThan(38);
+    expect(groundAt(world, v(2, 30))).toBe<Ground>("oob");
   });
 
-  test("the windmill's blades open and close the tunnel", () => {
-    const mill = c.movers[0];
-    const states = new Set<boolean>();
-    for (let t = 0; t < 6; t += 0.05) {
-      const pose = poseOf(mill, t);
-      if (pose.kind === "windmill") states.add(pose.closed);
-    }
-    expect(states).toEqual(new Set([true, false]));
+  test("islands are holes in the green", () => {
+    const c = plain({ greens: [{ poly: box(5, 5, 25, 65) }, { poly: box(12, 30, 18, 36) }] });
+    const world = compile(c);
+    expect(groundAt(world, v(15, 33))).toBe("oob");
+    expect(groundAt(world, v(8, 33))).toBe("green");
   });
 
   test("the same shot at the same moment plays out exactly the same", () => {
+    const c = generate(GREEN_HILLS[1])!;
+    const world = compile(c);
     const run = () => {
       const sim = newSim(c);
       for (let i = 0; i < 1.3 / DT; i++) step(sim, world);
@@ -110,27 +130,37 @@ describe("golf physics", () => {
   });
 
   test("a mulligan takes the last shot back", () => {
+    const c = plain();
     const sim = newSim(c);
     sim.bag = ["mulligan"];
     shoot(sim, -1.2, 0.5);
-    settle(sim, world);
+    settle(sim, compile(c));
     activate(sim, 0);
     expect(sim.strokes).toBe(0);
-    expect(sim.x).toBeCloseTo(c.tee.x);
+    expect(sim.x).toBeCloseTo(15);
     expect(sim.bag).toEqual([]);
   });
 
   test("ice barely slows the ball; sand stops it fast", () => {
     const roll = (kind: "green" | "ice" | "sand") => {
-      const flat = { ...c, zones: [{ kind, poly: [{ x: 0, y: 0 }, { x: 999, y: 0 }, { x: 999, y: 999 }, { x: 0, y: 999 }] }], greens: [], walls: [], blocks: [], props: [], movers: [], w: 999, h: 999, boxes: [] };
-      const w = compile(flat);
+      const flat = plain({ greens: [], zones: [{ kind, poly: box(0, 0, 999, 999) }], w: 999, h: 999 });
       const sim = newSim(flat);
       Object.assign(sim, { x: 10, y: 500 });
       shoot(sim, 0, 0.3);
-      settle(sim, w, 60);
+      settle(sim, compile(flat), 60);
       return sim.x - 10;
     };
     expect(roll("ice")).toBeGreaterThan(roll("green") * 3);
     expect(roll("sand")).toBeLessThan(roll("green") / 2);
+  });
+
+  test("windmill blades open and close", () => {
+    const mill = { kind: "windmill" as const, hub: v(0, 0), L: 3, arms: 4, omega: 1.3, mouth: [v(-1, 0), v(1, 0)] as [typeof v extends (...a: never[]) => infer R ? R : never, ReturnType<typeof v>], height: 2.7 };
+    const states = new Set<boolean>();
+    for (let t = 0; t < 6; t += 0.05) {
+      const pose = poseOf(mill, t);
+      if (pose.kind === "windmill") states.add(pose.closed);
+    }
+    expect(states).toEqual(new Set([true, false]));
   });
 });
