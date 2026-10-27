@@ -14,6 +14,8 @@ export type BoardPiece = {
   // Four-player: an eliminated army, greyed out.
   dead?: boolean;
   moving?: boolean;
+  // A faint copy left on the square a piece came from while its move waits for Confirm. Takes no taps.
+  ghost?: boolean;
 };
 
 type Props = {
@@ -122,7 +124,7 @@ export function Board({ pieces, view, canSelect, selectable, selected, targets, 
           if (!view.onBoard(...sq)) return <div key={i} aria-hidden="true" />;
           const dark = (sq[0] + sq[1]) % 2 === 0;
           const isTarget = targets.some((t) => same(t, sq));
-          const occupied = pieces.some((p) => Math.round(p.x) === sq[0] && Math.round(p.y) === sq[1] && !p.moving);
+          const occupied = pieces.some((p) => !p.ghost && Math.round(p.x) === sq[0] && Math.round(p.y) === sq[1] && !p.moving);
           const name = view.name(sq);
           return (
             <div key={i} role="gridcell" aria-label={name} data-square={name} className={cn("relative", dark ? "bg-[var(--board-dark)]" : "bg-[var(--board-light)]")}>
@@ -153,7 +155,7 @@ export function Board({ pieces, view, canSelect, selectable, selected, targets, 
       {/* Pieces */}
       <div className="pointer-events-none absolute inset-0">
         {pieces.map((p) => {
-          const dragging = drag?.moved && same(drag.from, [p.x, p.y]) && !p.moving;
+          const dragging = drag?.moved && same(drag.from, [p.x, p.y]) && !p.moving && !p.ghost;
           const [c, r] = view.toScreen(p.x, p.y);
           const style: CSSProperties = {
             left: `${c * pct}%`,
@@ -165,7 +167,7 @@ export function Board({ pieces, view, canSelect, selectable, selected, targets, 
             zIndex: dragging ? 30 : 10,
           };
           return (
-            <div key={p.key} className="absolute" style={style} data-piece={`${p.dead ? "dead" : p.color}${p.kind}`}>
+            <div key={p.key} className={cn("absolute", p.ghost && "opacity-30")} style={style} data-piece={p.ghost ? undefined : `${p.dead ? "dead" : p.color}${p.kind}`} data-ghost={p.ghost || undefined}>
               <img src={pieceSrc(p)} alt="" draggable={false} className="relative size-full" />
             </div>
           );

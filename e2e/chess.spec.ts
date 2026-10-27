@@ -31,6 +31,19 @@ async function tapMove(page: Page, from: string, to: string) {
   await page.locator(`[data-square=${to}]`).click();
 }
 
+async function classicMove(page: Page, from: string, to: string) {
+  // The chip under the board, not one on a game in a list sliding out behind it.
+  await expect(page.locator("span:not(a *)", { hasText: /^Your move$/ })).toBeVisible();
+  await tapMove(page, from, to);
+  await page.getByRole("button", { name: /^Confirm/ }).click();
+}
+
+async function pieceOn(page: Page, piece: string, square: string) {
+  const sq = await page.locator(`[data-square=${square}]`).boundingBox();
+  const boxes = await page.locator(`[data-piece="${piece}"]`).evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON()));
+  return boxes.some((b) => Math.abs(b.x - sq!.x) < 2 && Math.abs(b.y - sq!.y) < 2);
+}
+
 async function startClassic(browser: Browser, context: Parameters<typeof phone>[0]) {
   const shlok = await createPlayer("Shlok");
   const chris = await createPlayer("Chris");
@@ -74,11 +87,37 @@ test.describe("chess", () => {
     await g.black.locator("[data-square=e7]").click();
     await expect(g.black.locator("[data-square=e5] span.rounded-full")).toHaveCount(0);
 
+    // The move waits on this phone only, and swapping the dock for Confirm doesn't shift the board.
+    const grid = g.white.getByRole("grid");
+    await tapMove(g.white, "e2", "e3");
+    await expect(g.white.getByRole("button", { name: /^Confirm/ })).toBeVisible();
+    await expect.poll(() => pieceOn(g.white, "wP", "e3")).toBe(true);
+    const pendingY = (await grid.boundingBox())!.y;
+    expect((await getMatch(g.id)).state.moves).toHaveLength(0);
+    await expect.poll(() => pieceOn(g.black, "wP", "e2")).toBe(true);
+    await expect(g.black.getByRole("button", { name: /^Confirm/ })).toHaveCount(0);
+    await g.white.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect.poll(() => pieceOn(g.white, "wP", "e2")).toBe(true);
+    expect((await grid.boundingBox())!.y).toBeCloseTo(pendingY, 0);
+    // A waiting move leaves a faint copy at home. Moving the piece back there takes the move back, and
+    // moving another piece replaces it, with no Cancel needed.
+    const confirm = g.white.getByRole("button", { name: /^Confirm/ });
+    await tapMove(g.white, "e2", "e3");
+    await expect(g.white.locator("[data-ghost]")).toHaveCount(1);
+    await tapMove(g.white, "e3", "e2");
+    await expect(confirm).toHaveCount(0);
+    await expect(g.white.locator("[data-ghost]")).toHaveCount(0);
+    await tapMove(g.white, "d2", "d4");
+    await expect(confirm).toContainText("d4");
     await tapMove(g.white, "e2", "e4");
+    await expect(confirm).toContainText("e4");
+    await expect.poll(() => pieceOn(g.white, "wP", "d2")).toBe(true);
+    await confirm.click();
     await expect(g.black.getByLabel("Moves")).toContainText("e4");
+    expect((await getMatch(g.id)).state.moves.map((m: { san: string }) => m.san)).toEqual(["e4"]);
     await expect(g.white.getByLabel("Moves")).toContainText("e4");
 
-    await tapMove(g.black, "e7", "e5");
+    await classicMove(g.black, "e7", "e5");
     await expect(g.white.getByLabel("Moves")).toContainText("e5");
 
     // Drag a knight out on the white phone.
@@ -88,15 +127,23 @@ test.describe("chess", () => {
     await g.white.mouse.down();
     await g.white.mouse.move(to!.x + to!.width / 2, to!.y + to!.height / 2, { steps: 8 });
     await g.white.mouse.up();
+    await expect(g.white.getByRole("button", { name: /^Confirm/ })).toContainText("Nf3");
+    await expect.poll(() => pieceOn(g.white, "wN", "f3")).toBe(true);
+    expect((await getMatch(g.id)).state.moves).toHaveLength(2);
+    await expect.poll(() => pieceOn(g.black, "wN", "g1")).toBe(true);
+    await g.white.getByRole("button", { name: /^Confirm/ }).click();
     await expect(g.black.getByLabel("Moves")).toContainText("Nf3");
 
     const stored = await getMatch(g.id);
     expect(stored.state.moves.map((m: { san: string }) => m.san)).toEqual(["e4", "e5", "Nf3"]);
 
+    await tapMove(g.black, "b8", "c6");
+    await expect(g.black.getByRole("button", { name: /^Confirm/ })).toBeVisible();
     await g.white.getByRole("button", { name: "Resign" }).click();
     await g.white.getByRole("alertdialog").getByRole("button", { name: "Resign" }).click();
     await expect(g.white.getByRole("heading", { name: "You lost" })).toBeVisible();
     await expect(g.black.getByRole("heading", { name: "You won" })).toBeVisible();
+    await expect(g.black.getByRole("button", { name: /^Confirm/ })).toHaveCount(0);
     await expect(g.black.getByText("1216", { exact: true })).toBeVisible();
 
     await g.black.goto("/chess/mode/classic");
@@ -109,16 +156,45 @@ test.describe("chess", () => {
 
   test("classic: checkmate ends the game for both players", async ({ context, browser }) => {
     const g = await startClassic(browser, context);
-    await tapMove(g.white, "f2", "f3");
+    await classicMove(g.white, "f2", "f3");
     await expect(g.black.getByLabel("Moves")).toContainText("f3");
-    await tapMove(g.black, "e7", "e5");
+    await classicMove(g.black, "e7", "e5");
     await expect(g.white.getByLabel("Moves")).toContainText("e5");
-    await tapMove(g.white, "g2", "g4");
+    await classicMove(g.white, "g2", "g4");
     await expect(g.black.getByLabel("Moves")).toContainText("g4");
-    await tapMove(g.black, "d8", "h4");
+    await classicMove(g.black, "d8", "h4");
     await expect(g.black.getByRole("heading", { name: "You won" })).toBeVisible();
     await expect(g.white.getByRole("heading", { name: "You lost" })).toBeVisible();
     await expect(g.white.getByText("Checkmate")).toBeVisible();
+    await g.close();
+  });
+
+  test("classic: choosing a promotion previews it until confirmed", async ({ context, browser }) => {
+    test.setTimeout(60_000);
+    const g = await startClassic(browser, context);
+    for (const [page, from, to] of [
+      [g.white, "a2", "a4"], [g.black, "h7", "h5"],
+      [g.white, "a4", "a5"], [g.black, "h5", "h4"],
+      [g.white, "a5", "a6"], [g.black, "h4", "h3"],
+      [g.white, "a6", "b7"], [g.black, "h3", "g2"],
+    ] as const) {
+      await classicMove(page, from, to);
+      await expect.poll(async () => (await getMatch(g.id)).state.moves.at(-1)?.lan.slice(2, 4)).toBe(to);
+    }
+    await tapMove(g.white, "b7", "a8");
+    await g.white.getByRole("button", { name: "Knight", exact: true }).click();
+    await expect(g.white.getByRole("button", { name: /^Confirm/ })).toContainText("bxa8=N");
+    await expect.poll(() => pieceOn(g.white, "wN", "a8")).toBe(true);
+    expect((await getMatch(g.id)).state.moves).toHaveLength(8);
+    await expect.poll(() => pieceOn(g.black, "bR", "a8")).toBe(true);
+    await g.white.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect.poll(() => pieceOn(g.white, "bR", "a8")).toBe(true);
+    await tapMove(g.white, "b7", "a8");
+    await g.white.getByRole("button", { name: "Queen", exact: true }).click();
+    await g.white.getByRole("button", { name: /^Confirm/ }).click();
+    await expect(g.black.getByLabel("Moves")).toContainText("bxa8=Q");
+    await expect.poll(() => pieceOn(g.black, "wQ", "a8")).toBe(true);
+    expect((await getMatch(g.id)).state.moves).toHaveLength(9);
     await g.close();
   });
 
@@ -372,7 +448,7 @@ test.describe("chess", () => {
     await c.page.goto(`/chess/${g.id}`);
     await expect(c.page.getByText("You're watching.")).toBeVisible();
     await expect(c.page.getByRole("button", { name: "Resign" })).toHaveCount(0);
-    await tapMove(g.white, "e2", "e4");
+    await classicMove(g.white, "e2", "e4");
     await expect(c.page.getByLabel("Moves")).toContainText("e4");
     await c.context.close();
     await g.close();

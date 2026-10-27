@@ -59,11 +59,18 @@ test("chess screens", async ({ browser }) => {
   const black = white === a ? b : a;
   for (const [pg, f, t] of [[white, "e2", "e4"], [black, "e7", "e5"], [white, "g1", "f3"], [black, "b8", "c6"], [white, "f1", "c4"]] as const) {
     await tap(pg, f, t);
+    await pg.getByRole("button", { name: /^Confirm/ }).click();
     await expect(pg === white ? black.getByLabel("Moves") : white.getByLabel("Moves")).toContainText(f === "g1" ? "Nf3" : f === "b8" ? "Nc6" : f === "f1" ? "Bc4" : t);
   }
   await black.locator("[data-square=g8]").click();
   await shot(black, "classic-selected");
   await shot(white, "classic-waiting");
+  await black.locator("[data-square=f6]").click();
+  await black.emulateMedia({ colorScheme: "dark" });
+  await shot(black, "classic-confirm-dark");
+  await black.emulateMedia({ colorScheme: "light" });
+  await shot(black, "classic-confirm-light");
+  await black.getByRole("button", { name: "Cancel", exact: true }).click();
 
   // Real-time
   await a.goto("/chess/mode/realtime");
@@ -128,12 +135,16 @@ test("four-player screens", async ({ browser }) => {
   const moves: [number, string, string][] = [[0, "e2", "e4"], [1, "b5", "d5"], [2, "f13", "f11"], [3, "m10", "k10"], [0, "e1", "f3"], [1, "a5", "c6"]];
   for (const [i, f, t] of moves) {
     await tap(pages[i], f, t);
+    await pages[i].getByRole("button", { name: /^Confirm/ }).click();
     await expect(pages[(i + 1) % 4].getByLabel("Moves")).toContainText(t);
   }
-  await c.locator("[data-square=f13]").click();
+  await c.locator("[data-square=f11]").click();
   await shot(c, "four-yellow-selected", true);
   await shot(a, "four-red", true);
   await shot(b, "four-blue-light", true);
+  await c.locator("[data-square=f10]").click();
+  await shot(c, "four-confirm", true);
+  await c.getByRole("button", { name: "Cancel", exact: true }).click();
 
   // Real-time.
   const rid = await admin().action(anyApi.testing.startFour, { mode: "chess:realtime4", players: people.map((p) => p.userId) });

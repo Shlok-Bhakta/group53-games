@@ -1,15 +1,15 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation } from "convex/react";
 import { Chess, type Square } from "chess.js";
-import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { ClassicState } from "../../../convex/chess";
 import type { MatchView } from "../../../convex/matches";
 import { Board, fromName, squareName, type BoardPiece, type Sq } from "./Board";
-import { viewFor } from "./geometry";
+import { same, viewFor } from "./geometry";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { cn } from "@/lib/utils";
+import { ChessFrame, ConfirmMove, draftTargets, realSquare, useMoveDraft, useSendMove, type Dock } from "./dock";
 
 type Kind = BoardPiece["kind"];
 
@@ -41,16 +41,27 @@ function useStableKeys(board: ReturnType<Chess["board"]>) {
   }, [board]);
 }
 
-export function ClassicGame({ match, meId, above, below }: { match: MatchView; meId: Id<"users"> | undefined; above?: ReactNode; below?: ReactNode }) {
+type Draft = { from: Sq; to: Sq; promotion?: string };
+
+export function ClassicGame({ match, meId, above, below, dock }: { match: MatchView; meId: Id<"users"> | undefined; above?: ReactNode; below?: ReactNode; dock: Dock }) {
   const state = match.state as ClassicState;
   const chess = useMemo(() => new Chess(state.fen), [state.fen]);
-  const board = useMemo(() => chess.board(), [chess]);
-  const keys = useStableKeys(board);
   const me = match.players.find((p) => p.userId === meId);
   const myColor = (me?.color as "w" | "b" | undefined) ?? "w";
   const myTurn = match.status === "active" && !!me && chess.turn() === myColor;
   const [selected, setSelected] = useState<Sq | null>(null);
-  const [promotion, setPromotion] = useState<{ from: Sq; to: Sq } | null>(null);
+  const [draft, setDraft] = useMoveDraft<Draft & { choosing?: boolean }>(`${match._id}:${match.status}:${state.fen}`);
+  const [sending, send] = useSendMove();
+  // The position after the waiting move, shown on the board until it's confirmed.
+  const preview = useMemo(() => {
+    if (!draft || draft.choosing || !myTurn) return null;
+    const after = new Chess(state.fen);
+    return { chess: after, move: after.move({ from: squareName(draft.from), to: squareName(draft.to), promotion: draft.promotion }) };
+  }, [draft, state.fen, myTurn]);
+  const shown = preview ? draft : null;
+  const display = preview?.chess ?? chess;
+  const board = useMemo(() => display.board(), [display]);
+  const keys = useStableKeys(board);
 
   const move = useMutation(api.chess.move).withOptimisticUpdate((store, { id, from, to, promotion }) => {
     const current = store.getQuery(api.matches.get, { id });
@@ -69,41 +80,51 @@ export function ClassicGame({ match, meId, above, below }: { match: MatchView; m
     const [x, y] = fromName(sq);
     return { key: p.key, color: p.color as "w" | "b", kind: p.type.toUpperCase() as Kind, x, y };
   });
+  const moved = shown && chess.get(squareName(shown.from) as Square);
+  if (shown && moved) pieces.push({ key: "ghost", color: moved.color, kind: moved.type.toUpperCase() as Kind, x: shown.from[0], y: shown.from[1], ghost: true });
 
-  const targets: Sq[] = selected ? chess.moves({ square: squareName(selected) as Square, verbose: true }).map((m) => fromName(m.to)) : [];
+  // While a move waits you can still pick up any of your pieces, the waiting one included, and move it instead.
+  const pickable = myTurn && !sending;
+  const mineIn = (pos: Chess, sq: Sq) => pos.get(squareName(sq) as Square)?.color === myColor;
+  const legalFrom = (sq: Sq) => chess.moves({ square: squareName(sq) as Square, verbose: true }).map((m) => fromName(m.to));
+  const from = selected && realSquare(shown, selected);
+  const targets: Sq[] = from && pickable ? draftTargets(shown, from, legalFrom(from)) : [];
   const last = state.moves.at(-1);
-  const lastMove: [Sq, Sq] | null = last ? [fromName(last.lan.slice(0, 2)), fromName(last.lan.slice(2, 4))] : null;
-  const king = chess.inCheck() ? kingSquare(chess, chess.turn()) : null;
+  const lastMove: [Sq, Sq] | null = shown ? [shown.from, shown.to] : last ? [fromName(last.lan.slice(0, 2)), fromName(last.lan.slice(2, 4))] : null;
+  const king = display.inCheck() ? kingSquare(display, display.turn()) : null;
   const view = useMemo(() => viewFor("two", myColor), [myColor]);
 
-  const play = (from: Sq, to: Sq, promo?: string) => {
-    move({ id: match._id, from: squareName(from), to: squareName(to), promotion: promo }).catch((err: Error) => toast.error(err.message.replace(/^.*Uncaught Error: /, "").split("\n")[0]));
-  };
-  const onMove = (from: Sq, to: Sq) => {
+  const onMove = (at: Sq, to: Sq) => {
+    const from = realSquare(shown, at);
+    if (shown && same(from, shown.from) && same(to, shown.from)) return setDraft(null);
     const piece = chess.get(squareName(from) as Square);
-    if (piece?.type === "p" && (to[1] === 7 || to[1] === 0)) setPromotion({ from, to });
-    else play(from, to);
+    setDraft({ from, to, choosing: piece?.type === "p" && (to[1] === 7 || to[1] === 0) });
   };
+  const confirm = (d: Draft, san: string) => send(san, () => move({ id: match._id, from: squareName(d.from), to: squareName(d.to), promotion: d.promotion }));
 
   return (
-    <>
+    <ChessFrame
+      dock={dock(
+        sending ? <ConfirmMove move={sending} busy /> : shown && preview ? <ConfirmMove move={preview.move.san} onCancel={() => setDraft(null)} onConfirm={() => void confirm(shown, preview.move.san)} /> : undefined,
+      )}
+    >
       {above}
       <Board
         label="Classic chess board"
         pieces={pieces}
         view={view}
-        canSelect={(sq) => myTurn && chess.get(squareName(sq) as Square)?.color === myColor}
+        canSelect={(sq) => pickable && mineIn(display, sq) && mineIn(chess, realSquare(shown, sq))}
         selected={selected}
         targets={targets}
         onSelect={setSelected}
         onMove={onMove}
         lastMove={lastMove}
         check={king ? [king] : []}
-        disabled={!myTurn}
+        disabled={!pickable}
       />
       {below}
       <MoveList moves={state.moves.map((m) => m.san)} />
-      <Drawer open={promotion !== null} onOpenChange={(o) => !o && setPromotion(null)}>
+      <Drawer open={!!draft?.choosing && myTurn} onOpenChange={(o) => !o && setDraft(null)}>
         <DrawerContent className="pb-[calc(env(safe-area-inset-bottom)+20px)]">
           <DrawerHeader>
             <DrawerTitle>Promote to</DrawerTitle>
@@ -114,10 +135,7 @@ export function ClassicGame({ match, meId, above, below }: { match: MatchView; m
                 key={p}
                 type="button"
                 aria-label={{ q: "Queen", r: "Rook", b: "Bishop", n: "Knight" }[p]}
-                onClick={() => {
-                  if (promotion) play(promotion.from, promotion.to, p);
-                  setPromotion(null);
-                }}
+                onClick={() => draft && setDraft({ from: draft.from, to: draft.to, promotion: p })}
                 className="grid aspect-square touch-manipulation place-items-center rounded-lg bg-card transition-transform duration-100 active:scale-[0.97]"
               >
                 <img src={`/pieces/${myColor}${p.toUpperCase()}.svg`} alt="" className="size-4/5" />
@@ -126,7 +144,7 @@ export function ClassicGame({ match, meId, above, below }: { match: MatchView; m
           </div>
         </DrawerContent>
       </Drawer>
-    </>
+    </ChessFrame>
   );
 }
 

@@ -10,6 +10,7 @@ export function chessRules(mode: ModeKey, s: Settings): string[] {
     case "chess:classic":
       return [
         "Normal chess, one move at a time.",
+        "Your move waits on the board until you tap Confirm. Until then you can move a different piece, or Cancel.",
         "We ping you when it's your move, and again every 8 hours if you forget.",
         ...(s.moveTime ? [`Sit on your move for ${days(s.moveTime)} and you lose on time.`] : []),
         "Offer a draw or resign from under the board.",
@@ -17,6 +18,7 @@ export function chessRules(mode: ModeKey, s: Settings): string[] {
     case "chess:four":
       return [
         "Red, blue, yellow and green take turns clockwise. Your army is always at the bottom of your screen.",
+        "Your move waits on the board until you tap Confirm. Until then you can move a different piece, or Cancel.",
         "Captures score points: pawn 1, knight 3, bishop or rook 5, queen 9. Queens made by promotion are worth 1.",
         "Check two kings with one move for +5, all three for +20.",
         "Checkmate someone for +20. If you have no legal move and aren't in check, you're out but get +20.",

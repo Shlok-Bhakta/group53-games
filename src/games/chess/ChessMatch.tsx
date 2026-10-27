@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { motion } from "motion/react";
 import { CrownSimpleIcon, HandshakeIcon } from "@phosphor-icons/react";
@@ -18,12 +18,12 @@ import { cn } from "@/lib/utils";
 import { ClassicGame } from "./ClassicGame";
 import { FourGame, SEAT_COLORS } from "./FourGame";
 import { RealtimeGame } from "./RealtimeGame";
+import { ChessFrame, type Dock } from "./dock";
 import { COLOR_NAMES } from "./text";
 
 type Player = MatchView["players"][number];
 
-// A chess game in progress or finished, laid out like a native game screen: the board and its players as
-// one block in the middle, and the actions docked at the bottom where thumbs are.
+// A chess game in progress or finished.
 export function ChessGame({ match, meId }: { match: MatchView; meId: Id<"users"> | undefined }) {
   const mode = MODES[match.mode as ModeKey];
   const four = mode.players > 2;
@@ -33,28 +33,23 @@ export function ChessGame({ match, meId }: { match: MatchView; meId: Id<"users">
   const seats = four ? <FourSeats match={match} meId={meId} /> : null;
   const top = !four ? <PlayerBar player={opponent ?? match.players[0]} match={match} meId={meId} /> : null;
   const bottom = !four ? <PlayerBar player={mine ?? match.players[1]} match={match} meId={meId} /> : <FourStatus match={match} meId={meId} />;
-  const game =
-    match.mode === "chess:classic" ? (
-      <ClassicGame match={match} meId={meId} above={top} below={bottom} />
-    ) : match.mode === "chess:four" ? (
-      <FourGame match={match} meId={meId} overlay={seats} below={bottom} />
+  // The dock under the board. In async games a move waiting for Confirm takes the place of draw and resign.
+  const dock: Dock = (confirm) =>
+    match.status === "finished" ? (
+      <Result match={match} meId={meId} />
+    ) : mine ? (
+      <Controls match={match} meId={meId!} confirm={confirm} />
     ) : (
-      <RealtimeGame match={match} meId={meId} above={top} below={bottom} overlay={seats} />
+      <p className="py-3 text-center text-callout text-muted-foreground">You're watching.</p>
     );
-
-  return (
-    <>
-      <div className="flex flex-1 flex-col justify-center gap-2 py-2">{game}</div>
-      <div className="pt-4">
-        {match.status === "finished" ? (
-          <Result match={match} meId={meId} />
-        ) : mine ? (
-          <Controls match={match} meId={meId!} />
-        ) : (
-          <p className="py-3 text-center text-callout text-muted-foreground">You're watching.</p>
-        )}
-      </div>
-    </>
+  return match.mode === "chess:classic" ? (
+    <ClassicGame match={match} meId={meId} above={top} below={bottom} dock={dock} />
+  ) : match.mode === "chess:four" ? (
+    <FourGame match={match} meId={meId} overlay={seats} below={bottom} dock={dock} />
+  ) : (
+    <ChessFrame dock={dock()}>
+      <RealtimeGame match={match} meId={meId} above={top} below={bottom} overlay={seats} />
+    </ChessFrame>
   );
 }
 
@@ -181,8 +176,9 @@ function FourStatus({ match, meId }: { match: MatchView; meId: Id<"users"> | und
 
 const outText = (reason: string) => ({ checkmate: "Mated", stalemate: "Stalemated", resign: "Resigned", timeout: "Timed out", king: "King fell" })[reason] ?? "Out";
 
-// The bar at the bottom of a game in progress: draw and resign, each a full-height thumb target.
-function Controls({ match, meId }: { match: MatchView; meId: Id<"users"> }) {
+// The bar at the bottom of a game in progress: draw and resign, each a full-height thumb target, or Confirm
+// while a move waits.
+function Controls({ match, meId, confirm }: { match: MatchView; meId: Id<"users">; confirm?: ReactNode }) {
   const offerDraw = useMutation(api.matches.offerDraw);
   const declineDraw = useMutation(api.matches.declineDraw);
   const resign = useMutation(api.matches.resign);
@@ -201,7 +197,7 @@ function Controls({ match, meId }: { match: MatchView; meId: Id<"users"> }) {
       detail={four ? "Your army turns grey and the others play on. You keep your place for how long you lasted." : "Your opponent gets the win and the rating points."}
     />
   );
-  if (four) return <div className="grid">{resignButton}</div>;
+  if (four) return confirm ?? <div className="grid">{resignButton}</div>;
   return (
     <div className="flex flex-col gap-2.5">
       {theyOffered && (
@@ -216,12 +212,14 @@ function Controls({ match, meId }: { match: MatchView; meId: Id<"users"> }) {
           </AsyncButton>
         </div>
       )}
-      <div className="grid grid-cols-2 gap-2.5">
-        <AsyncButton variant="secondary" className={bar} disabled={iOffered} icon={<HandshakeIcon weight="bold" />} onClick={() => offerDraw({ id: match._id })}>
-          {iOffered ? "Draw offered" : "Offer draw"}
-        </AsyncButton>
-        {resignButton}
-      </div>
+      {confirm ?? (
+        <div className="grid grid-cols-2 gap-2.5">
+          <AsyncButton variant="secondary" className={bar} disabled={iOffered} icon={<HandshakeIcon weight="bold" />} onClick={() => offerDraw({ id: match._id })}>
+            {iOffered ? "Draw offered" : "Offer draw"}
+          </AsyncButton>
+          {resignButton}
+        </div>
+      )}
     </div>
   );
 }

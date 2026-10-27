@@ -137,7 +137,17 @@ test.describe("4-player chess", () => {
     // Red moves first; it shows up live for blue, whose turn it is next.
     await expect(g.red.getByText("Your move")).toBeVisible();
     await expect(g.blue.getByText(/^(\S+ is on it|Waiting for \D+)$/)).toBeVisible();
+    const before = await g.red.getByRole("grid").boundingBox();
+    await tapMove(g.red, "e2", "e3");
+    await expect(g.red.getByRole("button", { name: /^Confirm/ })).toBeVisible();
+    await expect.poll(() => pieceOn(g.red, "redP", "e3")).toBe(true);
+    expect((await getMatch(id)).state.moves).toHaveLength(0);
+    await expect.poll(() => pieceOn(g.blue, "redP", "e2")).toBe(true);
+    await g.red.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect.poll(() => pieceOn(g.red, "redP", "e2")).toBe(true);
+    expect((await g.red.getByRole("grid").boundingBox())!.y).toBeCloseTo(before!.y, 0);
     await tapMove(g.red, "e2", "e4");
+    await g.red.getByRole("button", { name: /^Confirm/ }).click();
     await expect(g.blue.getByLabel("Moves")).toContainText("e4");
     await expect(g.blue.getByText("Your move")).toBeVisible();
     await expect(g.red.getByText("Your move")).toHaveCount(0);
@@ -145,13 +155,22 @@ test.describe("4-player chess", () => {
     await g.red.locator("[data-square=d2]").click();
     await expect(g.red.locator("[data-square=d3] span.rounded-full")).toHaveCount(0);
     await tapMove(g.blue, "b5", "d5");
+    await g.blue.getByRole("button", { name: /^Confirm/ }).click();
     await expect(g.yellow.getByLabel("Moves")).toContainText("d5");
+
+    // A resignation changes the position and cancels any unconfirmed move.
+    await tapMove(g.yellow, "f13", "f11");
+    await expect(g.yellow.getByRole("button", { name: /^Confirm/ })).toBeVisible();
+    expect((await getMatch(id)).state.moves).toHaveLength(2);
 
     // Green resigns out of turn; the game goes on and green's army turns grey everywhere.
     await g.green.getByRole("button", { name: "Resign" }).click();
     await g.green.getByRole("alertdialog").getByRole("button", { name: "Resign" }).click();
     await expect(g.red.locator('[data-seat="green"]')).toContainText("Resigned");
     await expect(g.red.locator('[data-piece="deadK"]')).toHaveCount(1);
+    await expect(g.yellow.getByRole("button", { name: /^Confirm/ })).toHaveCount(0);
+    await expect.poll(() => pieceOn(g.yellow, "yellowP", "f13")).toBe(true);
+    expect((await getMatch(id)).state.moves).toHaveLength(2);
     await expect(g.green.getByText("You're out")).toBeVisible();
 
     // Blue and yellow resign too, so red is the last one standing.
