@@ -28,7 +28,7 @@ import * as sound from "./audio";
 import { BAG_SIZE, DT, INSTANT, MAX_STROKES, TARGETED, activate, brake, compile, groundAt, hop, newSim, preview, scoreName, shoot, step, fireTargeted, type Course, type Power, type Sim } from "./engine";
 import { BATTLE_GROUNDS } from "./battle";
 import { BUMPER_PLAINS } from "./plains";
-import { drawFrame, refreshTheme, still, type Camera, type Fx } from "./toy";
+import { STYLES, drawFrame, refreshTheme, setStyle, still, type Camera, type Fx, type Style } from "./toy";
 import { PALETTES } from "@/themes";
 
 // Golf, made by hand: Bumper Plains (six short holes, bumpers everywhere) and Battle Grounds (three big
@@ -73,6 +73,26 @@ export function GolfExplorer() {
   // The app's theme, which the void behind the course follows. In the app it's picked on the You tab.
   const [palette, setPalette] = useState(() => document.documentElement.dataset.palette ?? "felt");
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
+  // Which look the course is drawn in, while we decide.
+  const [look, setLook] = useState<Style>(() => {
+    let saved: Style = "pico";
+    try {
+      saved = (localStorage.getItem("golf:look") as Style) || "pico";
+    } catch {
+      // No storage in a sandboxed frame.
+    }
+    setStyle(saved);
+    return saved;
+  });
+  const pickLook = (l: Style) => {
+    setStyle(l);
+    setLook(l);
+    try {
+      localStorage.setItem("golf:look", l);
+    } catch {
+      // No storage in a sandboxed frame.
+    }
+  };
   const pickTheme = (p: string, d: boolean) => {
     document.documentElement.dataset.palette = p;
     document.documentElement.classList.toggle("dark", d);
@@ -111,6 +131,13 @@ export function GolfExplorer() {
         </button>
       </header>
       <section className="g-section">
+        <div className="g-seg" role="radiogroup" aria-label="Look">
+          {STYLES.map((st) => (
+            <button key={st.id} type="button" role="radio" aria-checked={look === st.id} className={`g-seg-item ${look === st.id ? "g-seg-on" : ""}`} onClick={() => pickLook(st.id)}>
+              {st.name}
+            </button>
+          ))}
+        </div>
         <div className="g-themes" role="radiogroup" aria-label="Theme">
           {PALETTES.map((p) => (
             <button key={p.id} type="button" role="radio" aria-checked={palette === p.id} className={`g-chip-btn ${palette === p.id ? "g-chip-on" : ""}`} onClick={() => pickTheme(p.id, dark)}>
@@ -137,7 +164,7 @@ export function GolfExplorer() {
               <li key={c.id}>
                 <button type="button" className="g-hole-row" onClick={() => play(ci, i)}>
                   <span className="g-display g-hole-num">{i + 1}</span>
-                  <Thumb c={c} theme={`${palette}-${dark}`} />
+                  <Thumb c={c} theme={`${palette}-${dark}-${look}`} />
                   <span className="g-hole-text">
                     <span className="g-display g-card-name">{c.name}</span>
                     <span className="g-footnote">Par {c.par}</span>

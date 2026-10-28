@@ -5,16 +5,38 @@ import { BALL_R, CUP_R, LASER_R, newSim, rng, type Course, type Sim, type Vec } 
 
 type Ctx = CanvasRenderingContext2D;
 
-// The course is the same in every theme: natural golf colors, warm and a little muted, so it reads as
-// grass and painted wood rather than plastic. Only the void around it follows the app's theme.
-const C = {
-  void: "#1c2620",
-  dot: "rgba(255,255,255,0.08)",
+// The course is the same in every theme; only the void around it follows the app's theme. It comes in
+// three looks: smooth (natural golf colors, drawn sharp at full resolution) and two pixel-art ones,
+// drawn at about five pixels to a ball's width, snapped to a fixed 16-color palette, and scaled up
+// with hard edges: PICO-8's, and Sweetie 16 (GrafxKid's, from Lospec).
+type Look = {
+  carpet: string;
+  mow: string; // the other way of the mowing stripes
+  putting: string; // the green round the cup
+  wall: string;
+  outline: string | null; // a dark line round walls, in pixel art
+  bumper: string;
+  bumperRing: string;
+  cup: string;
+  flag: string;
+  box: string;
+  boxInk: string;
+  boost: string;
+  ramp: string;
+  sand: string;
+  mine: string;
+  ball: string;
+  ui: string;
+  confetti: string[];
+  palette: string[] | null; // pixel art snaps to these
+};
+const SMOOTH: Look = {
   carpet: "#5c9a4b", // Dunn-Edwards' "Golf Course" green, nudged warmer
-  mow: "#67a455", // the lighter way of the mowing stripes
-  putting: "#4f8f40", // the green round the cup, cut shorter and darker
-  wall: "#ece4d0", // a painted rail
-  bumper: "#b5533f", // terracotta
+  mow: "#67a455",
+  putting: "#4f8f40",
+  wall: "#ece4d0",
+  outline: null,
+  bumper: "#b5533f",
   bumperRing: "#ece4d0",
   cup: "#1d2a1a",
   flag: "#c4473a",
@@ -26,7 +48,37 @@ const C = {
   mine: "#3a3934",
   ball: "#fbf9f3",
   ui: "#fbf9f3",
+  confetti: ["#c4473a", "#d4aa44", "#8cbf6a", "#5f819c", "#ece4d0"],
+  palette: null,
 };
+const PICO8 = ["#000000", "#1d2b53", "#7e2553", "#008751", "#ab5236", "#5f574f", "#c2c3c7", "#fff1e8", "#ff004d", "#ffa300", "#ffec27", "#00e436", "#29adff", "#83769c", "#ff77a8", "#ffccaa"];
+const SWEETIE16 = ["#1a1c2c", "#5d275d", "#b13e53", "#ef7d57", "#ffcd75", "#a7f070", "#38b764", "#257179", "#29366f", "#3b5dc9", "#41a6f6", "#73eff7", "#f4f4f4", "#94b0c2", "#566c86", "#333c57"];
+const LOOKS = {
+  smooth: SMOOTH,
+  pico: {
+    carpet: "#008751", mow: "#00e436", putting: "#008751", wall: "#fff1e8", outline: "#1d2b53", bumper: "#ff004d", bumperRing: "#fff1e8",
+    cup: "#000000", flag: "#ff004d", box: "#ffec27", boxInk: "#ab5236", boost: "#ffa300", ramp: "#29adff", sand: "#ffccaa", mine: "#5f574f",
+    ball: "#fff1e8", ui: "#fff1e8", confetti: ["#ff004d", "#ffec27", "#00e436", "#29adff", "#ff77a8"], palette: PICO8,
+  },
+  sweetie: {
+    carpet: "#38b764", mow: "#a7f070", putting: "#38b764", wall: "#f4f4f4", outline: "#1a1c2c", bumper: "#b13e53", bumperRing: "#ffcd75",
+    cup: "#1a1c2c", flag: "#b13e53", box: "#ffcd75", boxInk: "#b13e53", boost: "#ef7d57", ramp: "#41a6f6", sand: "#ffcd75", mine: "#333c57",
+    ball: "#f4f4f4", ui: "#f4f4f4", confetti: ["#b13e53", "#ffcd75", "#a7f070", "#41a6f6", "#ef7d57"], palette: SWEETIE16,
+  },
+} satisfies Record<string, Look>;
+export type Style = keyof typeof LOOKS;
+export const STYLES: { id: Style; name: string }[] = [
+  { id: "smooth", name: "Smooth" },
+  { id: "pico", name: "PICO-8" },
+  { id: "sweetie", name: "Sweetie 16" },
+];
+let style: Style = "smooth";
+let C: Look = SMOOTH;
+export function setStyle(s: Style) {
+  style = s;
+  C = LOOKS[s];
+  palette = null;
+}
 
 // The void and its dots come from the app's theme: its background, and its border color for the dots.
 let theme: { bg: string; dot: string } | null = null;
@@ -36,7 +88,7 @@ export function refreshTheme() {
 function themeColors() {
   if (!theme) {
     const cs = typeof document !== "undefined" ? getComputedStyle(document.documentElement) : null;
-    theme = { bg: cs?.getPropertyValue("--background").trim() || C.void, dot: cs?.getPropertyValue("--border").trim() || C.dot };
+    theme = { bg: cs?.getPropertyValue("--background").trim() || "#1c2620", dot: cs?.getPropertyValue("--border").trim() || "rgba(255,255,255,0.08)" };
   }
   return theme;
 }
@@ -69,7 +121,7 @@ function circ(ctx: Ctx, x: number, y: number, r: number) {
   ctx.arc(x, y, Math.max(0.001, r), 0, Math.PI * 2);
 }
 
-export function drawFrame(ctx: Ctx, f: Frame) {
+function drawScene(ctx: Ctx, f: Frame, pixel: boolean) {
   const { c, sim, cam, dpr, t } = f;
   const W = ctx.canvas.width, H = ctx.canvas.height;
   const T = () => ctx.setTransform(cam.s * dpr, 0, 0, cam.s * dpr, (cam.ox - cam.x * cam.s) * dpr, (cam.oy - cam.y * cam.s) * dpr);
@@ -87,7 +139,10 @@ export function drawFrame(ctx: Ctx, f: Frame) {
   ctx.fillStyle = th.dot;
   const gap = 1.6;
   for (let x = Math.floor(vx0 / gap) * gap; x < vx1; x += gap)
-    for (let y = Math.floor(vy0 / gap) * gap; y < vy1; y += gap) ctx.fillRect(x - 0.06, y - 0.06, 0.12, 0.12);
+    for (let y = Math.floor(vy0 / gap) * gap; y < vy1; y += gap) {
+      const d = pixel ? 1 / cam.s : 0.12; // one pixel, in pixel art
+      ctx.fillRect(x - d / 2, y - d / 2, d, d);
+    }
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
@@ -100,6 +155,7 @@ export function drawFrame(ctx: Ctx, f: Frame) {
     ctx.clip();
     // Mowing stripes, on the diagonal like a real green.
     ctx.fillStyle = C.mow;
+    ctx.strokeStyle = C.mow;
     const band = 2.4;
     const span = vx1 - vx0 + vy1 - vy0;
     for (let k = Math.floor((vx0 + vy0) / (band * 2)) * band * 2; k < vx0 + vy0 + span + band * 2; k += band * 2) {
@@ -109,7 +165,20 @@ export function drawFrame(ctx: Ctx, f: Frame) {
       ctx.lineTo(k + band - vy0, vy0);
       ctx.lineTo(k - vy0, vy0);
       ctx.closePath();
-      ctx.fill();
+      if (!pixel) ctx.fill();
+      else {
+        // In pixel art the lighter stripe is hatched, one pixel in four, like dithering.
+        ctx.save();
+        ctx.clip();
+        ctx.lineWidth = 1 / cam.s;
+        for (let d = -band; d < band * 2; d += 4 / cam.s) {
+          ctx.beginPath();
+          ctx.moveTo(k - vy1 + d, vy1);
+          ctx.lineTo(k - vy0 + d, vy0);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
     }
     circ(ctx, c.cup.x, c.cup.y, 3.2);
     ctx.fillStyle = C.putting;
@@ -178,7 +247,20 @@ export function drawFrame(ctx: Ctx, f: Frame) {
 
   drawFx(ctx, f.fx, t, true);
 
-  // Walls: the board's edge and any baffles, one flat line each.
+  // Walls: the board's edge and any baffles, one flat line each (with a dark outline in pixel art).
+  if (C.outline) {
+    ctx.strokeStyle = C.outline;
+    for (const b of boards) {
+      ctx.lineWidth = 0.6 + 2 / cam.s;
+      path(ctx, b);
+      ctx.stroke();
+    }
+    for (const w of c.walls) {
+      ctx.lineWidth = Math.max(0.5, w.w) + 2 / cam.s;
+      path(ctx, w.pts, 0, 0, !!w.closed);
+      ctx.stroke();
+    }
+  }
   ctx.strokeStyle = C.wall;
   for (const b of boards) {
     ctx.lineWidth = 0.6;
@@ -207,7 +289,8 @@ export function drawFrame(ctx: Ctx, f: Frame) {
   const bx = sinking ? sim.x + (c.cup.x - sim.x) * sinking : sim.x;
   const by = sinking ? sim.y + (c.cup.y - sim.y) * sinking : sim.y;
   if (sinking < 1 && out < 1) {
-    const R = sim.r * (1 + sim.z * 0.18) * (1 - sinking * 0.5) * (1 - out);
+    // In pixel art the ball is never smaller than about six pixels across, so it always reads.
+    const R = Math.max(sim.r, pixel ? 3 / cam.s : 0) * (1 + sim.z * 0.18) * (1 - sinking * 0.5) * (1 - out);
     circ(ctx, bx, by, R);
     ctx.fillStyle = C.ball;
     ctx.fill();
@@ -265,11 +348,18 @@ export function drawFrame(ctx: Ctx, f: Frame) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.font = `800 ${Math.max(8, cam.s * 0.75)}px system-ui, sans-serif`;
   ctx.fillStyle = C.boxInk;
   c.boxes.forEach((b, i) => {
     if (sim.boxes[i]) return;
-    ctx.fillText("?", (b.x - cam.x) * cam.s + cam.ox, (b.y - cam.y) * cam.s + cam.oy + 1);
+    const sx = (b.x - cam.x) * cam.s + cam.ox, sy = (b.y - cam.y) * cam.s + cam.oy;
+    if (pixel) {
+      // Too small for a "?" in pixel art: a little mark instead.
+      ctx.fillRect(Math.round(sx) - 1, Math.round(sy) - 2, 2, 2);
+      ctx.fillRect(Math.round(sx) - 1, Math.round(sy) + 1, 2, 1);
+    } else {
+      ctx.font = `800 ${Math.max(8, cam.s * 0.75)}px system-ui, sans-serif`;
+      ctx.fillText("?", sx, sy + 1);
+    }
   });
 
   if (f.aim && sim.mode === "aim") {
@@ -332,7 +422,96 @@ export function drawFrame(ctx: Ctx, f: Frame) {
     }
     ctx.setLineDash([]);
   }
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+// Pixel art: the scene drawn small, every pixel snapped to the palette (and the theme's two colors),
+// then scaled up with no smoothing.
+const PIXELS_PER_UNIT = 5.5;
+let low: HTMLCanvasElement | null = null;
+let palette: { rgb: [number, number, number][]; key: string } | null = null;
+const snapCache = new Map<number, number>();
+function paletteRGB(): [number, number, number][] {
+  const th = themeColors();
+  const key = `${style}|${th.bg}|${th.dot}`;
+  if (palette?.key === key) return palette.rgb;
+  const probe = document.createElement("canvas");
+  probe.width = probe.height = 1;
+  const pc = probe.getContext("2d", { willReadFrequently: true })!;
+  const read = (fill: string, over?: string): [number, number, number] => {
+    pc.clearRect(0, 0, 1, 1);
+    if (over) {
+      pc.fillStyle = over;
+      pc.fillRect(0, 0, 1, 1);
+    }
+    pc.fillStyle = fill;
+    pc.fillRect(0, 0, 1, 1);
+    const d = pc.getImageData(0, 0, 1, 1).data;
+    return [d[0], d[1], d[2]];
+  };
+  const rgb = [...(C.palette ?? []).map((h) => read(h)), read(th.bg), read(th.dot, th.bg)];
+  palette = { rgb, key };
+  snapCache.clear();
+  return rgb;
+}
+function snap(lc: Ctx) {
+  const rgb = paletteRGB();
+  const img = lc.getImageData(0, 0, lc.canvas.width, lc.canvas.height);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const key = (d[i] << 16) | (d[i + 1] << 8) | d[i + 2];
+    let k = snapCache.get(key);
+    if (k === undefined) {
+      let best = 1e9;
+      k = 0;
+      for (let j = 0; j < rgb.length; j++) {
+        const dr = d[i] - rgb[j][0], dg = d[i + 1] - rgb[j][1], db = d[i + 2] - rgb[j][2];
+        const e = dr * dr * 3 + dg * dg * 4 + db * db * 2;
+        if (e < best) {
+          best = e;
+          k = j;
+        }
+      }
+      snapCache.set(key, k);
+    }
+    d[i] = rgb[k][0];
+    d[i + 1] = rgb[k][1];
+    d[i + 2] = rgb[k][2];
+    d[i + 3] = 255;
+  }
+  lc.putImageData(img, 0, 0);
+}
+
+export function drawFrame(ctx: Ctx, f: Frame) {
+  if (!C.palette) {
+    drawScene(ctx, f, false);
+  } else {
+    const k = Math.max(2, Math.round(f.cam.s / PIXELS_PER_UNIT)); // screen points per pixel
+    const cssW = ctx.canvas.width / f.dpr, cssH = ctx.canvas.height / f.dpr;
+    low ??= document.createElement("canvas");
+    const w = Math.ceil(cssW / k), h = Math.ceil(cssH / k);
+    if (low.width !== w || low.height !== h) {
+      low.width = w;
+      low.height = h;
+    }
+    const lc = low.getContext("2d", { willReadFrequently: true })!;
+    const sc = (p?: Vec) => p && { x: p.x / k, y: p.y / k };
+    drawScene(
+      lc,
+      {
+        ...f,
+        cam: { x: f.cam.x, y: f.cam.y, s: f.cam.s / k, ox: f.cam.ox / k, oy: f.cam.oy / k },
+        dpr: 1,
+        aim: f.aim && { ...f.aim, from: sc(f.aim.from), to: sc(f.aim.to) },
+      },
+      true,
+    );
+    snap(lc);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(low, 0, 0, w * k * f.dpr, h * k * f.dpr);
+    ctx.imageSmoothingEnabled = true;
+  }
+  ctx.setTransform(f.dpr, 0, 0, f.dpr, 0, 0);
   if (f.inset) holeArrow(ctx, f);
 }
 
@@ -419,7 +598,7 @@ function drawFx(ctx: Ctx, fx: Fx[], t: number, ground: boolean) {
       for (let i = 0; i < n; i++) {
         const a = r() * Math.PI * 2, sp = 1.5 + r() * 2.5;
         const ease = 1 - (1 - k) ** 3;
-        ctx.fillStyle = e.kind === "confetti" ? ["#c4473a", "#d4aa44", "#8cbf6a", "#5f819c", "#ece4d0"][i % 5] : (e.color ?? C.box);
+        ctx.fillStyle = e.kind === "confetti" ? C.confetti[i % 5] : (e.color ?? C.box);
         ctx.fillRect(e.x + Math.cos(a) * sp * ease - 0.1, e.y + Math.sin(a) * sp * ease - 0.1 + k * k, 0.2, 0.2);
       }
     }
