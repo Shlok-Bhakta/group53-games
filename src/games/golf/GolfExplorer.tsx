@@ -28,7 +28,8 @@ import * as sound from "./audio";
 import { BAG_SIZE, DT, INSTANT, MAX_STROKES, TARGETED, activate, brake, compile, groundAt, hop, newSim, preview, scoreName, shoot, step, fireTargeted, type Course, type Power, type Sim } from "./engine";
 import { BATTLE_GROUNDS } from "./battle";
 import { BUMPER_PLAINS } from "./plains";
-import { drawFrame, still, type Camera, type Fx } from "./toy";
+import { drawFrame, refreshTheme, still, type Camera, type Fx } from "./toy";
+import { PALETTES } from "@/themes";
 
 // Golf, made by hand: Bumper Plains (six short holes, bumpers everywhere) and Battle Grounds (three big
 // holes after Super Battle Golf). Single player, no server.
@@ -69,6 +70,21 @@ export function GolfExplorer() {
     setMuted(!muted);
   };
   const play = (course: number, index = 0) => setRound({ course, start: index, index, scores: [], attempt: 0 });
+  // The app's theme, which the void behind the course follows. In the app it's picked on the You tab.
+  const [palette, setPalette] = useState(() => document.documentElement.dataset.palette ?? "felt");
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
+  const pickTheme = (p: string, d: boolean) => {
+    document.documentElement.dataset.palette = p;
+    document.documentElement.classList.toggle("dark", d);
+    setPalette(p);
+    setDark(d);
+    refreshTheme();
+    try {
+      localStorage.setItem("golf:theme", JSON.stringify({ palette: p, dark: d }));
+    } catch {
+      // No storage in a sandboxed frame.
+    }
+  };
 
   if (round) {
     const { name, holes } = COURSES[round.course];
@@ -94,6 +110,22 @@ export function GolfExplorer() {
           {muted ? <SpeakerSlashIcon size={22} weight="fill" /> : <SpeakerHighIcon size={22} weight="fill" />}
         </button>
       </header>
+      <section className="g-section">
+        <div className="g-themes" role="radiogroup" aria-label="Theme">
+          {PALETTES.map((p) => (
+            <button key={p.id} type="button" role="radio" aria-checked={palette === p.id} className={`g-chip-btn ${palette === p.id ? "g-chip-on" : ""}`} onClick={() => pickTheme(p.id, dark)}>
+              {p.name}
+            </button>
+          ))}
+        </div>
+        <div className="g-seg" role="radiogroup" aria-label="Light or dark">
+          {[false, true].map((d) => (
+            <button key={String(d)} type="button" role="radio" aria-checked={dark === d} className={`g-seg-item ${dark === d ? "g-seg-on" : ""}`} onClick={() => pickTheme(palette, d)}>
+              {d ? "Dark" : "Light"}
+            </button>
+          ))}
+        </div>
+      </section>
       {COURSES.map((co, ci) => (
         <section key={co.name} className="g-section">
           <h2 className="g-display g-heading">{co.name}</h2>
@@ -105,7 +137,7 @@ export function GolfExplorer() {
               <li key={c.id}>
                 <button type="button" className="g-hole-row" onClick={() => play(ci, i)}>
                   <span className="g-display g-hole-num">{i + 1}</span>
-                  <Thumb c={c} />
+                  <Thumb c={c} theme={`${palette}-${dark}`} />
                   <span className="g-hole-text">
                     <span className="g-display g-card-name">{c.name}</span>
                     <span className="g-footnote">Par {c.par}</span>
@@ -120,8 +152,8 @@ export function GolfExplorer() {
   );
 }
 
-function Thumb({ c }: { c: Course }) {
-  const src = useMemo(() => still(c, 120).toDataURL("image/png"), [c]);
+function Thumb({ c, theme }: { c: Course; theme: string }) {
+  const src = useMemo(() => still(c, 120).toDataURL("image/png"), [c, theme]);
   return (
     <div className="g-thumb">
       <img src={src} alt="" draggable={false} />
@@ -243,7 +275,7 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
             lastKnock = now;
             const i = course.bumpers.findIndex((b) => Math.hypot(b.at.x - e.x, b.at.y - e.y) < 0.01);
             if (i >= 0) hits.current.set(i, t);
-            fx.current.push({ kind: "ring", x: e.x, y: e.y, t, seed, color: "#ff8a80" });
+            fx.current.push({ kind: "ring", x: e.x, y: e.y, t, seed, color: "#d98a78" });
             break;
           }
           case "splash":

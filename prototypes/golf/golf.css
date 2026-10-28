@@ -1,17 +1,18 @@
 /* The golf explorer's own small stylesheet, in the app's sizes: 36/28/20/17/15/13/11 type, 8/12/16/28 radii. */
+/* Colors come from the app's own themes (injected from src/style.css by main.tsx), so the menus and the
+   void behind the course follow whichever theme is picked, as they will in the app. */
 :root {
-  --bg: #111318;
-  --card: #1b1f27;
-  --card-2: #252a34;
-  --fg: #eef0f4;
-  --muted: #9aa3b0;
-  --primary: #ffd166;
-  --primary-fg: #1b1508;
-  --tile-green: #4caf6a;
-  --tile-yellow: #d9b43a;
-  --tile-grey: #5b6270;
-  --tile-red: #d6453d;
-  --float: rgba(17, 19, 24, 0.74);
+  --bg: var(--background);
+  --fg: var(--foreground);
+  --muted-ink: var(--muted-foreground);
+  --card-2: var(--secondary);
+  --primary-fg: var(--primary-foreground);
+  --tile-red: var(--tile-hit);
+  --tile-grey: color-mix(in oklab, var(--muted-foreground) 70%, var(--background));
+  --float: color-mix(in oklab, var(--card) 84%, transparent);
+  color-scheme: light;
+}
+html.dark {
   color-scheme: dark;
 }
 * {
@@ -62,10 +63,10 @@ button {
 }
 .g-footnote {
   font-size: 13px;
-  color: var(--muted);
+  color: var(--muted-ink);
 }
 .g-muted {
-  color: var(--muted);
+  color: var(--muted-ink);
 }
 
 /* --- Course list --- */
@@ -572,7 +573,7 @@ html[data-framed="true"] .g-toast {
   width: 24px;
   text-align: center;
   font-size: 20px;
-  color: var(--muted);
+  color: var(--muted-ink);
 }
 .g-hole-row .g-thumb {
   width: 56px;
@@ -720,7 +721,7 @@ html[data-framed="true"] .g-intro {
 .g-card-table th:first-child {
   text-align: left;
   padding-left: 12px;
-  color: var(--muted);
+  color: var(--muted-ink);
   font-weight: 600;
 }
 .g-card-table tr + tr {
@@ -748,7 +749,7 @@ html[data-framed="true"] .g-intro {
   border-radius: 8px;
   font-size: 15px;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--muted-ink);
 }
 .g-seg-on {
   background: var(--card-2);
@@ -766,4 +767,20 @@ html[data-framed="true"] .g-intro {
   place-items: center;
   background: rgba(0, 0, 0, 0.15);
   color: inherit;
+}
+
+.g-themes {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 12px;
+  scrollbar-width: none;
+}
+.g-themes .g-chip-btn {
+  flex: none;
+}
+.g-chip-on {
+  background: var(--primary);
+  color: var(--primary-foreground);
 }

@@ -1,27 +1,45 @@
 import { BALL_R, CUP_R, LASER_R, newSim, rng, type Course, type Sim, type Vec } from "./engine";
 
-// Bumper Plains' look: flat and straight down, like GamePigeon's mini golf. A green board on a dark dot
-// grid, plain walls, flat round bumpers that flash when hit. No depth, no shadows.
+// The look: flat and straight down, like GamePigeon's mini golf. The course is drawn in fixed, natural
+// golf colors on a dot grid in the app theme's own background. No depth, no shadows.
 
 type Ctx = CanvasRenderingContext2D;
 
+// The course is the same in every theme: natural golf colors, warm and a little muted, so it reads as
+// grass and painted wood rather than plastic. Only the void around it follows the app's theme.
 const C = {
-  void: "#15171d",
-  dot: "#2b2f39",
-  carpet: "#56b947",
-  stripe: "rgba(255,255,255,0.06)",
-  wall: "#f2efe6",
-  bumper: "#f05545",
-  bumperRing: "#ffffff",
-  cup: "#16301a",
-  box: "#ffc93c",
-  boost: "#ff8a3d",
-  ramp: "#4aa3ff",
-  sand: "#f2d48a",
-  mine: "#2b2f39",
-  ball: "#ffffff",
-  ui: "#ffffff",
+  void: "#1c2620",
+  dot: "rgba(255,255,255,0.08)",
+  carpet: "#5c9a4b", // Dunn-Edwards' "Golf Course" green, nudged warmer
+  mow: "#67a455", // the lighter way of the mowing stripes
+  putting: "#4f8f40", // the green round the cup, cut shorter and darker
+  wall: "#ece4d0", // a painted rail
+  bumper: "#b5533f", // terracotta
+  bumperRing: "#ece4d0",
+  cup: "#1d2a1a",
+  flag: "#c4473a",
+  box: "#d4aa44",
+  boxInk: "#5a4212",
+  boost: "#c9853f",
+  ramp: "#5f819c",
+  sand: "#d8c9a8",
+  mine: "#3a3934",
+  ball: "#fbf9f3",
+  ui: "#fbf9f3",
 };
+
+// The void and its dots come from the app's theme: its background, and its border color for the dots.
+let theme: { bg: string; dot: string } | null = null;
+export function refreshTheme() {
+  theme = null;
+}
+function themeColors() {
+  if (!theme) {
+    const cs = typeof document !== "undefined" ? getComputedStyle(document.documentElement) : null;
+    theme = { bg: cs?.getPropertyValue("--background").trim() || C.void, dot: cs?.getPropertyValue("--border").trim() || C.dot };
+  }
+  return theme;
+}
 
 export type Camera = { x: number; y: number; s: number; ox: number; oy: number }; // screen = (world - xy) * s + o
 export type Fx =
@@ -62,10 +80,11 @@ export function drawFrame(ctx: Ctx, f: Frame) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = "source-over";
-  ctx.fillStyle = C.void;
+  const th = themeColors();
+  ctx.fillStyle = th.bg;
   ctx.fillRect(0, 0, W, H);
   T();
-  ctx.fillStyle = C.dot;
+  ctx.fillStyle = th.dot;
   const gap = 1.6;
   for (let x = Math.floor(vx0 / gap) * gap; x < vx1; x += gap)
     for (let y = Math.floor(vy0 / gap) * gap; y < vy1; y += gap) ctx.fillRect(x - 0.06, y - 0.06, 0.12, 0.12);
@@ -79,8 +98,22 @@ export function drawFrame(ctx: Ctx, f: Frame) {
     ctx.fill();
     ctx.save();
     ctx.clip();
-    ctx.fillStyle = C.stripe;
-    for (let y = Math.floor(vy0 / 4) * 4; y < vy1; y += 4) ctx.fillRect(vx0, y, vx1 - vx0, 2);
+    // Mowing stripes, on the diagonal like a real green.
+    ctx.fillStyle = C.mow;
+    const band = 2.4;
+    const span = vx1 - vx0 + vy1 - vy0;
+    for (let k = Math.floor((vx0 + vy0) / (band * 2)) * band * 2; k < vx0 + vy0 + span + band * 2; k += band * 2) {
+      ctx.beginPath();
+      ctx.moveTo(k - vy1, vy1);
+      ctx.lineTo(k + band - vy1, vy1);
+      ctx.lineTo(k + band - vy0, vy0);
+      ctx.lineTo(k - vy0, vy0);
+      ctx.closePath();
+      ctx.fill();
+    }
+    circ(ctx, c.cup.x, c.cup.y, 3.2);
+    ctx.fillStyle = C.putting;
+    ctx.fill();
     ctx.restore();
   }
 
@@ -95,7 +128,7 @@ export function drawFrame(ctx: Ctx, f: Frame) {
     ctx.save();
     ctx.translate(m.x, m.y);
     ctx.rotate(Math.atan2(z.dir.y, z.dir.x));
-    ctx.strokeStyle = "#ffffff";
+    ctx.strokeStyle = C.wall;
     ctx.lineWidth = 0.22;
     const n = z.kind === "boost" ? 2 : 1;
     for (let k = 0; k < n; k++) {
@@ -137,7 +170,7 @@ export function drawFrame(ctx: Ctx, f: Frame) {
   // The cup.
   const cupR = CUP_R * sim.cupScale;
   circ(ctx, c.cup.x, c.cup.y, cupR + 0.12);
-  ctx.fillStyle = "#ffffff";
+  ctx.fillStyle = C.wall;
   ctx.fill();
   circ(ctx, c.cup.x, c.cup.y, cupR);
   ctx.fillStyle = C.cup;
@@ -187,7 +220,7 @@ export function drawFrame(ctx: Ctx, f: Frame) {
     const pop = age < 0.25 ? Math.sin((age / 0.25) * Math.PI) : 0;
     const r = b.r * (1 + pop * 0.2);
     circ(ctx, b.at.x, b.at.y, r);
-    ctx.fillStyle = pop > 0.5 ? "#ffffff" : C.bumper;
+    ctx.fillStyle = pop > 0.5 ? C.wall : C.bumper;
     ctx.fill();
     ctx.lineWidth = r * 0.2;
     ctx.strokeStyle = C.bumperRing;
@@ -205,6 +238,27 @@ export function drawFrame(ctx: Ctx, f: Frame) {
     ctx.fill();
   });
 
+  // The flag: a pole and a pennant, gone once the ball's close.
+  const near = Math.hypot(sim.x - c.cup.x, sim.y - c.cup.y);
+  const flagA = sim.mode === "sunk" ? 0 : Math.max(0, Math.min(1, (near - 1.5) / 1.5));
+  if (flagA > 0) {
+    ctx.globalAlpha = flagA;
+    ctx.strokeStyle = C.wall;
+    ctx.lineWidth = 0.13;
+    ctx.beginPath();
+    ctx.moveTo(c.cup.x, c.cup.y);
+    ctx.lineTo(c.cup.x, c.cup.y - 2.6);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(c.cup.x, c.cup.y - 2.6);
+    ctx.lineTo(c.cup.x + 1.4, c.cup.y - 2.15);
+    ctx.lineTo(c.cup.x, c.cup.y - 1.7);
+    ctx.closePath();
+    ctx.fillStyle = C.flag;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
   drawFx(ctx, f.fx, t, false);
 
   // Screen-space bits: question marks, the aim, the arrow to the cup.
@@ -212,7 +266,7 @@ export function drawFrame(ctx: Ctx, f: Frame) {
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.font = `800 ${Math.max(8, cam.s * 0.75)}px system-ui, sans-serif`;
-  ctx.fillStyle = "#7a4a00";
+  ctx.fillStyle = C.boxInk;
   c.boxes.forEach((b, i) => {
     if (sim.boxes[i]) return;
     ctx.fillText("?", (b.x - cam.x) * cam.s + cam.ox, (b.y - cam.y) * cam.s + cam.oy + 1);
@@ -365,7 +419,7 @@ function drawFx(ctx: Ctx, fx: Fx[], t: number, ground: boolean) {
       for (let i = 0; i < n; i++) {
         const a = r() * Math.PI * 2, sp = 1.5 + r() * 2.5;
         const ease = 1 - (1 - k) ** 3;
-        ctx.fillStyle = e.kind === "confetti" ? ["#ff5a5a", "#ffd84a", "#4ae07a", "#4ab8ff", "#c07aff"][i % 5] : (e.color ?? C.box);
+        ctx.fillStyle = e.kind === "confetti" ? ["#c4473a", "#d4aa44", "#8cbf6a", "#5f819c", "#ece4d0"][i % 5] : (e.color ?? C.box);
         ctx.fillRect(e.x + Math.cos(a) * sp * ease - 0.1, e.y + Math.sin(a) * sp * ease - 0.1 + k * k, 0.2, 0.2);
       }
     }
