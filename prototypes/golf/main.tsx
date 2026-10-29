@@ -6,6 +6,7 @@ import { GolfExplorer } from "@/games/golf/GolfExplorer";
 import { BATTLE_GROUNDS } from "@/games/golf/battle";
 import { BUMPER_PLAINS } from "@/games/golf/plains";
 import { still } from "@/games/golf/toy";
+import { assetSheet } from "./assets";
 
 // The golf explorer on its own, built into a single HTML file (npm run golf:build). Inside a frame it
 // takes a fixed height; opened directly on a phone it takes the whole screen.
@@ -35,3 +36,7 @@ createRoot(document.getElementById("root")!).render(<GolfExplorer />);
 
 // For review screenshots: a whole hole as one picture.
 (window as unknown as { __golfStill: unknown }).__golfStill = (i: number, width: number) => still([...BUMPER_PLAINS, ...BATTLE_GROUNDS][i], width).toDataURL("image/png");
+(window as unknown as { __golfAssets: unknown }).__golfAssets = () => {
+  const cs = getComputedStyle(document.documentElement);
+  return assetSheet(cs.getPropertyValue("--background").trim(), cs.getPropertyValue("--foreground").trim(), cs.getPropertyValue("--muted-foreground").trim()).toDataURL("image/png");
+};

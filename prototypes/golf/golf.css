@@ -461,41 +461,6 @@ html[data-framed="true"] .g-toast {
   background: var(--card);
   animation: g-rise 380ms cubic-bezier(0.2, 0.9, 0.2, 1);
 }
-.g-tiles {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-.g-tile-row {
-  display: flex;
-  gap: 5px;
-}
-.g-tile {
-  width: 38px;
-  height: 38px;
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  font-family: "Oxanium Variable", system-ui, sans-serif;
-  font-weight: 800;
-  font-size: 22px;
-  color: #fff;
-  animation: g-flip 420ms cubic-bezier(0.3, 1.4, 0.5, 1) backwards;
-}
-.g-tile-green {
-  background: var(--tile-green);
-}
-.g-tile-yellow {
-  background: var(--tile-yellow);
-}
-.g-tile-grey {
-  background: var(--tile-grey);
-}
-.g-tile-hit {
-  background: var(--tile-red);
-  transform: rotate(-8deg);
-}
 .g-result-sub {
   text-align: center;
   margin: 14px 0 18px;
@@ -513,12 +478,6 @@ html[data-framed="true"] .g-toast {
 @keyframes g-rise {
   from {
     transform: translateY(40px);
-    opacity: 0;
-  }
-}
-@keyframes g-flip {
-  from {
-    transform: scale(0.4) rotate(-12deg);
     opacity: 0;
   }
 }
@@ -668,8 +627,6 @@ html[data-framed="true"] .g-toast {
 }
 .g-intro-no {
   font-size: 17px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
   opacity: 0.85;
 }
 .g-intro-name {
@@ -700,10 +657,6 @@ html[data-framed="true"] .g-intro {
   display: flex;
   flex-direction: column;
   gap: 20px;
-}
-.g-tiles-left {
-  align-items: flex-start;
-  margin-top: 16px;
 }
 .g-card-table {
   width: 100%;
@@ -783,4 +736,121 @@ html[data-framed="true"] .g-intro {
 .g-chip-on {
   background: var(--primary);
   color: var(--primary-foreground);
+}
+
+/* --- Final pass: the app's own surfaces and sizes --- */
+.g-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.g-section-head .g-heading {
+  margin: 0;
+}
+.g-holes {
+  margin-bottom: 12px;
+}
+.g-play-all {
+  margin-bottom: 0;
+}
+.g-hole-row .g-thumb {
+  width: 52px;
+  height: 52px;
+}
+.g-card-name {
+  font-size: 17px;
+  font-weight: 600;
+}
+.g-hole-pill {
+  gap: 12px;
+  padding: 4px 6px 4px 16px;
+  min-height: 52px;
+}
+.g-hole-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  line-height: 1.2;
+}
+.g-hole-name {
+  font-size: 17px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.g-hole-sub {
+  font-size: 13px;
+  color: var(--muted-ink);
+  white-space: nowrap;
+}
+.g-strokes {
+  min-width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 20px;
+  margin-left: 0;
+}
+.g-slot {
+  border-radius: 16px;
+  color: var(--foreground);
+}
+.g-slot svg {
+  color: var(--primary);
+}
+.g-slot-on {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.g-slot-on svg {
+  color: var(--primary-foreground);
+}
+.g-result-card {
+  border-radius: 28px;
+  padding: 28px 16px 16px;
+}
+.g-result-title {
+  margin: 0;
+  text-align: center;
+  font-size: 36px;
+  line-height: 1.1;
+  animation: g-score 420ms cubic-bezier(0.3, 1.5, 0.5, 1) backwards;
+}
+.g-result-under {
+  color: var(--primary);
+}
+.g-result-par {
+  color: var(--foreground);
+}
+.g-result-over {
+  color: var(--muted-ink);
+}
+.g-result-sub {
+  color: var(--muted-ink);
+}
+@keyframes g-score {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+}
+.g-total {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 16px 0 20px;
+}
+.g-total-num {
+  font-size: 56px;
+  line-height: 1;
+}
+.g-total-sub {
+  font-size: 17px;
+  color: var(--muted-ink);
 }

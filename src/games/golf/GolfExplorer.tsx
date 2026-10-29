@@ -28,7 +28,7 @@ import * as sound from "./audio";
 import { BAG_SIZE, DT, INSTANT, MAX_STROKES, TARGETED, activate, brake, compile, groundAt, hop, newSim, preview, scoreName, shoot, step, fireTargeted, type Course, type Power, type Sim } from "./engine";
 import { BATTLE_GROUNDS } from "./battle";
 import { BUMPER_PLAINS } from "./plains";
-import { STYLES, drawFrame, refreshTheme, setStyle, still, type Camera, type Fx, type Style } from "./toy";
+import { drawFrame, refreshTheme, still, type Camera, type Fx, type Juice } from "./toy";
 import { PALETTES } from "@/themes";
 
 // Golf, made by hand: Bumper Plains (six short holes, bumpers everywhere) and Battle Grounds (three big
@@ -73,26 +73,6 @@ export function GolfExplorer() {
   // The app's theme, which the void behind the course follows. In the app it's picked on the You tab.
   const [palette, setPalette] = useState(() => document.documentElement.dataset.palette ?? "felt");
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
-  // Which look the course is drawn in, while we decide.
-  const [look, setLook] = useState<Style>(() => {
-    let saved: Style = "pico";
-    try {
-      saved = (localStorage.getItem("golf:look") as Style) || "pico";
-    } catch {
-      // No storage in a sandboxed frame.
-    }
-    setStyle(saved);
-    return saved;
-  });
-  const pickLook = (l: Style) => {
-    setStyle(l);
-    setLook(l);
-    try {
-      localStorage.setItem("golf:look", l);
-    } catch {
-      // No storage in a sandboxed frame.
-    }
-  };
   const pickTheme = (p: string, d: boolean) => {
     document.documentElement.dataset.palette = p;
     document.documentElement.classList.toggle("dark", d);
@@ -130,14 +110,34 @@ export function GolfExplorer() {
           {muted ? <SpeakerSlashIcon size={22} weight="fill" /> : <SpeakerHighIcon size={22} weight="fill" />}
         </button>
       </header>
+      {COURSES.map((co, ci) => (
+        <section key={co.name} className="g-section">
+          <div className="g-section-head">
+            <h2 className="g-display g-heading">{co.name}</h2>
+            <span className="g-footnote">Par {co.holes.reduce((a, c) => a + c.par, 0)}</span>
+          </div>
+          <ol className="g-holes">
+            {co.holes.map((c, i) => (
+              <li key={c.id}>
+                <button type="button" className="g-hole-row" onClick={() => play(ci, i)}>
+                  <Thumb c={c} theme={`${palette}-${dark}`} />
+                  <span className="g-hole-text">
+                    <span className="g-card-name">{c.name}</span>
+                    <span className="g-footnote">
+                      Hole {i + 1}, par {c.par}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ol>
+          <button type="button" className="g-btn g-btn-big g-btn-primary g-play-all" onClick={() => play(ci)}>
+            Play {co.holes.length} holes
+          </button>
+        </section>
+      ))}
       <section className="g-section">
-        <div className="g-seg" role="radiogroup" aria-label="Look">
-          {STYLES.map((st) => (
-            <button key={st.id} type="button" role="radio" aria-checked={look === st.id} className={`g-seg-item ${look === st.id ? "g-seg-on" : ""}`} onClick={() => pickLook(st.id)}>
-              {st.name}
-            </button>
-          ))}
-        </div>
+        <h2 className="g-display g-heading">Theme</h2>
         <div className="g-themes" role="radiogroup" aria-label="Theme">
           {PALETTES.map((p) => (
             <button key={p.id} type="button" role="radio" aria-checked={palette === p.id} className={`g-chip-btn ${palette === p.id ? "g-chip-on" : ""}`} onClick={() => pickTheme(p.id, dark)}>
@@ -153,28 +153,6 @@ export function GolfExplorer() {
           ))}
         </div>
       </section>
-      {COURSES.map((co, ci) => (
-        <section key={co.name} className="g-section">
-          <h2 className="g-display g-heading">{co.name}</h2>
-          <button type="button" className="g-btn g-btn-big g-btn-primary g-play-all" onClick={() => play(ci)}>
-            Play {co.holes.length} holes · Par {co.holes.reduce((a, c) => a + c.par, 0)}
-          </button>
-          <ol className="g-holes">
-            {co.holes.map((c, i) => (
-              <li key={c.id}>
-                <button type="button" className="g-hole-row" onClick={() => play(ci, i)}>
-                  <span className="g-display g-hole-num">{i + 1}</span>
-                  <Thumb c={c} theme={`${palette}-${dark}-${look}`} />
-                  <span className="g-hole-text">
-                    <span className="g-display g-card-name">{c.name}</span>
-                    <span className="g-footnote">Par {c.par}</span>
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ol>
-        </section>
-      ))}
     </div>
   );
 }
@@ -202,6 +180,8 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
   const aim = useRef<{ angle: number; power: number; line: { x: number; y: number }[]; from?: { x: number; y: number }; to?: { x: number; y: number } } | null>(null);
   const fx = useRef<Fx[]>([]);
   const hits = useRef(new Map<number, number>());
+  const juice = useRef<Juice>({ start: 0, spawn: 0.25, impact: null });
+  const shake = useRef({ t: -9, power: 0 });
   // A targeted item waiting for its spot: which slot, and where the finger is.
   const [target, setTarget] = useState<{ i: number; kind: Power } | null>(null);
   const targetRef = useRef<{ i: number; kind: Power } | null>(null);
@@ -275,6 +255,7 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
     let t = 0;
     let lastHud = "";
     let lastKnock = 0;
+    let lastMode = sim.current.mode;
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
       const dt = Math.min(0.1, (now - last) / 1000);
@@ -292,17 +273,22 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
           case "hit":
             sound.putt(e.power);
             trail.current = [];
+            fx.current.push({ kind: "puff", x: e.x, y: e.y, t, seed });
             break;
           case "bounce":
             if (now - lastKnock > 60) sound.knock(e.power);
             lastKnock = now;
+            // Squash against the wall, along the way it's been sent.
+            juice.current.impact = { t, n: Math.atan2(s.vy, s.vx), power: e.power };
+            if (e.power > 0.15) fx.current.push({ kind: "ring", x: e.x, y: e.y, t, seed });
             break;
           case "bump": {
             if (now - lastKnock > 50) sound.bump();
             lastKnock = now;
             const i = course.bumpers.findIndex((b) => Math.hypot(b.at.x - e.x, b.at.y - e.y) < 0.01);
             if (i >= 0) hits.current.set(i, t);
-            fx.current.push({ kind: "ring", x: e.x, y: e.y, t, seed, color: "#d98a78" });
+            juice.current.impact = { t, n: Math.atan2(s.vy, s.vx), power: 0.5 };
+            shake.current = { t, power: 2 };
             break;
           }
           case "splash":
@@ -311,13 +297,14 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
           case "sink":
             sound.plunk();
             fx.current.push({ kind: "ring", x: e.x, y: e.y, t, seed });
-            if (s.strokes <= course.par) fx.current.push({ kind: "confetti", x: e.x, y: e.y - 1, t, seed });
-            setTimeout(() => setDone(true), 900);
+            fx.current.push({ kind: "ring", x: e.x, y: e.y, t: t + 0.12, seed });
+            if (s.strokes <= course.par) fx.current.push({ kind: "confetti", x: e.x, y: e.y - 1, t: t + 0.15, seed });
+            setTimeout(() => setDone(true), 1100);
             break;
           case "box":
             sound.pickup();
-            fx.current.push({ kind: "spark", x: e.x, y: e.y - 1, t, seed });
-            say(`Got ${POWER_UI[e.item].name}`);
+            fx.current.push({ kind: "spark", x: e.x, y: e.y, t, seed });
+            fx.current.push({ kind: "label", x: e.x, y: e.y, t, seed, text: POWER_UI[e.item].name });
             break;
           case "launch":
             sound.whoosh();
@@ -332,11 +319,13 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
           case "boom":
             sound.splash();
             fx.current.push({ kind: "boom", x: e.x, y: e.y, t, seed, color: "big" });
+            shake.current = { t, power: 9 };
             break;
           case "mine":
           case "smash":
             sound.land(1);
             fx.current.push({ kind: "boom", x: e.x, y: e.y, t, seed });
+            shake.current = { t, power: e.type === "mine" ? 6 : 3 };
             if (e.type === "mine") say("Boom");
             break;
           case "rail":
@@ -349,6 +338,9 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
         }
       }
       s.events.length = 0;
+      // Back from off the edge: the ball pops in again.
+      if (lastMode === "out" && s.mode === "aim") juice.current.spawn = t;
+      lastMode = s.mode;
       fx.current = fx.current.filter((f) => t - f.t < 2);
       const speed = Math.hypot(s.vx, s.vy);
       if (s.mode === "roll") {
@@ -369,10 +361,14 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
         c.x += (s.x + lean.x - c.x) * k;
         c.y += (s.y + lean.y - c.y) * k;
       }
+      // A short shake for anything that goes bang.
+      const sk = Math.max(0, 1 - (t - shake.current.t) / 0.3) * shake.current.power;
+      const shook = sk > 0 ? { ...c, ox: c.ox + (Math.random() - 0.5) * sk, oy: c.oy + (Math.random() - 0.5) * sk } : c;
       drawFrame(ctx, {
         c: course,
         sim: s,
-        cam: c,
+        cam: shook,
+        juice: juice.current,
         dpr: cv.current!.width / Math.max(1, v.w),
         t,
         trail: trail.current,
@@ -532,12 +528,15 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
           <CaretLeftIcon size={22} weight="bold" />
         </button>
         <div className="g-pill g-hole-pill">
-          <span className="g-display g-hole-no">{number}</span>
-          <span className="g-display g-hole-name">{course.name}</span>
-          <span className="g-muted">Par {course.par}</span>
-          {round.scores.length > 0 && <span className="g-muted g-vspar">{vsPar === 0 ? "E" : vsPar > 0 ? `+${vsPar}` : vsPar}</span>}
-          <span className="g-display g-strokes" aria-label={`${hud.strokes} strokes`}>
-            {hud.strokes}
+          <span className="g-hole-title">
+            <span className="g-hole-name">{course.name}</span>
+            <span className="g-hole-sub">
+              Hole {number}, par {course.par}
+              {round.scores.length > 0 && <>, {vsPar === 0 ? "even" : vsPar > 0 ? `${vsPar} over` : `${-vsPar} under`}</>}
+            </span>
+          </span>
+          <span className="g-strokes" aria-label={`${hud.strokes} strokes`}>
+            <span className="g-display">{hud.strokes}</span>
           </span>
         </div>
       </div>
@@ -556,13 +555,12 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
 
       <div className="g-dock">
         <div className="g-bag">
-          {Array.from({ length: BAG_SIZE }, (_, i) => i).map((i) => {
-            const p = hud.bag[i];
-            const IconC = p ? POWER_UI[p].icon : null;
+          {hud.bag.slice(0, BAG_SIZE).map((p, i) => {
+            const IconC = POWER_UI[p].icon;
             return (
-              <button key={i} type="button" className={`g-slot ${p ? "" : "g-slot-empty"}`} disabled={!p || hud.mode !== "aim"} onClick={() => tapPower(i)} aria-label={p ? `Use ${POWER_UI[p].name}` : "Empty power-up slot"}>
-                {IconC && <IconC size={22} weight="fill" />}
-                {p && <span>{POWER_UI[p].short}</span>}
+              <button key={`${i}-${p}`} type="button" className={`g-slot ${target?.i === i ? "g-slot-on" : ""}`} disabled={hud.mode !== "aim"} onClick={() => tapPower(i)} aria-label={`Use ${POWER_UI[p].name}`}>
+                <IconC size={22} weight="fill" />
+                <span>{POWER_UI[p].short}</span>
               </button>
             );
           })}
@@ -623,13 +621,13 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
       </div>
 
       {hud.mode === "aim" && hud.strokes >= MAX_STROKES && !done && (
-        <Result title="PICKED UP" sub={`${MAX_STROKES} strokes`} tone="hit" primary={last ? "Scorecard" : "Next hole"} onPrimary={() => onDone(MAX_STROKES)} onSecondary={onAgain} />
+        <Result title="Picked up" sub={`${MAX_STROKES} strokes is the most a hole takes`} tone="over" primary={last ? "Scorecard" : "Next hole"} onPrimary={() => onDone(MAX_STROKES)} onSecondary={onAgain} />
       )}
       {done && (
         <Result
-          title={scoreName(hud.strokes, course.par).toUpperCase()}
-          sub={`${hud.strokes} ${hud.strokes === 1 ? "stroke" : "strokes"} · Par ${course.par}`}
-          tone={hud.strokes < course.par ? "green" : hud.strokes === course.par ? "yellow" : "grey"}
+          title={scoreName(hud.strokes, course.par)}
+          sub={`${hud.strokes} ${hud.strokes === 1 ? "stroke" : "strokes"} on a par ${course.par}`}
+          tone={hud.strokes < course.par ? "under" : hud.strokes === course.par ? "par" : "over"}
           primary={last ? "Scorecard" : "Next hole"}
           onPrimary={() => onDone(hud.strokes)}
           onSecondary={onAgain}
@@ -639,23 +637,13 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
   );
 }
 
-function Result({ title, sub, tone, primary, onPrimary, onSecondary }: { title: string; sub: string; tone: "green" | "yellow" | "grey" | "hit"; primary: string; onPrimary: () => void; onSecondary: () => void }) {
-  const words = title.split(" ");
+// The hole's result: a sheet from the bottom with the score's name, big.
+function Result({ title, sub, tone, primary, onPrimary, onSecondary }: { title: string; sub: string; tone: "under" | "par" | "over"; primary: string; onPrimary: () => void; onSecondary: () => void }) {
   return (
     <div className="g-result">
       <div className="g-result-card">
-        <div className="g-tiles" aria-label={title}>
-          {words.map((w, wi) => (
-            <div key={wi} className="g-tile-row">
-              {[...w].map((ch, i) => (
-                <span key={i} className={`g-tile g-tile-${tone === "hit" && wi === 0 && i === 0 ? "hit" : tone === "hit" ? "grey" : tone}`} style={{ animationDelay: `${(wi * 4 + i) * 60}ms` }}>
-                  {ch}
-                </span>
-              ))}
-            </div>
-          ))}
-        </div>
-        <p className="g-muted g-result-sub">{sub}</p>
+        <h2 className={`g-display g-result-title g-result-${tone}`}>{title}</h2>
+        <p className="g-result-sub">{sub}</p>
         <div className="g-result-actions">
           <button type="button" className="g-btn g-btn-big" onClick={onSecondary}>
             Again
@@ -678,16 +666,10 @@ function Scorecard({ name, holes: all, round, onHome }: { name: string; holes: C
     <div className="g-menu g-scorecard">
       <div>
         <h1 className="g-display g-title-lg">{name}</h1>
-        <div className="g-tiles g-tiles-left" aria-label={`${total} strokes`}>
-          <div className="g-tile-row">
-            {[...String(total)].map((ch, i) => (
-              <span key={i} className={`g-tile g-tile-${diff < 0 ? "green" : diff === 0 ? "yellow" : "grey"}`} style={{ animationDelay: `${i * 60}ms` }}>
-                {ch}
-              </span>
-            ))}
-          </div>
+        <div className="g-total">
+          <span className={`g-display g-total-num g-result-${diff < 0 ? "under" : diff === 0 ? "par" : "over"}`}>{total}</span>
+          <span className="g-total-sub">{diff === 0 ? "Even par" : diff > 0 ? `${diff} over par` : `${-diff} under par`}</span>
         </div>
-        <p className="g-muted g-result-sub">{diff === 0 ? "Even par" : diff > 0 ? `${diff} over par` : `${-diff} under par`}</p>
         <table className="g-card-table">
           <thead>
             <tr>

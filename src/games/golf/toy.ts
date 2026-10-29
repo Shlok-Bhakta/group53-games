@@ -1,84 +1,40 @@
 import { BALL_R, CUP_R, LASER_R, newSim, rng, type Course, type Sim, type Vec } from "./engine";
 
-// The look: flat and straight down, like GamePigeon's mini golf. The course is drawn in fixed, natural
-// golf colors on a dot grid in the app theme's own background. No depth, no shadows.
+// The look: flat and straight down, in fixed natural golf colors, on a dot grid in the app theme's
+// own background. Every part of the course is its own small drawing below (the board, a rail, a
+// bumper, the cup, the flag, the ball, a box, a pad, a ramp, a mine), each taking how far along its
+// animation is, so the asset sheet and the game draw exactly the same things.
+//
+// Rules the parts follow: one family of colors per kind of thing; the things you play with (ball,
+// cup, bumpers, boxes) stand out by brightness from the grass and rails, not just by hue; nothing
+// pretends to have depth. Motion is where the life is: the ball squashes against what it hits and
+// stretches when it's fast, bumpers swell, the flag flies off when the ball drops, things pop in.
 
 type Ctx = CanvasRenderingContext2D;
 
-// The course is the same in every theme; only the void around it follows the app's theme. It comes in
-// three looks: smooth (natural golf colors, drawn sharp at full resolution) and two pixel-art ones,
-// drawn at about five pixels to a ball's width, snapped to a fixed 16-color palette, and scaled up
-// with hard edges: PICO-8's, and Sweetie 16 (GrafxKid's, from Lospec).
-type Look = {
-  carpet: string;
-  mow: string; // the other way of the mowing stripes
-  putting: string; // the green round the cup
-  wall: string;
-  outline: string | null; // a dark line round walls, in pixel art
-  bumper: string;
-  bumperRing: string;
-  cup: string;
-  flag: string;
-  box: string;
-  boxInk: string;
-  boost: string;
-  ramp: string;
-  sand: string;
-  mine: string;
-  ball: string;
-  ui: string;
-  confetti: string[];
-  palette: string[] | null; // pixel art snaps to these
-};
-const SMOOTH: Look = {
-  carpet: "#5c9a4b", // Dunn-Edwards' "Golf Course" green, nudged warmer
-  mow: "#67a455",
-  putting: "#4f8f40",
-  wall: "#ece4d0",
-  outline: null,
+export const PALETTE = {
+  grass: "#5c9a4b", // Dunn-Edwards' "Golf Course" green, nudged warmer
+  mow: "#67a455", // the other way of the mowing stripes
+  putting: "#4f8f40", // cut shorter round the cup
+  rail: "#ece4d0", // a painted rail
+  railLine: "#d6ccb3",
   bumper: "#b5533f",
   bumperRing: "#ece4d0",
   cup: "#1d2a1a",
   flag: "#c4473a",
   box: "#d4aa44",
   boxInk: "#5a4212",
-  boost: "#c9853f",
+  pad: "#c9853f",
   ramp: "#5f819c",
   sand: "#d8c9a8",
   mine: "#3a3934",
+  mineLight: "#e0503f",
   ball: "#fbf9f3",
-  ui: "#fbf9f3",
-  confetti: ["#c4473a", "#d4aa44", "#8cbf6a", "#5f819c", "#ece4d0"],
-  palette: null,
-};
-const PICO8 = ["#000000", "#1d2b53", "#7e2553", "#008751", "#ab5236", "#5f574f", "#c2c3c7", "#fff1e8", "#ff004d", "#ffa300", "#ffec27", "#00e436", "#29adff", "#83769c", "#ff77a8", "#ffccaa"];
-const SWEETIE16 = ["#1a1c2c", "#5d275d", "#b13e53", "#ef7d57", "#ffcd75", "#a7f070", "#38b764", "#257179", "#29366f", "#3b5dc9", "#41a6f6", "#73eff7", "#f4f4f4", "#94b0c2", "#566c86", "#333c57"];
-const LOOKS = {
-  smooth: SMOOTH,
-  pico: {
-    carpet: "#008751", mow: "#00e436", putting: "#008751", wall: "#fff1e8", outline: "#1d2b53", bumper: "#ff004d", bumperRing: "#fff1e8",
-    cup: "#000000", flag: "#ff004d", box: "#ffec27", boxInk: "#ab5236", boost: "#ffa300", ramp: "#29adff", sand: "#ffccaa", mine: "#5f574f",
-    ball: "#fff1e8", ui: "#fff1e8", confetti: ["#ff004d", "#ffec27", "#00e436", "#29adff", "#ff77a8"], palette: PICO8,
-  },
-  sweetie: {
-    carpet: "#38b764", mow: "#a7f070", putting: "#38b764", wall: "#f4f4f4", outline: "#1a1c2c", bumper: "#b13e53", bumperRing: "#ffcd75",
-    cup: "#1a1c2c", flag: "#b13e53", box: "#ffcd75", boxInk: "#b13e53", boost: "#ef7d57", ramp: "#41a6f6", sand: "#ffcd75", mine: "#333c57",
-    ball: "#f4f4f4", ui: "#f4f4f4", confetti: ["#b13e53", "#ffcd75", "#a7f070", "#41a6f6", "#ef7d57"], palette: SWEETIE16,
-  },
-} satisfies Record<string, Look>;
-export type Style = keyof typeof LOOKS;
-export const STYLES: { id: Style; name: string }[] = [
-  { id: "smooth", name: "Smooth" },
-  { id: "pico", name: "PICO-8" },
-  { id: "sweetie", name: "Sweetie 16" },
-];
-let style: Style = "smooth";
-let C: Look = SMOOTH;
-export function setStyle(s: Style) {
-  style = s;
-  C = LOOKS[s];
-  palette = null;
-}
+  ballShade: "#e1ddd2",
+  ink: "#fbf9f3", // the aim line and markers
+} as const;
+const C = PALETTE;
+export const CONFETTI = [C.flag, C.box, "#8cbf6a", C.ramp, C.rail];
 
 // The void and its dots come from the app's theme: its background, and its border color for the dots.
 let theme: { bg: string; dot: string } | null = null;
@@ -93,10 +49,248 @@ function themeColors() {
   return theme;
 }
 
+// --- Small helpers ---
+
+function path(ctx: Ctx, pts: Vec[], closed = true) {
+  ctx.beginPath();
+  pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+  if (closed) ctx.closePath();
+}
+function circ(ctx: Ctx, x: number, y: number, r: number) {
+  ctx.beginPath();
+  ctx.arc(x, y, Math.max(0.001, r), 0, Math.PI * 2);
+}
+// Text at a world position and size, drawn in device pixels: tiny fractional font sizes under a big
+// scale render badly on Safari.
+function worldText(ctx: Ctx, text: string, x: number, y: number, size: number, fill: string, stroke?: string, scale = 1) {
+  const m = ctx.getTransform();
+  const px = m.a * x + m.c * y + m.e, py = m.b * x + m.d * y + m.f;
+  const fs = size * m.a * scale;
+  if (fs < 3) return;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.font = `800 ${fs}px system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  if (stroke) {
+    ctx.lineJoin = "round";
+    ctx.lineWidth = fs * 0.22;
+    ctx.strokeStyle = stroke;
+    ctx.strokeText(text, px, py);
+  }
+  ctx.fillStyle = fill;
+  ctx.fillText(text, px, py);
+  ctx.restore();
+}
+
+// A quick overshoot, for things popping in: 0 to 1, a little past 1, settling at 1.
+export const popIn = (k: number) => (k >= 1 ? 1 : k <= 0 ? 0 : 1 + 2.4 * (k - 1) ** 3 + 1.4 * (k - 1) ** 2);
+const ease = (k: number) => 1 - (1 - Math.max(0, Math.min(1, k))) ** 3;
+
+// --- The parts ---
+
+export function drawBoard(ctx: Ctx, boards: Vec[][], cup: Vec | null, view: { x0: number; y0: number; x1: number; y1: number }) {
+  for (const b of boards) {
+    path(ctx, b);
+    ctx.fillStyle = C.grass;
+    ctx.fill();
+    ctx.save();
+    ctx.clip();
+    // Mowing stripes, on the diagonal like a real green.
+    ctx.fillStyle = C.mow;
+    const band = 2.4;
+    const { x0, y0, x1, y1 } = view;
+    for (let k = Math.floor((x0 + y0) / (band * 2)) * band * 2; k < x1 + y1 + band * 2; k += band * 2) {
+      ctx.beginPath();
+      ctx.moveTo(k - y1, y1);
+      ctx.lineTo(k + band - y1, y1);
+      ctx.lineTo(k + band - y0, y0);
+      ctx.lineTo(k - y0, y0);
+      ctx.closePath();
+      ctx.fill();
+    }
+    if (cup) {
+      circ(ctx, cup.x, cup.y, 3.2);
+      ctx.fillStyle = C.putting;
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+// A rail: flat, with a thin line just inside its edge so it reads as a made thing, not a stroke.
+export function drawRail(ctx: Ctx, pts: Vec[], closed: boolean, w: number) {
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  path(ctx, pts, closed);
+  ctx.strokeStyle = C.rail;
+  ctx.lineWidth = w;
+  ctx.stroke();
+  path(ctx, pts, closed);
+  ctx.strokeStyle = C.railLine;
+  ctx.lineWidth = w * 0.18;
+  ctx.stroke();
+}
+
+// A bumper. `pop` runs 0 to 1 after a hit: it swells, flashes and settles.
+export function drawBumper(ctx: Ctx, at: Vec, r: number, pop = 1) {
+  const swell = pop < 1 ? Math.sin(pop * Math.PI) : 0;
+  const R = r * (1 + swell * 0.22);
+  circ(ctx, at.x, at.y, R);
+  ctx.fillStyle = swell > 0.9 ? C.rail : C.bumper; // a flash right at the peak
+  ctx.fill();
+  ctx.lineWidth = R * 0.2;
+  ctx.strokeStyle = C.bumperRing;
+  circ(ctx, at.x, at.y, R * 0.6);
+  ctx.stroke();
+  // A ring thrown off by the hit.
+  if (pop < 1) {
+    ctx.globalAlpha = 1 - pop;
+    ctx.strokeStyle = C.bumper;
+    ctx.lineWidth = 0.12;
+    circ(ctx, at.x, at.y, R + pop * 1.4);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+}
+
+export function drawCup(ctx: Ctx, at: Vec, r: number) {
+  circ(ctx, at.x, at.y, r + 0.12);
+  ctx.fillStyle = C.rail;
+  ctx.fill();
+  circ(ctx, at.x, at.y, r);
+  ctx.fillStyle = C.cup;
+  ctx.fill();
+}
+
+// The flag: a pole and a pennant that ripples. `out` runs 0 to 1 as it's pulled when the ball drops:
+// it lifts away and fades.
+export function drawFlag(ctx: Ctx, at: Vec, t: number, alpha = 1, out = 0) {
+  if (alpha <= 0 || out >= 1) return;
+  ctx.globalAlpha = alpha * (1 - out);
+  const lift = ease(out) * 2.5;
+  const base = { x: at.x, y: at.y - lift };
+  ctx.strokeStyle = C.rail;
+  ctx.lineWidth = 0.13;
+  ctx.beginPath();
+  ctx.moveTo(base.x, base.y);
+  ctx.lineTo(base.x, base.y - 2.6);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(base.x, base.y - 2.6);
+  for (let k = 1; k <= 6; k++) {
+    const u = k / 6;
+    ctx.lineTo(base.x + u * 1.4, base.y - 2.6 + u * 0.45 + Math.sin(t * 5 - u * 3) * 0.06 * u);
+  }
+  for (let k = 6; k >= 0; k--) {
+    const u = k / 6;
+    ctx.lineTo(base.x + u * 1.4, base.y - 1.7 - u * 0.45 + Math.sin(t * 5 - u * 3) * 0.06 * u);
+  }
+  ctx.closePath();
+  ctx.fillStyle = C.flag;
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+// The ball. `stretch` runs along its direction of travel (above 1 when it's fast), `squash` flattens
+// it against whatever it just hit (normal `n`), `scale` is for popping in and dropping out.
+export function drawBall(ctx: Ctx, x: number, y: number, r: number, o: { dir?: number; stretch?: number; squash?: number; n?: number; scale?: number; alpha?: number } = {}) {
+  const s = o.scale ?? 1;
+  if (s <= 0.01) return;
+  ctx.save();
+  ctx.globalAlpha = o.alpha ?? 1;
+  ctx.translate(x, y);
+  let sx = 1, sy = 1, rot = 0;
+  if (o.squash && o.squash > 0) {
+    rot = o.n ?? 0;
+    sx = 1 - o.squash * 0.35;
+    sy = 1 + o.squash * 0.25;
+  } else if (o.stretch && o.stretch > 1) {
+    rot = o.dir ?? 0;
+    sx = o.stretch;
+    sy = 1 / Math.sqrt(o.stretch);
+  }
+  ctx.rotate(rot);
+  ctx.scale(sx * s, sy * s);
+  circ(ctx, 0, 0, r);
+  ctx.fillStyle = C.ball;
+  ctx.fill();
+  // A soft shade on the bottom right, so it reads as a ball, not a dot.
+  ctx.save();
+  circ(ctx, 0, 0, r);
+  ctx.clip();
+  circ(ctx, r * 0.35, r * 0.4, r * 0.95);
+  ctx.globalAlpha *= 0.55;
+  ctx.fillStyle = C.ballShade;
+  ctx.fill();
+  ctx.restore();
+  ctx.restore();
+}
+
+// A mystery box: it breathes a little until you roll through it.
+export function drawBox(ctx: Ctx, at: Vec, t: number, i = 0, inkLabel = true) {
+  const sz = 1.15 * (1 + Math.sin(t * 3 + i * 1.7) * 0.04);
+  ctx.fillStyle = C.box;
+  ctx.beginPath();
+  ctx.roundRect(at.x - sz / 2, at.y - sz / 2, sz, sz, 0.18);
+  ctx.fill();
+  if (inkLabel) worldText(ctx, "?", at.x, at.y + sz * 0.05, sz * 0.78, C.boxInk);
+}
+
+// A speed pad (chevrons that run) or a jump ramp (a chevron and a lip).
+export function drawPad(ctx: Ctx, poly: Vec[], dir: Vec, kind: "boost" | "ramp", t: number) {
+  path(ctx, poly);
+  ctx.fillStyle = kind === "boost" ? C.pad : C.ramp;
+  ctx.fill();
+  const m = poly.reduce((a, p) => ({ x: a.x + p.x / poly.length, y: a.y + p.y / poly.length }), { x: 0, y: 0 });
+  ctx.save();
+  ctx.translate(m.x, m.y);
+  ctx.rotate(Math.atan2(dir.y, dir.x));
+  ctx.strokeStyle = C.rail;
+  ctx.lineWidth = 0.22;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  const n = kind === "boost" ? 2 : 1;
+  for (let k = 0; k < n; k++) {
+    const o = (k - (n - 1) / 2) * 0.7 + (kind === "boost" ? ((t * 2) % 1) * 0.3 - 0.15 : 0);
+    ctx.beginPath();
+    ctx.moveTo(o - 0.35, -0.5);
+    ctx.lineTo(o + 0.2, 0);
+    ctx.lineTo(o - 0.35, 0.5);
+    ctx.stroke();
+  }
+  if (kind === "ramp") {
+    ctx.lineWidth = 0.12;
+    ctx.beginPath();
+    ctx.moveTo(0.9, -0.9);
+    ctx.lineTo(0.9, 0.9);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+export function drawMine(ctx: Ctx, at: Vec, t: number) {
+  circ(ctx, at.x, at.y, 0.55);
+  ctx.fillStyle = C.mine;
+  ctx.fill();
+  circ(ctx, at.x, at.y, 0.18);
+  ctx.fillStyle = Math.sin(t * 6 + at.x) > 0 ? C.mineLight : "#6e2a20";
+  ctx.fill();
+}
+
+// --- Frames ---
+
 export type Camera = { x: number; y: number; s: number; ox: number; oy: number }; // screen = (world - xy) * s + o
 export type Fx =
   | { kind: "ring" | "splash" | "puff" | "spark" | "confetti" | "boom"; x: number; y: number; t: number; color?: string; seed: number }
-  | { kind: "rail"; x: number; y: number; x2: number; y2: number; t: number; color?: string; seed: number };
+  | { kind: "rail"; x: number; y: number; x2: number; y2: number; t: number; color?: string; seed: number }
+  | { kind: "label"; x: number; y: number; t: number; text: string; color?: string; seed: number };
+// Moments the renderer animates from, all in the frame's time.
+export type Juice = {
+  start: number; // the hole came up
+  spawn: number; // the ball last appeared (on the tee, or back from off the edge)
+  impact: { t: number; n: number; power: number } | null; // the ball last hit something, and which way it was pushed
+};
 export type Frame = {
   c: Course;
   sim: Sim;
@@ -106,27 +300,19 @@ export type Frame = {
   trail: Vec[];
   fx: Fx[];
   hits: Map<number, number>; // bumper index -> when it was last hit
+  juice?: Juice;
   aim: { angle: number; power: number; line: Vec[]; from?: Vec; to?: Vec } | null;
   target?: { kind: "laser" | "mine" | "railgun"; at: Vec | null } | null; // picking where an item goes
   inset?: { top: number; bottom: number };
 };
 
-function path(ctx: Ctx, pts: Vec[], dx = 0, dy = 0, closed = true) {
-  ctx.beginPath();
-  pts.forEach((p, i) => (i ? ctx.lineTo(p.x + dx, p.y + dy) : ctx.moveTo(p.x + dx, p.y + dy)));
-  if (closed) ctx.closePath();
-}
-function circ(ctx: Ctx, x: number, y: number, r: number) {
-  ctx.beginPath();
-  ctx.arc(x, y, Math.max(0.001, r), 0, Math.PI * 2);
-}
-
-function drawScene(ctx: Ctx, f: Frame, pixel: boolean) {
+export function drawFrame(ctx: Ctx, f: Frame) {
   const { c, sim, cam, dpr, t } = f;
+  const J = f.juice ?? { start: -9, spawn: -9, impact: null };
   const W = ctx.canvas.width, H = ctx.canvas.height;
   const T = () => ctx.setTransform(cam.s * dpr, 0, 0, cam.s * dpr, (cam.ox - cam.x * cam.s) * dpr, (cam.oy - cam.y * cam.s) * dpr);
   const vx0 = cam.x - cam.ox / cam.s, vy0 = cam.y - cam.oy / cam.s;
-  const vx1 = vx0 + W / dpr / cam.s, vy1 = vy0 + H / dpr / cam.s;
+  const view = { x0: vx0, y0: vy0, x1: vx0 + W / dpr / cam.s, y1: vy0 + H / dpr / cam.s };
 
   // The void, and a dot grid that moves with the board.
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -138,234 +324,96 @@ function drawScene(ctx: Ctx, f: Frame, pixel: boolean) {
   T();
   ctx.fillStyle = th.dot;
   const gap = 1.6;
-  for (let x = Math.floor(vx0 / gap) * gap; x < vx1; x += gap)
-    for (let y = Math.floor(vy0 / gap) * gap; y < vy1; y += gap) {
-      const d = pixel ? 1 / cam.s : 0.12; // one pixel, in pixel art
-      ctx.fillRect(x - d / 2, y - d / 2, d, d);
-    }
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
+  for (let x = Math.floor(view.x0 / gap) * gap; x < view.x1; x += gap)
+    for (let y = Math.floor(view.y0 / gap) * gap; y < view.y1; y += gap) ctx.fillRect(x - 0.06, y - 0.06, 0.12, 0.12);
 
-  const boards = c.greens.map((g) => g.poly);
-  for (const b of boards) {
-    path(ctx, b);
-    ctx.fillStyle = C.carpet;
-    ctx.fill();
-    ctx.save();
-    ctx.clip();
-    // Mowing stripes, on the diagonal like a real green.
-    ctx.fillStyle = C.mow;
-    ctx.strokeStyle = C.mow;
-    const band = 2.4;
-    const span = vx1 - vx0 + vy1 - vy0;
-    for (let k = Math.floor((vx0 + vy0) / (band * 2)) * band * 2; k < vx0 + vy0 + span + band * 2; k += band * 2) {
-      ctx.beginPath();
-      ctx.moveTo(k - vy1, vy1);
-      ctx.lineTo(k + band - vy1, vy1);
-      ctx.lineTo(k + band - vy0, vy0);
-      ctx.lineTo(k - vy0, vy0);
-      ctx.closePath();
-      if (!pixel) ctx.fill();
-      else {
-        // In pixel art the lighter stripe is hatched, one pixel in four, like dithering.
-        ctx.save();
-        ctx.clip();
-        ctx.lineWidth = 1 / cam.s;
-        for (let d = -band; d < band * 2; d += 4 / cam.s) {
-          ctx.beginPath();
-          ctx.moveTo(k - vy1 + d, vy1);
-          ctx.lineTo(k - vy0 + d, vy0);
-          ctx.stroke();
-        }
-        ctx.restore();
-      }
-    }
-    circ(ctx, c.cup.x, c.cup.y, 3.2);
-    ctx.fillStyle = C.putting;
-    ctx.fill();
-    ctx.restore();
-  }
-
-  // Speed pads and jump ramps: flat plates with arrows.
+  // The course fades up as the hole starts.
+  const intro = ease((t - J.start) / 0.4);
+  ctx.globalAlpha = intro;
+  drawBoard(ctx, c.greens.map((g) => g.poly), c.cup, view);
   for (const z of c.zones) {
-    if (z.kind !== "boost" && z.kind !== "ramp" && z.kind !== "sand") continue;
-    path(ctx, z.poly);
-    ctx.fillStyle = z.kind === "boost" ? C.boost : z.kind === "ramp" ? C.ramp : C.sand;
-    ctx.fill();
-    if (z.kind !== "boost" && z.kind !== "ramp") continue;
-    const m = z.poly.reduce((a, p) => ({ x: a.x + p.x / z.poly.length, y: a.y + p.y / z.poly.length }), { x: 0, y: 0 });
-    ctx.save();
-    ctx.translate(m.x, m.y);
-    ctx.rotate(Math.atan2(z.dir.y, z.dir.x));
-    ctx.strokeStyle = C.wall;
-    ctx.lineWidth = 0.22;
-    const n = z.kind === "boost" ? 2 : 1;
-    for (let k = 0; k < n; k++) {
-      const o = (k - (n - 1) / 2) * 0.7 + (z.kind === "boost" ? ((t * 2) % 1) * 0.3 - 0.15 : 0);
-      ctx.beginPath();
-      ctx.moveTo(o - 0.35, -0.5);
-      ctx.lineTo(o + 0.2, 0);
-      ctx.lineTo(o - 0.35, 0.5);
-      ctx.stroke();
-    }
-    if (z.kind === "ramp") {
-      ctx.lineWidth = 0.12;
-      ctx.strokeStyle = "rgba(255,255,255,0.6)";
-      ctx.beginPath();
-      ctx.moveTo(0.9, -0.9);
-      ctx.lineTo(0.9, 0.9);
-      ctx.stroke();
-    }
-    ctx.restore();
+    if (z.kind === "sand") {
+      path(ctx, z.poly);
+      ctx.fillStyle = C.sand;
+      ctx.fill();
+    } else if (z.kind === "boost" || z.kind === "ramp") drawPad(ctx, z.poly, z.dir, z.kind, t);
   }
-
-  // Landmines: dark discs with a blinking red light.
-  for (const m of sim.mines) {
-    if (!m.live) continue;
-    circ(ctx, m.x, m.y, 0.55);
-    ctx.fillStyle = C.mine;
-    ctx.fill();
-    circ(ctx, m.x, m.y, 0.18);
-    ctx.fillStyle = Math.sin(t * 6 + m.x) > 0 ? "#ff3b30" : "#7a1a14";
-    ctx.fill();
-  }
-
-  // Tee mat.
+  for (const m of sim.mines) if (m.live) drawMine(ctx, m, t);
   ctx.fillStyle = "rgba(0,0,0,0.1)";
   ctx.beginPath();
   ctx.roundRect(c.tee.x - 1.1, c.tee.y - 1.1, 2.2, 2.2, 0.35);
   ctx.fill();
-
-  // The cup.
-  const cupR = CUP_R * sim.cupScale;
-  circ(ctx, c.cup.x, c.cup.y, cupR + 0.12);
-  ctx.fillStyle = C.wall;
-  ctx.fill();
-  circ(ctx, c.cup.x, c.cup.y, cupR);
-  ctx.fillStyle = C.cup;
-  ctx.fill();
-
+  drawCup(ctx, c.cup, CUP_R * sim.cupScale);
   drawFx(ctx, f.fx, t, true);
+  for (const g of c.greens) drawRail(ctx, g.poly, true, 0.6);
+  for (const w of c.walls) drawRail(ctx, w.pts, !!w.closed, Math.max(0.5, w.w));
+  ctx.globalAlpha = 1;
 
-  // Walls: the board's edge and any baffles, one flat line each (with a dark outline in pixel art).
-  if (C.outline) {
-    ctx.strokeStyle = C.outline;
-    for (const b of boards) {
-      ctx.lineWidth = 0.6 + 2 / cam.s;
-      path(ctx, b);
-      ctx.stroke();
-    }
-    for (const w of c.walls) {
-      ctx.lineWidth = Math.max(0.5, w.w) + 2 / cam.s;
-      path(ctx, w.pts, 0, 0, !!w.closed);
-      ctx.stroke();
-    }
-  }
-  ctx.strokeStyle = C.wall;
-  for (const b of boards) {
-    ctx.lineWidth = 0.6;
-    path(ctx, b);
-    ctx.stroke();
-  }
-  for (const w of c.walls) {
-    ctx.lineWidth = Math.max(0.5, w.w);
-    path(ctx, w.pts, 0, 0, !!w.closed);
-    ctx.stroke();
-  }
-
-  // The ball's trail and the ball, under the bumpers' tops so it can't sit on them.
-  const out = sim.mode === "out" ? Math.min(1, sim.modeT / 0.5) : 0;
-  const sinking = sim.mode === "sunk" ? Math.min(1, sim.modeT / 0.25) : 0;
+  // The ball's trail: a streak that thins out behind it.
   if (f.trail.length > 1 && sim.mode === "roll")
     for (let i = 1; i < f.trail.length; i++) {
       const k = i / f.trail.length;
-      ctx.strokeStyle = `rgba(255,255,255,${0.45 * k})`;
+      ctx.strokeStyle = `rgba(251,249,243,${0.4 * k})`;
       ctx.lineWidth = BALL_R * 1.5 * k;
+      ctx.lineCap = "round";
       ctx.beginPath();
       ctx.moveTo(f.trail[i - 1].x, f.trail[i - 1].y);
       ctx.lineTo(f.trail[i].x, f.trail[i].y);
       ctx.stroke();
     }
-  const bx = sinking ? sim.x + (c.cup.x - sim.x) * sinking : sim.x;
-  const by = sinking ? sim.y + (c.cup.y - sim.y) * sinking : sim.y;
-  if (sinking < 1 && out < 1) {
-    // In pixel art the ball is never smaller than about six pixels across, so it always reads.
-    const R = Math.max(sim.r, pixel ? 3 / cam.s : 0) * (1 + sim.z * 0.18) * (1 - sinking * 0.5) * (1 - out);
-    circ(ctx, bx, by, R);
-    ctx.fillStyle = C.ball;
-    ctx.fill();
+
+  // The ball, with its moments: popping onto the tee, squashing against walls, stretching at speed,
+  // spiralling into the cup, dropping off the edge.
+  const speed = Math.hypot(sim.vx, sim.vy);
+  if (sim.mode === "sunk") {
+    const k = Math.min(1, sim.modeT / 0.35);
+    const a = k * Math.PI * 1.5;
+    const rr = (1 - k) * 0.5;
+    drawBall(ctx, c.cup.x + Math.cos(a) * rr, c.cup.y + Math.sin(a) * rr, sim.r, { scale: 1 - k * 0.6, alpha: 1 - Math.max(0, k - 0.7) / 0.3 });
+  } else if (sim.mode === "out") {
+    // Off the edge: it keeps drifting, shrinks and fades.
+    const k = Math.min(1, sim.modeT / 0.5);
+    drawBall(ctx, sim.x, sim.y, sim.r, { scale: 1 - ease(k), alpha: 1 - k });
+  } else {
+    const since = t - (J.impact?.t ?? -9);
+    const squash = J.impact && since < 0.12 ? (1 - since / 0.12) * Math.min(1, J.impact.power * 3) : 0;
+    const lift = sim.z * 0.5;
+    if (sim.z > 0) {
+      circ(ctx, sim.x + 0.12 + sim.z * 0.3, sim.y + 0.22 + sim.z * 0.5, sim.r);
+      ctx.fillStyle = "rgba(0,0,0,0.22)";
+      ctx.fill();
+    }
+    drawBall(ctx, sim.x, sim.y - lift, sim.r * (1 + sim.z * 0.18), {
+      dir: Math.atan2(sim.vy, sim.vx),
+      stretch: 1 + Math.min(0.35, speed / 70),
+      squash,
+      n: J.impact?.n,
+      scale: popIn((t - J.spawn) / 0.35),
+    });
   }
 
-  // Bumpers: flat red discs with a white ring. Hit, they swell and flash.
   c.bumpers.forEach((b, i) => {
     if (sim.gone[i]) return;
-    const age = t - (f.hits.get(i) ?? -9);
-    const pop = age < 0.25 ? Math.sin((age / 0.25) * Math.PI) : 0;
-    const r = b.r * (1 + pop * 0.2);
-    circ(ctx, b.at.x, b.at.y, r);
-    ctx.fillStyle = pop > 0.5 ? C.wall : C.bumper;
-    ctx.fill();
-    ctx.lineWidth = r * 0.2;
-    ctx.strokeStyle = C.bumperRing;
-    circ(ctx, b.at.x, b.at.y, r * 0.6);
-    ctx.stroke();
+    drawBumper(ctx, b.at, b.r, Math.min(1, (t - (f.hits.get(i) ?? -9)) / 0.3));
   });
-
-  // Mystery boxes: flat yellow squares.
   c.boxes.forEach((b, i) => {
-    if (sim.boxes[i]) return;
-    const sz = 1.1;
-    ctx.fillStyle = C.box;
-    ctx.beginPath();
-    ctx.roundRect(b.x - sz / 2, b.y - sz / 2, sz, sz, 0.15);
-    ctx.fill();
+    if (!sim.boxes[i]) drawBox(ctx, b, t, i);
   });
 
-  // The flag: a pole and a pennant, gone once the ball's close.
+  // The flag stands until the ball's close, and flies off when it drops.
   const near = Math.hypot(sim.x - c.cup.x, sim.y - c.cup.y);
-  const flagA = sim.mode === "sunk" ? 0 : Math.max(0, Math.min(1, (near - 1.5) / 1.5));
-  if (flagA > 0) {
-    ctx.globalAlpha = flagA;
-    ctx.strokeStyle = C.wall;
-    ctx.lineWidth = 0.13;
-    ctx.beginPath();
-    ctx.moveTo(c.cup.x, c.cup.y);
-    ctx.lineTo(c.cup.x, c.cup.y - 2.6);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(c.cup.x, c.cup.y - 2.6);
-    ctx.lineTo(c.cup.x + 1.4, c.cup.y - 2.15);
-    ctx.lineTo(c.cup.x, c.cup.y - 1.7);
-    ctx.closePath();
-    ctx.fillStyle = C.flag;
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  }
+  if (sim.mode === "sunk") drawFlag(ctx, c.cup, t, 1, Math.min(1, sim.modeT / 0.6));
+  else drawFlag(ctx, c.cup, t, Math.max(0, Math.min(1, (near - 1.5) / 1.5)) * intro);
 
   drawFx(ctx, f.fx, t, false);
 
-  // Screen-space bits: question marks, the aim, the arrow to the cup.
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = C.boxInk;
-  c.boxes.forEach((b, i) => {
-    if (sim.boxes[i]) return;
-    const sx = (b.x - cam.x) * cam.s + cam.ox, sy = (b.y - cam.y) * cam.s + cam.oy;
-    if (pixel) {
-      // Too small for a "?" in pixel art: a little mark instead.
-      ctx.fillRect(Math.round(sx) - 1, Math.round(sy) - 2, 2, 2);
-      ctx.fillRect(Math.round(sx) - 1, Math.round(sy) + 1, 2, 1);
-    } else {
-      ctx.font = `800 ${Math.max(8, cam.s * 0.75)}px system-ui, sans-serif`;
-      ctx.fillText("?", sx, sy + 1);
-    }
-  });
-
+  // The aim: where the finger went down and how far it's pulled, then a dotted line out to the first
+  // bounce and a ring round the ball filling with power.
   if (f.aim && sim.mode === "aim") {
     const { power, line } = f.aim;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (f.aim.from && f.aim.to) {
-      ctx.strokeStyle = "rgba(255,255,255,0.5)";
+      ctx.strokeStyle = "rgba(251,249,243,0.45)";
       ctx.lineWidth = 2;
       ctx.setLineDash([4, 6]);
       ctx.beginPath();
@@ -374,14 +422,15 @@ function drawScene(ctx: Ctx, f: Frame, pixel: boolean) {
       ctx.stroke();
       ctx.setLineDash([]);
       circ(ctx, f.aim.from.x, f.aim.from.y, 6);
-      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      ctx.fillStyle = "rgba(251,249,243,0.45)";
       ctx.fill();
     }
     T();
-    ctx.strokeStyle = C.ui;
+    ctx.strokeStyle = C.ink;
+    ctx.lineCap = "round";
     ctx.lineWidth = 0.2;
     ctx.setLineDash([0.02, 0.45]);
-    path(ctx, line, 0, 0, false);
+    path(ctx, line, false);
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.lineWidth = 0.15;
@@ -389,11 +438,12 @@ function drawScene(ctx: Ctx, f: Frame, pixel: boolean) {
     ctx.arc(sim.x, sim.y, BALL_R + 0.4, -Math.PI / 2, -Math.PI / 2 + power * Math.PI * 2);
     ctx.stroke();
   }
-  // Lasers on their way: a target ring closing in.
+
+  // Orbital Lasers on their way: a target ring closing in.
   T();
   for (const st of sim.strikes) {
     const k = Math.max(0, Math.min(1, (st.t - sim.t) / 0.9));
-    ctx.strokeStyle = "#ff3b30";
+    ctx.strokeStyle = C.mineLight;
     ctx.lineWidth = 0.15;
     circ(ctx, st.x, st.y, LASER_R * (0.4 + k * 0.6));
     ctx.stroke();
@@ -407,7 +457,7 @@ function drawScene(ctx: Ctx, f: Frame, pixel: boolean) {
   // Picking where an item goes.
   if (f.target?.at) {
     const { kind, at } = f.target;
-    ctx.strokeStyle = "#ffffff";
+    ctx.strokeStyle = C.ink;
     ctx.lineWidth = 0.14;
     ctx.setLineDash([0.4, 0.3]);
     if (kind === "railgun") {
@@ -422,99 +472,11 @@ function drawScene(ctx: Ctx, f: Frame, pixel: boolean) {
     }
     ctx.setLineDash([]);
   }
-}
-
-// Pixel art: the scene drawn small, every pixel snapped to the palette (and the theme's two colors),
-// then scaled up with no smoothing.
-const PIXELS_PER_UNIT = 5.5;
-let low: HTMLCanvasElement | null = null;
-let palette: { rgb: [number, number, number][]; key: string } | null = null;
-const snapCache = new Map<number, number>();
-function paletteRGB(): [number, number, number][] {
-  const th = themeColors();
-  const key = `${style}|${th.bg}|${th.dot}`;
-  if (palette?.key === key) return palette.rgb;
-  const probe = document.createElement("canvas");
-  probe.width = probe.height = 1;
-  const pc = probe.getContext("2d", { willReadFrequently: true })!;
-  const read = (fill: string, over?: string): [number, number, number] => {
-    pc.clearRect(0, 0, 1, 1);
-    if (over) {
-      pc.fillStyle = over;
-      pc.fillRect(0, 0, 1, 1);
-    }
-    pc.fillStyle = fill;
-    pc.fillRect(0, 0, 1, 1);
-    const d = pc.getImageData(0, 0, 1, 1).data;
-    return [d[0], d[1], d[2]];
-  };
-  const rgb = [...(C.palette ?? []).map((h) => read(h)), read(th.bg), read(th.dot, th.bg)];
-  palette = { rgb, key };
-  snapCache.clear();
-  return rgb;
-}
-function snap(lc: Ctx) {
-  const rgb = paletteRGB();
-  const img = lc.getImageData(0, 0, lc.canvas.width, lc.canvas.height);
-  const d = img.data;
-  for (let i = 0; i < d.length; i += 4) {
-    const key = (d[i] << 16) | (d[i + 1] << 8) | d[i + 2];
-    let k = snapCache.get(key);
-    if (k === undefined) {
-      let best = 1e9;
-      k = 0;
-      for (let j = 0; j < rgb.length; j++) {
-        const dr = d[i] - rgb[j][0], dg = d[i + 1] - rgb[j][1], db = d[i + 2] - rgb[j][2];
-        const e = dr * dr * 3 + dg * dg * 4 + db * db * 2;
-        if (e < best) {
-          best = e;
-          k = j;
-        }
-      }
-      snapCache.set(key, k);
-    }
-    d[i] = rgb[k][0];
-    d[i + 1] = rgb[k][1];
-    d[i + 2] = rgb[k][2];
-    d[i + 3] = 255;
-  }
-  lc.putImageData(img, 0, 0);
-}
-
-export function drawFrame(ctx: Ctx, f: Frame) {
-  if (!C.palette) {
-    drawScene(ctx, f, false);
-  } else {
-    const k = Math.max(2, Math.round(f.cam.s / PIXELS_PER_UNIT)); // screen points per pixel
-    const cssW = ctx.canvas.width / f.dpr, cssH = ctx.canvas.height / f.dpr;
-    low ??= document.createElement("canvas");
-    const w = Math.ceil(cssW / k), h = Math.ceil(cssH / k);
-    if (low.width !== w || low.height !== h) {
-      low.width = w;
-      low.height = h;
-    }
-    const lc = low.getContext("2d", { willReadFrequently: true })!;
-    const sc = (p?: Vec) => p && { x: p.x / k, y: p.y / k };
-    drawScene(
-      lc,
-      {
-        ...f,
-        cam: { x: f.cam.x, y: f.cam.y, s: f.cam.s / k, ox: f.cam.ox / k, oy: f.cam.oy / k },
-        dpr: 1,
-        aim: f.aim && { ...f.aim, from: sc(f.aim.from), to: sc(f.aim.to) },
-      },
-      true,
-    );
-    snap(lc);
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(low, 0, 0, w * k * f.dpr, h * k * f.dpr);
-    ctx.imageSmoothingEnabled = true;
-  }
-  ctx.setTransform(f.dpr, 0, 0, f.dpr, 0, 0);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   if (f.inset) holeArrow(ctx, f);
 }
 
+// When the cup is off screen, an arrow at the edge points to it.
 function holeArrow(ctx: Ctx, f: Frame) {
   const { c, sim, cam, dpr } = f;
   if (sim.mode === "sunk") return;
@@ -529,9 +491,9 @@ function holeArrow(ctx: Ctx, f: Frame) {
   const x = cx + dx * k, y = cy + dy * k;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   circ(ctx, x, y, 17);
-  ctx.fillStyle = C.bumper;
+  ctx.fillStyle = C.flag;
   ctx.fill();
-  ctx.strokeStyle = "#ffffff";
+  ctx.strokeStyle = C.rail;
   ctx.lineWidth = 2.5;
   ctx.stroke();
   ctx.save();
@@ -543,23 +505,32 @@ function holeArrow(ctx: Ctx, f: Frame) {
   ctx.lineTo(-1.5, 0);
   ctx.lineTo(-4, 6.5);
   ctx.closePath();
-  ctx.fillStyle = "#ffffff";
+  ctx.fillStyle = C.rail;
   ctx.fill();
   ctx.restore();
 }
 
-function drawFx(ctx: Ctx, fx: Fx[], t: number, ground: boolean) {
+export function drawFx(ctx: Ctx, fx: Fx[], t: number, ground: boolean) {
   for (const e of fx) {
     const age = t - e.t;
     const r = rng(e.seed);
+    if (e.kind === "label") {
+      // An item's name floating up off the box it came from.
+      const life = 1.2;
+      if (age > life || ground) continue;
+      const k = age / life;
+      ctx.globalAlpha = 1 - Math.max(0, k - 0.6) / 0.4;
+      worldText(ctx, e.text, e.x, e.y - 1 - ease(k) * 1.5, 0.9, e.color ?? C.box, C.cup, popIn(Math.min(1, age / 0.25)));
+      ctx.globalAlpha = 1;
+      continue;
+    }
     if (e.kind === "boom") {
-      // A flash and a ring of debris.
       const life = 0.6;
       if (age > life || !ground) continue;
       const k = age / life;
       ctx.globalAlpha = 1 - k;
       circ(ctx, e.x, e.y, (e.color === "big" ? LASER_R : 1.4) * (0.5 + k));
-      ctx.fillStyle = k < 0.25 ? "#fff2c4" : "#ff8a3d";
+      ctx.fillStyle = k < 0.25 ? "#fff2c4" : C.pad;
       ctx.fill();
       ctx.globalAlpha = 1;
       continue;
@@ -569,7 +540,7 @@ function drawFx(ctx: Ctx, fx: Fx[], t: number, ground: boolean) {
       if (age > life || ground) continue;
       const k = age / life;
       ctx.globalAlpha = 1 - k;
-      ctx.strokeStyle = "#7df9ff";
+      ctx.strokeStyle = "#cfe9f2";
       ctx.lineWidth = 0.5 * (1 - k) + 0.1;
       ctx.beginPath();
       ctx.moveTo(e.x, e.y);
@@ -584,12 +555,23 @@ function drawFx(ctx: Ctx, fx: Fx[], t: number, ground: boolean) {
       const life = 0.45;
       if (age > life) continue;
       const k = age / life;
-      ctx.strokeStyle = e.color ?? "#ffffff";
-      ctx.globalAlpha = 1 - k;
+      ctx.strokeStyle = e.color ?? C.rail;
+      ctx.globalAlpha = (1 - k) * 0.9;
       ctx.lineWidth = 0.14;
-      circ(ctx, e.x, e.y, 0.6 + k * 1.8);
+      circ(ctx, e.x, e.y, 0.5 + ease(k) * 1.6);
       ctx.stroke();
-    } else if (e.kind !== "puff") {
+    } else if (e.kind === "puff") {
+      const life = 0.45;
+      if (age > life) continue;
+      const k = age / life;
+      ctx.globalAlpha = (1 - k) * 0.8;
+      ctx.fillStyle = e.color ?? C.rail;
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + r();
+        circ(ctx, e.x + Math.cos(a) * ease(k) * 0.9, e.y + Math.sin(a) * ease(k) * 0.9, 0.16 * (1 - k));
+        ctx.fill();
+      }
+    } else {
       const life = e.kind === "confetti" ? 1.6 : 0.6;
       if (age > life) continue;
       const k = age / life;
@@ -597,9 +579,13 @@ function drawFx(ctx: Ctx, fx: Fx[], t: number, ground: boolean) {
       const n = e.kind === "confetti" ? 34 : 12;
       for (let i = 0; i < n; i++) {
         const a = r() * Math.PI * 2, sp = 1.5 + r() * 2.5;
-        const ease = 1 - (1 - k) ** 3;
-        ctx.fillStyle = e.kind === "confetti" ? C.confetti[i % 5] : (e.color ?? C.box);
-        ctx.fillRect(e.x + Math.cos(a) * sp * ease - 0.1, e.y + Math.sin(a) * sp * ease - 0.1 + k * k, 0.2, 0.2);
+        const spin = r() * 10;
+        ctx.save();
+        ctx.translate(e.x + Math.cos(a) * sp * ease(k), e.y + Math.sin(a) * sp * ease(k) + k * k * 2);
+        ctx.rotate(spin * k);
+        ctx.fillStyle = e.kind === "confetti" ? CONFETTI[i % CONFETTI.length] : (e.color ?? C.box);
+        ctx.fillRect(-0.1, -0.06, 0.2, e.kind === "confetti" ? 0.12 : 0.2);
+        ctx.restore();
       }
     }
     ctx.globalAlpha = 1;
@@ -617,7 +603,7 @@ export function still(c: Course, width: number): HTMLCanvasElement {
     sim: newSim(c),
     cam: { x: c.w / 2, y: c.h / 2, s, ox: el.width / 2, oy: el.height / 2 },
     dpr: 1,
-    t: 0.5,
+    t: 5,
     trail: [],
     fx: [],
     hits: new Map(),
