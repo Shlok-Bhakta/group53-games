@@ -34,6 +34,7 @@ export const PALETTE = {
   ink: "#fbf9f3", // the aim line and markers
 } as const;
 const C = PALETTE;
+const v0: Vec = { x: 0, y: 0 };
 export const CONFETTI = [C.flag, C.box, "#8cbf6a", C.ramp, C.rail];
 
 // The void and its dots come from the app's theme: its background, and its border color for the dots.
@@ -62,24 +63,51 @@ function circ(ctx: Ctx, x: number, y: number, r: number) {
 }
 // Text at a world position and size, drawn in device pixels: tiny fractional font sizes under a big
 // scale render badly on Safari.
-function worldText(ctx: Ctx, text: string, x: number, y: number, size: number, fill: string, stroke?: string, scale = 1) {
-  const m = ctx.getTransform();
-  const px = m.a * x + m.c * y + m.e, py = m.b * x + m.d * y + m.f;
-  const fs = size * m.a * scale;
-  if (fs < 3) return;
-  ctx.save();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.font = `800 ${fs}px system-ui, sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
+// Text is drawn once, large, into its own little canvas, then scaled like any other shape. Drawing
+// it straight at a changing size makes the glyphs snap between hinted sizes, so a "?" that breathes
+// or a label that pops would wobble a pixel at a time.
+const GLYPH_PX = 96;
+const glyphs = new Map<string, { img: HTMLCanvasElement; w: number; h: number; cx: number; cy: number }>();
+function glyph(text: string, fill: string, stroke?: string) {
+  const key = `${text}|${fill}|${stroke ?? ""}`;
+  let g = glyphs.get(key);
+  if (g) return g;
+  const img = document.createElement("canvas");
+  const g2 = img.getContext("2d")!;
+  const font = `800 ${GLYPH_PX}px system-ui, sans-serif`;
+  g2.font = font;
+  const m = g2.measureText(text);
+  const pad = stroke ? GLYPH_PX * 0.16 : 2;
+  const w = Math.ceil(m.actualBoundingBoxLeft + m.actualBoundingBoxRight + pad * 2);
+  const h = Math.ceil(m.actualBoundingBoxAscent + m.actualBoundingBoxDescent + pad * 2);
+  img.width = w;
+  img.height = h;
+  const ox = pad + m.actualBoundingBoxLeft, oy = pad + m.actualBoundingBoxAscent;
+  g2.font = font;
+  g2.textBaseline = "alphabetic";
   if (stroke) {
-    ctx.lineJoin = "round";
-    ctx.lineWidth = fs * 0.22;
-    ctx.strokeStyle = stroke;
-    ctx.strokeText(text, px, py);
+    g2.lineJoin = "round";
+    g2.lineWidth = GLYPH_PX * 0.22;
+    g2.strokeStyle = stroke;
+    g2.strokeText(text, ox, oy);
   }
-  ctx.fillStyle = fill;
-  ctx.fillText(text, px, py);
+  g2.fillStyle = fill;
+  g2.fillText(text, ox, oy);
+  // Centred on the glyphs' own ink, not the font's idea of the middle (which sits low on a "?").
+  g = { img, w, h, cx: w / 2, cy: h / 2 };
+  glyphs.set(key, g);
+  return g;
+}
+
+// Text in world units: `size` is the height of a capital, roughly, at scale 1.
+function worldText(ctx: Ctx, text: string, x: number, y: number, size: number, fill: string, stroke?: string, scale = 1) {
+  if (typeof document === "undefined" || scale <= 0) return;
+  const g = glyph(text, fill, stroke);
+  const k = (size * scale) / GLYPH_PX;
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(g.img, x - g.cx * k, y - g.cy * k, g.w * k, g.h * k);
   ctx.restore();
 }
 
@@ -134,23 +162,34 @@ export function drawRail(ctx: Ctx, pts: Vec[], closed: boolean, w: number) {
 
 // A bumper. `pop` runs 0 to 1 after a hit: it swells, flashes and settles.
 export function drawBumper(ctx: Ctx, at: Vec, r: number, pop = 1) {
-  const swell = pop < 1 ? Math.sin(pop * Math.PI) : 0;
-  const R = r * (1 + swell * 0.22);
+  // A rubbery wobble: out fast, a little under, settling to nothing by the end.
+  const swell = pop < 1 ? (1 - pop) ** 2 * Math.sin(Math.min(1, pop) * Math.PI * 3) : 0;
+  const R = r * (1 + swell * 0.24);
   circ(ctx, at.x, at.y, R);
-  ctx.fillStyle = swell > 0.9 ? C.rail : C.bumper; // a flash right at the peak
+  ctx.fillStyle = C.bumper;
   ctx.fill();
+  // A flash that rises and falls with the swell.
+  const flash = pop < 1 ? Math.max(0, 1 - pop * 3) ** 2 : 0;
+  if (flash > 0) {
+    const base = ctx.globalAlpha;
+    ctx.globalAlpha = base * flash * 0.85;
+    ctx.fillStyle = C.rail;
+    ctx.fill();
+    ctx.globalAlpha = base;
+  }
   ctx.lineWidth = R * 0.2;
   ctx.strokeStyle = C.bumperRing;
   circ(ctx, at.x, at.y, R * 0.6);
   ctx.stroke();
   // A ring thrown off by the hit.
   if (pop < 1) {
-    ctx.globalAlpha = 1 - pop;
+    const base = ctx.globalAlpha;
+    ctx.globalAlpha = base * (1 - pop) ** 2;
     ctx.strokeStyle = C.bumper;
-    ctx.lineWidth = 0.12;
-    circ(ctx, at.x, at.y, R + pop * 1.4);
+    ctx.lineWidth = 0.14 * (1 - pop);
+    circ(ctx, at.x, at.y, r + ease(pop) * 1.4);
     ctx.stroke();
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = base;
   }
 }
 
@@ -167,7 +206,8 @@ export function drawCup(ctx: Ctx, at: Vec, r: number) {
 // it lifts away and fades.
 export function drawFlag(ctx: Ctx, at: Vec, t: number, alpha = 1, out = 0) {
   if (alpha <= 0 || out >= 1) return;
-  ctx.globalAlpha = alpha * (1 - out);
+  const base0 = ctx.globalAlpha;
+  ctx.globalAlpha = base0 * alpha * (1 - out);
   const lift = ease(out) * 2.5;
   const base = { x: at.x, y: at.y - lift };
   ctx.strokeStyle = C.rail;
@@ -189,7 +229,7 @@ export function drawFlag(ctx: Ctx, at: Vec, t: number, alpha = 1, out = 0) {
   ctx.closePath();
   ctx.fillStyle = C.flag;
   ctx.fill();
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = base0;
 }
 
 // The ball. `stretch` runs along its direction of travel (above 1 when it's fast), `squash` flattens
@@ -198,20 +238,19 @@ export function drawBall(ctx: Ctx, x: number, y: number, r: number, o: { dir?: n
   const s = o.scale ?? 1;
   if (s <= 0.01) return;
   ctx.save();
-  ctx.globalAlpha = o.alpha ?? 1;
+  ctx.globalAlpha *= o.alpha ?? 1;
   ctx.translate(x, y);
-  let sx = 1, sy = 1, rot = 0;
-  if (o.squash && o.squash > 0) {
-    rot = o.n ?? 0;
-    sx = 1 - o.squash * 0.35;
-    sy = 1 + o.squash * 0.25;
-  } else if (o.stretch && o.stretch > 1) {
-    rot = o.dir ?? 0;
-    sx = o.stretch;
-    sy = 1 / Math.sqrt(o.stretch);
-  }
-  ctx.rotate(rot);
-  ctx.scale(sx * s, sy * s);
+  // Stretched along the way it's going, squashed along the way it was knocked. Each in its own frame,
+  // so the shape never snaps when one fades out; squash can go negative for a jelly wobble back.
+  const sq = Math.max(-0.5, Math.min(1, o.squash ?? 0));
+  const st = Math.max(1, o.stretch ?? 1);
+  const dir = o.dir ?? 0, n = o.n ?? dir;
+  ctx.scale(s, s);
+  ctx.rotate(dir);
+  ctx.scale(st, 1 / Math.sqrt(st));
+  ctx.rotate(n - dir);
+  ctx.scale(1 - sq * 0.3, 1 + sq * 0.22);
+  ctx.rotate(-n);
   circ(ctx, 0, 0, r);
   ctx.fillStyle = C.ball;
   ctx.fill();
@@ -234,7 +273,7 @@ export function drawBox(ctx: Ctx, at: Vec, t: number, i = 0, inkLabel = true) {
   ctx.beginPath();
   ctx.roundRect(at.x - sz / 2, at.y - sz / 2, sz, sz, 0.18);
   ctx.fill();
-  if (inkLabel) worldText(ctx, "?", at.x, at.y + sz * 0.05, sz * 0.78, C.boxInk);
+  if (inkLabel) worldText(ctx, "?", at.x, at.y, sz * 0.72, C.boxInk);
 }
 
 // A speed pad (chevrons that run) or a jump ramp (a chevron and a lip).
@@ -250,13 +289,28 @@ export function drawPad(ctx: Ctx, poly: Vec[], dir: Vec, kind: "boost" | "ramp",
   ctx.lineWidth = 0.22;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  const n = kind === "boost" ? 2 : 1;
-  for (let k = 0; k < n; k++) {
-    const o = (k - (n - 1) / 2) * 0.7 + (kind === "boost" ? ((t * 2) % 1) * 0.3 - 0.15 : 0);
+  if (kind === "boost") {
+    // Chevrons on a belt: evenly spaced, always moving, fading in at the back and out at the front,
+    // so nothing ever jumps.
+    const gap = 0.75, half = 1.05, speed = 1.4;
+    const shift = (t * speed) % gap;
+    const base = ctx.globalAlpha;
+    for (let o = -half - gap + shift; o <= half + gap; o += gap) {
+      const edge = Math.max(0, 1 - Math.abs(o) / half);
+      if (edge <= 0) continue;
+      ctx.globalAlpha = base * Math.min(1, edge * 1.8);
+      ctx.beginPath();
+      ctx.moveTo(o - 0.28, -0.48);
+      ctx.lineTo(o + 0.2, 0);
+      ctx.lineTo(o - 0.28, 0.48);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = base;
+  } else {
     ctx.beginPath();
-    ctx.moveTo(o - 0.35, -0.5);
-    ctx.lineTo(o + 0.2, 0);
-    ctx.lineTo(o - 0.35, 0.5);
+    ctx.moveTo(-0.35, -0.5);
+    ctx.lineTo(0.2, 0);
+    ctx.lineTo(-0.35, 0.5);
     ctx.stroke();
   }
   if (kind === "ramp") {
@@ -274,22 +328,30 @@ export function drawMine(ctx: Ctx, at: Vec, t: number) {
   ctx.fillStyle = C.mine;
   ctx.fill();
   circ(ctx, at.x, at.y, 0.18);
-  ctx.fillStyle = Math.sin(t * 6 + at.x) > 0 ? C.mineLight : "#6e2a20";
+  ctx.fillStyle = "#6e2a20";
   ctx.fill();
+  const base = ctx.globalAlpha;
+  ctx.globalAlpha = base * (0.5 + 0.5 * Math.sin(t * 5 + at.x));
+  ctx.fillStyle = C.mineLight;
+  ctx.fill();
+  ctx.globalAlpha = base;
 }
 
 // --- Frames ---
 
 export type Camera = { x: number; y: number; s: number; ox: number; oy: number }; // screen = (world - xy) * s + o
 export type Fx =
-  | { kind: "ring" | "splash" | "puff" | "spark" | "confetti" | "boom"; x: number; y: number; t: number; color?: string; seed: number }
+  | { kind: "ring" | "splash" | "puff" | "spark" | "confetti" | "boom"; x: number; y: number; t: number; color?: string; seed: number; big?: number }
   | { kind: "rail"; x: number; y: number; x2: number; y2: number; t: number; color?: string; seed: number }
-  | { kind: "label"; x: number; y: number; t: number; text: string; color?: string; seed: number };
+  | { kind: "label"; x: number; y: number; t: number; text: string; color?: string; seed: number }
+  | { kind: "boxpop"; x: number; y: number; t: number; color?: string; seed: number };
 // Moments the renderer animates from, all in the frame's time.
 export type Juice = {
   start: number; // the hole came up
   spawn: number; // the ball last appeared (on the tee, or back from off the edge)
   impact: { t: number; n: number; power: number } | null; // the ball last hit something, and which way it was pushed
+  outV?: Vec; // how fast it was going when it went off the edge, so it drifts on as it drops
+  flag?: { a: number; t: number }; // the flag's fade, eased so a ball zipping past doesn't flicker it
 };
 export type Frame = {
   c: Course;
@@ -301,6 +363,8 @@ export type Frame = {
   fx: Fx[];
   hits: Map<number, number>; // bumper index -> when it was last hit
   juice?: Juice;
+  ball?: Vec; // where to draw the ball: between the last two physics steps, so it glides
+  trailAlpha?: number; // the trail fades out after the ball stops
   aim: { angle: number; power: number; line: Vec[]; from?: Vec; to?: Vec } | null;
   target?: { kind: "laser" | "mine" | "railgun"; at: Vec | null } | null; // picking where an item goes
   inset?: { top: number; bottom: number };
@@ -349,16 +413,18 @@ export function drawFrame(ctx: Ctx, f: Frame) {
   for (const w of c.walls) drawRail(ctx, w.pts, !!w.closed, Math.max(0.5, w.w));
   ctx.globalAlpha = 1;
 
-  // The ball's trail: a streak that thins out behind it.
-  if (f.trail.length > 1 && sim.mode === "roll")
+  const bx = f.ball?.x ?? sim.x, by = f.ball?.y ?? sim.y;
+  // The ball's trail: a streak that thins out behind it, and fades away once the ball stops.
+  const ta = f.trailAlpha ?? (sim.mode === "roll" ? 1 : 0);
+  if (f.trail.length > 1 && ta > 0)
     for (let i = 1; i < f.trail.length; i++) {
       const k = i / f.trail.length;
-      ctx.strokeStyle = `rgba(251,249,243,${0.4 * k})`;
+      ctx.strokeStyle = `rgba(251,249,243,${0.4 * k * ta})`;
       ctx.lineWidth = BALL_R * 1.5 * k;
-      ctx.lineCap = "round";
+      ctx.lineCap = "butt"; // round caps overlap at every joint and bead the streak
       ctx.beginPath();
       ctx.moveTo(f.trail[i - 1].x, f.trail[i - 1].y);
-      ctx.lineTo(f.trail[i].x, f.trail[i].y);
+      ctx.lineTo(i === f.trail.length - 1 && sim.mode === "roll" ? bx : f.trail[i].x, i === f.trail.length - 1 && sim.mode === "roll" ? by : f.trail[i].y);
       ctx.stroke();
     }
 
@@ -366,24 +432,28 @@ export function drawFrame(ctx: Ctx, f: Frame) {
   // spiralling into the cup, dropping off the edge.
   const speed = Math.hypot(sim.vx, sim.vy);
   if (sim.mode === "sunk") {
-    const k = Math.min(1, sim.modeT / 0.35);
-    const a = k * Math.PI * 1.5;
-    const rr = (1 - k) * 0.5;
-    drawBall(ctx, c.cup.x + Math.cos(a) * rr, c.cup.y + Math.sin(a) * rr, sim.r, { scale: 1 - k * 0.6, alpha: 1 - Math.max(0, k - 0.7) / 0.3 });
+    // From wherever it dropped in, round the rim and down.
+    const k = Math.min(1, sim.modeT / 0.45);
+    const ox = sim.x - c.cup.x, oy = sim.y - c.cup.y;
+    const a = Math.atan2(oy, ox) + ease(k) * Math.PI * 1.5;
+    const rr = Math.hypot(ox, oy) * (1 - ease(k));
+    drawBall(ctx, c.cup.x + Math.cos(a) * rr, c.cup.y + Math.sin(a) * rr, sim.r, { scale: 1 - ease(k) * 0.55, alpha: 1 - Math.max(0, k - 0.6) / 0.4 });
   } else if (sim.mode === "out") {
     // Off the edge: it keeps drifting, shrinks and fades.
     const k = Math.min(1, sim.modeT / 0.5);
-    drawBall(ctx, sim.x, sim.y, sim.r, { scale: 1 - ease(k), alpha: 1 - k });
+    const d = J.outV ? ease(k) * 0.12 : 0;
+    drawBall(ctx, bx + (J.outV?.x ?? 0) * d, by + (J.outV?.y ?? 0) * d, sim.r, { scale: 1 - ease(k), alpha: 1 - k });
   } else {
     const since = t - (J.impact?.t ?? -9);
-    const squash = J.impact && since < 0.12 ? (1 - since / 0.12) * Math.min(1, J.impact.power * 3) : 0;
+    // Flattened by the knock, then a jelly wobble back to round.
+    const squash = J.impact && since < 0.3 ? Math.exp(-since * 16) * Math.cos(since * 48) * Math.min(1, J.impact.power * 3) : 0;
     const lift = sim.z * 0.5;
     if (sim.z > 0) {
-      circ(ctx, sim.x + 0.12 + sim.z * 0.3, sim.y + 0.22 + sim.z * 0.5, sim.r);
+      circ(ctx, bx + 0.12 + sim.z * 0.3, by + 0.22 + sim.z * 0.5, sim.r);
       ctx.fillStyle = "rgba(0,0,0,0.22)";
       ctx.fill();
     }
-    drawBall(ctx, sim.x, sim.y - lift, sim.r * (1 + sim.z * 0.18), {
+    drawBall(ctx, bx, by - lift, sim.r * (1 + sim.z * 0.18), {
       dir: Math.atan2(sim.vy, sim.vx),
       stretch: 1 + Math.min(0.35, speed / 70),
       squash,
@@ -392,18 +462,39 @@ export function drawFrame(ctx: Ctx, f: Frame) {
     });
   }
 
+  // Bumpers and boxes pop up one after another as the hole comes in.
+  const grow = (i: number) => popIn((t - J.start - 0.2 - i * 0.05) / 0.35);
   c.bumpers.forEach((b, i) => {
     if (sim.gone[i]) return;
-    drawBumper(ctx, b.at, b.r, Math.min(1, (t - (f.hits.get(i) ?? -9)) / 0.3));
+    const g = grow(i);
+    if (g <= 0) return;
+    drawBumper(ctx, b.at, b.r * g, Math.min(1, (t - (f.hits.get(i) ?? -9)) / 0.45));
   });
   c.boxes.forEach((b, i) => {
-    if (!sim.boxes[i]) drawBox(ctx, b, t, i);
+    if (sim.boxes[i]) return;
+    const g = grow(c.bumpers.length + i);
+    if (g <= 0) return;
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.scale(g, g);
+    drawBox(ctx, v0, t, i);
+    ctx.restore();
   });
 
   // The flag stands until the ball's close, and flies off when it drops.
   const near = Math.hypot(sim.x - c.cup.x, sim.y - c.cup.y);
-  if (sim.mode === "sunk") drawFlag(ctx, c.cup, t, 1, Math.min(1, sim.modeT / 0.6));
-  else drawFlag(ctx, c.cup, t, Math.max(0, Math.min(1, (near - 1.5) / 1.5)) * intro);
+  // Its fade is eased, so a ball zipping past doesn't flicker it; once the ball drops it comes back
+  // and lifts away.
+  const sunk = sim.mode === "sunk";
+  const want = sunk ? 1 : Math.max(0, Math.min(1, (near - 1.5) / 1.5));
+  let fa = want;
+  if (f.juice) {
+    const fl = (f.juice.flag ??= { a: want, t });
+    fl.a += (want - fl.a) * (1 - Math.exp(-Math.max(0, t - fl.t) * (sunk ? 14 : 8)));
+    fl.t = t;
+    fa = fl.a;
+  }
+  drawFlag(ctx, c.cup, t, fa * intro, sunk ? Math.min(1, sim.modeT / 0.6) : 0);
 
   drawFx(ctx, f.fx, t, false);
 
@@ -511,42 +602,63 @@ function holeArrow(ctx: Ctx, f: Frame) {
 }
 
 export function drawFx(ctx: Ctx, fx: Fx[], t: number, ground: boolean) {
+  const base = ctx.globalAlpha;
   for (const e of fx) {
     const age = t - e.t;
+    if (age < 0) continue; // scheduled a moment ahead (the second ring, the confetti)
     const r = rng(e.seed);
     if (e.kind === "label") {
       // An item's name floating up off the box it came from.
       const life = 1.2;
       if (age > life || ground) continue;
       const k = age / life;
-      ctx.globalAlpha = 1 - Math.max(0, k - 0.6) / 0.4;
+      ctx.globalAlpha = base * (1 - Math.max(0, k - 0.6) / 0.4);
       worldText(ctx, e.text, e.x, e.y - 1 - ease(k) * 1.5, 0.9, e.color ?? C.box, C.cup, popIn(Math.min(1, age / 0.25)));
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = base;
+      continue;
+    }
+    if (e.kind === "boxpop") {
+      // The box swells and fades as it opens.
+      const life = 0.28;
+      if (age > life || ground) continue;
+      const k = age / life;
+      ctx.globalAlpha = base * (1 - k);
+      ctx.save();
+      ctx.translate(e.x, e.y);
+      ctx.scale(1 + ease(k) * 0.7, 1 + ease(k) * 0.7);
+      drawBox(ctx, v0, 0, 0, false);
+      ctx.restore();
+      ctx.globalAlpha = base;
       continue;
     }
     if (e.kind === "boom") {
       const life = 0.6;
       if (age > life || !ground) continue;
       const k = age / life;
-      ctx.globalAlpha = 1 - k;
-      circ(ctx, e.x, e.y, (e.color === "big" ? LASER_R : 1.4) * (0.5 + k));
-      ctx.fillStyle = k < 0.25 ? "#fff2c4" : C.pad;
+      // A hot flash that cools to the blast's color as it spreads and fades.
+      const R = (e.color === "big" ? LASER_R : 1.4) * (0.45 + ease(k) * 0.65);
+      ctx.globalAlpha = base * (1 - k) ** 1.5;
+      circ(ctx, e.x, e.y, R);
+      ctx.fillStyle = C.pad;
       ctx.fill();
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = base * Math.max(0, 1 - k * 2.5) ** 2;
+      ctx.fillStyle = "#fff2c4";
+      ctx.fill();
+      ctx.globalAlpha = base;
       continue;
     }
     if (e.kind === "rail") {
       const life = 0.5;
       if (age > life || ground) continue;
       const k = age / life;
-      ctx.globalAlpha = 1 - k;
+      ctx.globalAlpha = base * (1 - k) ** 2;
       ctx.strokeStyle = "#cfe9f2";
       ctx.lineWidth = 0.5 * (1 - k) + 0.1;
       ctx.beginPath();
       ctx.moveTo(e.x, e.y);
       ctx.lineTo(e.x2, e.y2);
       ctx.stroke();
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = base;
       continue;
     }
     const onGround = e.kind === "ring" || e.kind === "splash" || e.kind === "puff";
@@ -556,15 +668,16 @@ export function drawFx(ctx: Ctx, fx: Fx[], t: number, ground: boolean) {
       if (age > life) continue;
       const k = age / life;
       ctx.strokeStyle = e.color ?? C.rail;
-      ctx.globalAlpha = (1 - k) * 0.9;
-      ctx.lineWidth = 0.14;
-      circ(ctx, e.x, e.y, 0.5 + ease(k) * 1.6);
+      ctx.globalAlpha = base * (1 - k) ** 2 * 0.9;
+      const big = e.big ?? 1;
+      ctx.lineWidth = 0.14 * Math.sqrt(big) * (1 - k * 0.5);
+      circ(ctx, e.x, e.y, (0.5 + ease(k) * 1.6) * big);
       ctx.stroke();
     } else if (e.kind === "puff") {
       const life = 0.45;
       if (age > life) continue;
       const k = age / life;
-      ctx.globalAlpha = (1 - k) * 0.8;
+      ctx.globalAlpha = base * (1 - k) * 0.8;
       ctx.fillStyle = e.color ?? C.rail;
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * Math.PI * 2 + r();
@@ -575,20 +688,25 @@ export function drawFx(ctx: Ctx, fx: Fx[], t: number, ground: boolean) {
       const life = e.kind === "confetti" ? 1.6 : 0.6;
       if (age > life) continue;
       const k = age / life;
-      ctx.globalAlpha = 1 - k;
-      const n = e.kind === "confetti" ? 34 : 12;
+      const conf = e.kind === "confetti";
+      // Confetti stays bright, then fades; sparks fade as they fly.
+      ctx.globalAlpha = base * (conf ? 1 - Math.max(0, k - 0.55) / 0.45 : (1 - k) ** 1.5);
+      const n = conf ? 34 : 12;
       for (let i = 0; i < n; i++) {
         const a = r() * Math.PI * 2, sp = 1.5 + r() * 2.5;
-        const spin = r() * 10;
+        const spin = (r() - 0.5) * 16, ph = r() * 6;
+        const flutter = conf ? Math.sin(age * 7 + ph) * 0.25 * k : 0;
         ctx.save();
-        ctx.translate(e.x + Math.cos(a) * sp * ease(k), e.y + Math.sin(a) * sp * ease(k) + k * k * 2);
-        ctx.rotate(spin * k);
+        ctx.translate(e.x + Math.cos(a) * sp * ease(k) + flutter, e.y + Math.sin(a) * sp * ease(k) + (conf ? k * k * 2.5 : 0));
+        ctx.rotate(spin * age);
+        // A tumbling flake: its width swings as it turns over.
+        if (conf) ctx.scale(Math.cos(age * 9 + ph), 1);
         ctx.fillStyle = e.kind === "confetti" ? CONFETTI[i % CONFETTI.length] : (e.color ?? C.box);
         ctx.fillRect(-0.1, -0.06, 0.2, e.kind === "confetti" ? 0.12 : 0.2);
         ctx.restore();
       }
     }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = base;
   }
 }
 

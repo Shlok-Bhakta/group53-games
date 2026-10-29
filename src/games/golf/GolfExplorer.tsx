@@ -181,7 +181,7 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
   const fx = useRef<Fx[]>([]);
   const hits = useRef(new Map<number, number>());
   const juice = useRef<Juice>({ start: 0, spawn: 0.25, impact: null });
-  const shake = useRef({ t: -9, power: 0 });
+  const shake = useRef({ t: -9, power: 0, a: 0 });
   // A targeted item waiting for its spot: which slot, and where the finger is.
   const [target, setTarget] = useState<{ i: number; kind: Power } | null>(null);
   const targetRef = useRef<{ i: number; kind: Power } | null>(null);
@@ -256,6 +256,8 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
     let lastHud = "";
     let lastKnock = 0;
     let lastMode = sim.current.mode;
+    let px = sim.current.x, py = sim.current.y;
+    let stoppedAt = -9;
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
       const dt = Math.min(0.1, (now - last) / 1000);
@@ -263,10 +265,18 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
       t += dt;
       const s = sim.current;
       acc += dt;
+      const vx0 = s.vx, vy0 = s.vy;
       while (acc >= DT) {
+        px = s.x;
+        py = s.y;
         step(s, world, DT);
         acc -= DT;
       }
+      // Drawn between the last two steps, so the ball glides instead of stepping on uneven frames.
+      // A jump (back to the tee, a mulligan, a rail gun) snaps.
+      const lerp = acc / DT;
+      const jumped = Math.hypot(s.x - px, s.y - py) > 1.5;
+      const ball = jumped ? { x: s.x, y: s.y } : { x: px + (s.x - px) * lerp, y: py + (s.y - py) * lerp };
       for (const e of s.events) {
         const seed = Math.floor(Math.random() * 1e6);
         switch (e.type) {
@@ -288,10 +298,11 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
             const i = course.bumpers.findIndex((b) => Math.hypot(b.at.x - e.x, b.at.y - e.y) < 0.01);
             if (i >= 0) hits.current.set(i, t);
             juice.current.impact = { t, n: Math.atan2(s.vy, s.vx), power: 0.5 };
-            shake.current = { t, power: 2 };
+            shake.current = { t, power: 0.12, a: Math.atan2(s.vy, s.vx) };
             break;
           }
           case "splash":
+            juice.current.outV = { x: vx0, y: vy0 };
             say("Off the edge. +1");
             break;
           case "sink":
@@ -303,6 +314,7 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
             break;
           case "box":
             sound.pickup();
+            fx.current.push({ kind: "boxpop", x: e.x, y: e.y, t, seed });
             fx.current.push({ kind: "spark", x: e.x, y: e.y, t, seed });
             fx.current.push({ kind: "label", x: e.x, y: e.y, t, seed, text: POWER_UI[e.item].name });
             break;
@@ -319,13 +331,17 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
           case "boom":
             sound.splash();
             fx.current.push({ kind: "boom", x: e.x, y: e.y, t, seed, color: "big" });
-            shake.current = { t, power: 9 };
+            fx.current.push({ kind: "ring", x: e.x, y: e.y, t, seed, big: 2.2 });
+            fx.current.push({ kind: "spark", x: e.x, y: e.y, t, seed });
+            shake.current = { t, power: 0.55, a: seed };
             break;
           case "mine":
           case "smash":
             sound.land(1);
             fx.current.push({ kind: "boom", x: e.x, y: e.y, t, seed });
-            shake.current = { t, power: e.type === "mine" ? 6 : 3 };
+            fx.current.push({ kind: "ring", x: e.x, y: e.y, t, seed, big: 1.3 });
+            fx.current.push({ kind: "spark", x: e.x, y: e.y, t: t + 0.02, seed });
+            shake.current = { t, power: e.type === "mine" ? 0.4 : 0.2, a: seed };
             if (e.type === "mine") say("Boom");
             break;
           case "rail":
@@ -340,13 +356,14 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
       s.events.length = 0;
       // Back from off the edge: the ball pops in again.
       if (lastMode === "out" && s.mode === "aim") juice.current.spawn = t;
+      if (lastMode === "roll" && s.mode !== "roll") stoppedAt = t;
       lastMode = s.mode;
       fx.current = fx.current.filter((f) => t - f.t < 2);
       const speed = Math.hypot(s.vx, s.vy);
       if (s.mode === "roll") {
         const tr = trail.current;
         const lp = tr[tr.length - 1];
-        if (!lp || Math.hypot(lp.x - s.x, lp.y - s.y) > 0.25) tr.push({ x: s.x, y: s.y });
+        if (!lp || Math.hypot(lp.x - ball.x, lp.y - ball.y) > 0.25) tr.push({ x: ball.x, y: ball.y });
         if (tr.length > 24) tr.shift();
       }
       sound.rolling(s.mode === "roll" && s.z <= 0 ? speed : 0, s.mode === "roll" ? groundAt(world, s) : null);
@@ -355,15 +372,18 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
       const c = cam.current, v = view.current;
       if (v.zoomed && now - v.panned > 1500) {
         // Ahead of the ball: toward the cup while aiming, the way it's going while it rolls.
-        const dx = course.cup.x - s.x, dy = course.cup.y - s.y, d = Math.hypot(dx, dy) || 1;
+        const dx = course.cup.x - ball.x, dy = course.cup.y - ball.y, d = Math.hypot(dx, dy) || 1;
         const lean = s.mode === "roll" ? { x: s.vx * 0.35, y: s.vy * 0.35 } : { x: (dx / d) * Math.min(7, d * 0.3), y: (dy / d) * Math.min(7, d * 0.3) };
         const k = 1 - Math.exp(-dt * 3);
-        c.x += (s.x + lean.x - c.x) * k;
-        c.y += (s.y + lean.y - c.y) * k;
+        c.x += (ball.x + lean.x - c.x) * k;
+        c.y += (ball.y + lean.y - c.y) * k;
       }
       // A short shake for anything that goes bang.
-      const sk = Math.max(0, 1 - (t - shake.current.t) / 0.3) * shake.current.power;
-      const shook = sk > 0 ? { ...c, ox: c.ox + (Math.random() - 0.5) * sk, oy: c.oy + (Math.random() - 0.5) * sk } : c;
+      // A damped wobble in world units, mostly along the hit, so it reads as a knock and not noise.
+      const sa = t - shake.current.t;
+      const sk = sa < 0.45 ? shake.current.power * Math.exp(-sa * 9) * Math.sin(sa * 52) : 0;
+      const sa2 = shake.current.a;
+      const shook = sk !== 0 ? { ...c, x: c.x + Math.cos(sa2) * sk, y: c.y + Math.sin(sa2) * sk + Math.sin(sa * 37) * sk * 0.3 } : c;
       drawFrame(ctx, {
         c: course,
         sim: s,
@@ -372,6 +392,8 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
         dpr: cv.current!.width / Math.max(1, v.w),
         t,
         trail: trail.current,
+        ball,
+        trailAlpha: s.mode === "roll" ? 1 : Math.max(0, 1 - (t - stoppedAt) / 0.4),
         fx: fx.current,
         hits: hits.current,
         aim: aim.current,
@@ -520,7 +542,7 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
   const last = number === holes.length;
 
   return (
-    <div ref={wrap} className="g-play">
+    <div ref={wrap} className="g-play" data-mode={hud.mode}>
       <canvas ref={cv} className="g-canvas" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} aria-label={`${course.name}, par ${course.par}`} />
 
       <div className="g-top">
