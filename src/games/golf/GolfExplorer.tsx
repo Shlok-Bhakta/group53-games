@@ -64,7 +64,10 @@ type Round = { course: number; start: number; index: number; scores: number[]; a
 export function GolfExplorer() {
   const [round, setRound] = useState<Round | null>(null);
   const [muted, setMuted] = useState(false);
-  useEffect(() => () => sound.stop(), []);
+  useEffect(() => {
+    sound.listen();
+    return () => sound.stop();
+  }, []);
   const toggleMute = () => {
     sound.setMuted(!muted);
     setMuted(!muted);
@@ -302,6 +305,7 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
             break;
           }
           case "splash":
+            sound.drop();
             juice.current.outV = { x: vx0, y: vy0 };
             say("Off the edge. +1");
             break;
@@ -322,14 +326,14 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
             sound.whoosh();
             break;
           case "land":
-            if (e.power > 0.1) sound.land(e.power);
+            sound.land(e.power);
             break;
           case "lip":
-            sound.knock(0.2);
+            sound.lip();
             say("Lipped out");
             break;
           case "boom":
-            sound.splash();
+            sound.blast(1);
             fx.current.push({ kind: "boom", x: e.x, y: e.y, t, seed, color: "big" });
             fx.current.push({ kind: "ring", x: e.x, y: e.y, t, seed, big: 2.2 });
             fx.current.push({ kind: "spark", x: e.x, y: e.y, t, seed });
@@ -337,7 +341,7 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
             break;
           case "mine":
           case "smash":
-            sound.land(1);
+            sound.blast(e.type === "mine" ? 0.8 : 0.5);
             fx.current.push({ kind: "boom", x: e.x, y: e.y, t, seed });
             fx.current.push({ kind: "ring", x: e.x, y: e.y, t, seed, big: 1.3 });
             fx.current.push({ kind: "spark", x: e.x, y: e.y, t: t + 0.02, seed });
@@ -349,7 +353,7 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
             fx.current.push({ kind: "rail", x: e.x, y: e.y, x2: e.x2, y2: e.y2, t, seed });
             break;
           case "stop":
-            sound.land(0.4);
+            sound.brake();
             break;
         }
       }

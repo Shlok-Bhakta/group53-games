@@ -6,6 +6,7 @@ import { GolfExplorer } from "@/games/golf/GolfExplorer";
 import { BATTLE_GROUNDS } from "@/games/golf/battle";
 import { BUMPER_PLAINS } from "@/games/golf/plains";
 import { still } from "@/games/golf/toy";
+import { renderOffline } from "@/games/golf/audio";
 import { assetSheet } from "./assets";
 
 // The golf explorer on its own, built into a single HTML file (npm run golf:build). Inside a frame it
@@ -39,4 +40,21 @@ createRoot(document.getElementById("root")!).render(<GolfExplorer />);
 (window as unknown as { __golfAssets: unknown }).__golfAssets = () => {
   const cs = getComputedStyle(document.documentElement);
   return assetSheet(cs.getPropertyValue("--background").trim(), cs.getPropertyValue("--foreground").trim(), cs.getPropertyValue("--muted-foreground").trim()).toDataURL("image/png");
+};
+
+// For recordings: the sounds logged in `window.__golfSounds`, rendered offline from `t0` (the log's
+// clock, in ms) as 16-bit stereo PCM, base64.
+(window as unknown as { __golfRenderSounds: unknown }).__golfRenderSounds = async (t0: number, seconds: number) => {
+  const log = (window as unknown as { __golfSounds: Parameters<typeof renderOffline>[0] }).__golfSounds;
+  const buf = await renderOffline(log, t0, seconds);
+  const l = buf.getChannelData(0), r = buf.getChannelData(1);
+  const pcm = new Int16Array(l.length * 2);
+  for (let i = 0; i < l.length; i++) {
+    pcm[i * 2] = Math.max(-1, Math.min(1, l[i])) * 32767;
+    pcm[i * 2 + 1] = Math.max(-1, Math.min(1, r[i])) * 32767;
+  }
+  const bytes = new Uint8Array(pcm.buffer);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
 };
