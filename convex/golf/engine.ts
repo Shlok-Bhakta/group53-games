@@ -13,7 +13,7 @@ export type Vec = { x: number; y: number };
 export type Theme = "hills" | "desert" | "ice" | "volcano" | "arcade" | "orbit" | "server" | "zen";
 
 // What the ball rolls on. Hazards end the shot: one stroke penalty and back to where it was hit from.
-export type Ground = "green" | "fringe" | "rough" | "dune" | "sand" | "quicksand" | "snow" | "ice" | "bridge" | "stone" | "water" | "lava" | "void" | "coolant" | "oob";
+export type Ground = "green" | "fringe" | "rough" | "dune" | "sand" | "quicksand" | "snow" | "ice" | "bridge" | "stone" | "honey" | "water" | "lava" | "void" | "coolant" | "oob";
 // "oob" is everything outside the course's walls: only a ball in the air can get there.
 export const HAZARDS: Ground[] = ["water", "lava", "void", "coolant", "oob"];
 // Rolling resistance (units/s²). Green is a fast mini-golf carpet, ice barely slows anything.
@@ -27,6 +27,7 @@ export const DECEL: Record<Ground, number> = {
   snow: 9.5,
   sand: 19,
   quicksand: 34,
+  honey: 30,
   ice: 0.9,
   water: 0,
   lava: 0,
@@ -42,7 +43,13 @@ export type Zone =
   | { kind: "mound"; poly: Vec[]; center: Vec; radius: number; strength: number } // > 0 a hill, < 0 a bowl
   | { kind: "boost"; poly: Vec[]; dir: Vec; strength: number }
   | { kind: "ramp"; poly: Vec[]; dir: Vec; lift: number }
-  | { kind: "conveyor"; poly: Vec[]; dir: Vec; speed: number };
+  | { kind: "conveyor"; poly: Vec[]; dir: Vec; speed: number }
+  // Wind gusts along `dir`: a nudge on the ground, a real push in the air.
+  | { kind: "wind"; poly: Vec[]; dir: Vec; strength: number };
+
+// Something a player put down for a while: ice where a Freeze Bomb hit water (you can roll across it),
+// or a puddle of Honey (you can't, quickly).
+export type Patch = { kind: "ice" | "honey"; x: number; y: number; r: number; until: number };
 
 export type WallStyle = "rim" | "wood" | "stone" | "hedge" | "adobe" | "ice" | "obsidian" | "neon" | "metal" | "rack" | "timber" | "fence" | "rail";
 export type Wall = { pts: Vec[]; w: number; h: number; style: WallStyle; bounce?: number; closed?: boolean };
@@ -95,25 +102,43 @@ export const GRAVITY = 30;
 export const DT = 1 / 240;
 export const MAX_STROKES = 10;
 
-// The first eight are ours; the rest are Super Battle Golf's items, made to work on a ball on a board.
-// Air Horn, Flash Camera and Thunderstorm only make sense against other players, so they come with
-// multiplayer.
+// Ours (Ghost, Magnet, Brake, Mulligan, Big cup, Jump, Bouncy), every one of Super Battle Golf's, made
+// to work on a ball on a board (Rocket Driver, Spring Boots, Golf Cart, Jumbo Burger, Smoke Bomb, Orbital
+// Laser, Landmine, Rail Gun, Rocket Launcher, Air Horn, Dueling Pistol, Elephant Gun, Coffee,
+// Electromagnet, Freeze Bomb, Flash Camera, Thunderstorm), and Golf With Your Friends' Honey.
 export type Power =
   | "rocket" | "ghost" | "magnet" | "brake" | "mulligan" | "bigcup" | "jump" | "bouncy"
-  | "spring" | "cart" | "jumbo" | "smoke" | "laser" | "mine" | "railgun";
-export const POWERS: Power[] = ["rocket", "ghost", "magnet", "brake", "mulligan", "bigcup", "jump", "bouncy", "spring", "cart", "jumbo", "smoke", "laser", "mine", "railgun"];
+  | "spring" | "cart" | "jumbo" | "smoke" | "laser" | "mine" | "railgun"
+  | "missile" | "horn" | "pistol" | "elephant" | "coffee" | "shield" | "freeze" | "flash" | "storm" | "honey";
+// What a box can give on your own, and with other players around (the rest only do anything to them).
+export const SOLO_POWERS: Power[] = ["rocket", "ghost", "magnet", "brake", "mulligan", "bigcup", "jump", "bouncy", "spring", "cart", "jumbo", "smoke", "laser", "mine", "railgun", "coffee"];
+export const POWERS: Power[] = [...SOLO_POWERS, "missile", "horn", "pistol", "elephant", "shield", "freeze", "flash", "storm", "honey"];
 export const BAG_SIZE = 3;
 // Instant power-ups happen when tapped; targeted ones need a spot (or a direction) picked first; the
-// rest are armed for the next shot.
-export const INSTANT: Power[] = ["mulligan", "bigcup"];
-export const TARGETED: Power[] = ["laser", "mine", "railgun"];
+// rest are armed for the next shot. Rocket Launcher, Air Horn and Flash Camera reach other players, so
+// the world (world.ts) works them out.
+export const INSTANT: Power[] = ["mulligan", "bigcup", "coffee", "shield", "missile", "horn", "flash"];
+export const TARGETED: Power[] = ["laser", "mine", "railgun", "freeze", "storm", "pistol", "elephant", "honey"];
+// How long things last, in seconds.
+export const SHIELD_S = 7;
+export const COFFEE_S = 12;
+export const FREEZE_S = 4;
+export const ICE_S = 15;
+export const HONEY_S = 40;
+export const BLIND_S = 3.5;
 export const JUMBO = 2.2; // how much bigger a Jumbo Burger makes the ball
 
 export type Ev =
-  | { type: "hit" | "bounce" | "bump" | "splash" | "sink" | "launch" | "land" | "warp" | "lip" | "stop" | "clack" | "spawn"; x: number; y: number; power: number }
+  | {
+      type: "hit" | "bounce" | "bump" | "splash" | "sink" | "launch" | "land" | "warp" | "lip" | "stop" | "clack" | "spawn"
+        | "horn" | "flash" | "freeze" | "bolt" | "shield" | "coffee" | "honey" | "missile" | "stun" | "fizzle";
+      x: number;
+      y: number;
+      power: number;
+    }
   | { type: "box"; x: number; y: number; power: number; item: Power }
   | { type: "boom" | "smash" | "mine"; x: number; y: number; power: number }
-  | { type: "rail"; x: number; y: number; x2: number; y2: number; power: number };
+  | { type: "rail" | "tracer"; x: number; y: number; x2: number; y2: number; power: number };
 
 type Seg = { a: Vec; b: Vec; r: number; h: number; bounce: number; rim: boolean };
 export type World = { course: Course; segs: Seg[]; cells: Map<number, Seg[]> };
@@ -157,6 +182,16 @@ export type Sim = {
   history: Snapshot[];
   events: Ev[];
   seed: number;
+  multi: boolean; // in a world with other players: boxes give from the whole pool
+  // Until when (in the ball's own time, `t`) each of these lasts. Times, not countdowns, so a world
+  // jumping ahead while it's quiet ends them exactly as stepping would.
+  shieldUntil: number; // Electromagnet: items don't touch it
+  frozenUntil: number; // a Freeze Bomb: an ice cube, going nowhere
+  stunUntil: number; // shot by a pistol or struck by lightning: can't putt
+  blindUntil: number; // a Flash Camera: no aim line
+  coffeeUntil: number; // can putt again while still rolling
+  rattled: boolean; // an Air Horn went off: the next putt overshoots and pulls
+  patches: Patch[]; // shared, like `mines`
 };
 
 // --- Geometry ---
@@ -249,6 +284,17 @@ export function groundAt(world: World, p: Vec): Ground {
   return inside ? "green" : c.off;
 }
 
+// The ground under a ball, with what players have put down: ice over water, honey over anything else.
+export function groundUnder(world: World, sim: Sim, p: Vec = sim): Ground {
+  let g = groundAt(world, p);
+  for (const pt of sim.patches) {
+    if (sim.t >= pt.until || hyp(p.x - pt.x, p.y - pt.y) >= pt.r) continue;
+    if (pt.kind === "ice" && (g === "water" || g === "coolant")) g = "ice";
+    else if (pt.kind === "honey" && !HAZARDS.includes(g)) g = "honey";
+  }
+  return g;
+}
+
 export type MoverPose =
   | { kind: "windmill"; angle: number; closed: boolean }
   | { kind: "spinner"; angle: number }
@@ -310,6 +356,14 @@ export function newSim(course: Course, seed = 53): Sim {
     lipT: 0,
     r: BALL_R,
     cartT: 0,
+    multi: false,
+    shieldUntil: 0,
+    frozenUntil: 0,
+    stunUntil: 0,
+    blindUntil: 0,
+    coffeeUntil: 0,
+    rattled: false,
+    patches: [],
     gone: course.bumpers.map(() => false),
     mines: (course.mines ?? []).map((m) => ({ ...m, live: true })),
     strikes: [],
@@ -322,13 +376,26 @@ export function newSim(course: Course, seed = 53): Sim {
 
 export const maxSpeed = (sim: Sim) => MAX_SPEED * (sim.armed === "rocket" ? 1.8 : 1);
 
+// Whether a putt would go: the ball's still (or rolling, on Coffee), and it isn't frozen or stunned.
+export function canShoot(sim: Sim) {
+  if (sim.strokes >= MAX_STROKES || sim.t < sim.frozenUntil || sim.t < sim.stunUntil) return false;
+  return sim.mode === "aim" || (sim.mode === "roll" && sim.z <= 0 && sim.t < sim.coffeeUntil);
+}
+
 export function shoot(sim: Sim, angle: number, power: number) {
-  if (sim.mode !== "aim" || sim.strokes >= MAX_STROKES) return;
+  if (!canShoot(sim)) return;
   sim.history.push({ x: sim.x, y: sim.y, strokes: sim.strokes, bag: [...sim.bag], boxes: [...sim.boxes], cupScale: sim.cupScale });
   if (sim.history.length > 3) sim.history.shift();
-  const speed = maxSpeed(sim) * Math.max(0, Math.min(1, power));
-  sim.vx = dcos(angle) * speed;
-  sim.vy = dsin(angle) * speed;
+  let a = angle, k = Math.max(0, Math.min(1, power));
+  if (sim.rattled) {
+    // An Air Horn in your ear: it goes too far and pulls one way or the other.
+    sim.rattled = false;
+    k = Math.min(1.45, k * 1.4 + 0.08);
+    a += (rng(sim.seed + Math.round(sim.t * 240))() - 0.5) * 0.36;
+  }
+  const speed = maxSpeed(sim) * k;
+  sim.vx = dcos(a) * speed;
+  sim.vy = dsin(a) * speed;
   sim.shot = sim.armed;
   sim.armed = null;
   // Spring Boots: up and over everything. Golf Cart: no slowing down for a moment. Jumbo: a big ball.
@@ -349,6 +416,15 @@ export function activate(sim: Sim, i: number) {
   const p = sim.bag[i];
   if (!p) return;
   if (sim.mode !== "aim" || TARGETED.includes(p)) return;
+  // These reach other players; the world handles them (world.ts).
+  if (p === "missile" || p === "horn" || p === "flash") return;
+  if (p === "coffee" || p === "shield") {
+    sim.bag.splice(i, 1);
+    if (p === "coffee") sim.coffeeUntil = sim.t + COFFEE_S;
+    else sim.shieldUntil = sim.t + SHIELD_S;
+    sim.events.push({ type: p, x: sim.x, y: sim.y, power: 1 });
+    return;
+  }
   if (p === "mulligan") {
     const last = sim.history.pop();
     if (!last) return;
@@ -369,6 +445,9 @@ export const LASER_R = 3;
 
 // Thrown away from a point, up into the air: a mine going off, or a laser landing close.
 export function blast(sim: Sim, x: number, y: number, speed: number) {
+  // An Electromagnet shrugs it off; an ice cube shatters and goes flying.
+  if (sim.t < sim.shieldUntil) return;
+  sim.frozenUntil = 0;
   const dx = sim.x - x, dy = sim.y - y, d = hyp(dx, dy) || 1;
   const a = d < 0.05 ? sim.seed : datan2(dy, dx);
   sim.vx = (d < 0.05 ? dcos(a) : dx / d) * speed;
@@ -386,7 +465,16 @@ export function fireTargeted(sim: Sim, course: Course, i: number, at: Vec) {
   sim.bag.splice(i, 1);
   if (p === "laser") sim.strikes.push({ x: at.x, y: at.y, t: sim.t + 0.9 });
   else if (p === "mine") sim.mines.push({ x: at.x, y: at.y, live: true });
-  else {
+  else if (p === "honey") {
+    sim.patches.push({ kind: "honey", x: at.x, y: at.y, r: 2.4, until: sim.t + HONEY_S });
+    sim.events.push({ type: "honey", x: at.x, y: at.y, power: 1 });
+  } else if (p === "freeze") {
+    // Water under it turns to ice for a while; the world freezes any balls caught in it.
+    sim.patches.push({ kind: "ice", x: at.x, y: at.y, r: 4.2, until: sim.t + ICE_S });
+    sim.events.push({ type: "freeze", x: at.x, y: at.y, power: 1 });
+  } else if (p === "storm" || p === "pistol" || p === "elephant") {
+    // Only other players feel these (world.ts).
+  } else {
     const dx = at.x - sim.x, dy = at.y - sim.y, d = hyp(dx, dy) || 1;
     const end = { x: sim.x + (dx / d) * 80, y: sim.y + (dy / d) * 80 };
     course.bumpers.forEach((b, k) => {
@@ -501,6 +589,16 @@ export function stepBall(sim: Sim, world: World, dt = DT) {
     }
     return;
   }
+  // Frozen solid: it stops where it is until the ice melts (or something shatters it).
+  if (sim.t < sim.frozenUntil) {
+    sim.vx = sim.vy = sim.vz = sim.z = 0;
+    if (sim.mode === "roll") {
+      sim.rest = { x: sim.x, y: sim.y };
+      sim.shot = null;
+      setMode(sim, "aim");
+    }
+    return;
+  }
 
   const ghost = sim.shot === "ghost";
   // Moving obstacles push the ball even when it's sitting still.
@@ -548,8 +646,17 @@ export function stepBall(sim: Sim, world: World, dt = DT) {
     }
   }
 
+  // Wind blows hardest on a ball in the air.
+  for (const z of c.zones) {
+    if (z.kind !== "wind" || !inPoly(p, z.poly)) continue;
+    const gust = z.strength * (0.65 + 0.35 * dsin(sim.t * 1.4 + z.dir.x * 3 + z.dir.y));
+    const k = grounded ? 0.35 : 1;
+    ax += z.dir.x * gust * k;
+    ay += z.dir.y * gust * k;
+  }
+
   if (grounded) {
-    const g = groundAt(world, p);
+    const g = groundUnder(world, sim, p);
     if (HAZARDS.includes(g)) return hazard(sim, g);
     let inRamp = false;
     for (let zi = 0; zi < c.zones.length; zi++) {
@@ -707,7 +814,8 @@ export function stepBall(sim: Sim, world: World, dt = DT) {
     if (sim.bag.length >= BAG_SIZE) return;
     sim.boxes[i] = true;
     const r = rng(sim.seed * 977 + i * 131 + sim.strokes * 7 + Math.round(sim.t * 240))();
-    const item = POWERS[Math.floor(r * POWERS.length)];
+    const pool = sim.multi ? POWERS : SOLO_POWERS;
+    const item = pool[Math.floor(r * pool.length)];
     sim.bag.push(item);
     sim.events.push({ type: "box", x: b.x, y: b.y, power: 1, item });
   });

@@ -1,0 +1,62 @@
+import {
+  ArrowFatLinesUpIcon,
+  ArrowsOutIcon,
+  BasketballIcon,
+  BombIcon,
+  CameraIcon,
+  CarProfileIcon,
+  ClockCounterClockwiseIcon,
+  CloudIcon,
+  CloudLightningIcon,
+  CoffeeIcon,
+  CrosshairIcon,
+  CrosshairSimpleIcon,
+  DropIcon,
+  GhostIcon,
+  HamburgerIcon,
+  HandPalmIcon,
+  LightningIcon,
+  MagnetIcon,
+  MegaphoneIcon,
+  RocketIcon,
+  RocketLaunchIcon,
+  ShieldIcon,
+  SneakerMoveIcon,
+  SnowflakeIcon,
+  TargetIcon,
+  type Icon,
+} from "@phosphor-icons/react";
+import { LASER_R, type Power } from "./engine";
+import { ELEPHANT, FREEZE_R, PISTOL, STORM } from "../../../convex/golf/world";
+
+// How every item looks and reads, for the golf screens (the world and the explorer). `aim` is what a
+// targeted item shows while you pick its spot: a line out from your ball, or the patch it covers.
+export type ItemUI = { name: string; short: string; icon: Icon; hint?: string; aim?: { kind: "line" | "area"; range?: number; r?: number } };
+
+export const ITEMS: Record<Power, ItemUI> = {
+  rocket: { name: "Rocket Driver", short: "Rocket", icon: RocketLaunchIcon },
+  ghost: { name: "Ghost", short: "Ghost", icon: GhostIcon },
+  magnet: { name: "Magnet", short: "Magnet", icon: MagnetIcon },
+  brake: { name: "Brake", short: "Brake", icon: HandPalmIcon },
+  mulligan: { name: "Mulligan", short: "Mulligan", icon: ClockCounterClockwiseIcon },
+  bigcup: { name: "Big cup", short: "Big cup", icon: ArrowsOutIcon },
+  jump: { name: "Jump", short: "Jump", icon: ArrowFatLinesUpIcon },
+  bouncy: { name: "Bouncy", short: "Bouncy", icon: BasketballIcon },
+  spring: { name: "Spring Boots", short: "Spring", icon: SneakerMoveIcon },
+  cart: { name: "Golf Cart", short: "Cart", icon: CarProfileIcon },
+  jumbo: { name: "Jumbo Burger", short: "Jumbo", icon: HamburgerIcon },
+  smoke: { name: "Smoke Bomb", short: "Smoke", icon: CloudIcon },
+  laser: { name: "Orbital Laser", short: "Laser", icon: CrosshairIcon, hint: "Tap where to strike", aim: { kind: "area", r: LASER_R } },
+  mine: { name: "Landmine", short: "Mine", icon: BombIcon, hint: "Tap where to drop it", aim: { kind: "area", r: 0.6 } },
+  railgun: { name: "Rail Gun", short: "Rail Gun", icon: LightningIcon, hint: "Tap which way to fire", aim: { kind: "line", range: 80 } },
+  missile: { name: "Rocket Launcher", short: "Missile", icon: RocketIcon },
+  horn: { name: "Air Horn", short: "Horn", icon: MegaphoneIcon },
+  pistol: { name: "Dueling Pistol", short: "Pistol", icon: CrosshairSimpleIcon, hint: "Tap who to shoot", aim: { kind: "line", range: PISTOL.range } },
+  elephant: { name: "Elephant Gun", short: "Elephant", icon: TargetIcon, hint: "Tap which way to fire. It kicks.", aim: { kind: "line", range: ELEPHANT.range } },
+  coffee: { name: "Coffee", short: "Coffee", icon: CoffeeIcon },
+  shield: { name: "Electromagnet", short: "Shield", icon: ShieldIcon },
+  freeze: { name: "Freeze Bomb", short: "Freeze", icon: SnowflakeIcon, hint: "Tap where to throw it", aim: { kind: "area", r: FREEZE_R } },
+  flash: { name: "Flash Camera", short: "Flash", icon: CameraIcon },
+  storm: { name: "Thunderstorm", short: "Storm", icon: CloudLightningIcon, hint: "Tap where to call it", aim: { kind: "area", r: STORM.r } },
+  honey: { name: "Honey", short: "Honey", icon: DropIcon, hint: "Tap where to pour it", aim: { kind: "area", r: 2.4 } },
+};

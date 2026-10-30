@@ -49,5 +49,14 @@ export function play(scn: { cmds: Cmd[]; checkpoints: number[] }, bags: Power[] 
 }
 
 export function allFingerprints() {
-  return { chaos1: play(chaos(1)), chaos2: play(chaos(2), ["bouncy", "jumbo", "spring"]), chaos3: play(chaos(3), ["cart", "rocket", "laser"]) };
+  return {
+    chaos1: play(chaos(1)),
+    chaos2: play(chaos(2), ["bouncy", "jumbo", "spring"]),
+    chaos3: play(chaos(3), ["cart", "rocket", "laser"]),
+    // Everything that reaches other players: missiles, storms, guns, ice, honey, shields, coffee.
+    chaos4: play(chaos(4), ["missile", "storm", "pistol"]),
+    chaos5: play(chaos(5), ["freeze", "elephant", "horn"]),
+    chaos6: play(chaos(6), ["honey", "coffee", "shield"]),
+    chaos7: play(chaos(7), ["flash", "missile", "freeze"]),
+  };
 }

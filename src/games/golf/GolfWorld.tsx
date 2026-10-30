@@ -3,32 +3,16 @@ import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  ArrowFatLinesUpIcon,
-  ArrowsOutIcon,
-  BasketballIcon,
-  BombIcon,
   CaretLeftIcon,
-  CarProfileIcon,
-  ClockCounterClockwiseIcon,
-  CloudIcon,
   CornersInIcon,
   CornersOutIcon,
-  CrosshairIcon,
   FlagPennantIcon,
-  GhostIcon,
   GolfIcon,
-  HamburgerIcon,
-  HandPalmIcon,
-  LightningIcon,
-  MagnetIcon,
-  RocketLaunchIcon,
-  SneakerMoveIcon,
   XIcon,
-  type Icon,
 } from "@phosphor-icons/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { BAG_SIZE, INSTANT, TARGETED, compile, groundAt, preview, type Power } from "../../../convex/golf/engine";
+import { BAG_SIZE, INSTANT, TARGETED, canShoot, compile, groundUnder, preview, type Power } from "../../../convex/golf/engine";
 import { SANDBOX } from "../../../convex/golf/sandbox";
 import { advance, cmdOrder, newWorld, TPS, unpack, type Ball, type Cmd, type Packed, type WorldState } from "../../../convex/golf/world";
 import { useGoBack } from "@/components/AppHeader";
@@ -38,6 +22,7 @@ import { SEAT_COLORS } from "@/games/seats";
 import { useServerClock } from "@/games/chess/clock";
 import { cn } from "@/lib/utils";
 import * as sound from "./audio";
+import { ITEMS } from "./items";
 import { allCups, drawFrame, refreshTheme, type Camera, type Fx, type Juice, type Other } from "./toy";
 
 // Golf's open world: everyone's ball on Driftwood Bay at once. Every phone runs the same physics from
@@ -54,26 +39,18 @@ const colorOf = (b: Ball) => BALL_COLORS[b.color % BALL_COLORS.length];
 const EASE_S = 0.14;
 const SNAP = 4;
 
-const ITEMS: Record<Power, { name: string; icon: Icon }> = {
-  rocket: { name: "Rocket Driver", icon: RocketLaunchIcon },
-  ghost: { name: "Ghost", icon: GhostIcon },
-  magnet: { name: "Magnet", icon: MagnetIcon },
-  brake: { name: "Brake", icon: HandPalmIcon },
-  mulligan: { name: "Mulligan", icon: ClockCounterClockwiseIcon },
-  bigcup: { name: "Big cup", icon: ArrowsOutIcon },
-  jump: { name: "Jump", icon: ArrowFatLinesUpIcon },
-  bouncy: { name: "Bouncy", icon: BasketballIcon },
-  spring: { name: "Spring Boots", icon: SneakerMoveIcon },
-  cart: { name: "Golf Cart", icon: CarProfileIcon },
-  jumbo: { name: "Jumbo Burger", icon: HamburgerIcon },
-  smoke: { name: "Smoke Bomb", icon: CloudIcon },
-  laser: { name: "Orbital Laser", icon: CrosshairIcon },
-  mine: { name: "Landmine", icon: BombIcon },
-  railgun: { name: "Rail Gun", icon: LightningIcon },
-};
-const HINT: Partial<Record<Power, string>> = { laser: "Tap where to strike", mine: "Tap where to drop it", railgun: "Tap which way to fire" };
 
-type Hud = { ready: boolean; mode: Ball["mode"] | null; bag: Power[]; armed: Power | null; shot: Power | null; holes: number };
+type Hud = { ready: boolean; mode: Ball["mode"] | null; bag: Power[]; armed: Power | null; shot: Power | null; holes: number; status: string | null; canShoot: boolean };
+// What's happening to my ball, in a word or two for the dock.
+function statusOf(b: Ball) {
+  if (b.t < b.frozenUntil) return "Frozen";
+  if (b.t < b.stunUntil) return "Stunned";
+  if (b.rattled) return "Rattled";
+  if (b.t < b.blindUntil) return "Blinded";
+  if (b.t < b.shieldUntil) return "Shielded";
+  if (b.t < b.coffeeUntil) return "Caffeinated";
+  return null;
+}
 type Vec = { x: number; y: number };
 
 const round = "pointer-events-auto grid size-11 shrink-0 place-items-center rounded-full bg-card/90 shadow-md backdrop-blur-md transition-transform duration-100 active:scale-[0.94]";
@@ -149,11 +126,12 @@ export default function GolfWorld() {
   const shake = useRef({ t: -9, power: 0, a: 0 });
   const trail = useRef<Vec[]>([]);
   const flagOut = useRef(new Map<number, number>());
+  const blind = useRef<HTMLDivElement>(null);
   const [target, setTarget] = useState<{ i: number; kind: Power } | null>(null);
   const targetRef = useRef(target);
   targetRef.current = target;
   const targetAt = useRef<Vec | null>(null);
-  const [hud, setHud] = useState<Hud>({ ready: false, mode: null, bag: [], armed: null, shot: null, holes: 0 });
+  const [hud, setHud] = useState<Hud>({ ready: false, mode: null, bag: [], armed: null, shot: null, holes: 0, status: null, canShoot: false });
 
   // Full screen: the sea runs up under the status bar.
   useEffect(() => {
@@ -303,6 +281,51 @@ export default function GolfWorld() {
           case "stop":
             if (isMe) sound.brake();
             break;
+          case "missile":
+            if (near) sound.whoosh();
+            break;
+          case "horn":
+            if (near) sound.horn();
+            fx.current.push({ kind: "horn", x: ev.x, y: ev.y, t, seed, big: 5 });
+            break;
+          case "flash":
+            if (near) sound.camera();
+            fx.current.push({ kind: "flash", x: ev.x, y: ev.y, t, seed, big: 9 });
+            break;
+          case "freeze":
+            if (near) sound.freeze();
+            fx.current.push({ kind: "frost", x: ev.x, y: ev.y, t, seed, big: 3.6 }, { kind: "spark", x: ev.x, y: ev.y, t, seed, color: "#dff1f7" });
+            break;
+          case "honey":
+            if (near) sound.honey();
+            fx.current.push({ kind: "puff", x: ev.x, y: ev.y, t, seed, color: "#d99a2b" });
+            break;
+          case "shield":
+            if (near) sound.shieldUp();
+            fx.current.push({ kind: "ring", x: ev.x, y: ev.y, t, seed, color: "#8cc4e3" });
+            break;
+          case "coffee":
+            if (isMe) sound.coffee();
+            break;
+          case "bolt":
+            if (near) {
+              sound.thunder();
+              shake.current = { t, power: 0.3, a: seed };
+            }
+            fx.current.push({ kind: "bolt", x: ev.x, y: ev.y, x2: ev.x + 0.6, y2: ev.y - 9, t, seed }, { kind: "ring", x: ev.x, y: ev.y, t, seed, big: 1.2 });
+            break;
+          case "tracer":
+            if (near) sound.gun(ev.power > 0.7);
+            fx.current.push({ kind: "tracer", x: ev.x, y: ev.y, x2: ev.x2, y2: ev.y2, t, seed, big: ev.power > 0.7 ? 1.6 : 1 });
+            if (isMe && mine && ev.power > 0.7) shake.current = { t, power: 0.25, a: Math.atan2(ev.y - ev.y2, ev.x - ev.x2) };
+            break;
+          case "stun":
+            fx.current.push({ kind: "spark", x: ev.x, y: ev.y, t, seed, color: "#f3d35b" });
+            break;
+          case "fizzle":
+            if (near) sound.fizzle();
+            fx.current.push({ kind: "puff", x: ev.x, y: ev.y, t, seed });
+            break;
         }
       }
       s.events.length = 0;
@@ -372,7 +395,7 @@ export default function GolfWorld() {
         wasRolling = false;
         stoppedAt = t;
       }
-      sound.rolling(mine.mode === "roll" && mine.z <= 0 ? Math.hypot(mine.vx, mine.vy) : 0, mine.mode === "roll" ? groundAt(WORLD, mine) : null);
+      sound.rolling(mine.mode === "roll" && mine.z <= 0 ? Math.hypot(mine.vx, mine.vy) : 0, mine.mode === "roll" ? groundUnder(WORLD, mine) : null);
 
       // The camera follows my ball, leaning the way it's going (or toward the nearest flag).
       const c = cam.current, bx = box.current;
@@ -403,18 +426,23 @@ export default function GolfWorld() {
         trailAlpha: mine.mode === "roll" ? 1 : Math.max(0, 1 - (t - stoppedAt) / 0.4),
         fx: fx.current,
         hits: hits.current,
-        aim: aim.current,
-        target: tg && (tg.kind === "laser" || tg.kind === "mine" || tg.kind === "railgun") ? { kind: tg.kind, at: targetAt.current } : null,
+        // A Flash Camera took the aim line away.
+        aim: aim.current && mine.t < mine.blindUntil ? { ...aim.current, line: [] } : aim.current,
+        air: { missiles: s.missiles, storms: s.storms },
+        target: tg && ITEMS[tg.kind].aim ? { ...ITEMS[tg.kind].aim!, at: targetAt.current } : null,
         inset: { top: bx.top, bottom: bx.bottom },
         others,
         myColor: colorOf(mine),
         flagOut: flagOut.current,
       });
 
-      const h = `${mine.mode}|${mine.bag.join()}|${mine.armed}|${mine.shot}|${mine.holes}`;
+      // The flash fading off the screen.
+      if (blind.current) blind.current.style.opacity = String(Math.max(0, Math.min(1, (mine.blindUntil - mine.t) / 1.2)) * 0.92);
+      const status = statusOf(mine), shootable = canShoot(mine);
+      const h = `${mine.mode}|${mine.bag.join()}|${mine.armed}|${mine.shot}|${mine.holes}|${status}|${shootable}`;
       if (h !== lastHud) {
         lastHud = h;
-        setHud({ ready: true, mode: mine.mode, bag: [...mine.bag], armed: mine.armed, shot: mine.shot, holes: mine.holes });
+        setHud({ ready: true, mode: mine.mode, bag: [...mine.bag], armed: mine.armed, shot: mine.shot, holes: mine.holes, status, canShoot: shootable });
       }
     };
     raf = requestAnimationFrame(frame);
@@ -466,7 +494,8 @@ export default function GolfWorld() {
       targetAt.current = toWorld(p);
       return;
     }
-    gesture.current = m.mode === "aim" && !e.shiftKey && e.button !== 2 ? { kind: "aim", start: p } : { kind: "pan" };
+    // Still (or rolling on Coffee), and not frozen or stunned: drag to putt. Otherwise drag to look around.
+    gesture.current = canShoot(m) && !e.shiftKey && e.button !== 2 ? { kind: "aim", start: p } : { kind: "pan" };
   };
   const move = (e: RPointerEvent) => {
     const prev = pointers.current.get(e.pointerId);
@@ -585,7 +614,7 @@ export default function GolfWorld() {
             className="absolute inset-x-0 top-[calc(env(safe-area-inset-top)+92px)] z-20 flex justify-center"
           >
             <span className="flex min-h-11 items-center gap-2 rounded-full bg-card/90 py-1 pl-4 pr-1 font-display text-callout shadow-md backdrop-blur-md">
-              {HINT[target.kind]}
+              {ITEMS[target.kind].hint}
               <button type="button" aria-label="Cancel" onClick={() => setTarget(null)} className="grid size-9 place-items-center rounded-full bg-muted active:scale-[0.94]">
                 <XIcon weight="bold" />
               </button>
@@ -623,10 +652,10 @@ export default function GolfWorld() {
             );
           })}
         </div>
-        {hud.armed && (
-          <span className="min-w-0 flex-1 truncate text-center font-display text-footnote text-foreground [text-shadow:0_1px_3px_var(--background)]">{ITEMS[hud.armed].name} next shot</span>
-        )}
-        {!hud.armed && <span className="flex-1" />}
+        <span className="min-w-0 flex-1 text-center font-display text-footnote text-foreground [text-shadow:0_1px_3px_var(--background)]" aria-live="polite">
+          {hud.status && <span className="block truncate">{hud.status}</span>}
+          {hud.armed && <span className="block truncate">{ITEMS[hud.armed].name} next shot</span>}
+        </span>
         {hud.mode === "roll" && (hud.shot === "brake" || hud.shot === "jump") ? (
           <button type="button" onPointerDown={() => send(hud.shot === "jump" ? "hop" : "brake")} className="flex h-14 items-center rounded-lg bg-primary px-5 font-display text-callout text-primary-foreground shadow-md active:scale-[0.97]">
             {hud.shot === "jump" ? "Jump" : "Brake"}
@@ -642,6 +671,8 @@ export default function GolfWorld() {
           </>
         )}
       </div>
+
+      <div ref={blind} aria-hidden className="pointer-events-none absolute inset-0 z-20 bg-white opacity-0" />
 
       {!hud.ready && (
         <div className="pointer-events-none absolute inset-0 z-30 grid place-items-center">

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { compile, DT, rng } from "./engine";
+import { compile, DT, groundUnder, ICE_S, rng, type Power } from "./engine";
 import { datan, datan2, dcos, dexp, dlog, dpow, dsin, hyp } from "./dmath";
 import { SANDBOX } from "./sandbox";
-import { advance, applyCmd, BOX_BACK, cmdOrder, fingerprint, MINE_BACK, newWorld, pack, TPS, unpack, type Cmd, type WorldState } from "./world";
+import { advance, applyCmd, BOX_BACK, cmdOrder, fingerprint, MINE_BACK, newWorld, pack, REACH, STORM, TPS, unpack, type Cmd, type Packed, type WorldState } from "./world";
 
 const W = compile(SANDBOX);
 const at = (s: WorldState, id: string) => s.balls.find((b) => b.id === id)!;
@@ -208,7 +208,166 @@ describe("the map keeps itself going", () => {
   });
 });
 
+// Everyone on open grass on the plaza's north side, in a row, with whatever items they're given.
+function crowd(ids: string[], items: Record<string, Power[]> = {}, xs = ids.map((_, i) => 40 + i * 6)) {
+  const s = newWorld(SANDBOX);
+  ids.forEach((id, i) => {
+    applyCmd(s, SANDBOX, { tick: 0, by: id, seq: 0, kind: "join" });
+    const b = at(s, id);
+    Object.assign(b, { x: xs[i], y: 61, rest: { x: xs[i], y: 61 }, bag: items[id] ?? [] });
+  });
+  return s;
+}
+const moved = (s: WorldState, id: string, from: { x: number; y: number }) => hyp(at(s, id).x - from.x, at(s, id).y - from.y);
+const evs = (s: WorldState, type: string, id?: string) => s.events.filter((e) => e.ev.type === type && (id === undefined || e.id === id));
+let seq = 100;
+const cmd = (tick: number, by: string, kind: Cmd["kind"], extra: Partial<Cmd> = {}): Cmd => ({ tick, by, seq: seq++, kind, ...extra });
+
+describe("Super Battle Golf's items, on other players", () => {
+  test("a Rocket Launcher homes in on the nearest player and throws them", () => {
+    const s = crowd(["a", "b", "c"], { a: ["missile"] }, [40, 50, 70]);
+    advance(s, W, TPS * 2, [cmd(5, "a", "use", { i: 0 })]);
+    expect(at(s, "a").bag).toEqual([]);
+    expect(evs(s, "missile", "a")).toHaveLength(1);
+    // b was nearest; c, further off, wasn't the target.
+    expect(evs(s, "mine", "b")).toHaveLength(1);
+    expect(evs(s, "mine", "c")).toHaveLength(0);
+    expect(s.missiles).toEqual([]);
+  });
+
+  test("a Rocket Launcher with nobody about stays in the bag", () => {
+    const s = crowd(["a"], { a: ["missile"] });
+    advance(s, W, 30, [cmd(5, "a", "use", { i: 0 })]);
+    expect(at(s, "a").bag).toEqual(["missile"]);
+  });
+
+  test("an Electromagnet pops missiles and shrugs off lasers", () => {
+    const s = crowd(["a", "b"], { a: ["missile", "laser"], b: ["shield"] });
+    const from = { x: at(s, "b").x, y: at(s, "b").y };
+    advance(s, W, TPS * 3, [cmd(2, "b", "use", { i: 0 }), cmd(5, "a", "use", { i: 0 }), cmd(8, "a", "fire", { i: 0, x: from.x, y: from.y })]);
+    expect(evs(s, "shield", "b")).toHaveLength(1);
+    expect(evs(s, "fizzle", "b")).toHaveLength(1);
+    expect(moved(s, "b", from)).toBe(0);
+  });
+
+  test("an Air Horn rattles everyone close: their next putt overshoots", () => {
+    const putt = (horn: boolean) => {
+      const s = crowd(["a", "b", "c"], { a: horn ? ["horn"] : [] }, [40, 46, 40 + REACH + 8]);
+      advance(s, W, TPS * 6, [cmd(2, "a", "use", { i: 0 }), cmd(10, "b", "shot", { a: 0, p: 0.3 })]);
+      return { s, x: at(s, "b").x };
+    };
+    const quiet = putt(false), loud = putt(true);
+    expect(loud.x - 46).toBeGreaterThan((quiet.x - 46) * 1.3);
+    expect(at(loud.s, "b").rattled).toBe(false); // used up by the putt
+    expect(at(loud.s, "c").rattled).toBe(false); // too far away to hear it
+  });
+
+  test("a Flash Camera blinds everyone close for a moment", () => {
+    const s = crowd(["a", "b", "c"], { a: ["flash"] }, [40, 46, 40 + REACH + 8]);
+    advance(s, W, 10, [cmd(2, "a", "use", { i: 0 })]);
+    expect(at(s, "b").blindUntil).toBeGreaterThan(at(s, "b").t + 3);
+    expect(at(s, "c").blindUntil).toBe(0);
+  });
+
+  test("a Dueling Pistol knocks the first ball on its line and stuns it", () => {
+    const s = crowd(["a", "b", "c"], { a: ["pistol"] }, [40, 46, 52]);
+    const b0 = { x: 46, y: 61 }, c0 = { x: 52, y: 61 };
+    advance(s, W, 30, [cmd(2, "a", "fire", { i: 0, x: 60, y: 61 }), cmd(20, "b", "shot", { a: 3, p: 0.5 })]);
+    expect(evs(s, "tracer", "a")).toHaveLength(1);
+    expect(moved(s, "b", b0)).toBeGreaterThan(0);
+    expect(at(s, "b").stunUntil).toBeGreaterThan(at(s, "b").t);
+    // Stunned: the putt it tried didn't happen.
+    expect(at(s, "b").strokes).toBe(0);
+    // b took the bullet; c behind it didn't.
+    expect(moved(s, "c", c0)).toBeLessThan(1);
+  });
+
+  test("the Elephant Gun hits harder and kicks the shooter backwards", () => {
+    const s = crowd(["a", "b"], { a: ["elephant"] }, [44, 50]);
+    advance(s, W, 40, [cmd(2, "a", "fire", { i: 0, x: 60, y: 61 })]);
+    expect(at(s, "a").x).toBeLessThan(44);
+    expect(at(s, "b").x).toBeGreaterThan(51);
+  });
+
+  test("a Freeze Bomb freezes balls where it lands and turns water to ice for a while", () => {
+    const s = crowd(["a", "b"], { a: ["freeze"] });
+    const b = at(s, "b");
+    advance(s, W, 10, [cmd(2, "a", "fire", { i: 0, x: b.x, y: b.y }), cmd(6, "b", "shot", { a: 0, p: 0.5 })]);
+    expect(b.frozenUntil).toBeGreaterThan(b.t);
+    expect(b.mode).toBe("aim");
+    expect(b.strokes).toBe(0);
+    // Over the lagoon: ice, then water again.
+    const t2 = newWorld(SANDBOX);
+    applyCmd(t2, SANDBOX, { tick: 0, by: "a", seq: 0, kind: "join" });
+    const a2 = at(t2, "a");
+    a2.bag = ["freeze"];
+    advance(t2, W, 3, [cmd(1, "a", "fire", { i: 0, x: 42, y: 45 })]);
+    const probe = { ...a2, x: 42, y: 45 };
+    expect(groundUnder(W, probe, { x: 42, y: 45 })).toBe("ice");
+    advance(t2, W, 3 + TPS * (ICE_S + 1), []);
+    expect(groundUnder(W, { ...a2, t: a2.t + ICE_S + 2 }, { x: 42, y: 45 })).toBe("water");
+    expect(t2.patches).toEqual([]);
+  });
+
+  test("a Thunderstorm drops bolts under its cloud, then clears", () => {
+    const s = crowd(["a", "b"], { a: ["storm"] });
+    advance(s, W, TPS * (STORM.life + 1), [cmd(2, "a", "fire", { i: 0, x: 46, y: 61 })]);
+    expect(evs(s, "bolt").length).toBeGreaterThanOrEqual(7);
+    for (const e of evs(s, "bolt")) expect(hyp(e.ev.x - 46, e.ev.y - 61)).toBeLessThanOrEqual(STORM.r);
+    expect(s.storms).toEqual([]);
+  });
+
+  test("Honey slows anything rolling through it", () => {
+    const roll = (honey: boolean) => {
+      const s = crowd(["a", "b"], { a: honey ? ["honey"] : [] }, [36, 60]);
+      advance(s, W, TPS * 6, [cmd(2, "a", "fire", { i: 0, x: 48, y: 61 }), cmd(5, "b", "shot", { a: Math.PI, p: 0.5 })]);
+      return at(s, "b").x;
+    };
+    // b rolls west into it and stops well short of where it would have.
+    expect(roll(true)).toBeGreaterThan(roll(false) + 2);
+  });
+
+  test("Coffee lets you putt again while still rolling", () => {
+    const s = crowd(["a"], { a: ["coffee"] });
+    advance(s, W, TPS, [cmd(2, "a", "use", { i: 0 }), cmd(5, "a", "shot", { a: 0, p: 0.4 }), cmd(60, "a", "shot", { a: -1.2, p: 0.4 })]);
+    expect(at(s, "a").strokes).toBe(2);
+  });
+});
+
+describe("the board fights back", () => {
+  test("the spinning bar shoves a ball parked in its way", () => {
+    const s = crowd(["a"]);
+    const spin = SANDBOX.movers.find((m) => m.kind === "spinner")!;
+    if (spin.kind !== "spinner") throw new Error();
+    Object.assign(at(s, "a"), { x: spin.at.x + 2, y: spin.at.y, rest: { x: spin.at.x + 2, y: spin.at.y } });
+    advance(s, W, TPS * 4, []);
+    expect(moved(s, "a", { x: spin.at.x + 2, y: spin.at.y })).toBeGreaterThan(0.5);
+  });
+
+  test("a ball on the ice rink slides much further than on grass", () => {
+    const slide = (y: number, x = 20.5) => {
+      const s = crowd(["a"], {}, [x]);
+      Object.assign(at(s, "a"), { y, rest: { x, y } });
+      advance(s, W, TPS * 3, [cmd(1, "a", "shot", { a: 0, p: 0.18 })]);
+      return at(s, "a").x - x;
+    };
+    expect(slide(35.5)).toBeGreaterThan(slide(61, 40) * 1.5);
+  });
+
+  test("snapshots from before these items still load", () => {
+    const s = crowd(["a", "b"]);
+    const old = pack(s) as Partial<Packed>;
+    delete old.patches;
+    delete old.missiles;
+    delete old.storms;
+    for (const b of old.balls! as Record<string, unknown>[]) for (const k of ["shieldUntil", "frozenUntil", "stunUntil", "blindUntil", "coffeeUntil", "rattled"]) delete b[k];
+    const back = unpack(JSON.parse(JSON.stringify(old)));
+    advance(back, W, TPS * 3, [cmd(1, "a", "shot", { a: 0, p: 0.3 })]);
+    expect(at(back, "a").x).toBeGreaterThan(41);
+  });
+});
+
 // Ticks are whole engine steps.
 test("a tick is one engine step", () => expect(TPS * DT).toBe(1));
 
-const PINNED = 2102668566;
+const PINNED = 3583485931;

@@ -102,7 +102,7 @@ export function stop() {
   rolling(0, null);
 }
 
-type Name = "putt" | "knock" | "bump" | "plunk" | "drop" | "blast" | "whoosh" | "land" | "pickup" | "brake" | "lip" | "rolling";
+type Name = "putt" | "knock" | "bump" | "plunk" | "drop" | "blast" | "whoosh" | "land" | "pickup" | "brake" | "lip" | "rolling" | "horn" | "camera" | "thunder" | "freeze" | "gun" | "shieldUp" | "coffee" | "honey" | "fizzle";
 function rec(name: Name, args: unknown[]) {
   if (offline) return;
   const log = (window as unknown as { __golfSounds?: unknown[] }).__golfSounds;
@@ -265,12 +265,107 @@ export function lip() {
   [0, 0.05].forEach((d) => burst(c, t + d, 0.03, "bandpass", 2600, 2.5, 0.16, undefined, 0.3));
 }
 
+// An Air Horn: a short, soft two-note honk (filtered, not a real blare).
+export function horn() {
+  rec("horn", []);
+  const c = live();
+  if (!c) return;
+  const t = now(c);
+  for (const [f, d] of [[233, 0], [233, 0.16]] as const) {
+    tone(c, t + d, f, 0.14, 0.14, f * 0.97, 0.5, 0.01);
+    tone(c, t + d, f * 2, 0.12, 0.07, undefined, 0.5, 0.01);
+    tone(c, t + d, f * 3, 0.1, 0.04, undefined, 0.5, 0.01);
+  }
+}
+
+// A Flash Camera: the shutter, and a high whine as the flash charges down.
+export function camera() {
+  rec("camera", []);
+  const c = live();
+  if (!c) return;
+  const t = now(c);
+  burst(c, t, 0.025, "highpass", 3000, 0.7, 0.2, undefined, 0.2);
+  burst(c, t + 0.05, 0.03, "bandpass", 2200, 2, 0.14, undefined, 0.2);
+  tone(c, t, 3400, 0.4, 0.035, 1800, 0.6, 0.01);
+}
+
+// Lightning: a crack, then the rumble rolling away.
+export function thunder() {
+  rec("thunder", []);
+  const c = live();
+  if (!c) return;
+  const t = now(c);
+  burst(c, t, 0.08, "highpass", 2000, 0.7, 0.3, undefined, 0.4);
+  burst(c, t + 0.03, 1.1, "lowpass", 900, 0.7, 0.4, 90, 0.8);
+  tone(c, t + 0.03, 70, 0.8, 0.3, 40, 0.6, 0.02);
+}
+
+// A Freeze Bomb: glassy notes falling, and a crackle.
+export function freeze() {
+  rec("freeze", []);
+  const c = live();
+  if (!c) return;
+  const t = now(c);
+  [2637, 2093, 1760, 1318.5].forEach((f, i) => tone(c, t + i * 0.045, f, 0.5, 0.05, undefined, 0.9, 0.004));
+  burst(c, t, 0.35, "highpass", 4000, 0.7, 0.1, undefined, 0.5);
+}
+
+// A gunshot: the Dueling Pistol's pop, or (big) the Elephant Gun's both barrels.
+export function gun(big = false) {
+  rec("gun", [big]);
+  const c = live();
+  if (!c) return;
+  const t = now(c);
+  burst(c, t, big ? 0.35 : 0.12, "lowpass", big ? 2600 : 4000, 0.7, big ? 0.5 : 0.32, big ? 200 : 600, 0.7);
+  tone(c, t, big ? 90 : 180, big ? 0.35 : 0.12, big ? 0.4 : 0.2, 50, 0.4, 0.002);
+}
+
+// An Electromagnet coming on: a hum rising into a soft chord.
+export function shieldUp() {
+  rec("shieldUp", []);
+  const c = live();
+  if (!c) return;
+  const t = now(c);
+  tone(c, t, 220, 0.5, 0.09, 440, 0.7, 0.05);
+  [440, 554.37, 659.25].forEach((f) => tone(c, t + 0.18, f, 0.6, 0.05, undefined, 0.9, 0.02));
+}
+
+// Coffee: a quick bubbly slurp.
+export function coffee() {
+  rec("coffee", []);
+  const c = live();
+  if (!c) return;
+  const t = now(c);
+  for (let i = 0; i < 4; i++) tone(c, t + i * 0.05, 500 + i * 140, 0.06, 0.08, 900 + i * 140, 0.4, 0.004);
+}
+
+// Honey landing: a low wet squelch.
+export function honey() {
+  rec("honey", []);
+  const c = live();
+  if (!c) return;
+  const t = now(c);
+  tone(c, t, 160, 0.25, 0.2, 90, 0.4, 0.01);
+  burst(c, t, 0.18, "lowpass", 700, 2, 0.12, 250, 0.3);
+}
+
+// Something blocked or burnt out: a shield taking a hit, a missile running dry.
+export function fizzle() {
+  rec("fizzle", []);
+  const c = live();
+  if (!c) return;
+  const t = now(c);
+  burst(c, t, 0.3, "bandpass", 1600, 1.2, 0.12, 400, 0.4);
+  tone(c, t, 660, 0.15, 0.05, 330, 0.5, 0.005);
+}
+
 // Called every frame with the ball's speed and what it's on.
 let lastRoll = -1;
 export function rolling(speed: number, ground: Ground | null) {
   const s = ground ? Math.min(1, speed / 22) : 0;
-  const rough = ground === "sand" ? 2.4 : ground === "bridge" ? 1.6 : 1;
-  const level = s ** 1.2 * 0.2 * (ground === "sand" ? 1.6 : 1);
+  // Sand and wood are rough, ice a thin scrape, honey a muffled drag.
+  const rough = ground === "sand" ? 2.4 : ground === "bridge" ? 1.6 : ground === "ice" ? 2.2 : ground === "honey" ? 0.35 : 1;
+  const level = s ** 1.2 * 0.2 * (ground === "sand" ? 1.6 : ground === "ice" ? 0.55 : ground === "honey" ? 1.3 : 1);
   if (level === 0 && lastRoll === 0 && !offline) return;
   lastRoll = level;
   rec("rolling", [speed, ground]);
@@ -280,7 +375,7 @@ export function rolling(speed: number, ground: Ground | null) {
   g.roll.filter.frequency.setTargetAtTime(180 + s * 900 * rough, t, 0.05);
 }
 
-const PLAY: Record<Name, (...a: never[]) => void> = { putt, knock, bump, plunk, drop, blast, whoosh, land, pickup, brake, lip, rolling };
+const PLAY: Record<Name, (...a: never[]) => void> = { putt, knock, bump, plunk, drop, blast, whoosh, land, pickup, brake, lip, rolling, horn, camera, thunder, freeze, gun, shieldUp, coffee, honey, fizzle };
 
 // Renders a log of sounds (from `window.__golfSounds`) into a buffer, `t0` being the log time (ms)
 // at which the buffer starts.

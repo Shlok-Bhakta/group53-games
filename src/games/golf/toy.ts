@@ -1,4 +1,5 @@
-import { BALL_R, CUP_R, LASER_R, newSim, rng, type Course, type Sim, type Vec } from "./engine";
+import { BALL_R, CUP_R, LASER_R, newSim, poseOf, rng, sliderRect, type Course, type Mover, type Patch, type Sim, type Vec } from "./engine";
+import type { Missile, Storm } from "../../../convex/golf/world";
 
 // The look: flat and straight down, in fixed natural golf colors, on a dot grid in the app theme's
 // own background. Every part of the course is its own small drawing below (the board, a rail, a
@@ -38,6 +39,14 @@ export const PALETTE = {
   wood: "#b48a5a",
   woodLine: "#977145",
   portal: "#8c80b4",
+  ice: "#dcebf0",
+  iceLine: "#b9d5df",
+  honey: "#d99a2b",
+  honeyLight: "#efc56a",
+  cloud: "#474d55",
+  shield: "#8cc4e3",
+  stun: "#f3d35b",
+  steam: "#efe6d6",
 } as const;
 const C = PALETTE;
 const v0: Vec = { x: 0, y: 0 };
@@ -224,6 +233,259 @@ export function drawBridge(ctx: Ctx, poly: Vec[]) {
   ctx.restore();
 }
 
+// Ice: a pale rink with skate scratches on it.
+export function drawIce(ctx: Ctx, poly: Vec[], seed = 1) {
+  path(ctx, poly);
+  ctx.fillStyle = C.ice;
+  ctx.fill();
+  ctx.save();
+  ctx.clip();
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of poly) (x0 = Math.min(x0, p.x)), (y0 = Math.min(y0, p.y)), (x1 = Math.max(x1, p.x)), (y1 = Math.max(y1, p.y));
+  const r = rng(seed);
+  ctx.strokeStyle = C.iceLine;
+  ctx.lineWidth = 0.07;
+  ctx.lineCap = "round";
+  const n = Math.max(3, Math.round(((x1 - x0) * (y1 - y0)) / 9));
+  for (let k = 0; k < n; k++) {
+    const cx = x0 + r() * (x1 - x0), cy = y0 + r() * (y1 - y0), rad = 1 + r() * 2.5, a = r() * 6.28;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rad, a, a + 0.6 + r() * 0.8);
+    ctx.stroke();
+  }
+  ctx.restore();
+  path(ctx, poly);
+  ctx.strokeStyle = C.iceLine;
+  ctx.lineWidth = 0.18;
+  ctx.stroke();
+}
+
+// Wind: faint streaks drifting the way it blows, gusting stronger and weaker.
+export function drawWind(ctx: Ctx, poly: Vec[], dir: Vec, t: number) {
+  const m = poly.reduce((a, p) => ({ x: a.x + p.x / poly.length, y: a.y + p.y / poly.length }), { x: 0, y: 0 });
+  const R = Math.max(...poly.map((p) => Math.hypot(p.x - m.x, p.y - m.y)));
+  ctx.save();
+  path(ctx, poly);
+  ctx.clip();
+  ctx.translate(m.x, m.y);
+  ctx.rotate(Math.atan2(dir.y, dir.x));
+  ctx.strokeStyle = C.ink;
+  ctx.lineCap = "round";
+  ctx.lineWidth = 0.09;
+  const gust = 0.65 + 0.35 * Math.sin(t * 1.4 + dir.x * 3 + dir.y);
+  const base = ctx.globalAlpha;
+  const span = 6;
+  for (let row = -R; row <= R; row += 1.7) {
+    const r = rng(Math.round(row * 10) + 977);
+    const off = r() * span, speed = 5 + r() * 3;
+    for (let x = -R - span; x <= R; x += span) {
+      const px = x + ((off + t * speed * gust) % span);
+      const k = Math.max(0, 1 - Math.abs(px) / R);
+      ctx.globalAlpha = base * 0.42 * k * gust;
+      ctx.beginPath();
+      ctx.moveTo(px, row + Math.sin(px * 0.6 + t) * 0.15);
+      ctx.lineTo(px + 1.8, row + Math.sin((px + 1.8) * 0.6 + t) * 0.15);
+      ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = base;
+  ctx.restore();
+}
+
+// A moving obstacle, where it is at time `t`: a spinning bar (painted like a rail) or a sliding crate.
+export function drawMover(ctx: Ctx, m: Mover, t: number) {
+  const pose = poseOf(m, t);
+  if (pose.kind === "spinner" && m.kind === "spinner") {
+    ctx.lineCap = "round";
+    for (let k = 0; k < m.arms; k++) {
+      const a = pose.angle + (k * Math.PI * 2) / m.arms;
+      const tip = { x: m.at.x + Math.cos(a) * m.L, y: m.at.y + Math.sin(a) * m.L };
+      drawRail(ctx, [m.at, tip], false, m.w);
+    }
+    circ(ctx, m.at.x, m.at.y, m.w * 0.9);
+    ctx.fillStyle = C.wood;
+    ctx.fill();
+  } else if (pose.kind === "slider" && m.kind === "slider") {
+    const r = sliderRect(pose.at, m.size);
+    path(ctx, r);
+    ctx.fillStyle = C.wood;
+    ctx.fill();
+    ctx.strokeStyle = C.woodLine;
+    ctx.lineWidth = 0.14;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(r[0].x, r[0].y);
+    ctx.lineTo(r[2].x, r[2].y);
+    ctx.moveTo(r[1].x, r[1].y);
+    ctx.lineTo(r[3].x, r[3].y);
+    ctx.stroke();
+  }
+}
+
+// Ice a Freeze Bomb left, or a puddle of Honey, fading as it wears off.
+export function drawPatch(ctx: Ctx, p: Patch, now: number) {
+  const left = p.until - now;
+  if (left <= 0) return;
+  const base = ctx.globalAlpha;
+  ctx.globalAlpha = base * Math.min(1, left / 2);
+  if (p.kind === "ice") {
+    const pts = Array.from({ length: 20 }, (_, i) => {
+      const a = (i / 20) * Math.PI * 2;
+      const w = 1 + Math.sin(a * 5 + p.x) * 0.06;
+      return { x: p.x + Math.cos(a) * p.r * w, y: p.y + Math.sin(a) * p.r * w };
+    });
+    ctx.globalAlpha *= 0.92;
+    drawIce(ctx, pts, Math.round(p.x * 7 + p.y));
+  } else {
+    const r = rng(Math.round(p.x * 13 + p.y * 7));
+    ctx.fillStyle = C.honey;
+    for (let k = 0; k < 4; k++) {
+      const a = r() * 6.28, d = k === 0 ? 0 : p.r * 0.45;
+      circ(ctx, p.x + Math.cos(a) * d, p.y + Math.sin(a) * d, p.r * (k === 0 ? 0.8 : 0.55));
+      ctx.fill();
+    }
+    ctx.fillStyle = C.honeyLight;
+    circ(ctx, p.x - p.r * 0.3, p.y - p.r * 0.3, p.r * 0.22);
+    ctx.fill();
+  }
+  ctx.globalAlpha = base;
+}
+
+// A Rocket Launcher's missile, nose first, with a short smoke trail.
+export function drawMissile(ctx: Ctx, m: { x: number; y: number; vx: number; vy: number }) {
+  const a = Math.atan2(m.vy, m.vx);
+  ctx.save();
+  ctx.translate(m.x, m.y);
+  ctx.rotate(a);
+  const g = ctx.createLinearGradient(-3, 0, 0, 0);
+  g.addColorStop(0, "rgba(239,230,214,0)");
+  g.addColorStop(1, "rgba(239,230,214,0.6)");
+  ctx.strokeStyle = g;
+  ctx.lineWidth = 0.3;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(-3, 0);
+  ctx.lineTo(-0.4, 0);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.roundRect(-0.45, -0.17, 0.9, 0.34, 0.17);
+  ctx.fillStyle = C.ball;
+  ctx.fill();
+  circ(ctx, 0.36, 0, 0.17);
+  ctx.fillStyle = C.flag;
+  ctx.fill();
+  ctx.restore();
+}
+
+// A Thunderstorm's cloud over its patch, with rain, fading in and out.
+export function drawStorm(ctx: Ctx, st: { x: number; y: number; r: number; until: number }, now: number, t: number) {
+  const left = st.until - now;
+  if (left <= 0) return;
+  const base = ctx.globalAlpha;
+  const k = Math.min(1, left / 0.8) * Math.min(1, (7 - left) / 0.5 + 0.2);
+  ctx.globalAlpha = base * 0.3 * k;
+  ctx.strokeStyle = C.ink;
+  ctx.lineWidth = 0.06;
+  const r = rng(Math.round(st.x * 31 + st.y));
+  for (let i = 0; i < 26; i++) {
+    const a = r() * 6.28, d = Math.sqrt(r()) * st.r, ph = r();
+    const fall = ((t * 1.6 + ph) % 1) * 1.4;
+    const x = st.x + Math.cos(a) * d, y = st.y + Math.sin(a) * d - 0.7 + fall;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x - 0.12, y + 0.5);
+    ctx.stroke();
+  }
+  ctx.fillStyle = C.cloud;
+  ctx.globalAlpha = base * 0.5 * k;
+  const r2 = rng(Math.round(st.x * 7 + st.y * 3));
+  for (let i = 0; i < 7; i++) {
+    const a = r2() * 6.28, d = r2() * st.r * 0.6;
+    circ(ctx, st.x + Math.cos(a) * d + Math.sin(t * 0.7 + i) * 0.2, st.y - 1 + Math.sin(a) * d, st.r * (0.35 + r2() * 0.2));
+    ctx.fill();
+  }
+  ctx.globalAlpha = base;
+}
+
+// What's happening to a ball: frozen in an ice cube, stunned (stars round it), shielded (a bubble),
+// on Coffee (steam), or rattled by an Air Horn (sound waves).
+export function drawStatus(ctx: Ctx, b: Sim, at: Vec, t: number) {
+  const now = b.t, r = b.r;
+  if (now < b.frozenUntil) {
+    ctx.beginPath();
+    ctx.roundRect(at.x - r * 1.7, at.y - r * 1.7, r * 3.4, r * 3.4, r * 0.5);
+    ctx.fillStyle = "rgba(214,236,244,0.55)";
+    ctx.fill();
+    ctx.strokeStyle = "#bfe3f0";
+    ctx.lineWidth = 0.08;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(at.x - r * 1.1, at.y - r * 0.6);
+    ctx.lineTo(at.x - r * 0.6, at.y - r * 1.1);
+    ctx.strokeStyle = "rgba(255,255,255,0.8)";
+    ctx.stroke();
+  }
+  if (now < b.stunUntil) {
+    ctx.fillStyle = C.stun;
+    for (let k = 0; k < 3; k++) {
+      const a = t * 5 + (k * Math.PI * 2) / 3;
+      const x = at.x + Math.cos(a) * r * 1.9, y = at.y - r * 1.4 + Math.sin(a) * r * 0.7;
+      ctx.beginPath();
+      for (let j = 0; j < 8; j++) {
+        const rr = j % 2 ? 0.07 : 0.17, aa = (j * Math.PI) / 4 + t * 3;
+        ctx.lineTo(x + Math.cos(aa) * rr, y + Math.sin(aa) * rr);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  if (now < b.shieldUntil) {
+    const left = b.shieldUntil - now;
+    // It flickers in its last moments.
+    const on = left > 1.2 || Math.sin(t * 30) > 0;
+    if (on) {
+      const base = ctx.globalAlpha;
+      ctx.globalAlpha = base * (0.55 + 0.2 * Math.sin(t * 5));
+      circ(ctx, at.x, at.y, r * 2.1);
+      ctx.fillStyle = "rgba(140,196,227,0.18)";
+      ctx.fill();
+      ctx.strokeStyle = C.shield;
+      ctx.lineWidth = 0.1;
+      ctx.stroke();
+      ctx.globalAlpha = base;
+    }
+  }
+  if (now < b.coffeeUntil) {
+    const base = ctx.globalAlpha;
+    ctx.strokeStyle = C.steam;
+    ctx.lineWidth = 0.07;
+    ctx.lineCap = "round";
+    for (let k = 0; k < 2; k++) {
+      const ph = (t * 0.9 + k * 0.5) % 1;
+      ctx.globalAlpha = base * 0.7 * Math.sin(ph * Math.PI);
+      const x = at.x + (k ? 0.18 : -0.18), y = at.y - r - 0.15 - ph * 0.9;
+      ctx.beginPath();
+      ctx.moveTo(x, y + 0.4);
+      ctx.quadraticCurveTo(x + 0.2, y + 0.2, x, y);
+      ctx.quadraticCurveTo(x - 0.2, y - 0.2, x, y - 0.35);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = base;
+  }
+  if (b.rattled) {
+    ctx.strokeStyle = C.ink;
+    ctx.lineWidth = 0.07;
+    ctx.lineCap = "round";
+    const w = Math.sin(t * 14) * 0.05;
+    for (const side of [-1, 1])
+      for (let k = 1; k <= 2; k++) {
+        ctx.beginPath();
+        ctx.arc(at.x + side * w, at.y, r + 0.18 * k, side > 0 ? -0.6 : Math.PI - 0.6, side > 0 ? 0.6 : Math.PI + 0.6);
+        ctx.stroke();
+      }
+  }
+}
+
 // A portal: a ring with a slow swirl inside it.
 export function drawPortal(ctx: Ctx, at: Vec, t: number) {
   circ(ctx, at.x, at.y, 0.95);
@@ -399,6 +661,7 @@ function drawOther(ctx: Ctx, c: Course, o: Other, t: number) {
   drawBall(ctx, x, y - lift, b.r * (1 + b.z * 0.18), { dir: Math.atan2(b.vy, b.vx), stretch: b.mode === "roll" ? 1 + Math.min(0.35, speed / 70) : 1, scale, alpha, ring: o.color });
   const base = ctx.globalAlpha;
   ctx.globalAlpha = base * alpha;
+  if (b.mode === "aim" || b.mode === "roll") drawStatus(ctx, b, { x, y: y - lift }, t);
   worldText(ctx, o.name, x, y - lift - b.r - 0.75, 0.62, o.color, C.cup);
   ctx.globalAlpha = base;
 }
@@ -479,7 +742,8 @@ export function drawMine(ctx: Ctx, at: Vec, t: number) {
 export type Camera = { x: number; y: number; s: number; ox: number; oy: number }; // screen = (world - xy) * s + o
 export type Fx =
   | { kind: "ring" | "splash" | "puff" | "spark" | "confetti" | "boom"; x: number; y: number; t: number; color?: string; seed: number; big?: number }
-  | { kind: "rail"; x: number; y: number; x2: number; y2: number; t: number; color?: string; seed: number }
+  | { kind: "rail" | "tracer" | "bolt"; x: number; y: number; x2: number; y2: number; t: number; color?: string; seed: number; big?: number }
+  | { kind: "horn" | "flash" | "frost"; x: number; y: number; t: number; color?: string; seed: number; big?: number }
   | { kind: "label"; x: number; y: number; t: number; text: string; color?: string; seed: number }
   | { kind: "boxpop"; x: number; y: number; t: number; color?: string; seed: number };
 // Moments the renderer animates from, all in the frame's time.
@@ -504,12 +768,15 @@ export type Frame = {
   ball?: Vec; // where to draw the ball: between the last two physics steps, so it glides
   trailAlpha?: number; // the trail fades out after the ball stops
   aim: { angle: number; power: number; line: Vec[]; from?: Vec; to?: Vec } | null;
-  target?: { kind: "laser" | "mine" | "railgun"; at: Vec | null } | null; // picking where an item goes
+  // Picking where an item goes: a line out from the ball (`range` long) or a patch (`r` across).
+  target?: { kind: "line" | "area"; at: Vec | null; range?: number; r?: number } | null;
   inset?: { top: number; bottom: number };
   // Multiplayer: everyone else's ball (`at` is where to draw it), the color of mine, and when each
   // flag was last pulled by someone sinking.
   others?: Other[];
   myColor?: string;
+  // Things in the air over the course: Rocket Launcher missiles and Thunderstorm clouds.
+  air?: { missiles: readonly Missile[]; storms: readonly Storm[] };
   flagOut?: Map<number, number>;
 };
 export type Other = { sim: Sim; at: Vec; color: string; name: string };
@@ -558,12 +825,14 @@ export function drawFrame(ctx: Ctx, f: Frame) {
       drawWater(ctx, z.poly, t, view);
       ctx.globalAlpha = intro;
     } else if (z.kind === "bridge") drawBridge(ctx, z.poly);
+    else if (z.kind === "ice") drawIce(ctx, z.poly, Math.round(z.poly[0].x * 7));
     else if (z.kind === "boost" || z.kind === "ramp") drawPad(ctx, z.poly, z.dir, z.kind, t);
   }
   for (const p of c.portals) {
     drawPortal(ctx, p.a, t);
     drawPortal(ctx, p.b, t);
   }
+  for (const p of sim.patches ?? []) drawPatch(ctx, p, sim.t);
   for (const m of sim.mines) if (m.live) drawMine(ctx, m, t);
   ctx.fillStyle = "rgba(0,0,0,0.1)";
   for (const tee of [c.tee, ...(c.tees ?? [])]) {
@@ -575,6 +844,8 @@ export function drawFrame(ctx: Ctx, f: Frame) {
   drawFx(ctx, f.fx, t, true);
   for (const g of c.greens) if (g.rim !== false) drawRail(ctx, g.poly, true, 0.6);
   for (const w of c.walls) drawRail(ctx, w.pts, !!w.closed, Math.max(0.5, w.w));
+  for (const m of c.movers) drawMover(ctx, m, sim.t);
+  for (const z of c.zones) if (z.kind === "wind") drawWind(ctx, z.poly, z.dir, t);
   ctx.globalAlpha = 1;
 
   const bx = f.ball?.x ?? sim.x, by = f.ball?.y ?? sim.y;
@@ -628,6 +899,7 @@ export function drawFrame(ctx: Ctx, f: Frame) {
       scale: popIn((t - J.spawn) / 0.35),
       ring: f.myColor,
     });
+    drawStatus(ctx, sim, { x: bx, y: by - lift }, t);
   }
 
   // Bumpers and boxes pop up one after another as the hole comes in.
@@ -685,11 +957,14 @@ export function drawFrame(ctx: Ctx, f: Frame) {
     } else drawFlag(ctx, cup, t, fa * intro, out);
   });
 
+  for (const m of f.air?.missiles ?? []) drawMissile(ctx, m);
   drawFx(ctx, f.fx, t, false);
+  for (const st of f.air?.storms ?? []) drawStorm(ctx, st, sim.t, t);
 
   // The aim: where the finger went down and how far it's pulled, then a dotted line out to the first
   // bounce and a ring round the ball filling with power.
-  if (f.aim && sim.mode === "aim") {
+  // (Only ever set when a putt would go: still, or rolling on Coffee.)
+  if (f.aim) {
     const { power, line } = f.aim;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (f.aim.from && f.aim.to) {
@@ -740,14 +1015,15 @@ export function drawFrame(ctx: Ctx, f: Frame) {
     ctx.strokeStyle = C.ink;
     ctx.lineWidth = 0.14;
     ctx.setLineDash([0.4, 0.3]);
-    if (kind === "railgun") {
+    if (kind === "line") {
       const dx = at.x - sim.x, dy = at.y - sim.y, d = Math.hypot(dx, dy) || 1;
+      const L = f.target.range ?? 80;
       ctx.beginPath();
       ctx.moveTo(sim.x, sim.y);
-      ctx.lineTo(sim.x + (dx / d) * 80, sim.y + (dy / d) * 80);
+      ctx.lineTo(sim.x + (dx / d) * L, sim.y + (dy / d) * L);
       ctx.stroke();
     } else {
-      circ(ctx, at.x, at.y, kind === "laser" ? LASER_R : 0.6);
+      circ(ctx, at.x, at.y, f.target.r ?? 0.6);
       ctx.stroke();
     }
     ctx.setLineDash([]);
@@ -834,6 +1110,71 @@ export function drawFx(ctx: Ctx, fx: Fx[], t: number, ground: boolean) {
       ctx.globalAlpha = base * Math.max(0, 1 - k * 2.5) ** 2;
       ctx.fillStyle = "#fff2c4";
       ctx.fill();
+      ctx.globalAlpha = base;
+      continue;
+    }
+    if (e.kind === "tracer") {
+      // A gunshot: a hot line that's gone almost at once.
+      const life = 0.25;
+      if (age > life || ground) continue;
+      const k = age / life;
+      ctx.globalAlpha = base * (1 - k) ** 2;
+      ctx.strokeStyle = "#fff2c4";
+      ctx.lineWidth = (e.big ?? 1) * 0.22 * (1 - k * 0.5);
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(e.x + (e.x2 - e.x) * ease(k) * 0.6, e.y + (e.y2 - e.y) * ease(k) * 0.6);
+      ctx.lineTo(e.x2, e.y2);
+      ctx.stroke();
+      ctx.globalAlpha = base;
+      continue;
+    }
+    if (e.kind === "bolt") {
+      // Lightning: a jagged white line out of the cloud, flickering twice.
+      const life = 0.35;
+      if (age > life || ground) continue;
+      const k = age / life;
+      const on = k < 0.25 || (k > 0.45 && k < 0.6);
+      if (!on) continue;
+      ctx.globalAlpha = base * (1 - k);
+      ctx.strokeStyle = "#fbf6d8";
+      ctx.lineWidth = 0.22;
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      ctx.moveTo(e.x2, e.y2);
+      for (let i = 1; i <= 6; i++) {
+        const u = i / 6;
+        const jx = i === 6 ? 0 : (r() - 0.5) * 1.2;
+        ctx.lineTo(e.x2 + (e.x - e.x2) * u + jx, e.y2 + (e.y - e.y2) * u);
+      }
+      ctx.stroke();
+      circ(ctx, e.x, e.y, 0.9 * (1 - k));
+      ctx.fillStyle = "#fbf6d8";
+      ctx.fill();
+      ctx.globalAlpha = base;
+      continue;
+    }
+    if (e.kind === "horn" || e.kind === "flash" || e.kind === "frost") {
+      // An Air Horn's sound waves, a camera's flash, a Freeze Bomb's cold snap: all spreading out.
+      const life = e.kind === "flash" ? 0.5 : 0.8;
+      if (age > life || ground) continue;
+      const k = age / life;
+      const R = (e.big ?? 1) * (0.6 + ease(k));
+      if (e.kind === "flash") {
+        circ(ctx, e.x, e.y, R);
+        ctx.globalAlpha = base * (1 - k) ** 2 * 0.7;
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+      } else {
+        ctx.strokeStyle = e.kind === "horn" ? C.ink : "#cfeaf4";
+        ctx.lineWidth = 0.16 * (1 - k * 0.6);
+        for (let w = 0; w < (e.kind === "horn" ? 3 : 1); w++) {
+          const kk = Math.max(0, k - w * 0.12);
+          ctx.globalAlpha = base * (1 - kk) ** 2;
+          circ(ctx, e.x, e.y, (e.big ?? 1) * (0.6 + ease(kk)));
+          ctx.stroke();
+        }
+      }
       ctx.globalAlpha = base;
       continue;
     }

@@ -2,27 +2,13 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEven
 import {
   ArrowCounterClockwiseIcon,
   ArrowFatLinesUpIcon,
-  ArrowsOutIcon,
-  BasketballIcon,
-  BombIcon,
-  CarProfileIcon,
-  CloudIcon,
   CornersInIcon,
   CornersOutIcon,
-  CrosshairIcon,
-  HamburgerIcon,
-  LightningIcon,
-  SneakerMoveIcon,
   XIcon,
   CaretLeftIcon,
-  ClockCounterClockwiseIcon,
-  GhostIcon,
   HandPalmIcon,
-  MagnetIcon,
-  RocketLaunchIcon,
   SpeakerHighIcon,
   SpeakerSlashIcon,
-  type Icon,
 } from "@phosphor-icons/react";
 import * as sound from "./audio";
 import { BAG_SIZE, DT, INSTANT, MAX_STROKES, TARGETED, activate, brake, compile, groundAt, hop, newSim, preview, scoreName, shoot, step, fireTargeted, type Course, type Power, type Sim } from "./engine";
@@ -30,30 +16,13 @@ import { BATTLE_GROUNDS } from "./battle";
 import { BUMPER_PLAINS } from "./plains";
 import { SANDBOX } from "../../../convex/golf/sandbox";
 import { drawFrame, refreshTheme, still, type Camera, type Fx, type Juice } from "./toy";
+import { ITEMS } from "./items";
 import { PALETTES } from "@/themes";
 
 // Golf, made by hand: Bumper Plains (six short holes, bumpers everywhere) and Battle Grounds (three big
 // holes after Super Battle Golf). Single player, no server.
 
-const POWER_UI: Record<Power, { name: string; short: string; icon: Icon }> = {
-  rocket: { name: "Rocket Driver", short: "Driver", icon: RocketLaunchIcon },
-  ghost: { name: "Ghost", short: "Ghost", icon: GhostIcon },
-  magnet: { name: "Magnet", short: "Magnet", icon: MagnetIcon },
-  brake: { name: "Brake", short: "Brake", icon: HandPalmIcon },
-  mulligan: { name: "Mulligan", short: "Mulligan", icon: ClockCounterClockwiseIcon },
-  bigcup: { name: "Big cup", short: "Big cup", icon: ArrowsOutIcon },
-  jump: { name: "Jump", short: "Jump", icon: ArrowFatLinesUpIcon },
-  bouncy: { name: "Bouncy", short: "Bouncy", icon: BasketballIcon },
-  spring: { name: "Spring Boots", short: "Spring", icon: SneakerMoveIcon },
-  cart: { name: "Golf Cart", short: "Cart", icon: CarProfileIcon },
-  jumbo: { name: "Jumbo Burger", short: "Jumbo", icon: HamburgerIcon },
-  smoke: { name: "Smoke Bomb", short: "Smoke", icon: CloudIcon },
-  laser: { name: "Orbital Laser", short: "Laser", icon: CrosshairIcon },
-  mine: { name: "Landmine", short: "Mine", icon: BombIcon },
-  railgun: { name: "Rail Gun", short: "Rail Gun", icon: LightningIcon },
-};
-// What to do with a targeted item, said on the chip while you pick.
-const TARGET_HINT: Partial<Record<Power, string>> = { laser: "Tap where to strike", mine: "Tap where to drop it", railgun: "Tap which way to fire" };
+const POWER_UI = ITEMS;
 
 const COURSES = [
   { name: "Bumper Plains", holes: BUMPER_PLAINS },
@@ -403,7 +372,7 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
         fx: fx.current,
         hits: hits.current,
         aim: aim.current,
-        target: targetRef.current && (targetRef.current.kind === "laser" || targetRef.current.kind === "mine" || targetRef.current.kind === "railgun") ? { kind: targetRef.current.kind, at: targetAt.current } : null,
+        target: targetRef.current && ITEMS[targetRef.current.kind].aim ? { ...ITEMS[targetRef.current.kind].aim!, at: targetAt.current } : null,
         inset: v.zoomed ? { top: v.top, bottom: PAD_BOTTOM } : undefined,
       });
 
@@ -598,7 +567,7 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
                 const A = POWER_UI[target.kind].icon;
                 return <A size={18} weight="fill" />;
               })()}
-              {TARGET_HINT[target.kind]}
+              {ITEMS[target.kind].hint}
               <button type="button" className="g-chip-x" onClick={() => setTarget(null)} aria-label="Cancel">
                 <XIcon size={14} weight="bold" />
               </button>

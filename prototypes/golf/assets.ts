@@ -1,5 +1,9 @@
-import { BALL_R, CUP_R, v } from "@/games/golf/engine";
-import { PALETTE, drawBall, drawBox, drawBumper, drawCup, drawFlag, drawFx, drawMine, drawPad, drawRail, drawBoard, type Fx } from "@/games/golf/toy";
+import { BALL_R, CUP_R, newSim, v, type Sim } from "@/games/golf/engine";
+import { BUMPER_PLAINS } from "@/games/golf/plains";
+import {
+  PALETTE, drawBall, drawBox, drawBumper, drawCup, drawFlag, drawFx, drawMine, drawPad, drawRail, drawBoard, drawWater, drawIce, drawWind, drawMover, drawPortal, drawPatch, drawMissile,
+  drawStorm, drawStatus, type Fx,
+} from "@/games/golf/toy";
 
 // The asset sheet: the palette, then every part of the course and the frames of its animations, drawn
 // by the same functions the game uses. For reviewing the look in one place.
@@ -24,7 +28,24 @@ const NAMES: Record<keyof typeof PALETTE, string> = {
   ball: "Ball",
   ballShade: "Ball shade",
   ink: "Aim",
+  water: "Water",
+  waterLight: "Wavelet",
+  foam: "Surf",
+  wood: "Wood",
+  woodLine: "Wood grain",
+  portal: "Portal",
+  ice: "Ice",
+  iceLine: "Ice scratch",
+  honey: "Honey",
+  honeyLight: "Honey shine",
+  cloud: "Storm cloud",
+  shield: "Electromagnet",
+  stun: "Stun stars",
+  steam: "Coffee steam",
 };
+
+// A ball with something happening to it, for the status row.
+const ballWith = (o: Partial<Sim>): Sim => Object.assign(newSim(BUMPER_PLAINS[0]), { t: 1, x: 0, y: 0 }, o);
 
 export function assetSheet(bg: string, fg: string, muted: string): HTMLCanvasElement {
   const W = 760, cell = 120, cols = 6, S = 22; // S: pixels per unit
@@ -77,6 +98,41 @@ export function assetSheet(bg: string, fg: string, muted: string): HTMLCanvasEle
       { label: "Confetti", ...tile((c) => drawFx(c, [{ kind: "confetti", x: 0, y: 0, t: 0, seed: 5 } as Fx], 0.35, false)) },
       { label: "Mine goes off", ...tile((c) => drawFx(c, [{ kind: "boom", x: 0, y: 0, t: 0, seed: 6 } as Fx], 0.15, true)) },
       { label: "Off the edge", ...tile((c) => [1, 0.6, 0.25].forEach((k, i) => drawBall(c, -1.2 + i * 1.2, 0, BALL_R * 1.4, { scale: k, alpha: k }))) },
+    ],
+  });
+
+  const sq = (r: number) => [v(-r, -r), v(r, -r), v(r, r), v(-r, r)];
+  rows.push({
+    title: "Board hazards",
+    cells: [
+      { label: "Water", ...tile((c) => drawWater(c, sq(2.6), T, { x0: -3, y0: -3, x1: 3, y1: 3 })) },
+      { label: "Ice rink", ...tile((c) => drawIce(c, sq(2.4), 3)) },
+      { label: "Wind", ...tile((c) => drawWind(c, sq(2.7), v(1, 0), T)) },
+      { label: "Spinning bar", ...tile((c) => drawMover(c, { kind: "spinner", at: v(0, 0), L: 2.2, arms: 2, omega: 1, w: 0.55 }, 0.6)) },
+      { label: "Sliding crate", ...tile((c) => drawMover(c, { kind: "slider", a: v(-1, 0), b: v(1, 0), size: v(1.6, 2.4), period: 4 }, 0)) },
+      { label: "Portal", ...tile((c) => drawPortal(c, v(0, 0), T)) },
+    ],
+  });
+  rows.push({
+    title: "Items in play",
+    cells: [
+      { label: "Frozen water", ...tile((c) => (drawWater(c, sq(2.6), T, { x0: -3, y0: -3, x1: 3, y1: 3 }), drawPatch(c, { kind: "ice", x: 0, y: 0, r: 1.9, until: 9 }, 0))) },
+      { label: "Honey", ...tile((c) => drawPatch(c, { kind: "honey", x: 0, y: 0, r: 1.8, until: 9 }, 0)) },
+      { label: "Rocket Launcher", ...tile((c) => drawMissile(c, { x: 0.8, y: -0.3, vx: 1, vy: -0.4 })) },
+      { label: "Thunderstorm", ...tile((c) => drawStorm(c, { x: 0, y: 0.6, r: 2.2, until: 4 }, 1, T)) },
+      { label: "Lightning", ...tile((c) => drawFx(c, [{ kind: "bolt", x: 0, y: 1.5, x2: 0.3, y2: -3, t: 0, seed: 7 } as Fx], 0.05, false)) },
+      { label: "Gunshot", ...tile((c) => drawFx(c, [{ kind: "tracer", x: -2.5, y: 0.5, x2: 2.5, y2: -0.5, t: 0, seed: 8, big: 1.4 } as Fx], 0.03, false)) },
+    ],
+  });
+  rows.push({
+    title: "What's happening to a ball",
+    cells: [
+      { label: "Frozen", ...tile((c) => (drawBall(c, 0, 0, BALL_R * 1.6), drawStatus(c, ballWith({ r: BALL_R * 1.6, frozenUntil: 5 }), v(0, 0), T))) },
+      { label: "Stunned", ...tile((c) => (drawBall(c, 0, 0, BALL_R * 1.6), drawStatus(c, ballWith({ r: BALL_R * 1.6, stunUntil: 5 }), v(0, 0), T))) },
+      { label: "Electromagnet", ...tile((c) => (drawBall(c, 0, 0, BALL_R * 1.6), drawStatus(c, ballWith({ r: BALL_R * 1.6, shieldUntil: 5 }), v(0, 0), T))) },
+      { label: "Coffee", ...tile((c) => (drawBall(c, 0, 0, BALL_R * 1.6), drawStatus(c, ballWith({ r: BALL_R * 1.6, coffeeUntil: 5 }), v(0, 0), 0.3))) },
+      { label: "Air Horn'd", ...tile((c) => (drawBall(c, 0, 0, BALL_R * 1.6), drawStatus(c, ballWith({ r: BALL_R * 1.6, rattled: true }), v(0, 0), T))) },
+      { label: "Air Horn", ...tile((c) => drawFx(c, [{ kind: "horn", x: 0, y: 0, t: 0, seed: 9, big: 1.6 } as Fx], 0.3, false)) },
     ],
   });
 
