@@ -378,7 +378,8 @@ export const maxSpeed = (sim: Sim) => MAX_SPEED * (sim.armed === "rocket" ? 1.8 
 
 // Whether a putt would go: the ball's still (or rolling, on Coffee), and it isn't frozen or stunned.
 export function canShoot(sim: Sim) {
-  if (sim.strokes >= MAX_STROKES || sim.t < sim.frozenUntil || sim.t < sim.stunUntil) return false;
+  // A hole stops at MAX_STROKES on your own; the open world has no limit.
+  if ((!sim.multi && sim.strokes >= MAX_STROKES) || sim.t < sim.frozenUntil || sim.t < sim.stunUntil) return false;
   return sim.mode === "aim" || (sim.mode === "roll" && sim.z <= 0 && sim.t < sim.coffeeUntil);
 }
 

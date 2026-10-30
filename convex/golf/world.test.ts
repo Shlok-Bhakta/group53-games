@@ -334,6 +334,15 @@ describe("Super Battle Golf's items, on other players", () => {
   });
 });
 
+test("strokes never stop you putting in the open world, however many pile up", () => {
+  // A real case: splashes add a stroke after the putt, and a ball reached 10 (single player's limit).
+  const s = crowd(["a"]);
+  at(s, "a").strokes = 25;
+  advance(s, W, TPS * 3, [cmd(1, "a", "shot", { a: 0, p: 0.3 })]);
+  expect(at(s, "a").x).toBeGreaterThan(41);
+  expect(at(s, "a").strokes).toBe(26);
+});
+
 describe("the board fights back", () => {
   test("the spinning bar shoves a ball parked in its way", () => {
     const s = crowd(["a"]);

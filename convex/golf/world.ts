@@ -1,5 +1,5 @@
 import {
-  activate, BALL_R, blast, BLIND_S, brake, closest, compile, DT, fireTargeted, FREEZE_S, hop, landStrikes, MAX_STROKES, newSim, rng, setMode, shoot, stepBall, TARGETED,
+  activate, BALL_R, blast, BLIND_S, brake, closest, compile, DT, fireTargeted, FREEZE_S, hop, landStrikes, newSim, rng, setMode, shoot, stepBall, TARGETED,
   type Course, type Ev, type Patch, type Sim, type Vec, type World,
 } from "./engine";
 import { dcos, dsin, DTWO_PI, hyp } from "./dmath";
@@ -161,8 +161,6 @@ export function applyCmd(s: WorldState, c: Course, cmd: Cmd) {
   switch (cmd.kind) {
     case "shot": {
       if (!Number.isFinite(cmd.a) || !Number.isFinite(cmd.p)) return;
-      // An open world has no stroke limit.
-      if (b.strokes >= MAX_STROKES - 1) b.strokes = 0;
       shoot(b, cmd.a!, cmd.p!);
       break;
     }
