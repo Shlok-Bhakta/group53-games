@@ -84,11 +84,12 @@ test.describe("signed in", () => {
     const page = await phone(context, { player: me });
     await page.goto("/games");
     await expect(page.getByRole("heading", { name: "Games", level: 1 })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Locked" })).toHaveCount(2);
+    await expect(page.getByRole("button", { name: "Locked" })).toHaveCount(3);
     for (const b of await page.getByRole("button", { name: "Locked" }).all()) await expect(b).toBeDisabled();
     await page.getByRole("button", { name: "Turn on notifications" }).click();
     await expect(page.getByRole("link", { name: "Play Chess" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Play Scrabble" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Play Golf" })).toBeVisible();
     await expect(page.getByText("Turn on notifications to play")).toHaveCount(0);
   });
 

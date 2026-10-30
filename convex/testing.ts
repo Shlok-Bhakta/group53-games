@@ -145,7 +145,7 @@ export const playAs = internalMutation({
   },
 });
 
-const TABLES = ["handoffs", "taps", "rtCommands", "rtSnapshots", "secrets", "drafts", "matches", "ratings", "presence", "pushSubscriptions", "profiles", "authRefreshTokens", "authSessions", "authAccounts", "users"] as const;
+const TABLES = ["golfCommands", "golfSnapshots", "golfPlayers", "golfWorlds", "handoffs", "taps", "rtCommands", "rtSnapshots", "secrets", "drafts", "matches", "ratings", "presence", "pushSubscriptions", "profiles", "authRefreshTokens", "authSessions", "authAccounts", "users"] as const;
 
 // Wipes everything. Refuses if any real (non-test) player exists, so it can't touch prod data.
 export const reset = internalMutation({
@@ -174,6 +174,16 @@ export const removeTestData = internalMutation({
       await ctx.db.delete(m._id);
       removed++;
     }
+    // Golf's open world: their balls and everything they did. The snapshot goes too, so the world is
+    // worked out again from the real players' commands alone.
+    let golf = false;
+    for (const table of ["golfCommands", "golfPlayers"] as const)
+      for (const doc of await ctx.db.query(table).collect())
+        if (testIds.has("by" in doc ? doc.by : doc.userId)) {
+          await ctx.db.delete(doc._id);
+          golf = true;
+        }
+    if (golf) for (const s of await ctx.db.query("golfSnapshots").collect()) await ctx.db.delete(s._id);
     for (const table of ["ratings", "presence", "taps", "profiles", "pushSubscriptions", "handoffs"] as const) {
       for (const doc of await ctx.db.query(table).collect()) if (testIds.has(doc.userId)) await ctx.db.delete(doc._id);
     }

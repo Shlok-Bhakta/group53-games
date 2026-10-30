@@ -28,6 +28,7 @@ import * as sound from "./audio";
 import { BAG_SIZE, DT, INSTANT, MAX_STROKES, TARGETED, activate, brake, compile, groundAt, hop, newSim, preview, scoreName, shoot, step, fireTargeted, type Course, type Power, type Sim } from "./engine";
 import { BATTLE_GROUNDS } from "./battle";
 import { BUMPER_PLAINS } from "./plains";
+import { SANDBOX } from "../../../convex/golf/sandbox";
 import { drawFrame, refreshTheme, still, type Camera, type Fx, type Juice } from "./toy";
 import { PALETTES } from "@/themes";
 
@@ -57,6 +58,7 @@ const TARGET_HINT: Partial<Record<Power, string>> = { laser: "Tap where to strik
 const COURSES = [
   { name: "Bumper Plains", holes: BUMPER_PLAINS },
   { name: "Battle Grounds", holes: BATTLE_GROUNDS },
+  { name: "Sandbox", holes: [SANDBOX] },
 ];
 
 type Round = { course: number; start: number; index: number; scores: number[]; attempt: number };

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router";
 import { Authenticated, AuthLoading, Unauthenticated, useQuery } from "convex/react";
 import { AnimatePresence, MotionConfig } from "motion/react";
@@ -25,6 +25,9 @@ import { Page, TAB_ROUTES, useAppBadge, useNavDirection, useScrollMemory } from 
 import { UpdateOverlay, useVersionCheck } from "@/version";
 import { wantMusic } from "@/sound";
 import { useDeepLinks } from "@/deepLinks";
+
+// Golf loads only when someone opens it, so chess and Scrabble players never download it.
+const GolfWorld = lazy(() => import("./games/golf/GolfWorld"));
 
 export function App() {
   useVersionCheck();
@@ -84,6 +87,16 @@ function SignedIn() {
                 <Route path="/you" element={<You />} />
                 <Route path="/settings" element={<Navigate to="/you" replace />} />
                 <Route path="/wordle" element={<Wordle />} />
+                <Route
+                  path="/golf"
+                  element={
+                    <NotificationsRequired>
+                      <Suspense fallback={<Skeleton className="mt-[calc(env(safe-area-inset-top)+44px)] h-96 w-full rounded-lg" />}>
+                        <GolfWorld />
+                      </Suspense>
+                    </NotificationsRequired>
+                  }
+                />
                 {Object.values(GAME_UI).flatMap((g) => [
                   <Route key={g.key} path={g.path} element={<NotificationsRequired><GameHub game={g} /></NotificationsRequired>} />,
                   <Route key={`${g.key}-mode`} path={`${g.path}/mode/:slug`} element={<NotificationsRequired><ModePage game={g} /></NotificationsRequired>} />,

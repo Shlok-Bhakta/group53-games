@@ -32,6 +32,12 @@ export const PALETTE = {
   ball: "#fbf9f3",
   ballShade: "#e1ddd2",
   ink: "#fbf9f3", // the aim line and markers
+  water: "#6aa3b1", // a lake, not a swimming pool
+  waterLight: "#86b7c2",
+  foam: "#dfe9e3",
+  wood: "#b48a5a",
+  woodLine: "#977145",
+  portal: "#8c80b4",
 } as const;
 const C = PALETTE;
 const v0: Vec = { x: 0, y: 0 };
@@ -117,7 +123,8 @@ const ease = (k: number) => 1 - (1 - Math.max(0, Math.min(1, k))) ** 3;
 
 // --- The parts ---
 
-export function drawBoard(ctx: Ctx, boards: Vec[][], cup: Vec | null, view: { x0: number; y0: number; x1: number; y1: number }) {
+export function drawBoard(ctx: Ctx, boards: Vec[][], cup: Vec | Vec[] | null, view: { x0: number; y0: number; x1: number; y1: number }) {
+  const cups = cup === null ? [] : Array.isArray(cup) ? cup : [cup];
   for (const b of boards) {
     path(ctx, b);
     ctx.fillStyle = C.grass;
@@ -137,12 +144,102 @@ export function drawBoard(ctx: Ctx, boards: Vec[][], cup: Vec | null, view: { x0
       ctx.closePath();
       ctx.fill();
     }
-    if (cup) {
-      circ(ctx, cup.x, cup.y, 3.2);
+    for (const k of cups) {
+      circ(ctx, k.x, k.y, 3.2);
       ctx.fillStyle = C.putting;
       ctx.fill();
     }
     ctx.restore();
+  }
+}
+
+// Water: flat, with little wavelets drifting across it. `edge` draws surf round its rim.
+export function drawWater(ctx: Ctx, poly: Vec[], t: number, view: { x0: number; y0: number; x1: number; y1: number }, edge = true) {
+  path(ctx, poly);
+  ctx.fillStyle = C.water;
+  ctx.fill();
+  ctx.save();
+  ctx.clip();
+  ctx.strokeStyle = C.waterLight;
+  ctx.lineWidth = 0.16;
+  ctx.lineCap = "round";
+  const gap = 3.2;
+  for (let gx = Math.floor(view.x0 / gap) - 1; gx * gap < view.x1 + gap; gx++)
+    for (let gy = Math.floor(view.y0 / gap) - 1; gy * gap < view.y1 + gap; gy++) {
+      const r = rng(gx * 7919 + gy * 104729);
+      const px = gx * gap + r() * gap, py = gy * gap + r() * gap, ph = r() * 6.28;
+      // Each wavelet drifts a little and breathes in and out.
+      const k = 0.5 + 0.5 * Math.sin(t * 0.9 + ph);
+      const x = px + Math.sin(t * 0.35 + ph) * 0.5;
+      ctx.globalAlpha = 0.35 + 0.45 * k;
+      ctx.beginPath();
+      ctx.arc(x, py + 0.5, 0.55 + 0.15 * k, Math.PI * 1.2, Math.PI * 1.8);
+      ctx.stroke();
+    }
+  ctx.restore();
+  if (edge) {
+    path(ctx, poly);
+    ctx.strokeStyle = C.foam;
+    ctx.lineWidth = 0.22;
+    ctx.globalAlpha = 0.8;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+}
+
+// Surf along a coast with no rail: a soft line of foam just off the grass, lapping in and out.
+export function drawShore(ctx: Ctx, poly: Vec[], t: number) {
+  const base = ctx.globalAlpha;
+  path(ctx, poly);
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = C.foam;
+  ctx.globalAlpha = base * (0.35 + 0.15 * Math.sin(t * 1.2));
+  ctx.lineWidth = 1.3 + 0.25 * Math.sin(t * 1.2);
+  ctx.stroke();
+  ctx.globalAlpha = base * 0.9;
+  ctx.lineWidth = 0.45;
+  ctx.stroke();
+  ctx.globalAlpha = base;
+}
+
+// A wooden bridge: planks across the way you cross it.
+export function drawBridge(ctx: Ctx, poly: Vec[]) {
+  path(ctx, poly);
+  ctx.fillStyle = C.wood;
+  ctx.fill();
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of poly) (x0 = Math.min(x0, p.x)), (y0 = Math.min(y0, p.y)), (x1 = Math.max(x1, p.x)), (y1 = Math.max(y1, p.y));
+  ctx.save();
+  path(ctx, poly);
+  ctx.clip();
+  ctx.strokeStyle = C.woodLine;
+  ctx.lineWidth = 0.08;
+  const across = x1 - x0 > y1 - y0;
+  ctx.beginPath();
+  for (let k = across ? x0 : y0; k < (across ? x1 : y1); k += 0.7) {
+    if (across) ctx.moveTo(k, y0), ctx.lineTo(k, y1);
+    else ctx.moveTo(x0, k), ctx.lineTo(x1, k);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+// A portal: a ring with a slow swirl inside it.
+export function drawPortal(ctx: Ctx, at: Vec, t: number) {
+  circ(ctx, at.x, at.y, 0.95);
+  ctx.fillStyle = "rgba(20,16,40,0.35)";
+  ctx.fill();
+  ctx.strokeStyle = C.portal;
+  ctx.lineWidth = 0.22;
+  circ(ctx, at.x, at.y, 0.95);
+  ctx.stroke();
+  ctx.lineWidth = 0.12;
+  ctx.lineCap = "round";
+  for (let k = 0; k < 3; k++) {
+    const a = t * 2.2 + (k * Math.PI * 2) / 3;
+    ctx.beginPath();
+    ctx.arc(at.x, at.y, 0.55, a, a + 1.4);
+    ctx.stroke();
   }
 }
 
@@ -234,7 +331,7 @@ export function drawFlag(ctx: Ctx, at: Vec, t: number, alpha = 1, out = 0) {
 
 // The ball. `stretch` runs along its direction of travel (above 1 when it's fast), `squash` flattens
 // it against whatever it just hit (normal `n`), `scale` is for popping in and dropping out.
-export function drawBall(ctx: Ctx, x: number, y: number, r: number, o: { dir?: number; stretch?: number; squash?: number; n?: number; scale?: number; alpha?: number } = {}) {
+export function drawBall(ctx: Ctx, x: number, y: number, r: number, o: { dir?: number; stretch?: number; squash?: number; n?: number; scale?: number; alpha?: number; ring?: string } = {}) {
   const s = o.scale ?? 1;
   if (s <= 0.01) return;
   ctx.save();
@@ -263,7 +360,47 @@ export function drawBall(ctx: Ctx, x: number, y: number, r: number, o: { dir?: n
   ctx.fillStyle = C.ballShade;
   ctx.fill();
   ctx.restore();
+  // In multiplayer, a ring in the player's color.
+  if (o.ring) {
+    circ(ctx, 0, 0, r * 0.84);
+    ctx.strokeStyle = o.ring;
+    ctx.lineWidth = r * 0.32;
+    ctx.stroke();
+  }
   ctx.restore();
+}
+
+// Someone else's ball: the same ball in their color, with their name over it.
+function drawOther(ctx: Ctx, c: Course, o: Other, t: number) {
+  const b = o.sim;
+  let x = o.at.x, y = o.at.y, scale = 1, alpha = 1;
+  if (b.mode === "sunk") {
+    const cup = nearestCup(c, b);
+    const k = Math.min(1, b.modeT / 0.45);
+    const a = Math.atan2(b.y - cup.y, b.x - cup.x) + ease(k) * Math.PI * 1.5;
+    const rr = Math.hypot(b.x - cup.x, b.y - cup.y) * (1 - ease(k));
+    x = cup.x + Math.cos(a) * rr;
+    y = cup.y + Math.sin(a) * rr;
+    scale = 1 - ease(k) * 0.55;
+    alpha = 1 - Math.max(0, k - 0.6) / 0.4;
+  } else if (b.mode === "out") {
+    const k = Math.min(1, b.modeT / 0.5);
+    scale = 1 - ease(k);
+    alpha = 1 - k;
+  }
+  if (alpha <= 0 || scale <= 0.01) return;
+  const lift = b.z * 0.5;
+  if (b.z > 0) {
+    circ(ctx, x + 0.12 + b.z * 0.3, y + 0.22 + b.z * 0.5, b.r);
+    ctx.fillStyle = "rgba(0,0,0,0.22)";
+    ctx.fill();
+  }
+  const speed = Math.hypot(b.vx, b.vy);
+  drawBall(ctx, x, y - lift, b.r * (1 + b.z * 0.18), { dir: Math.atan2(b.vy, b.vx), stretch: b.mode === "roll" ? 1 + Math.min(0.35, speed / 70) : 1, scale, alpha, ring: o.color });
+  const base = ctx.globalAlpha;
+  ctx.globalAlpha = base * alpha;
+  worldText(ctx, o.name, x, y - lift - b.r - 0.75, 0.62, o.color, C.cup);
+  ctx.globalAlpha = base;
 }
 
 // A mystery box: it breathes a little until you roll through it.
@@ -352,6 +489,7 @@ export type Juice = {
   impact: { t: number; n: number; power: number } | null; // the ball last hit something, and which way it was pushed
   outV?: Vec; // how fast it was going when it went off the edge, so it drifts on as it drops
   flag?: { a: number; t: number }; // the flag's fade, eased so a ball zipping past doesn't flicker it
+  flags?: { a: number; t: number }[]; // the same, for every flag on a map with several
 };
 export type Frame = {
   c: Course;
@@ -368,7 +506,15 @@ export type Frame = {
   aim: { angle: number; power: number; line: Vec[]; from?: Vec; to?: Vec } | null;
   target?: { kind: "laser" | "mine" | "railgun"; at: Vec | null } | null; // picking where an item goes
   inset?: { top: number; bottom: number };
+  // Multiplayer: everyone else's ball (`at` is where to draw it), the color of mine, and when each
+  // flag was last pulled by someone sinking.
+  others?: Other[];
+  myColor?: string;
+  flagOut?: Map<number, number>;
 };
+export type Other = { sim: Sim; at: Vec; color: string; name: string };
+export const allCups = (c: Course) => [c.cup, ...(c.cups ?? [])];
+const nearestCup = (c: Course, p: Vec) => allCups(c).reduce((a, k) => (Math.hypot(k.x - p.x, k.y - p.y) < Math.hypot(a.x - p.x, a.y - p.y) ? k : a));
 
 export function drawFrame(ctx: Ctx, f: Frame) {
   const { c, sim, cam, dpr, t } = f;
@@ -394,22 +540,40 @@ export function drawFrame(ctx: Ctx, f: Frame) {
   // The course fades up as the hole starts.
   const intro = ease((t - J.start) / 0.4);
   ctx.globalAlpha = intro;
-  drawBoard(ctx, c.greens.map((g) => g.poly), c.cup, view);
+  // A map in the sea: the sea right out to the edges of the screen, then surf round every coast
+  // without a rail.
+  if (c.off === "water") {
+    const { x0, y0, x1, y1 } = view;
+    drawWater(ctx, [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }], t, view, false);
+    for (const g of c.greens) if (g.rim === false) drawShore(ctx, g.poly, t);
+    ctx.globalAlpha = intro;
+  }
+  drawBoard(ctx, c.greens.map((g) => g.poly), allCups(c), view);
   for (const z of c.zones) {
     if (z.kind === "sand") {
       path(ctx, z.poly);
       ctx.fillStyle = C.sand;
       ctx.fill();
-    } else if (z.kind === "boost" || z.kind === "ramp") drawPad(ctx, z.poly, z.dir, z.kind, t);
+    } else if (z.kind === "water") {
+      drawWater(ctx, z.poly, t, view);
+      ctx.globalAlpha = intro;
+    } else if (z.kind === "bridge") drawBridge(ctx, z.poly);
+    else if (z.kind === "boost" || z.kind === "ramp") drawPad(ctx, z.poly, z.dir, z.kind, t);
+  }
+  for (const p of c.portals) {
+    drawPortal(ctx, p.a, t);
+    drawPortal(ctx, p.b, t);
   }
   for (const m of sim.mines) if (m.live) drawMine(ctx, m, t);
   ctx.fillStyle = "rgba(0,0,0,0.1)";
-  ctx.beginPath();
-  ctx.roundRect(c.tee.x - 1.1, c.tee.y - 1.1, 2.2, 2.2, 0.35);
-  ctx.fill();
-  drawCup(ctx, c.cup, CUP_R * sim.cupScale);
+  for (const tee of [c.tee, ...(c.tees ?? [])]) {
+    ctx.beginPath();
+    ctx.roundRect(tee.x - 1.1, tee.y - 1.1, 2.2, 2.2, 0.35);
+    ctx.fill();
+  }
+  for (const k of allCups(c)) drawCup(ctx, k, CUP_R * (k === nearestCup(c, sim) ? sim.cupScale : 1));
   drawFx(ctx, f.fx, t, true);
-  for (const g of c.greens) drawRail(ctx, g.poly, true, 0.6);
+  for (const g of c.greens) if (g.rim !== false) drawRail(ctx, g.poly, true, 0.6);
   for (const w of c.walls) drawRail(ctx, w.pts, !!w.closed, Math.max(0.5, w.w));
   ctx.globalAlpha = 1;
 
@@ -431,18 +595,21 @@ export function drawFrame(ctx: Ctx, f: Frame) {
   // The ball, with its moments: popping onto the tee, squashing against walls, stretching at speed,
   // spiralling into the cup, dropping off the edge.
   const speed = Math.hypot(sim.vx, sim.vy);
+  // Everyone else first, so mine is always on top.
+  for (const o of f.others ?? []) drawOther(ctx, c, o, t);
   if (sim.mode === "sunk") {
     // From wherever it dropped in, round the rim and down.
+    const cup = nearestCup(c, sim);
     const k = Math.min(1, sim.modeT / 0.45);
-    const ox = sim.x - c.cup.x, oy = sim.y - c.cup.y;
+    const ox = sim.x - cup.x, oy = sim.y - cup.y;
     const a = Math.atan2(oy, ox) + ease(k) * Math.PI * 1.5;
     const rr = Math.hypot(ox, oy) * (1 - ease(k));
-    drawBall(ctx, c.cup.x + Math.cos(a) * rr, c.cup.y + Math.sin(a) * rr, sim.r, { scale: 1 - ease(k) * 0.55, alpha: 1 - Math.max(0, k - 0.6) / 0.4 });
+    drawBall(ctx, cup.x + Math.cos(a) * rr, cup.y + Math.sin(a) * rr, sim.r, { scale: 1 - ease(k) * 0.55, alpha: 1 - Math.max(0, k - 0.6) / 0.4, ring: f.myColor });
   } else if (sim.mode === "out") {
     // Off the edge: it keeps drifting, shrinks and fades.
     const k = Math.min(1, sim.modeT / 0.5);
     const d = J.outV ? ease(k) * 0.12 : 0;
-    drawBall(ctx, bx + (J.outV?.x ?? 0) * d, by + (J.outV?.y ?? 0) * d, sim.r, { scale: 1 - ease(k), alpha: 1 - k });
+    drawBall(ctx, bx + (J.outV?.x ?? 0) * d, by + (J.outV?.y ?? 0) * d, sim.r, { scale: 1 - ease(k), alpha: 1 - k, ring: f.myColor });
   } else {
     const since = t - (J.impact?.t ?? -9);
     // Flattened by the knock, then a jelly wobble back to round.
@@ -459,6 +626,7 @@ export function drawFrame(ctx: Ctx, f: Frame) {
       squash,
       n: J.impact?.n,
       scale: popIn((t - J.spawn) / 0.35),
+      ring: f.myColor,
     });
   }
 
@@ -481,20 +649,41 @@ export function drawFrame(ctx: Ctx, f: Frame) {
     ctx.restore();
   });
 
-  // The flag stands until the ball's close, and flies off when it drops.
-  const near = Math.hypot(sim.x - c.cup.x, sim.y - c.cup.y);
-  // Its fade is eased, so a ball zipping past doesn't flicker it; once the ball drops it comes back
-  // and lifts away.
-  const sunk = sim.mode === "sunk";
-  const want = sunk ? 1 : Math.max(0, Math.min(1, (near - 1.5) / 1.5));
-  let fa = want;
-  if (f.juice) {
-    const fl = (f.juice.flag ??= { a: want, t });
-    fl.a += (want - fl.a) * (1 - Math.exp(-Math.max(0, t - fl.t) * (sunk ? 14 : 8)));
-    fl.t = t;
-    fa = fl.a;
-  }
-  drawFlag(ctx, c.cup, t, fa * intro, sunk ? Math.min(1, sim.modeT / 0.6) : 0);
+  // Each flag stands until a ball's close, and flies off when one drops. Its fade is eased, so a ball
+  // zipping past doesn't flicker it; once the ball drops it comes back and lifts away. In
+  // multiplayer, anyone's ball counts, and the flag pops back up a moment after.
+  const balls = [sim, ...(f.others ?? []).map((o) => o.sim)];
+  allCups(c).forEach((cup, i) => {
+    const near = Math.min(...balls.filter((b) => b.mode !== "sunk").map((b) => Math.hypot(b.x - cup.x, b.y - cup.y)), 99);
+    const mine = sim.mode === "sunk" && nearestCup(c, sim) === cup;
+    const pulled = f.flagOut?.get(i);
+    const sunk = mine || (pulled !== undefined && t - pulled < 0.6);
+    const want = sunk ? 1 : Math.max(0, Math.min(1, (near - 1.5) / 1.5));
+    let fa = want;
+    if (f.juice) {
+      const list = (f.juice.flags ??= []);
+      const fl = i === 0 ? (f.juice.flag ??= { a: want, t }) : (list[i] ??= { a: want, t });
+      fl.a += (want - fl.a) * (1 - Math.exp(-Math.max(0, t - fl.t) * (sunk ? 14 : 8)));
+      fl.t = t;
+      fa = fl.a;
+    }
+    let out = mine ? Math.min(1, sim.modeT / 0.6) : 0;
+    let back = 1;
+    if (!mine && pulled !== undefined) {
+      const age = t - pulled;
+      if (age < 0.6) out = age / 0.6;
+      else if (age < 2) out = 1;
+      else back = popIn((age - 2) / 0.4);
+    }
+    if (back < 1) {
+      ctx.save();
+      ctx.translate(cup.x, cup.y);
+      ctx.scale(back, back);
+      ctx.translate(-cup.x, -cup.y);
+      drawFlag(ctx, cup, t, fa * intro, 0);
+      ctx.restore();
+    } else drawFlag(ctx, cup, t, fa * intro, out);
+  });
 
   drawFx(ctx, f.fx, t, false);
 
@@ -567,14 +756,15 @@ export function drawFrame(ctx: Ctx, f: Frame) {
   if (f.inset) holeArrow(ctx, f);
 }
 
-// When the cup is off screen, an arrow at the edge points to it.
+// When the cup is off screen, an arrow at the edge points to it (the nearest, on a map with several).
 function holeArrow(ctx: Ctx, f: Frame) {
   const { c, sim, cam, dpr } = f;
   if (sim.mode === "sunk") return;
   const sw = ctx.canvas.width / dpr, sh = ctx.canvas.height / dpr;
   const pad = 30;
   const box = { x0: pad, y0: f.inset!.top + pad, x1: sw - pad, y1: sh - f.inset!.bottom - pad };
-  const sx = (c.cup.x - cam.x) * cam.s + cam.ox, sy = (c.cup.y - cam.y) * cam.s + cam.oy;
+  const cup = nearestCup(c, sim);
+  const sx = (cup.x - cam.x) * cam.s + cam.ox, sy = (cup.y - cam.y) * cam.s + cam.oy;
   if (sx > box.x0 && sx < box.x1 && sy > box.y0 && sy < box.y1) return;
   const cx = (box.x0 + box.x1) / 2, cy = (box.y0 + box.y1) / 2;
   const dx = sx - cx, dy = sy - cy;

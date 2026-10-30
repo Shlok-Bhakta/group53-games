@@ -10,6 +10,7 @@ import { chessRules } from "./chess/rules";
 import { ScrabbleBanner, ScrabbleModeArt } from "./scrabble/art";
 import { ScrabbleGame } from "./scrabble/ScrabbleGame";
 import { scrabbleRules } from "./scrabble/rules";
+import { GolfBanner } from "./golf/GolfBanner";
 
 // Everything the shared screens need from a game: its card on Games, its mode art, rules, and the screen
 // for a game in progress. The lobby, results, rematches, mode pages and hub are shared (src/pages).
@@ -53,6 +54,14 @@ export const GAME_UI: Record<GameKey, GameUI> = {
 
 // Cards on the Games tab: every game, then the ones still being built.
 export type GameCard = { path: string; name: string; blurb: string; banner: () => ReactNode; wip?: boolean };
+// Golf is an open world everyone shares while its modes are being built: no lobby yet, Play goes
+// straight in (src/games/golf/GolfWorld.tsx).
+const GOLF: GameCard = {
+  path: "/golf",
+  name: "Golf",
+  blurb: "Mini golf with everyone at once. Grab items, blow up bumpers, knock each other into the sea.",
+  banner: () => <GolfBanner />,
+};
 const SOON: GameCard[] = [
   {
     path: "/wordle",
@@ -62,4 +71,4 @@ const SOON: GameCard[] = [
     wip: true,
   },
 ];
-export const games: GameCard[] = [...Object.values(GAME_UI), ...SOON];
+export const games: GameCard[] = [...Object.values(GAME_UI), GOLF, ...SOON];

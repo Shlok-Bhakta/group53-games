@@ -95,6 +95,26 @@ export default defineSchema({
   }).index("by_match_tick", ["matchId", "tick"]),
   // A settled board state for each real-time game, advanced by chess:rtTick, so replays start near now.
   rtSnapshots: defineTable({ matchId: v.id("matches"), state: v.any() }).index("by_match", ["matchId"]),
+  // Golf's open world (convex/golf.ts): one row per world. `awake` while the server is settling it.
+  golfWorlds: defineTable({ key: v.string(), startAt: v.number(), awake: v.boolean(), collide: v.boolean() }).index("by_key", ["key"]),
+  // Everyone who's played in a world, for names and colors.
+  golfPlayers: defineTable({ worldId: v.id("golfWorlds"), userId: v.id("users"), joinedAt: v.number() }).index("by_world", ["worldId"]),
+  // Everything anyone does, one row each, stamped with the tick they did it on. Acting only ever inserts
+  // here, so players acting at once never conflict.
+  golfCommands: defineTable({
+    worldId: v.id("golfWorlds"),
+    tick: v.number(),
+    by: v.id("users"),
+    seq: v.number(),
+    kind: v.union(v.literal("join"), v.literal("shot"), v.literal("use"), v.literal("fire"), v.literal("hop"), v.literal("brake"), v.literal("reset")),
+    a: v.optional(v.number()),
+    p: v.optional(v.number()),
+    i: v.optional(v.number()),
+    x: v.optional(v.number()),
+    y: v.optional(v.number()),
+  }).index("by_world_tick", ["worldId", "tick"]),
+  // The settled world (convex/golf/world.ts, packed), advanced by golf:tick, so phones replay from near now.
+  golfSnapshots: defineTable({ worldId: v.id("golfWorlds"), tick: v.number(), state: v.any() }).index("by_world", ["worldId"]),
   // What players mustn't see: a player's own hand (`userId` set; a Scrabble rack) or the game's (no
   // `userId`; the tile bag). Only ever returned to its owner.
   secrets: defineTable({ matchId: v.id("matches"), userId: v.optional(v.id("users")), data: v.any() }).index("by_match_user", ["matchId", "userId"]),
