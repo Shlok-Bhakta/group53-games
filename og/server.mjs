@@ -320,12 +320,22 @@ function scrabbleBoard(s, side) {
 
 // A poker table: the felt with the board cards and the pot. Never anyone's own cards.
 const SUIT_INK = { s: "#1d1d1f", h: "#d23a3f", d: "#2a6cd0", c: "#1d8648" };
-const PIPS = { s: "♠", h: "♥", d: "♦", c: "♣" };
+// Suits as paths: the fonts have no suit glyphs, and the emoji fallback would draw clubs black.
+const SUIT_PATH = {
+  s: "M12 2C9 6 3 9 3 13.5 3 16 5 18 7.5 18c1.6 0 2.9-.8 3.6-2-.3 2.3-1.2 4.2-2.6 5.5h7c-1.4-1.3-2.3-3.2-2.6-5.5.7 1.2 2 2 3.6 2 2.5 0 4.5-2 4.5-4.5C21 9 15 6 12 2z",
+  h: "M12 21s-7-4.5-9.5-9C1 8.5 3 5 6.5 5c2 0 3.5 1.2 5.5 3.5C14 6.2 15.5 5 17.5 5 21 5 23 8.5 21.5 12 19 16.5 12 21 12 21z",
+  d: "M12 2l8 10-8 10-8-10z",
+  c: "M12 2.5a4 4 0 0 0-3.6 5.8A4 4 0 1 0 10.5 16c-.3 2.2-1.2 4-2.5 5.5h8c-1.3-1.5-2.2-3.3-2.5-5.5a4 4 0 1 0 2.1-7.7A4 4 0 0 0 12 2.5z",
+};
+const suit = (s, size) => ({
+  type: "img",
+  props: { width: size, height: size, src: `data:image/svg+xml;base64,${Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="${SUIT_INK[s]}" d="${SUIT_PATH[s]}"/></svg>`).toString("base64")}` },
+});
 function pokerTable(p, side) {
   const w = 84;
   const card = (c) =>
     c
-      ? h("div", { width: w, height: w * 1.4, borderRadius: 8, background: "#fbfaf6", color: SUIT_INK[c[1]], flexDirection: "column", padding: "6px 9px", boxShadow: "0 4px 10px rgba(0,0,0,0.35)" }, h("div", { fontSize: 38, fontWeight: 800, lineHeight: 1 }, c[0] === "T" ? "10" : c[0]), h("div", { fontSize: 40, lineHeight: 1, marginTop: 4 }, PIPS[c[1]]))
+      ? h("div", { width: w, height: w * 1.4, borderRadius: 8, background: "#fbfaf6", color: SUIT_INK[c[1]], flexDirection: "column", padding: "6px 9px", boxShadow: "0 4px 10px rgba(0,0,0,0.35)" }, h("div", { fontSize: 38, fontWeight: 800, lineHeight: 1 }, c[0] === "T" ? "10" : c[0]), h("div", { marginTop: 6 }, suit(c[1], 38)))
       : h("div", { width: w, height: w * 1.4, borderRadius: 8, background: "rgba(255,255,255,0.08)", border: "2px solid rgba(255,255,255,0.16)" });
   return h(
     "div",
@@ -366,7 +376,7 @@ async function renderMatch(m) {
     m.mode.startsWith("poker:") ? pokerTable(m.poker, 512) : m.scrabble ? scrabbleBoard(m.scrabble, 512) : h("div", { width: 512, height: 512, flexShrink: 0, flexDirection: "column", borderRadius: four ? 6 : 18, overflow: "hidden", boxShadow: four ? "none" : "0 18px 40px rgba(0,0,0,0.4)" }, rows),
     h(
       "div",
-      { flexDirection: "column", gap: four ? 18 : 26, flex: 1 },
+      { flexDirection: "column", gap: four ? 18 : 26, flex: 1, minWidth: 0 },
       h("div", { alignItems: "center", gap: 14 }, tiles("53", ["green", "yellow"], 44), h("div", { fontSize: 30, fontWeight: 800, color: "#bfe3d3" }, text.mode)),
       h(
         "div",
@@ -379,7 +389,7 @@ async function renderMatch(m) {
             { alignItems: "center", gap: 16 },
             p.color && SEAT_COLORS[p.color] ? h("div", { width: 12, height: 48, borderRadius: 6, background: SEAT_COLORS[p.color] }) : [],
             avatar({ name: p.name, frame: "none" }, big ? 64 : 48, images[i]),
-            h("div", { fontSize: big ? 40 : 32, fontWeight: 800 }, p.name),
+            h("div", { fontSize: big ? 40 : 32, fontWeight: 800, flexShrink: 1, minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }, p.name),
             m.poker && m.status !== "waiting" ? h("div", { fontSize: 24, color: "#9fcbb6", fontWeight: 500, flexShrink: 0, whiteSpace: "nowrap" }, m.poker.out.includes(i) ? "out" : `${(m.poker.stacks[i] ?? 0).toLocaleString("en-US")} chips`)
             : m.scrabble && m.status !== "waiting" ? h("div", { fontSize: 24, color: "#9fcbb6", fontWeight: 500, flexShrink: 0, whiteSpace: "nowrap" }, `${m.scrabble.scores[i] ?? 0} pts`)
             : m.points && p.color ? h("div", { fontSize: 24, color: "#9fcbb6", fontWeight: 500 }, `${m.points[p.color]} pts`) : p.color ? h("div", { fontSize: 24, color: "#9fcbb6", fontWeight: 500 }, COLOR_NAMES[p.color] ?? "") : [],

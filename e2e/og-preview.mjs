@@ -1,5 +1,5 @@
 // Renders link previews against a throwaway backend with a real game in progress.
-// node e2e/og-preview.mjs  ->  e2e/.state/og-match.png and e2e/.state/og-chess.png
+// node e2e/og-preview.mjs  ->  e2e/.state/og-*.png (chess, four-player, Scrabble and poker games, and cards)
 import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { ConvexHttpClient } from "convex/browser";
@@ -50,6 +50,20 @@ for (const [seat, word, cells] of [[0, "QUIZ", [[6, 7], [7, 7], [8, 7], [9, 7]]]
   await admin.mutation(anyApi.testing.playAs, { id: sid, userId, tiles: cells.map(([x, y], i) => ({ id: rack[i].id, x, y })) });
 }
 
+// A three-way Hold'em game on the flop.
+const pid = await a.client.mutation(anyApi.matches.queue, { mode: "poker:holdem" });
+await c.client.mutation(anyApi.matches.queue, { mode: "poker:holdem" });
+await s4.client.mutation(anyApi.matches.queue, { mode: "poker:holdem" });
+await a.client.mutation(anyApi.matches.startGame, { id: pid });
+const byUser = new Map([a, c, s4].map((p) => [p.userId, p]));
+for (let i = 0; i < 3; i++) {
+  const pm = await admin.query(anyApi.testing.getMatch, { id: pid });
+  if (pm.state.street > 0) break;
+  const p = byUser.get(pm.players[pm.state.turn].userId);
+  const owe = pm.state.current - pm.state.bets[pm.state.turn];
+  await p.client.mutation(anyApi.poker.move, { id: pid, hand: pm.state.hand, street: pm.state.street, kind: owe > 0 ? "call" : "check" });
+}
+
 mkdirSync("e2e/.state", { recursive: true });
 writeFileSync("e2e/.state/admin_key", b.adminKey);
 const pieces = spawn("python3", ["-m", "http.server", "8789", "-d", "public"], { stdio: "ignore" });
@@ -71,6 +85,11 @@ try {
   console.log(htmlS.split("\n").filter((l) => /og:(title|description)"/.test(l)).join("\n"));
   const imgS = htmlS.match(/og\/match\/[a-z0-9]+\.png\?v=[a-z0-9]+/)[0];
   writeFileSync("e2e/.state/og-scrabble-match.png", Buffer.from(await (await fetch(`http://127.0.0.1:8788/${imgS}`)).arrayBuffer()));
+  const htmlP = await (await fetch(`http://127.0.0.1:8788/poker/${pid}`)).text();
+  console.log(htmlP.split("\n").filter((l) => /og:(title|description)"/.test(l)).join("\n"));
+  const imgP = htmlP.match(/og\/match\/[a-z0-9]+\.png\?v=[a-z0-9]+/)[0];
+  writeFileSync("e2e/.state/og-poker-match.png", Buffer.from(await (await fetch(`http://127.0.0.1:8788/${imgP}`)).arrayBuffer()));
+  writeFileSync("e2e/.state/og-poker.png", Buffer.from(await (await fetch("http://127.0.0.1:8788/og/image/poker.png")).arrayBuffer()));
   writeFileSync("e2e/.state/og-scrabble.png", Buffer.from(await (await fetch("http://127.0.0.1:8788/og/image/scrabble.png")).arrayBuffer()));
   writeFileSync("e2e/.state/og-chess.png", Buffer.from(await (await fetch("http://127.0.0.1:8788/og/image/chess.png")).arrayBuffer()));
 } finally {
