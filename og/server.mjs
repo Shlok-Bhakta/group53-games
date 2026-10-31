@@ -66,6 +66,11 @@ const PAGES = {
     description: () => "Up to 8 of you on one board, at your own pace or live with a turn timer. Plan your words while you wait.",
     card: "scrabble",
   },
+  "/poker": {
+    title: () => "Poker",
+    description: () => "Hold'em, Omaha, Short Deck and five-card draw, up to 8 of you over the day. Come take a seat.",
+    card: "poker",
+  },
   "/crew": {
     title: () => "The crew",
     description: (crew) => crew.map((p) => p.name).join(", "),
@@ -176,6 +181,16 @@ const CARDS = {
       ),
       h("div", { alignItems: "center", justifyContent: "space-between" }, crewRow(crew, images, 84), h("div", { color: EMBED_COLOR, fontSize: 34, fontWeight: 800 }, "Tap to play")),
     ),
+  poker: (crew, images) =>
+    frame(
+      h(
+        "div",
+        { flexDirection: "column", gap: 28 },
+        tiles("POKER", ["green", "yellow", "green", "hit", "green"], 118),
+        h("div", { fontSize: 40, fontWeight: 500, color: "#cfe9dd", maxWidth: 940, lineHeight: 1.25 }, "Bet, bluff and take everyone's chips over the day."),
+      ),
+      h("div", { alignItems: "center", justifyContent: "space-between" }, crewRow(crew, images, 84), h("div", { color: EMBED_COLOR, fontSize: 34, fontWeight: 800 }, "Tap to play")),
+    ),
   home: (crew, images) =>
     frame(
       h("div", { fontSize: 88, fontWeight: 800, lineHeight: 1.02, letterSpacing: -2, maxWidth: 980 }, "Who are we ruining today?"),
@@ -215,6 +230,10 @@ const MODE_TITLES = {
   "chess:realtime": "Real-time chess",
   "chess:four": "4-player chess",
   "chess:realtime4": "4-player real-time chess",
+  "poker:holdem": "Texas Hold'em",
+  "poker:omaha": "Omaha",
+  "poker:short": "Short Deck Hold'em",
+  "poker:draw": "Five-card draw",
   "scrabble:classic": "Scrabble",
   "scrabble:live": "Live Scrabble",
 };
@@ -228,6 +247,16 @@ function matchText(m) {
   const realtime = m.mode === "chess:realtime" || m.mode === "chess:realtime4";
   const mode = MODE_TITLES[m.mode] ?? "Chess";
   const title = m.players.length < 2 ? `${names[0]} wants a game` : seats > 2 ? listNames(names) : names.join(" vs ");
+  if (m.mode.startsWith("poker:")) {
+    if (m.status === "waiting") return { title: `${names[0]} wants ${mode}`, status: `${m.players.length} at the table so far. Tap to take a seat.`, mode };
+    if (m.status === "cancelled") return { title, status: "This game was called off.", mode };
+    if (m.status === "finished") {
+      const top = Math.max(...(m.poker?.stacks ?? [0]));
+      return { title, status: m.result.draw ? "A tie." : `${m.result.winner} won with ${top.toLocaleString("en-US")} chips.`, mode };
+    }
+    const mover = m.players.find((p) => p.color === m.toMove);
+    return { title, status: `Hand ${m.poker?.hand ?? 1}, ${(m.poker?.pot ?? 0).toLocaleString("en-US")} in the pot. ${mover?.name ?? "Someone"} to act.`, mode };
+  }
   if (m.status === "waiting" && m.scrabble) {
     return { title: `${names[0]} wants ${mode.toLowerCase().replace("live scrabble", "live Scrabble").replace("scrabble", "Scrabble")}`, status: `${m.players.length} in so far. Tap to take a seat.`, mode };
   }
@@ -289,9 +318,26 @@ function scrabbleBoard(s, side) {
   return h("div", { width: side, height: side, flexShrink: 0, flexDirection: "column", borderRadius: 10, overflow: "hidden", background: "#0f3428" }, rows);
 }
 
+// A poker table: the felt with the board cards and the pot. Never anyone's own cards.
+const SUIT_INK = { s: "#1d1d1f", h: "#d23a3f", d: "#2a6cd0", c: "#1d8648" };
+const PIPS = { s: "♠", h: "♥", d: "♦", c: "♣" };
+function pokerTable(p, side) {
+  const w = 84;
+  const card = (c) =>
+    c
+      ? h("div", { width: w, height: w * 1.4, borderRadius: 8, background: "#fbfaf6", color: SUIT_INK[c[1]], flexDirection: "column", padding: "6px 9px", boxShadow: "0 4px 10px rgba(0,0,0,0.35)" }, h("div", { fontSize: 38, fontWeight: 800, lineHeight: 1 }, c[0] === "T" ? "10" : c[0]), h("div", { fontSize: 40, lineHeight: 1, marginTop: 4 }, PIPS[c[1]]))
+      : h("div", { width: w, height: w * 1.4, borderRadius: 8, background: "rgba(255,255,255,0.08)", border: "2px solid rgba(255,255,255,0.16)" });
+  return h(
+    "div",
+    { width: side, height: side, flexShrink: 0, flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 28, borderRadius: 120, backgroundImage: "radial-gradient(ellipse at 50% 42%, #2f8a5d 0%, #237049 55%, #1a5639 100%)", boxShadow: "inset 0 0 0 10px rgba(0,0,0,0.18), 0 18px 40px rgba(0,0,0,0.4)" },
+    h("div", { fontSize: 34, fontWeight: 800, color: "#f3f7f2", background: "rgba(0,0,0,0.25)", borderRadius: 40, padding: "8px 26px" }, `Pot ${(p?.pot ?? 0).toLocaleString("en-US")}`),
+    h("div", { gap: 8 }, ...[0, 1, 2, 3, 4].map((i) => card(p?.board?.[i]))),
+  );
+}
+
 async function renderMatch(m) {
   if (m.scrabble) m.scrabble.colors = m.players.map((p) => p.color);
-  const size = m.scrabble ? 0 : m.board.length;
+  const size = m.scrabble || m.mode.startsWith("poker:") ? 0 : m.board.length;
   const cell = 512 / size;
   const rows = [];
   for (let r = 0; r < size; r++) {
@@ -317,7 +363,7 @@ async function renderMatch(m) {
   const tree = h(
     "div",
     { width: 1200, height: 630, padding: 55, gap: 56, alignItems: "center", backgroundImage: "linear-gradient(140deg, #1f6b4f 0%, #134232 55%, #0b261d 100%)", color: "#f2fbf6", fontFamily: "Rubik" },
-    m.scrabble ? scrabbleBoard(m.scrabble, 512) : h("div", { width: 512, height: 512, flexShrink: 0, flexDirection: "column", borderRadius: four ? 6 : 18, overflow: "hidden", boxShadow: four ? "none" : "0 18px 40px rgba(0,0,0,0.4)" }, rows),
+    m.mode.startsWith("poker:") ? pokerTable(m.poker, 512) : m.scrabble ? scrabbleBoard(m.scrabble, 512) : h("div", { width: 512, height: 512, flexShrink: 0, flexDirection: "column", borderRadius: four ? 6 : 18, overflow: "hidden", boxShadow: four ? "none" : "0 18px 40px rgba(0,0,0,0.4)" }, rows),
     h(
       "div",
       { flexDirection: "column", gap: four ? 18 : 26, flex: 1 },
@@ -334,7 +380,8 @@ async function renderMatch(m) {
             p.color && SEAT_COLORS[p.color] ? h("div", { width: 12, height: 48, borderRadius: 6, background: SEAT_COLORS[p.color] }) : [],
             avatar({ name: p.name, frame: "none" }, big ? 64 : 48, images[i]),
             h("div", { fontSize: big ? 40 : 32, fontWeight: 800 }, p.name),
-            m.scrabble && m.status !== "waiting" ? h("div", { fontSize: 24, color: "#9fcbb6", fontWeight: 500, flexShrink: 0, whiteSpace: "nowrap" }, `${m.scrabble.scores[i] ?? 0} pts`)
+            m.poker && m.status !== "waiting" ? h("div", { fontSize: 24, color: "#9fcbb6", fontWeight: 500, flexShrink: 0, whiteSpace: "nowrap" }, m.poker.out.includes(i) ? "out" : `${(m.poker.stacks[i] ?? 0).toLocaleString("en-US")} chips`)
+            : m.scrabble && m.status !== "waiting" ? h("div", { fontSize: 24, color: "#9fcbb6", fontWeight: 500, flexShrink: 0, whiteSpace: "nowrap" }, `${m.scrabble.scores[i] ?? 0} pts`)
             : m.points && p.color ? h("div", { fontSize: 24, color: "#9fcbb6", fontWeight: 500 }, `${m.points[p.color]} pts`) : p.color ? h("div", { fontSize: 24, color: "#9fcbb6", fontWeight: 500 }, COLOR_NAMES[p.color] ?? "") : [],
           );
         }),
@@ -398,15 +445,16 @@ const escape = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", 
 
 async function pageHtml(pathname, search) {
   let title, description, image;
-  const game = pathname.match(/^\/(?:chess|scrabble)\/([a-z0-9]+)$/);
+  const game = pathname.match(/^\/(?:chess|scrabble|poker)\/([a-z0-9]+)$/);
   const m = game ? await convex.query(anyApi.previews.match, { id: game[1] }) : null;
   if (m) {
     const text = matchText(m);
     title = text.title;
     description = `${text.mode}. ${text.status}`;
-    image = `${SITE}/og/match/${game[1]}.png?v=${version([m.status, m.moveCount, m.board, m.scrabble?.tiles.length ?? 0])}`;
+    image = `${SITE}/og/match/${game[1]}.png?v=${version([m.status, m.moveCount, m.board, m.scrabble?.tiles.length ?? 0, m.poker?.hand ?? 0])}`;
   } else {
-    const page = PAGES[pathname] ?? PAGES["/"];
+    // A game we don't draw a board for (a poker table) still gets its game's card.
+    const page = PAGES[pathname] ?? PAGES[`/${pathname.split("/")[1]}`] ?? PAGES["/"];
     const crew = await getCrew();
     title = page.title(crew);
     description = page.description(crew);

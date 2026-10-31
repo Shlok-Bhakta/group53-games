@@ -780,6 +780,43 @@
   letter-spacing: var(--display-tracking);
 }
 
+/* Playing cards (poker): physical white cards in every theme, four-color suits so they read at a glance on
+   a phone. --w is the width; cards are 1.4 times as tall. A card back takes the color of whoever holds it
+   (--seat). The felt is a physical table too, the same green in every theme. */
+.pcard {
+  position: relative; display: block; flex-shrink: 0; width: var(--w); height: calc(var(--w) * 1.4);
+  border-radius: calc(var(--w) * 0.09);
+  background: linear-gradient(#ffffff, #f1efe9); color: #1d1d1f;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3), inset 0 0 0 1px rgb(0 0 0 / 0.06);
+  font-family: var(--app-font); font-weight: var(--display-weight); line-height: 1;
+  user-select: none; -webkit-user-select: none;
+}
+.pcard[data-suit="h"] { color: #d23a3f; }
+.pcard[data-suit="d"] { color: #2a6cd0; }
+.pcard[data-suit="c"] { color: #1d8648; }
+.pcard-rank { position: absolute; left: 9%; top: 7%; font-size: calc(var(--w) * 0.42); letter-spacing: -0.04em; }
+.pcard-pip { position: absolute; left: 10%; top: calc(7% + var(--w) * 0.42); font-size: calc(var(--w) * 0.3); }
+.pcard-big { position: absolute; right: 8%; bottom: 5%; font-size: calc(var(--w) * 0.62); }
+.pcard-back {
+  background:
+    repeating-linear-gradient(45deg, rgb(255 255 255 / 0.16) 0 2px, transparent 2px 6px),
+    var(--seat, #3f7be0);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3), inset 0 0 0 max(1.5px, calc(var(--w) * 0.07)) #ffffff;
+}
+.pcard-slot { background: rgb(255 255 255 / 0.07); box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 0.16); }
+.felt {
+  background: radial-gradient(ellipse at 50% 42%, #2f8a5d 0%, #237049 55%, #1a5639 100%);
+  box-shadow: inset 0 0 0 4px rgb(0 0 0 / 0.18), inset 0 0 0 7px rgb(255 255 255 / 0.06), inset 0 14px 40px rgb(0 0 0 / 0.35);
+  color: #f3f7f2;
+}
+.felt-ink { color: #f3f7f2; }
+.pdealer { background: #fbfaf6; color: #1d1d1f; box-shadow: 0 1px 2px rgb(0 0 0 / 0.35); }
+.pchip {
+  width: var(--w); height: var(--w); border-radius: 9999px; flex-shrink: 0;
+  background: radial-gradient(circle, var(--seat, #e0503f) 0 44%, #ffffff 44% 52%, var(--seat, #e0503f) 52%);
+  box-shadow: 0 1px 1.5px rgb(0 0 0 / 0.35), inset 0 0 0 1.5px rgb(0 0 0 / 0.15);
+}
+
 /* Letter tiles */
 /* Scrabble letter tiles: physical cream tiles in every theme, like the chess pieces. A placed tile's
    bottom edge is the color of whoever played it (--seat). */

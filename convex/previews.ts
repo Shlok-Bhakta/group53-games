@@ -6,6 +6,7 @@ import { DEFAULT_PROFILE } from "./profileOptions";
 import { SIZE as SIZE4, onBoard as onBoard4, setup as setup4 } from "./chess/four/board";
 import type { FourState } from "./chess/four/classic";
 import { layout, type ScrabbleState } from "./scrabble/engine";
+import { potOf, type PokerState } from "./poker/engine";
 
 // Read by the og/ preview service with the admin key, so none of this is public.
 export const crew = internalQuery({
@@ -62,6 +63,25 @@ export const match = internalQuery({
           scores: st?.scores ?? [],
           last: st?.moves.at(-1)?.kind === "play" ? st.moves.at(-1)!.words![0] : null,
         },
+        result: m.result
+          ? { draw: m.result.draw, reason: m.result.reason, winner: players.filter((p) => winners.includes(p.userId)).map((p) => p.name).join(" and ") || null }
+          : null,
+      };
+    }
+    if (m.mode.startsWith("poker:")) {
+      // Only what everyone at the table can see: the board, stacks and the pot. Never anyone's cards.
+      const st = m.state as PokerState | null;
+      const winners = m.result?.winners ?? [];
+      return {
+        mode: m.mode,
+        status: m.status,
+        seats: m.players.length,
+        points: null,
+        players,
+        board: [],
+        toMove: m.status === "active" && st && st.turn >= 0 ? (players[st.turn]?.color ?? null) : null,
+        moveCount: m.moveCount,
+        poker: st ? { hand: st.hand, board: st.board, stacks: st.stacks, pot: m.status === "active" ? potOf(st) + st.bets.reduce((a, b) => a + b, 0) : 0, out: st.out.map((o) => o.seat) } : null,
         result: m.result
           ? { draw: m.result.draw, reason: m.result.reason, winner: players.filter((p) => winners.includes(p.userId)).map((p) => p.name).join(" and ") || null }
           : null,

@@ -11,6 +11,9 @@ import { ScrabbleBanner, ScrabbleModeArt } from "./scrabble/art";
 import { ScrabbleGame } from "./scrabble/ScrabbleGame";
 import { scrabbleRules } from "./scrabble/rules";
 import { GolfBanner } from "./golf/GolfBanner";
+import { PokerBanner, PokerModeArt } from "./poker/art";
+import { PokerGame } from "./poker/PokerGame";
+import { pokerRules } from "./poker/rules";
 
 // Everything the shared screens need from a game: its card on Games, its mode art, rules, and the screen
 // for a game in progress. The lobby, results, rematches, mode pages and hub are shared (src/pages).
@@ -49,6 +52,16 @@ export const GAME_UI: Record<GameKey, GameUI> = {
     rules: scrabbleRules,
     Game: ScrabbleGame,
     fullscreen: (m) => m.status === "active",
+  },
+  poker: {
+    key: "poker",
+    path: GAMES.poker.path,
+    name: GAMES.poker.name,
+    blurb: "Hold'em, Omaha, Short Deck and draw, up to 8 of you over the day. Line up your move and it plays itself.",
+    banner: () => <PokerBanner />,
+    modeArt: (mode) => <PokerModeArt mode={mode} />,
+    rules: pokerRules,
+    Game: PokerGame,
   },
 };
 

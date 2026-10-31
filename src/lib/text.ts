@@ -16,6 +16,7 @@ export const REASONS: Record<string, string> = {
   went_out: "Went out",
   passes: "Everyone passed twice",
   rounds: "Last round played",
+  hands: "Last hand played",
 };
 
 export const reasonText = (reason: string, mode: string) => (reason === "fifty" && mode === "chess:four" ? "Fifty quiet rounds" : (REASONS[reason] ?? reason));

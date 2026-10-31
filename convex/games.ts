@@ -3,6 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { gameOf, type ModeKey } from "./modes";
 import { chessHooks } from "./chess";
 import { scrabbleHooks } from "./scrabble";
+import { pokerHooks } from "./poker";
 
 // What convex/matches.ts needs from each game. Everything else (lobbies, challenges, seats, results,
 // ratings, rematches, reminders) is shared. A new game writes these and adds its modes to convex/modes.ts.
@@ -19,6 +20,6 @@ export type GameHooks = {
   timeoutWarning: string;
 };
 
-// Looked up when called, not when this module loads: chess.ts and scrabble.ts import matches.ts, which
+// Looked up when called, not when this module loads: the game files import matches.ts, which
 // imports this, so the hooks may not exist yet at load time.
-export const hooksFor = (mode: string): GameHooks => ({ chess: chessHooks, scrabble: scrabbleHooks })[gameOf(mode)];
+export const hooksFor = (mode: string): GameHooks => ({ chess: chessHooks, scrabble: scrabbleHooks, poker: pokerHooks })[gameOf(mode)];

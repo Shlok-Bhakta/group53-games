@@ -8,6 +8,7 @@
 export const GAMES = {
   chess: { name: "Chess", path: "/chess" },
   scrabble: { name: "Scrabble", path: "/scrabble" },
+  poker: { name: "Poker", path: "/poker" },
 } as const;
 export type GameKey = keyof typeof GAMES;
 export const GAME_KEYS = Object.keys(GAMES) as GameKey[];
@@ -35,6 +36,15 @@ const SCRABBLE: Setting[] = [
   // Scrabble's official rules, or Letter League's (see convex/scrabble/engine.ts for what changes).
   { key: "rules", label: "Rules", short: "{} rules", options: [{ value: 0, label: "Scrabble" }, { value: 1, label: "Letter League" }], default: 0 },
   { key: "rounds", label: "Rounds", short: "{} rounds", options: [{ value: 0, label: "No limit" }, { value: 5, label: "5" }, { value: 10, label: "10" }, { value: 15, label: "15" }], default: 0 },
+];
+// Poker: a run of hands with blinds that double, until one player has every chip or the last hand is played.
+// Blinds start at 1% and 2% of the stack (convex/poker/engine.ts). Betting: 0 no limit, 1 pot limit.
+const poker = (betting: number): Setting[] => [
+  { key: "stack", label: "Chips", short: "{} chips", options: [{ value: 500, label: "500" }, { value: 1000, label: "1,000" }, { value: 2000, label: "2,000" }], default: 1000 },
+  { key: "hands", label: "Hands", short: "{} hands", options: [{ value: 5, label: "5" }, { value: 10, label: "10" }, { value: 20, label: "20" }, { value: 0, label: "No limit" }], default: 10 },
+  { key: "blinds", label: "Blinds double", short: "Blinds double {}", options: [{ value: 2, label: "Every 2 hands" }, { value: 3, label: "Every 3 hands" }, { value: 5, label: "Every 5 hands" }, { value: 0, label: "Never" }], default: 3 },
+  { key: "betting", label: "Betting", short: "{}", options: [{ value: 0, label: "No limit" }, { value: 1, label: "Pot limit" }], default: betting },
+  moveTime(24),
 ];
 
 export const MODES = {
@@ -112,6 +122,54 @@ export const MODES = {
       ...SCRABBLE,
       { key: "turnTime", label: "Turn timer", short: "{} turns", options: [{ value: 30, label: "30s" }, { value: 60, label: "1m" }, { value: 90, label: "90s" }, { value: 120, label: "2m" }, { value: 180, label: "3m" }], default: 90 },
     ],
+  },
+  "poker:holdem": {
+    game: "poker",
+    name: "Hold'em",
+    title: "Texas Hold'em",
+    kind: "async",
+    players: 8,
+    minPlayers: 2,
+    board: "poker",
+    slug: "holdem",
+    blurb: "Two cards each, five on the table. Bet, bluff, and take everyone's chips over the day.",
+    settings: poker(0),
+  },
+  "poker:omaha": {
+    game: "poker",
+    name: "Omaha",
+    title: "Omaha",
+    kind: "async",
+    players: 8,
+    minPlayers: 2,
+    board: "poker",
+    slug: "omaha",
+    blurb: "Four cards each, and you use exactly two of them. Bigger hands, pot-limit betting.",
+    settings: poker(1),
+  },
+  "poker:short": {
+    game: "poker",
+    name: "Short Deck",
+    title: "Short Deck Hold'em",
+    kind: "async",
+    players: 8,
+    minPlayers: 2,
+    board: "poker",
+    slug: "short",
+    blurb: "Hold'em with the 2s to 5s taken out. A flush beats a full house.",
+    settings: poker(0),
+  },
+  "poker:draw": {
+    game: "poker",
+    name: "5-Card Draw",
+    title: "five-card draw",
+    kind: "async",
+    players: 6,
+    minPlayers: 2,
+    board: "poker",
+    slug: "draw",
+    blurb: "Five cards each and no board. Bet, swap what you don't want, bet again.",
+    settings: poker(0),
   },
 } as const satisfies Record<string, { game: GameKey; players: number; minPlayers: number; settings: readonly Setting[]; [k: string]: unknown }>;
 

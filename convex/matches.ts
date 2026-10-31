@@ -141,6 +141,7 @@ export function describeReason(reason: string, mode?: string) {
       went_out: "someone went out",
       passes: "everyone passed",
       rounds: "the last round",
+      hands: "the last hand",
     }[reason] ?? reason
   );
 }

@@ -50,42 +50,63 @@ export function ModePicker({ game, art, badge, rating }: Props) {
   }
   return (
     <div className="flex flex-col gap-6">
-      {groups.map(({ kind, modes }, gi) => (
-        <section key={kind} aria-label={KINDS[kind].title} className="flex flex-col gap-2.5">
-          <h2 className="flex items-center gap-2 px-1 font-display text-heading [&_svg]:size-[18px] [&_svg]:text-primary">
-            {KINDS[kind].icon}
-            {KINDS[kind].title}
-          </h2>
-          <div className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 [scrollbar-width:none]">
-            {modes.map((mode, i) => (
-              <motion.div
-                key={mode}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ type: "spring", bounce: 0, duration: 0.45, delay: (gi * 2 + i) * 0.05 }}
-                className="w-[calc(50%-6px)] shrink-0 snap-start"
-              >
-                <ModeCard mode={mode} art={art(mode)} badge={badge?.(mode) ?? null} rating={rating?.(mode) ?? null} />
-              </motion.div>
-            ))}
-          </div>
-        </section>
-      ))}
+      {groups.map(({ kind, modes }, gi) => {
+        // Modes that seat the same can't be told apart by seats, so every card in the row says its name.
+        const titled = new Set(modes.map(seatLabel)).size < modes.length;
+        return (
+          <section key={kind} aria-label={KINDS[kind].title} className="flex flex-col gap-2.5">
+            <h2 className="flex items-center gap-2 px-1 font-display text-heading [&_svg]:size-[18px] [&_svg]:text-primary">
+              {KINDS[kind].icon}
+              {KINDS[kind].title}
+            </h2>
+            <div className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 [scrollbar-width:none]">
+              {modes.map((mode, i) => (
+                <motion.div
+                  key={mode}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ type: "spring", bounce: 0, duration: 0.45, delay: (gi * 2 + i) * 0.05 }}
+                  className="w-[calc(50%-6px)] shrink-0 snap-start"
+                >
+                  <ModeCard mode={mode} art={art(mode)} badge={badge?.(mode) ?? null} rating={rating?.(mode) ?? null} titled={titled} />
+                </motion.div>
+              ))}
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 }
 
-function ModeCard({ mode, art, badge, rating, named }: { mode: ModeKey; art: ReactNode; badge: string | null; rating: { rating: number; games: number } | null; named?: boolean }) {
+// `named` cards say their kind (async or real-time); `titled` ones their mode's name, for rows where seat
+// counts don't tell the modes apart (poker's games).
+function ModeCard({ mode, art, badge, rating, named, titled }: { mode: ModeKey; art: ReactNode; badge: string | null; rating: { rating: number; games: number } | null; named?: boolean; titled?: boolean }) {
   const m = MODES[mode];
   return (
     <Link
       to={modePath(mode)}
       className="relative flex min-h-44 flex-col gap-2 overflow-hidden rounded-lg bg-card p-3.5 transition-[transform,background-color] duration-100 ease-out active:scale-[0.97] active:bg-muted"
-      aria-label={`${KINDS[m.kind].title} ${seatLabel(mode)}`}
+      aria-label={titled ? m.name : `${KINDS[m.kind].title} ${seatLabel(mode)}`}
       data-mode={mode}
     >
       {art}
-      {named ? (
+      {titled ? (
+        <span className="mt-auto flex flex-col gap-0.5">
+          <span className="truncate font-display text-heading">{m.name}</span>
+          <span className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1 text-footnote text-muted-foreground">
+              <UsersThreeIcon size={14} weight="fill" aria-hidden="true" />
+              {seatLabel(mode)}
+            </span>
+            {rating && (
+              <span className={cn("font-display text-body tabular-nums", rating.games === 0 && "text-muted-foreground")} aria-label={`Your rating ${rating.rating}`}>
+                {rating.rating}
+              </span>
+            )}
+          </span>
+        </span>
+      ) : named ? (
         <span className="mt-auto flex flex-col gap-0.5">
           <span className="flex items-center gap-1.5 font-display text-heading [&_svg]:size-[18px] [&_svg]:text-primary">
             {KINDS[m.kind].icon}
