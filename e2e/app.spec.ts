@@ -94,6 +94,20 @@ test.describe("signed in", () => {
     await expect(page.getByText("Turn on notifications to play")).toHaveCount(0);
   });
 
+  test("game cards play their art only once you scroll to them", async ({ context }) => {
+    const me = await createPlayer("Shlok");
+    const page = await phone(context, { player: me, notifications: "granted" });
+    await enablePush(page);
+    await page.goto("/games");
+    const arts = page.locator("[data-art]");
+    await expect(arts.first()).toHaveAttribute("data-art", "played");
+    // The last card is below the fold: it waits, then plays when scrolled to.
+    const last = arts.last();
+    await expect(last).toHaveAttribute("data-art", "waiting");
+    await last.scrollIntoViewIfNeeded();
+    await expect(last).toHaveAttribute("data-art", "played");
+  });
+
   test("the tab bar reaches every tab and sits at native height", async ({ context }) => {
     const me = await createPlayer("Shlok");
     const page = await phone(context, { player: me });

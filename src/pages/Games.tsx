@@ -1,5 +1,6 @@
+import { useRef, type ReactNode } from "react";
 import { Link } from "react-router";
-import { motion } from "motion/react";
+import { motion, useInView } from "motion/react";
 import { HammerIcon, LockSimpleIcon, PlayIcon, ShareNetworkIcon } from "@phosphor-icons/react";
 import { games } from "@/games";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,7 @@ import { useNotifications } from "@/notifications";
 import { usePlayingIn } from "@/presence";
 import { shareLink } from "@/share";
 
-// Every game, one card each, with its art playing in once when you land here.
+// Every game, one card each, with its art playing in once when you scroll to it.
 export function Games() {
   const push = useNotifications();
   const locked = push.state !== "on" && push.state !== "unsupported";
@@ -29,7 +30,7 @@ export function Games() {
           className="overflow-hidden rounded-lg bg-card"
         >
           <div className="relative grid place-items-center bg-muted/60 px-4 py-9 [background-image:radial-gradient(color-mix(in_oklch,var(--foreground)_9%,transparent)_1px,transparent_1px)] [background-size:14px_14px]">
-            {g.banner()}
+            <PlayWhenSeen>{g.banner()}</PlayWhenSeen>
           </div>
           <div className="p-5">
             <div className="flex items-center justify-between gap-3">
@@ -84,5 +85,19 @@ function PlayingNow({ gamePath }: { gamePath: string }) {
       </span>
       <span className="truncate">{label}</span>
     </span>
+  );
+}
+
+// A card's art plays in when it mounts, so it waits, hidden but taking its space (nothing shifts), until most
+// of it is on screen, then mounts afresh and plays there. Once.
+function PlayWhenSeen({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const seen = useInView(ref, { once: true, amount: 0.6 });
+  return (
+    <div ref={ref} className={seen ? "w-full" : "invisible w-full"} aria-hidden={seen ? undefined : true} data-art={seen ? "played" : "waiting"}>
+      <div key={seen ? "seen" : "waiting"} className="w-full">
+        {children}
+      </div>
+    </div>
   );
 }

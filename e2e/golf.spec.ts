@@ -41,6 +41,8 @@ test("Golf has a card on Games, and Play goes straight into the world", async ({
   await enablePush(page);
   await page.goto("/games");
   await expect(page.getByRole("heading", { name: "Golf" })).toBeVisible();
+  // Card art plays once it's scrolled to.
+  await page.getByRole("heading", { name: "Golf" }).scrollIntoViewIfNeeded();
   await expect(page.getByRole("img", { name: "A putt rolling into the cup" })).toBeVisible();
   await page.getByRole("link", { name: "Play Golf" }).click();
   await expect(page).toHaveURL(/\/golf$/);
