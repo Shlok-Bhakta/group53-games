@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { AnimatePresence, motion } from "motion/react";
-import { CaretRightIcon, CheckIcon, MinusIcon, PlusIcon, SquareIcon, XIcon } from "@phosphor-icons/react";
+import { ArrowFatUpIcon, CaretRightIcon, CoinsIcon, HandPalmIcon, HandTapIcon, MinusIcon, PlusIcon, XIcon, type Icon } from "@phosphor-icons/react";
 import { Slider } from "radix-ui";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -13,13 +13,13 @@ import { actionLabel, resultText } from "../../../convex/poker/text";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { AsyncButton } from "@/components/AsyncButton";
 import { Button } from "@/components/ui/button";
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
+import { Drawer, DrawerClose, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { ResignButton, Result, ThinkingDots, useHere } from "@/components/match";
 import { OnlineDot } from "@/presence";
 import { SEAT_COLORS } from "@/games/seats";
 import { sfx } from "@/sound";
 import { cn } from "@/lib/utils";
-import { Chip, PlayingCard } from "./Card";
+import { PlayingCard, PokerChip } from "@/components/ui/playing-card";
 
 type Player = MatchView["players"][number];
 type Move = { kind: "fold" | "check" | "call" | "raise" | "draw"; to?: number; discard?: number[] };
@@ -154,23 +154,27 @@ function Table({ match, state, mySeat, meId }: { match: MatchView; state: PokerS
   const pot = totalPot(state);
   const over = match.status !== "active";
   // A hand that ends while you watch shows who won it on the table for a moment.
+  // Keyed on the hand number, not the object: every update brings a new `last`, and re-running on each one
+  // used to cancel the timer, so the flash never went away.
   const [flash, setFlash] = useState<HandResult | null>(null);
   const seenHand = useRef(state.last?.hand ?? 0);
+  const lastHand = state.last?.hand ?? 0;
+  const lastRef = useRef(state.last);
+  lastRef.current = state.last;
   useEffect(() => {
-    const last = state.last;
-    if (!last || last.hand === seenHand.current) return;
-    seenHand.current = last.hand;
-    setFlash(last);
+    if (!lastHand || lastHand === seenHand.current) return;
+    seenHand.current = lastHand;
+    setFlash(lastRef.current);
     const timer = setTimeout(() => setFlash(null), FLASH_MS);
     return () => clearTimeout(timer);
-  }, [state.last]);
+  }, [lastHand]);
   const nameOf = (seat: number) => (match.players[seat].userId === meId ? "You" : match.players[seat].name);
 
   return (
     <div role="group" className="relative mx-auto aspect-[1/1.04] w-full max-w-[420px]" aria-label="Poker table">
-      <div className="felt absolute inset-x-[10%] inset-y-[9%]" style={{ borderRadius: "46% / 34%" }} />
+      <div className="poker-felt absolute inset-x-[10%] inset-y-[9%]" style={{ borderRadius: "46% / 34%" }} />
       {/* The middle: the pot, the board, and the street. */}
-      <div className="absolute inset-x-[16%] top-1/2 flex -translate-y-1/2 flex-col items-center gap-2 felt-ink">
+      <div className="absolute inset-x-[16%] top-1/2 flex -translate-y-1/2 flex-col items-center gap-2 poker-ink">
         <AnimatePresence mode="wait" initial={false}>
           {flash || (over && state.last) ? (
             <motion.p
@@ -216,11 +220,13 @@ function Table({ match, state, mySeat, meId }: { match: MatchView; state: PokerS
             key={`bet${seat}`}
             initial={{ opacity: 0, scale: 0.6 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full bg-black/30 py-0.5 pl-0.5 pr-2 font-display text-footnote tabular-nums felt-ink"
+            className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full bg-black/30 py-0.5 pl-0.5 pr-2 font-display text-footnote tabular-nums poker-ink"
             style={{ left: `${at.x}%`, top: `${at.y}%` }}
             data-bet={seat}
+            role="img"
+            aria-label={`${p.name} has ${chips(state.bets[seat])} in`}
           >
-            <Chip width={16} seat={SEAT_COLORS[p.color ?? "red"]} />
+            <PokerChip width={16} seat={SEAT_COLORS[p.color ?? "red"]} />
             {chips(state.bets[seat])}
           </motion.span>
         );
@@ -245,7 +251,7 @@ function DealerButton({ at, offset }: { at: { x: number; y: number }; offset: { 
     <motion.span
       layout
       transition={{ type: "spring", bounce: 0, duration: 0.5 }}
-      className="pdealer absolute grid size-5 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full font-display text-caption"
+      className="poker-dealer absolute grid size-5 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full font-display text-caption"
       style={{ left: `${left}%`, top: `${top}%` }}
       aria-label="Dealer"
     >
@@ -262,10 +268,12 @@ function Seat({ player, seat, state, isMe, active, at, flash }: { player: Player
   const allIn = dealt && !folded && state.stacks[seat] === 0 && !out;
   const toAct = active && state.turn === seat;
   const color = SEAT_COLORS[player.color ?? "red"];
-  const latest = state.log.filter((e) => e.seat === seat && e.street === state.street && e.kind !== "blind").at(-1);
-  const label = out ? "Out" : allIn ? "All in" : folded ? "Fold" : latest ? actionLabel(latest) : null;
+  // Once the hand is over (the game's last), the last moves no longer describe anyone.
+  const latest = state.turn >= 0 ? state.log.filter((e) => e.seat === seat && e.street === state.street && e.kind !== "blind").at(-1) : undefined;
+  const label = out ? "Out" : state.turn < 0 ? null : allIn ? "All in" : folded ? "Fold" : latest ? actionLabel(latest) : null;
   const shown = flash?.shown[seat];
-  const won = flash?.won[seat] ?? 0;
+  // What they came out ahead, the same number Last hand shows.
+  const won = flash?.net[seat] ?? 0;
   const holeCount = VARIANTS[state.variant].hole;
   return (
     <div
@@ -388,7 +396,7 @@ function MyHand({ state, seat, cards, picking, swap, onPick }: { state: PokerSta
           })}
         </div>
       )}
-      <p className="h-6 text-callout font-semibold text-muted-foreground">{out ? "" : folded ? "Folded" : (best?.name ?? "")}</p>
+      <p className="h-6 text-callout font-semibold text-muted-foreground">{out || folded ? "" : (best?.name ?? "")}</p>
     </div>
   );
 }
@@ -409,24 +417,14 @@ function BetDock({ state, seat, move }: { state: PokerState; seat: number; move:
           Fold
         </AsyncButton>
       )}
-      <AsyncButton
-        className={cn(bar, "text-callout")}
-        aria-label={owe === 0 ? "Check" : `${owe >= stack ? "All in" : "Call"} ${chips(Math.min(owe, stack))}`}
-        onClick={() => move(owe > 0 ? { kind: "call" } : { kind: "check" })}
-      >
-        {owe === 0 ? (
-          <span className="font-display text-heading">Check</span>
-        ) : (
-          <>
-            <span>{owe >= stack ? "All in" : "Call"}</span>
-            <span className="font-display text-heading tabular-nums">{chips(Math.min(owe, stack))}</span>
-          </>
-        )}
+      <AsyncButton className={bar} icon={owe === 0 ? <HandTapIcon weight="fill" /> : <CoinsIcon weight="fill" />} onClick={() => move(owe > 0 ? { kind: "call" } : { kind: "check" })}>
+        {owe === 0 ? "Check" : `${owe >= stack ? "All in" : "Call"} ${chips(Math.min(owe, stack))}`}
       </AsyncButton>
       {bounds && (
         <>
-          <Button variant="secondary" className={cn(bar, "bg-card text-callout")} onClick={() => setRaising(true)}>
-            <span className="font-display text-heading">{state.current === 0 ? "Bet" : "Raise"}</span>
+          <Button variant="secondary" className={cn(bar, "bg-card")} onClick={() => setRaising(true)}>
+            <ArrowFatUpIcon weight="bold" />
+            {state.current === 0 ? "Bet" : "Raise"}
           </Button>
           <RaiseSheet state={state} seat={seat} bounds={bounds} open={raising} onClose={() => setRaising(false)} onRaise={(to) => move({ kind: "raise", to })} />
         </>
@@ -458,9 +456,7 @@ function RaiseSheet({ state, seat, bounds, open, onClose, onRaise }: { state: Po
   return (
     <Drawer open={open} onOpenChange={(o) => !o && onClose()}>
       <DrawerContent>
-        <DrawerHeader>
-          <DrawerTitle>{bet ? "Bet" : "Raise to"}</DrawerTitle>
-        </DrawerHeader>
+        <SheetHeader title={bet ? "Bet" : "Raise to"} />
         <div className="flex flex-col gap-4 px-4 pb-[calc(env(safe-area-inset-bottom)+20px)]">
           <div className="flex items-center justify-between gap-3">
             <Button variant="secondary" size="icon-lg" aria-label="Less" disabled={to <= bounds.min} onClick={() => setTo(snap(to - step))}>
@@ -528,8 +524,10 @@ function WaitDock({ match, state, seat }: { match: MatchView; state: PokerState;
   }
   const owe = toCall(state, seat);
   const options = [
-    { kind: "checkfold" as const, amount: 0, label: "Check/Fold" },
-    owe === 0 ? { kind: "check" as const, amount: 0, label: "Check" } : { kind: "call" as const, amount: owe, label: owe >= state.stacks[seat] ? "Call all in" : `Call ${chips(owe)}` },
+    { kind: "checkfold" as const, amount: 0, label: "Check/Fold", Icon: HandPalmIcon as Icon },
+    owe === 0
+      ? { kind: "check" as const, amount: 0, label: "Check", Icon: HandTapIcon as Icon }
+      : { kind: "call" as const, amount: owe, label: owe >= state.stacks[seat] ? "Call all in" : `Call ${chips(owe)}`, Icon: CoinsIcon as Icon },
   ];
   const armed = (o: (typeof options)[number]) => !!plan && plan.hand === state.hand && plan.street === state.street && plan.kind === o.kind && (o.kind !== "call" || plan.amount === o.amount);
   return (
@@ -542,7 +540,7 @@ function WaitDock({ match, state, seat }: { match: MatchView; state: PokerState;
             variant={on ? "default" : "secondary"}
             className={cn(bar, !on && "bg-card")}
             aria-pressed={on}
-            icon={on ? <CheckIcon weight="bold" /> : <SquareIcon weight="bold" />}
+            icon={<o.Icon weight={on ? "fill" : "bold"} />}
             onClick={() => setPlan({ id: match._id, hand: state.hand, street: state.street, ...(on ? {} : { kind: o.kind, amount: o.amount }) })}
           >
             {o.label}
@@ -563,13 +561,11 @@ function LastHand({ match, result, open, onClose }: { match: MatchView; result: 
   return (
     <Drawer open={open} onOpenChange={(o) => !o && onClose()}>
       <DrawerContent>
-        <DrawerHeader>
-          <DrawerTitle>Hand {result.hand}</DrawerTitle>
-        </DrawerHeader>
+        <SheetHeader title={`Hand ${result.hand}`} />
         <div className="flex flex-col gap-4 px-4 pb-[calc(env(safe-area-inset-bottom)+20px)]">
           <p className="text-center text-callout text-muted-foreground">{resultText(result, (s) => match.players[s].name)}</p>
           {result.board.length > 0 && (
-            <div role="group" className="felt flex justify-center gap-1.5 rounded-lg py-3" aria-label="Board">
+            <div role="group" className="poker-felt flex justify-center gap-1.5 rounded-lg py-3" aria-label="Board">
               {result.board.map((c) => (
                 <PlayingCard key={c} card={c} width={40} />
               ))}
@@ -603,3 +599,18 @@ function LastHand({ match, result, open, onClose }: { match: MatchView; result: 
   );
 }
 
+
+// A sheet's title with a close button: these sheets sit over the dock, so closing one shouldn't depend on
+// knowing to swipe it down.
+function SheetHeader({ title }: { title: string }) {
+  return (
+    <DrawerHeader className="relative">
+      <DrawerTitle>{title}</DrawerTitle>
+      <DrawerClose asChild>
+        <Button variant="ghost" size="icon" aria-label="Close" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground">
+          <XIcon weight="bold" />
+        </Button>
+      </DrawerClose>
+    </DrawerHeader>
+  );
+}

@@ -30,7 +30,7 @@ import { errorText } from "@/lib/errors";
 import { listNames, ordinal, reasonText } from "@/lib/text";
 import { Tiles, type TileState } from "@/Tiles";
 import { SEAT_COLORS } from "@/games/seats";
-import { pointsOf } from "@/games/summary";
+import { pointsOf, pointsUnit } from "@/games/summary";
 
 // The parts of a game screen every game shares: who's here, the lobby, resigning, and the result with its
 // rematch.
@@ -138,7 +138,7 @@ function Standings({ match, standings, meId }: { match: MatchView; standings: Id
               <span className={cn("w-8 font-display text-body tabular-nums", place === 0 ? "text-[var(--tile-yellow)]" : "text-muted-foreground")}>{ordinal(place + 1)}</span>
               <span className="size-2.5 shrink-0 rounded-full" style={{ background: SEAT_COLORS[p.color!] }} />
               <span className="min-w-0 flex-1 truncate font-semibold">{p.name}</span>
-              {pointsOf(match, id) !== null && <span className="text-footnote tabular-nums text-muted-foreground">{pointsOf(match, id)} pts</span>}
+              {pointsOf(match, id) !== null && <span className="text-footnote tabular-nums text-muted-foreground">{pointsOf(match, id)} {pointsUnit(match)}</span>}
               {c && <span className={cn("w-10 text-right text-footnote font-semibold tabular-nums", d >= 0 ? "text-[var(--tile-green)]" : "text-destructive")}>{d >= 0 ? "+" : ""}{d}</span>}
             </li>
           );

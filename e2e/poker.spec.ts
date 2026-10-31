@@ -14,6 +14,16 @@ async function enablePush(page: Page) {
 }
 
 const getMatch = (id: string) => admin().query(anyApi.testing.getMatch, { id });
+// Collects errors a page logs or throws. React reports render crashes with console.error, not as a page
+// error, so both are caught.
+function watchErrors(pages: Page[]) {
+  const errors: string[] = [];
+  for (const p of pages) {
+    p.on("pageerror", (e) => errors.push(e.message));
+    p.on("console", (msg) => void (msg.type() === "error" && errors.push(msg.text().slice(0, 300))));
+  }
+  return errors;
+}
 const boardCards = (page: Page) => page.getByRole("group", { name: "Poker table" }).getByRole("group", { name: "Board" }).locator("[data-card]");
 
 // Two phones at a started table. Returns them with whoever acts first (the button, heads-up) first.
@@ -98,7 +108,72 @@ test.describe("Poker", () => {
     expect(m.state.stacks.reduce((x: number, y: number) => x + y, 0) + m.state.bets.reduce((x: number, y: number) => x + y, 0)).toBe(2000);
     await second.page.getByRole("button", { name: "Last hand" }).click();
     await expect(second.page.getByRole("heading", { name: "Hand 1" })).toBeVisible();
-    await expect(second.page.getByRole("dialog").getByText(/took 80/)).toBeVisible();
+    await expect(second.page.getByRole("dialog").getByText(/took the pot of 80/)).toBeVisible();
+    await close();
+  });
+
+  test("the last hand ends the game with the result on both phones", async ({ browser, context }) => {
+    const [a, b] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
+    const pa = await phone(context, { player: a, notifications: "granted" });
+    const other = await otherPhone(browser, b);
+    const pb = other.page;
+    const errors = watchErrors([pa, pb]);
+    await enablePush(pa);
+    await enablePush(pb);
+    await pa.goto("/poker/mode/holdem");
+    // Five hands instead of ten.
+    await pa.getByRole("button", { name: "Settings" }).click();
+    await pa.getByRole("radiogroup", { name: "Hands" }).getByRole("radio", { name: "5", exact: true }).click();
+    await pa.getByRole("button", { name: "Open a game" }).click();
+    await expect(pa.getByRole("heading", { name: "Waiting for players" })).toBeVisible();
+    const id = pa.url().split("/poker/")[1].split("?")[0];
+    await pb.goto(`/poker/${id}?accept=1`);
+    await expect(pa.getByRole("heading", { name: "2 in" })).toBeVisible();
+    await pa.getByRole("button", { name: "Start with 2" }).click();
+    await expect(pa.getByRole("group", { name: "Poker table" })).toBeVisible();
+    const pageOf = (userId: string) => (userId === a.userId ? pa : pb);
+    for (let hand = 1; hand <= 5; hand++) {
+      await expect.poll(async () => (await getMatch(id)).state.hand).toBe(hand);
+      const m = await getMatch(id);
+      const p = pageOf(m.players[m.state.turn].userId);
+      await expect(p.getByText(`Hand ${hand} of 5`)).toBeVisible();
+      await p.getByRole("button", { name: "Fold" }).click();
+    }
+    await expect.poll(async () => (await getMatch(id)).status).toBe("finished");
+    for (const p of [pa, pb]) {
+      await expect(p.getByRole("region", { name: "Result" })).toBeVisible();
+      await expect(p.getByRole("list", { name: "Final standings" })).toBeVisible();
+      await expect(p.getByRole("group", { name: "Poker table" })).toBeVisible();
+    }
+    expect(errors).toEqual([]);
+    await other.context.close();
+  });
+
+  // A game that ends at a showdown once blanked the app: the street had run one past the river.
+  test("an all-in that knocks someone out ends the game with the result on both phones", async ({ browser, context }) => {
+    const { id, first, second, close } = await twoPlayerGame(browser, context);
+    const errors = watchErrors([first.page, second.page]);
+    const pageOf = (userId: string) => (userId === first.player.userId ? first.page : second.page);
+    // Shove and call until someone's out (a split pot just deals again).
+    for (let i = 0; i < 10; i++) {
+      const m = await getMatch(id);
+      if (m.status === "finished") break;
+      const p = pageOf(m.players[m.state.turn].userId);
+      const owe = m.state.current - m.state.bets[m.state.turn];
+      if (owe >= m.state.stacks[m.state.turn]) await p.getByRole("button", { name: /^All in/ }).click();
+      else {
+        await p.getByRole("button", { name: /^(Raise|Bet)$/ }).click();
+        await p.getByRole("button", { name: "All in", exact: true }).click();
+        await p.getByRole("button", { name: /^All in \d/ }).click();
+      }
+      await expect.poll(async () => (await getMatch(id)).moveCount).not.toBe(m.moveCount);
+    }
+    expect((await getMatch(id)).status).toBe("finished");
+    for (const p of [first.page, second.page]) {
+      await expect(p.getByRole("region", { name: "Result" })).toBeVisible();
+      await expect(p.getByRole("group", { name: "Poker table" })).toBeVisible();
+    }
+    expect(errors).toEqual([]);
     await close();
   });
 

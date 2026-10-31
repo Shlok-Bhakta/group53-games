@@ -1,6 +1,6 @@
 import { motion } from "motion/react";
 import type { ModeKey } from "../../../convex/modes";
-import { PlayingCard } from "./Card";
+import { PlayingCard } from "@/components/ui/playing-card";
 
 // The Poker card's art: a royal flush dealt into a fan, one card at a time. About a second, once.
 const ROYAL = ["Ts", "Js", "Qs", "Ks", "As"];

@@ -38,3 +38,6 @@ export function pointsOf(match: MatchView, userId: Id<"users">): number | null {
   if (match.mode.startsWith("poker:")) return (match.state as PokerState).stacks[seat] ?? null;
   return null;
 }
+
+// What a game's points are called in the standings: chips in poker, points everywhere else.
+export const pointsUnit = (match: MatchView) => (match.mode.startsWith("poker:") ? "chips" : "pts");

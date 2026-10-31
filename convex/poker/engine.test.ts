@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { bestHand, deckOf, rank5 } from "./cards";
-import { act, alive, blindsFor, deal, leave, newGame, potOf, raiseBounds, sidePots, standings, toCall, type Card, type Table } from "./engine";
+import { act, alive, blindsFor, deal, leave, newGame, potOf, raiseBounds, sidePots, standings, streetOf, toCall, type Card, type Table } from "./engine";
 
 const r = (s: string) => rank5(s.split(" "));
 const short = (s: string) => rank5(s.split(" "), true);
@@ -263,4 +263,15 @@ describe("review fixes", () => {
     t = act(t, 0, { kind: "check" });
     expect(t.state.idle).toEqual([0, 0, 0]);
   });
+});
+
+test("a hand that ends at a showdown stays on its last street", () => {
+  let t = deal(newGame("holdem", "nl", 2, 1000), { sb: 10, bb: 20 }, deckOf(false));
+  t = act(t, 0, { kind: "raise", to: 1000 });
+  t = act(t, 1, { kind: "call" });
+  expect(t.state.turn).toBe(-1);
+  expect(t.state.street).toBe(3);
+  expect(streetOf(t.state).name).toBe("River");
+  // Games stored before the fix had the street one past the end.
+  expect(streetOf({ ...t.state, street: 4 }).name).toBe("River");
 });

@@ -19,9 +19,9 @@ const BOARD: Street[] = [
   { kind: "bet", deal: 1, name: "River" },
 ];
 const DRAW: Street[] = [
-  { kind: "bet", deal: 0, name: "First bet" },
+  { kind: "bet", deal: 0, name: "Before the draw" },
   { kind: "draw", deal: 0, name: "Draw" },
-  { kind: "bet", deal: 0, name: "Last bet" },
+  { kind: "bet", deal: 0, name: "After the draw" },
 ];
 export const VARIANTS: Record<Variant, { hole: number; short: boolean; streets: Street[] }> = {
   holdem: { hole: 2, short: false, streets: BOARD },
@@ -99,7 +99,11 @@ export const isOut = (s: PokerState, seat: number) => s.out.some((o) => o.seat =
 export const alive = (s: PokerState) => seatsOf(s).filter((i) => !isOut(s, i) && s.stacks[i] > 0);
 export const inHand = (s: PokerState, seat: number) => s.dealt[seat] && !s.folded[seat];
 export const toCall = (s: PokerState, seat: number) => Math.max(0, s.current - s.bets[seat]);
-export const streetOf = (s: PokerState) => VARIANTS[s.variant].streets[s.street];
+// Clamped: a game that ended at a showdown before this was fixed has its street one past the last.
+export const streetOf = (s: PokerState) => {
+  const streets = VARIANTS[s.variant].streets;
+  return streets[Math.min(Math.max(0, s.street), streets.length - 1)];
+};
 // The pot already gathered in the middle, not counting this street's bets.
 export const potOf = (s: PokerState) => sum(s.paid) - sum(s.bets);
 const canAct = (s: PokerState, seat: number) => inHand(s, seat) && s.stacks[seat] > 0;
@@ -243,7 +247,11 @@ function nextStreet(t: Table, random: () => number): Table {
     s.current = 0;
     s.minRaise = s.bb;
     s.street += 1;
-    if (s.street >= streets.length) return showdown(t);
+    if (s.street >= streets.length) {
+      // The showdown happens on the last street; the hand never moves past it.
+      s.street = streets.length - 1;
+      return showdown(t);
+    }
     const street = streets[s.street];
     if (street.deal) s.board.push(...take(t, street.deal, random));
     const first = nextOf(s, s.button, (i) => needs(s, i));
