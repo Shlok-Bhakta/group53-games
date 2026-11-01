@@ -37,12 +37,13 @@ const SCRABBLE: Setting[] = [
   { key: "rules", label: "Rules", short: "{} rules", options: [{ value: 0, label: "Scrabble" }, { value: 1, label: "Letter League" }], default: 0 },
   { key: "rounds", label: "Rounds", short: "{} rounds", options: [{ value: 0, label: "No limit" }, { value: 5, label: "5" }, { value: 10, label: "10" }, { value: 15, label: "15" }], default: 0 },
 ];
-// Poker: a run of hands with blinds that double, until one player has every chip or the last hand is played.
-// Blinds start at 1% and 2% of the stack (convex/poker/engine.ts). Betting: 0 no limit, 1 pot limit.
+// Poker: a run of hands with rising blinds, until one player has every chip (or the last hand, if there's a
+// limit). Blinds start at 1% and 2% of the stack (convex/poker/engine.ts). Betting: 0 no limit, 1 pot limit.
 const poker = (betting: number): Setting[] => [
   { key: "stack", label: "Chips", short: "{} chips", options: [{ value: 500, label: "500" }, { value: 1000, label: "1,000" }, { value: 2000, label: "2,000" }], default: 1000 },
-  { key: "hands", label: "Hands", short: "{} hands", options: [{ value: 5, label: "5" }, { value: 10, label: "10" }, { value: 20, label: "20" }, { value: 0, label: "No limit" }], default: 10 },
-  { key: "blinds", label: "Blinds double", short: "Blinds double {}", options: [{ value: 2, label: "Every 2 hands" }, { value: 3, label: "Every 3 hands" }, { value: 5, label: "Every 5 hands" }, { value: 0, label: "Never" }], default: 3 },
+  { key: "hands", label: "Hands", short: "{} hands", options: [{ value: 0, label: "No limit" }, { value: 5, label: "5" }, { value: 10, label: "10" }, { value: 20, label: "20" }], default: 0 },
+  { key: "blinds", label: "Blinds go up every", short: "Blinds up: {}", options: [{ value: 2, label: "2 hands" }, { value: 3, label: "3 hands" }, { value: 5, label: "5 hands" }, { value: 0, label: "Never" }], default: 3 },
+  { key: "blindsBy", label: "Blinds multiply by", short: "Blinds {}", options: [{ value: 1.25, label: "×1.25" }, { value: 1.5, label: "×1.5" }, { value: 2, label: "×2" }, { value: 3, label: "×3" }], default: 2 },
   { key: "betting", label: "Betting", short: "{}", options: [{ value: 0, label: "No limit" }, { value: 1, label: "Pot limit" }], default: betting },
   moveTime(24),
 ];

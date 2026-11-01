@@ -2,7 +2,7 @@
 // imports. The server keeps the deck, the muck and everyone's cards in `secrets` and the rest (stacks, bets,
 // the board, the last hand's showdown) in matches.state, which everyone can read.
 //
-// A game is a run of hands. Everyone starts with the same stack; the blinds double on a schedule; a player
+// A game is a run of hands. Everyone starts with the same stack; the blinds rise on a schedule; a player
 // who runs out of chips is out. It ends when one player has everything, or after the last hand, placing by
 // chips (and the knocked-out by how long they lasted).
 
@@ -108,10 +108,14 @@ export const streetOf = (s: PokerState) => {
 export const potOf = (s: PokerState) => sum(s.paid) - sum(s.bets);
 const canAct = (s: PokerState, seat: number) => inHand(s, seat) && s.stacks[seat] > 0;
 
-// Blinds start at 1% and 2% of a starting stack and double every `every` hands (0: never).
-export function blindsFor(stack: number, hand: number, every: number) {
+// Blinds start at 1% and 2% of a starting stack and multiply by `by` every `every` hands (0: never). Rounded
+// to chips worth using, and every level goes up by at least one step, however small the multiplier.
+export function blindsFor(stack: number, hand: number, every: number, by = 2) {
   const level = every > 0 ? Math.floor((hand - 1) / every) : 0;
-  const sb = Math.max(1, Math.round(stack / 100)) * 2 ** level;
+  const first = Math.max(1, Math.round(stack / 100));
+  const step = first >= 10 ? first / 2 : first;
+  let sb = first;
+  for (let i = 1; i <= level; i++) sb = Math.max(sb + step, Math.round((first * by ** i) / step) * step);
   return { sb, bb: sb * 2 };
 }
 

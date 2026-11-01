@@ -26,6 +26,7 @@ for (const scheme of ["dark", "light"] as const) {
     await a.goto("/poker");
     await shot("hub");
     await a.goto("/poker/mode/holdem");
+    await a.getByRole("button", { name: "Settings" }).click();
     await shot("mode", a, true);
     await a.getByRole("button", { name: "Open a game" }).click();
     await expect(a.getByRole("heading", { name: "Waiting for players" })).toBeVisible();

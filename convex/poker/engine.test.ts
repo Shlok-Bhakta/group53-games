@@ -59,6 +59,16 @@ describe("a hand of Hold'em", () => {
     expect(blindsFor(500, 9, 0)).toEqual({ sb: 5, bb: 10 });
   });
 
+  test("blinds multiply by the setting, in round chips, and always go up", () => {
+    const levels = (stack: number, by: number) => [1, 2, 3, 4, 5, 6].map((level) => blindsFor(stack, level, 1, by).sb);
+    expect(levels(1000, 1.25)).toEqual([10, 15, 20, 25, 30, 35]);
+    expect(levels(1000, 1.5)).toEqual([10, 15, 25, 35, 50, 75]);
+    expect(levels(1000, 2)).toEqual([10, 20, 40, 80, 160, 320]);
+    expect(levels(1000, 3)).toEqual([10, 30, 90, 270, 810, 2430]);
+    expect(levels(500, 1.25)).toEqual([5, 10, 15, 20, 25, 30]);
+    expect(levels(2000, 1.5)).toEqual([20, 30, 50, 70, 100, 150]);
+  });
+
   test("heads-up: the button posts the small blind and acts first, then last after the flop", () => {
     // Seat 1 gets As Ad, seat 0 gets Kc Kd; board 2h 7s 9c Jd 3h.
     let t = deal(newGame("holdem", "nl", 2, 1000), { sb: 10, bb: 20 }, stacked("As Ad Kc Kd 2h 7s 9c Jd 3h"), noRandom);

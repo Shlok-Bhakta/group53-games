@@ -68,6 +68,31 @@ describe("starting", () => {
     );
   });
 
+  test("by default it plays on until one player has everything, and blinds multiply as set", async () => {
+    const t = setup();
+    const { id, seats } = await game(t, 2, "poker:holdem", { blinds: 2, blindsBy: 1.5 });
+    for (let i = 0; i < 12; i++) await (await up(t, id, seats)).move("fold");
+    const m = (await get(t, id))!;
+    expect(m.status).toBe("active");
+    const s = m.state as PokerState;
+    expect(s.hand).toBe(13);
+    // Hand 13 is the seventh level: 10, 15, 25, 35, 50, 75, 115.
+    expect(s).toMatchObject({ sb: 115, bb: 230 });
+  });
+
+  test("games already going keep the 10 hands they started with", async () => {
+    const t = setup();
+    const going = await game(t, 2);
+    const changed = await game(t, 2, "poker:holdem", { hands: 20 });
+    await t.run(async (ctx) => {
+      const m = (await ctx.db.get(going.id))!;
+      await ctx.db.patch(going.id, { settings: undefined, moveCount: m.moveCount });
+    });
+    expect(await t.mutation(internal.poker.keepHandLimit, {})).toBe(1);
+    expect((await get(t, going.id))!.settings).toMatchObject({ hands: 10 });
+    expect((await get(t, changed.id))!.settings).toMatchObject({ hands: 20 });
+  });
+
   test("settings: stack, pot limit and Omaha's four cards", async () => {
     const t = setup();
     const { id, seats } = await game(t, 2, "poker:omaha", { stack: 2000 });

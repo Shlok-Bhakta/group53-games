@@ -70,7 +70,7 @@ test.describe("Poker", () => {
     // Both see their own two cards and the blinds.
     await expect(first.page.getByRole("group", { name: "Your cards" }).locator("[data-card]")).toHaveCount(2);
     await expect(second.page.getByRole("group", { name: "Your cards" }).locator("[data-card]")).toHaveCount(2);
-    await expect(first.page.getByText("Hand 1 of 10")).toBeVisible();
+    await expect(first.page.getByText("Hand 1", { exact: true })).toBeVisible();
     await expect(first.page.getByText("Your move")).toBeVisible();
 
     await first.page.getByRole("button", { name: "Call 10" }).click();
@@ -101,8 +101,8 @@ test.describe("Poker", () => {
     await first.page.getByRole("button", { name: "Fold" }).click();
 
     // The next hand is dealt straight away, and the last one is a tap away.
-    await expect(first.page.getByText("Hand 2 of 10")).toBeVisible();
-    await expect(second.page.getByText("Hand 2 of 10")).toBeVisible();
+    await expect(first.page.getByText("Hand 2", { exact: true })).toBeVisible();
+    await expect(second.page.getByText("Hand 2", { exact: true })).toBeVisible();
     const m = await getMatch(id);
     expect(m.state.last.hand).toBe(1);
     expect(m.state.stacks.reduce((x: number, y: number) => x + y, 0) + m.state.bets.reduce((x: number, y: number) => x + y, 0)).toBe(2000);

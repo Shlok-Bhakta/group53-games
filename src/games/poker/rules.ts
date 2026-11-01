@@ -22,7 +22,7 @@ export function pokerRules(mode: ModeKey, s: Settings): string[] {
   }
   lines.push(
     "Hands, best first: straight flush, four of a kind, full house, flush, straight, three of a kind, two pair, pair, high card.",
-    `Everyone starts with ${stack.toLocaleString("en-US")} chips. Blinds start at ${sb}/${sb * 2}${s.blinds ? ` and double every ${s.blinds} hands` : ""}.`,
+    `Everyone starts with ${stack.toLocaleString("en-US")} chips. Blinds start at ${sb}/${sb * 2}${s.blinds ? ` and multiply by ${s.blindsBy ?? 2} every ${s.blinds} hands` : ""}.`,
     pot ? "Pot limit: the most you can raise is the size of the pot after you call." : "No limit: you can bet everything you have at any time.",
     "Not your turn? Line up Check/Fold or Call and it plays itself the moment the action reaches you.",
     s.moveTime ? `We ping you when it's your move. Sit on it for ${days(s.moveTime)} and we check or fold for you.` : "We ping you when it's your move, and again every 8 hours if you forget.",

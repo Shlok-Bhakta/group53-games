@@ -1,6 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { finish, loadMatch, scheduleReminder } from "./matches";
 import { MODES, matchPath, settingsOf, type ModeKey } from "./modes";
@@ -154,7 +154,7 @@ async function proceed(ctx: MutationCtx, match: Doc<"matches">, before: Table, a
       if (left.length < 2) ended = why && t.state.out.some((o) => o.reason === "resign" && o.hand === t.state.hand) && match.players.length === 2 ? why : "last_player";
       else if (s.hands > 0 && t.state.hand >= s.hands) ended = "hands";
       if (ended) break;
-      t = deal(t.state, blindsFor(s.stack, t.state.hand + 1, s.blinds), shuffle(deckOf(VARIANTS[variant].short)));
+      t = deal(t.state, blindsFor(s.stack, t.state.hand + 1, s.blinds, s.blindsBy), shuffle(deckOf(VARIANTS[variant].short)));
       continue;
     }
     const seat = t.state.turn;
@@ -311,5 +311,21 @@ export const myPlan = query({
     const userId = await getAuthUserId(ctx);
     if (userId === null) return null;
     return ((await draftRow(ctx, id, userId))?.data as Pre | undefined) ?? null;
+  },
+});
+
+// Run once when the Hands default went from 10 to no limit (npx convex run poker:keepHandLimit). Settings only
+// store what differs from the default, so games that started on the old default get it written down, or
+// they'd turn into no-limit games part way through. Lobbies that haven't started take the new default.
+export const keepHandLimit = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    let kept = 0;
+    for (const m of await ctx.db.query("matches").collect()) {
+      if (!m.mode.startsWith("poker:") || m.status === "waiting" || m.status === "cancelled" || m.settings?.hands !== undefined) continue;
+      await ctx.db.patch(m._id, { settings: { ...m.settings, hands: 10 } });
+      kept++;
+    }
+    return kept;
   },
 });
