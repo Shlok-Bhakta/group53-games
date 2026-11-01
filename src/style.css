@@ -37,6 +37,8 @@
     --font-sans: var(--ui-font);
     --color-online: var(--online);
     --color-tile-green: var(--tile-green);
+    --color-up: var(--up);
+    --color-down: var(--down);
     --color-tile-yellow: var(--tile-yellow);
     --color-tile-gray: var(--tile-gray);
     --color-tile-hit: var(--tile-hit);
@@ -112,6 +114,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: #ffffff;
   --tile-edge: oklch(0.8 0.025 160);
+  --up: oklch(0.6 0.15 148);
+  --down: oklch(0.52 0.2 25);
   --board-light: #ebecd0;
   --board-dark: #739552;
 }
@@ -144,6 +148,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: oklch(0.34 0.05 162);
   --tile-edge: oklch(0.46 0.05 162);
+  --up: oklch(0.6 0.14 148);
+  --down: oklch(0.76 0.15 22);
   --board-light: #e6e8c7;
   --board-dark: #5f8a4a;
 }
@@ -177,6 +183,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: #eff1f5;
   --tile-edge: #bcc0cc;
+  --up: #388e25;
+  --down: #d20f39;
   --board-light: #e6e9ef;
   --board-dark: #8c8fa1;
 }
@@ -209,6 +217,8 @@
   --tile-hit-ink: #11111b;
   --tile-blank: #313244;
   --tile-edge: #45475a;
+  --up: #a6e3a1;
+  --down: #f38ba8;
   --board-light: #bac2de;
   --board-dark: #585b70;
 }
@@ -242,6 +252,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: #fbf1c7;
   --tile-edge: #bdae93;
+  --up: #79740e;
+  --down: #9d0006;
   --board-light: #ebdbb2;
   --board-dark: #a89984;
 }
@@ -274,6 +286,8 @@
   --tile-hit-ink: #1d2021;
   --tile-blank: #3c3836;
   --tile-edge: #504945;
+  --up: #b8bb26;
+  --down: #fe6f5e;
   --board-light: #d5c4a1;
   --board-dark: #7c6f64;
 }
@@ -307,6 +321,8 @@
   --tile-hit-ink: #2e3440;
   --tile-blank: #eceff4;
   --tile-edge: #c2cad8;
+  --up: #5e8a45;
+  --down: #a5434e;
   --board-light: #e5e9f0;
   --board-dark: #81a1c1;
 }
@@ -339,6 +355,8 @@
   --tile-hit-ink: #2e3440;
   --tile-blank: #434c5e;
   --tile-edge: #4c566a;
+  --up: #a3be8c;
+  --down: #e0828c;
   --board-light: #d8dee9;
   --board-dark: #5e81ac;
 }
@@ -372,6 +390,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: #e9e9ec;
   --tile-edge: #b4b8cc;
+  --up: #587539;
+  --down: #c71a50;
   --board-light: #e9e9ec;
   --board-dark: #7890dd;
 }
@@ -404,6 +424,8 @@
   --tile-hit-ink: #16161e;
   --tile-blank: #292e42;
   --tile-edge: #3b4261;
+  --up: #9ece6a;
+  --down: #f7768e;
   --board-light: #c0caf5;
   --board-dark: #3d59a1;
 }
@@ -437,6 +459,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: #fffbeb;
   --tile-edge: #cfcbb4;
+  --up: #14710a;
+  --down: #cb3a2a;
   --board-light: #fffbeb;
   --board-dark: #a69ccf;
 }
@@ -469,6 +493,8 @@
   --tile-hit-ink: #21222c;
   --tile-blank: #343746;
   --tile-edge: #44475a;
+  --up: #50fa7b;
+  --down: #ff7a7a;
   --board-light: #f8f8f2;
   --board-dark: #6272a4;
 }
@@ -502,6 +528,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: #fffaf3;
   --tile-edge: #cecacd;
+  --up: #286983;
+  --down: #9a4560;
   --board-light: #faf4ed;
   --board-dark: #d7827e;
 }
@@ -534,6 +562,8 @@
   --tile-hit-ink: #191724;
   --tile-blank: #26233a;
   --tile-edge: #403d52;
+  --up: #31748f;
+  --down: #eb6f92;
   --board-light: #e0def4;
   --board-dark: #6e6a86;
 }
@@ -567,6 +597,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: #ffffff;
   --tile-edge: #cbd5e1;
+  --up: #16a34a;
+  --down: #dc2626;
   --board-light: #e2e8f0;
   --board-dark: #64748b;
 }
@@ -599,6 +631,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: #1e293b;
   --tile-edge: #475569;
+  --up: #16a34a;
+  --down: #f87171;
   --board-light: #cbd5e1;
   --board-dark: #475569;
 }
@@ -632,6 +666,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: #ffffff;
   --tile-edge: oklch(0.8 0.02 20);
+  --up: oklch(0.58 0.14 148);
+  --down: oklch(0.5 0.2 25);
   --board-light: #f5e6c8;
   --board-dark: #9b2c3a;
 }
@@ -664,6 +700,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: oklch(0.31 0.05 15);
   --tile-edge: oklch(0.44 0.06 15);
+  --up: oklch(0.6 0.14 148);
+  --down: oklch(0.78 0.14 25);
   --board-light: #f0dcb4;
   --board-dark: #7a1f2b;
 }
@@ -697,6 +735,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: #ffffff;
   --tile-edge: #d3d6da;
+  --up: #5d9a57;
+  --down: #c62d33;
   --board-light: #ebecd0;
   --board-dark: #6aaa64;
 }
@@ -729,6 +769,8 @@
   --tile-hit-ink: #ffffff;
   --tile-blank: #1d1d1f;
   --tile-edge: #3a3a3c;
+  --up: #538d4e;
+  --down: #ff7b7f;
   --board-light: #d3d6da;
   --board-dark: #538d4e;
 }

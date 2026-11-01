@@ -71,6 +71,11 @@ const PAGES = {
     description: () => "Hold'em, Omaha, Short Deck and five-card draw, up to 8 of you over the day. Come take a seat.",
     card: "poker",
   },
+  "/stonks": {
+    title: () => "Stonks",
+    description: () => "The S&P 500's top 20, ranked by their share of the index, every trade live.",
+    card: "stonks",
+  },
   "/crew": {
     title: () => "The crew",
     description: (crew) => crew.map((p) => p.name).join(", "),
@@ -190,6 +195,16 @@ const CARDS = {
         h("div", { fontSize: 40, fontWeight: 500, color: "#cfe9dd", maxWidth: 940, lineHeight: 1.25 }, "Bet, bluff and take everyone's chips over the day."),
       ),
       h("div", { alignItems: "center", justifyContent: "space-between" }, crewRow(crew, images, 84), h("div", { color: EMBED_COLOR, fontSize: 34, fontWeight: 800 }, "Tap to play")),
+    ),
+  stonks: (crew, images) =>
+    frame(
+      h(
+        "div",
+        { flexDirection: "column", gap: 28 },
+        tiles("STONKS", Array(6).fill("green"), 104),
+        h("div", { fontSize: 40, fontWeight: 500, color: "#cfe9dd", maxWidth: 940, lineHeight: 1.25 }, "The S&P 500's top 20, every trade live."),
+      ),
+      h("div", { alignItems: "center", justifyContent: "space-between" }, crewRow(crew, images, 84), h("div", { color: EMBED_COLOR, fontSize: 34, fontWeight: 800 }, "Tap to watch")),
     ),
   home: (crew, images) =>
     frame(
@@ -451,13 +466,79 @@ async function renderCard(card) {
   return png;
 }
 
+// --- Stonks previews: the live price and the day's chart ---
+
+const INDEX = "^GSPC";
+const UP = "#5fae57", DOWN = "#e5484d";
+const stockName = (s) => (s === INDEX ? "S&P 500" : s.replace("-", "."));
+const money = (n, s) => `${s === INDEX ? "" : "$"}${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+async function stockData(symbol) {
+  const [q, chart] = await Promise.all([convex.query(anyApi.stonks.quote, { symbol }), convex.query(anyApi.stonks.chart, { symbol, range: "1D" })]);
+  if (!q) return null;
+  const base = q.prevClose ?? chart.points[0]?.[1];
+  const change = base ? q.price - base : 0;
+  return { symbol, q, points: chart.points, base, change, pct: base ? (change / base) * 100 : 0 };
+}
+// Plain ASCII signs: the card's font has no arrows.
+const changeText = (d) => `${d.change < 0 ? "-" : "+"}${money(Math.abs(d.change), d.symbol)} (${Math.abs(d.pct).toFixed(2)}%)`;
+const pctText = (d) => `${d.change < 0 ? "-" : "+"}${Math.abs(d.pct).toFixed(2)}%`;
+
+// The day's line as an SVG image: the previous close dotted, a wash under the line.
+function lineChart(points, base, color, w, ht) {
+  if (points.length < 2) return h("div", { width: w, height: ht });
+  const ps = points.map((p) => p[1]);
+  let lo = Math.min(...ps, base ?? Infinity), hi = Math.max(...ps, base ?? -Infinity);
+  const pad = (hi - lo || 1) * 0.08;
+  lo -= pad;
+  hi += pad;
+  const t0 = points[0][0], t1 = points.at(-1)[0];
+  const x = (t) => (((t - t0) / (t1 - t0 || 1)) * (w - 12) + 6).toFixed(1), y = (v) => (ht * (1 - (v - lo) / (hi - lo))).toFixed(1);
+  const d = points.map((p, i) => `${i ? "L" : "M"}${x(p[0])},${y(p[1])}`).join("");
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${ht}" viewBox="0 0 ${w} ${ht}">${
+    base === undefined ? "" : `<line x1="0" x2="${w}" y1="${y(base)}" y2="${y(base)}" stroke="#cfe9dd" stroke-opacity="0.45" stroke-width="2" stroke-dasharray="2 10" stroke-linecap="round"/>`
+  }<path d="${d}L${x(t1)},${ht}L${x(t0)},${ht}Z" fill="${color}" fill-opacity="0.16"/><path d="${d}" fill="none" stroke="${color}" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+  return { type: "img", props: { src: `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`, width: w, height: ht } };
+}
+
+async function renderStock(d) {
+  const color = d.change < 0 ? DOWN : UP;
+  const svg = await satori(
+    frame(
+      h(
+        "div",
+        { flexDirection: "column", gap: 4 },
+        h("div", { fontSize: 34, fontWeight: 500, color: "#cfe9dd" }, d.symbol === INDEX ? "S&P 500" : `${stockName(d.symbol)}${d.q.name ? ` · ${d.q.name}` : ""}`),
+        h("div", { alignItems: "baseline", gap: 28 }, h("div", { fontSize: 92, fontWeight: 800 }, money(d.q.price, d.symbol)), h("div", { fontSize: 42, fontWeight: 800, color }, changeText(d))),
+      ),
+      lineChart(d.points, d.base, color, 1072, 230),
+    ),
+    { width: 1200, height: 630, fonts: FONTS, loadAdditionalAsset },
+  );
+  return new Resvg(svg, { fitTo: { mode: "width", value: 1200 } }).render().asPng();
+}
+
 const escape = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 async function pageHtml(pathname, search) {
   let title, description, image;
   const game = pathname.match(/^\/(?:chess|scrabble|poker)\/([a-z0-9]+)$/);
   const m = game ? await convex.query(anyApi.previews.match, { id: game[1] }) : null;
-  if (m) {
+  const stonk = pathname.match(/^\/stonks(?:\/([A-Za-z0-9.%^-]+))?\/?$/);
+  const symbol = stonk ? decodeURIComponent(stonk[1] ?? INDEX) : null;
+  const stock = symbol ? await stockData(symbol).catch(() => null) : null;
+  if (stock) {
+    // The live price in the title, the day so far in the picture.
+    title = `${stockName(symbol)} ${money(stock.q.price, symbol)} ${pctText(stock)}`;
+    if (symbol === INDEX) {
+      const board = await convex.query(anyApi.stonks.board, {});
+      description = board.rows
+        .slice(0, 6)
+        .map((r) => `${stockName(r.symbol)} ${r.prevClose ? pctText({ change: r.price - r.prevClose, pct: ((r.price - r.prevClose) / r.prevClose) * 100 }) : money(r.price, r.symbol)}`)
+        .join(", ");
+    } else description = `${stock.q.name ?? stockName(symbol)}, ${changeText(stock)} today. Live on Stonks.`;
+    image = `${SITE}/og/stonks/${encodeURIComponent(symbol)}.png?v=${version([stock.q.price, stock.points.length])}`;
+  } else if (m) {
     const text = matchText(m);
     title = text.title;
     description = `${text.mode}. ${text.status}`;
@@ -507,6 +588,13 @@ http
         if (!m) return void res.writeHead(404).end();
         res.writeHead(200, { "content-type": "image/png", "cache-control": "public, max-age=60" });
         return void res.end(await renderMatch(m));
+      }
+      const stockImage = pathname.match(/^\/og\/stonks\/([A-Za-z0-9.%^-]+)\.png$/);
+      if (stockImage) {
+        const d = await stockData(decodeURIComponent(stockImage[1]));
+        if (!d) return void res.writeHead(404).end();
+        res.writeHead(200, { "content-type": "image/png", "cache-control": "public, max-age=60" });
+        return void res.end(await renderStock(d));
       }
       if (pathname === "/og/health") return void res.writeHead(200).end("ok");
       const html = await pageHtml(pathname, search);

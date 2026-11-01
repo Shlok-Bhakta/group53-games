@@ -14,7 +14,7 @@ function tokens(id: string, mode: "light" | "dark") {
   return Object.fromEntries([...body.matchAll(/--([\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
 }
 
-const REQUIRED = ["background", "foreground", "card", "primary", "primary-foreground", "muted", "muted-foreground", "border", "destructive", "tile-green", "tile-yellow", "tile-gray", "tile-hit", "tile-ink", "tile-yellow-ink", "tile-gray-ink", "tile-hit-ink", "tile-blank", "tile-edge", "board-light", "board-dark"];
+const REQUIRED = ["background", "foreground", "card", "primary", "primary-foreground", "muted", "muted-foreground", "border", "destructive", "tile-green", "tile-yellow", "tile-gray", "tile-hit", "tile-ink", "tile-yellow-ink", "tile-gray-ink", "tile-hit-ink", "tile-blank", "tile-edge", "board-light", "board-dark", "up", "down"];
 
 const contrast = (a: string, b: string) => wcagContrast(parse(a)!, parse(b)!);
 
@@ -37,6 +37,9 @@ describe.each(PALETTES.map((p) => p.id))("theme %s", (id) => {
       ["yellow tile letter", "tile-yellow-ink", "tile-yellow", 3],
       ["gray tile letter", "tile-gray-ink", "tile-gray", 3],
       ["red tile letter", "tile-hit-ink", "tile-hit", 3],
+      // Stonks' 2px chart lines are graphics, so 3:1 against the card they're drawn on.
+      ["price up line on card", "up", "card", 3],
+      ["price down line on card", "down", "card", 3],
     ];
 
     test("text and tiles are readable", () => {

@@ -4,13 +4,15 @@ import sys
 
 W = "#ffffff"
 def t(bg, fg, card, primary, pfg, muted, mfg, border, green, yellow, gray, hit,
-      ink=W, yink="#1f2328", gink=W, accent=None, popover=None, blank=None, edge=None, destructive=None, hink=None):
+      ink=W, yink="#1f2328", gink=W, accent=None, popover=None, blank=None, edge=None, destructive=None, hink=None, up=None, down=None):
     return dict(background=bg, foreground=fg, card=card, popover=popover or card, primary=primary,
         **{"primary-foreground": pfg}, secondary=muted, **{"secondary-foreground": fg}, muted=muted,
         **{"muted-foreground": mfg}, accent=accent or muted, **{"accent-foreground": fg}, border=border,
         input=border, ring=primary, destructive=destructive or hit, **{"card-foreground": fg, "popover-foreground": fg},
         **{"tile-green": green, "tile-yellow": yellow, "tile-gray": gray, "tile-hit": hit, "tile-ink": ink,
-           "tile-yellow-ink": yink, "tile-gray-ink": gink, "tile-hit-ink": hink or ink, "tile-blank": blank or card, "tile-edge": edge or border})
+           "tile-yellow-ink": yink, "tile-gray-ink": gink, "tile-hit-ink": hink or ink, "tile-blank": blank or card, "tile-edge": edge or border},
+        # Stonks' chart lines: prices up and down. Drawn as 2px lines on cards, so each needs 3:1 there.
+        up=up or green, down=down or destructive or hit)
 
 THEMES = {
   # Poker night: felt table, gold chips.
@@ -25,7 +27,7 @@ THEMES = {
   ),
   "catppuccin": (  # Latte / Mocha
     t("#e6e9ef", "#4c4f69", "#eff1f5", "#8839ef", "#eff1f5", "#dce0e8", "#5c5f77", "#ccd0da",
-      "#40a02b", "#df8e1d", "#7c7f93", "#d20f39", yink="#303446", blank="#eff1f5", edge="#bcc0cc"),
+      "#40a02b", "#df8e1d", "#7c7f93", "#d20f39", yink="#303446", blank="#eff1f5", edge="#bcc0cc", up="#388e25"),
     t("#181825", "#cdd6f4", "#1e1e2e", "#cba6f7", "#11111b", "#313244", "#a6adc8", "#313244",
       "#a6e3a1", "#f9e2af", "#585b70", "#f38ba8", ink="#11111b", yink="#11111b", gink="#cdd6f4", popover="#313244",
       blank="#313244", edge="#45475a"),
@@ -39,10 +41,10 @@ THEMES = {
   ),
   "nord": (  # Snow Storm / Polar Night
     t("#e5e9f0", "#2e3440", "#eceff4", "#4b6a93", "#eceff4", "#d8dee9", "#4c566a", "#d8dee9",
-      "#a3be8c", "#ebcb8b", "#7b88a1", "#bf616a", ink="#2e3440", yink="#2e3440", blank="#eceff4", edge="#c2cad8", destructive="#a5434e"),
+      "#a3be8c", "#ebcb8b", "#7b88a1", "#bf616a", ink="#2e3440", yink="#2e3440", blank="#eceff4", edge="#c2cad8", destructive="#a5434e", up="#5e8a45"),
     t("#2e3440", "#eceff4", "#3b4252", "#88c0d0", "#2e3440", "#434c5e", "#b4bccb", "#434c5e",
       "#a3be8c", "#ebcb8b", "#4c566a", "#bf616a", ink="#2e3440", yink="#2e3440", gink="#eceff4", popover="#434c5e", destructive="#eba3aa",
-      blank="#434c5e", edge="#4c566a"),
+      blank="#434c5e", edge="#4c566a", down="#e0828c"),
   ),
   "tokyonight": (  # Day / Night
     t("#e1e2e7", "#3760bf", "#e9e9ec", "#2563c7", W, "#d0d5e3", "#4e5a8f", "#c4c8da",

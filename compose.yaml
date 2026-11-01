@@ -57,6 +57,18 @@ services:
     depends_on:
       convex:
         condition: service_healthy
+  # Live prices for Stonks: streams the market into Convex through convex/stonks.ts (stonks/).
+  stonks:
+    build: ./stonks
+    restart: unless-stopped
+    environment:
+      CONVEX_URL: http://convex:3210
+      ADMIN_KEY_FILE: /run/secrets/admin_key
+    volumes:
+      - ./secrets/admin_key:/run/secrets/admin_key:ro
+    depends_on:
+      convex:
+        condition: service_healthy
   tunnel:
     image: cloudflare/cloudflared@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c
     restart: unless-stopped

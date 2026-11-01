@@ -1,0 +1,18 @@
+[package]
+name = "stonks"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.104"
+base64 = "0.23.1"
+calamine = "0.37.0"
+chrono = "0.4.45"
+chrono-tz = "0.10.4"
+convex = { version = "0.10.4", default-features = false, features = ["rustls-tls-webpki-roots"] }
+futures = "0.3.34"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+serde_json = "1.0.154"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }

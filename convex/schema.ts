@@ -136,6 +136,44 @@ export default defineSchema({
   })
     .index("by_mode", ["mode"])
     .index("by_user_mode", ["userId", "mode"]),
+  // Stonks: live prices for the S&P 500's biggest companies. The stonks sidecar (stonks/, a Rust
+  // service on kiwi) is the only writer: it streams prices in and backfills history, through the
+  // internal mutations in convex/stonks.ts. One row per symbol.
+  stockQuotes: defineTable({
+    symbol: v.string(),
+    name: v.optional(v.string()),
+    price: v.number(),
+    // When the source says it traded, and when the sidecar heard about it (ms).
+    time: v.number(),
+    recv: v.number(),
+    source: v.string(),
+    // Yahoo's market hours for the trade: "pre", "regular", "post" or "extended".
+    session: v.optional(v.string()),
+    prevClose: v.optional(v.number()),
+    // The last regular-session price: today's close once the bell's gone, so after-hours moves show apart.
+    regularPrice: v.optional(v.number()),
+    dayHigh: v.optional(v.number()),
+    dayLow: v.optional(v.number()),
+    // The minute being built from live trades (pre-market and after hours too); it joins the 1D series
+    // once the next one starts.
+    minute: v.optional(v.number()),
+    minuteClose: v.optional(v.number()),
+  }).index("by_symbol", ["symbol"]),
+  // Price history per symbol and range ("1D", "1W", "1M", "1Y", "5Y"), as [ms, price] points.
+  stockSeries: defineTable({ symbol: v.string(), range: v.string(), points: v.array(v.array(v.number())), at: v.number() }).index("by_symbol_range", [
+    "symbol",
+    "range",
+  ]),
+  // The index's holdings (from SPY's daily file): weights as of a day's close, and each price that day,
+  // so live weights can follow the prices.
+  stockIndex: defineTable({
+    key: v.string(),
+    asOf: v.string(),
+    at: v.number(),
+    holdings: v.array(v.object({ symbol: v.string(), name: v.string(), weight: v.number(), base: v.optional(v.number()) })),
+    indexBase: v.optional(v.number()),
+  }).index("by_key", ["key"]),
+  stockFeeds: defineTable({ source: v.string(), state: v.string(), detail: v.optional(v.string()), at: v.number() }).index("by_source", ["source"]),
   pushSubscriptions: defineTable({
     userId: v.id("users"),
     endpoint: v.string(),

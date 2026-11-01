@@ -11,6 +11,7 @@ import { ScrabbleBanner, ScrabbleModeArt } from "./scrabble/art";
 import { ScrabbleGame } from "./scrabble/ScrabbleGame";
 import { scrabbleRules } from "./scrabble/rules";
 import { GolfBanner } from "./golf/GolfBanner";
+import { StonksBanner } from "./stonks/StonksBanner";
 import { PokerBanner, PokerModeArt } from "./poker/art";
 import { PokerGame } from "./poker/PokerGame";
 import { pokerRules } from "./poker/rules";
@@ -75,6 +76,14 @@ const GOLF: GameCard = {
   blurb: "Mini golf with everyone at once. Grab items, blow up bumpers, knock each other into the sea.",
   banner: () => <GolfBanner />,
 };
+// Stonks: the S&P 500's biggest companies, live, ranked by their share of the index. No lobby yet either;
+// Play opens the board (src/games/stonks/Stonks.tsx).
+const STONKS: GameCard = {
+  path: "/stonks",
+  name: "Stonks",
+  blurb: "The S&P 500's top 20, ranked by their share of the index, every trade live. Pre-market and after hours too.",
+  banner: () => <StonksBanner />,
+};
 const SOON: GameCard[] = [
   {
     path: "/wordle",
@@ -84,4 +93,4 @@ const SOON: GameCard[] = [
     wip: true,
   },
 ];
-export const games: GameCard[] = [...Object.values(GAME_UI), GOLF, ...SOON];
+export const games: GameCard[] = [...Object.values(GAME_UI), GOLF, STONKS, ...SOON];

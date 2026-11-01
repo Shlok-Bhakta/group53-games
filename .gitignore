@@ -12,3 +12,6 @@ e2e/.state/
 test-results/
 playwright-report/
 prototypes/*/dist
+
+# The stonks sidecar build
+stonks/target

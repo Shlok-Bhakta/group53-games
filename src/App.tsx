@@ -28,6 +28,9 @@ import { useDeepLinks } from "@/deepLinks";
 
 // Golf loads only when someone opens it, so chess and Scrabble players never download it.
 const GolfWorld = lazy(() => import("./games/golf/GolfWorld"));
+// Stonks too: its charts and the board load on demand.
+const StonksBoard = lazy(() => import("./games/stonks/Stonks").then((m) => ({ default: m.StonksBoard })));
+const StockPage = lazy(() => import("./games/stonks/Stonks").then((m) => ({ default: m.StockPage })));
 
 export function App() {
   useVersionCheck();
@@ -97,6 +100,8 @@ function SignedIn() {
                     </NotificationsRequired>
                   }
                 />
+                <Route path="/stonks" element={<NotificationsRequired><Suspense fallback={<LazySkeleton />}><StonksBoard /></Suspense></NotificationsRequired>} />
+                <Route path="/stonks/:symbol" element={<NotificationsRequired><Suspense fallback={<LazySkeleton />}><StockPage /></Suspense></NotificationsRequired>} />
                 {Object.values(GAME_UI).flatMap((g) => [
                   <Route key={g.key} path={g.path} element={<NotificationsRequired><GameHub game={g} /></NotificationsRequired>} />,
                   <Route key={`${g.key}-mode`} path={`${g.path}/mode/:slug`} element={<NotificationsRequired><ModePage game={g} /></NotificationsRequired>} />,
@@ -113,6 +118,10 @@ function SignedIn() {
       <ArrivalPills />
     </>
   );
+}
+
+function LazySkeleton() {
+  return <Skeleton className="mt-[calc(env(safe-area-inset-top)+44px)] h-96 w-full rounded-lg" />;
 }
 
 function NotFound() {

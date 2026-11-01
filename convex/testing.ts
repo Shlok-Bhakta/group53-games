@@ -145,7 +145,7 @@ export const playAs = internalMutation({
   },
 });
 
-const TABLES = ["golfCommands", "golfSnapshots", "golfPlayers", "golfWorlds", "handoffs", "taps", "rtCommands", "rtSnapshots", "secrets", "drafts", "matches", "ratings", "presence", "pushSubscriptions", "profiles", "authRefreshTokens", "authSessions", "authAccounts", "users"] as const;
+const TABLES = ["stockQuotes", "stockSeries", "stockIndex", "stockFeeds", "golfCommands", "golfSnapshots", "golfPlayers", "golfWorlds", "handoffs", "taps", "rtCommands", "rtSnapshots", "secrets", "drafts", "matches", "ratings", "presence", "pushSubscriptions", "profiles", "authRefreshTokens", "authSessions", "authAccounts", "users"] as const;
 
 // Wipes everything. Refuses if any real (non-test) player exists, so it can't touch prod data.
 export const reset = internalMutation({

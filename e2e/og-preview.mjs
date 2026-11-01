@@ -64,6 +64,16 @@ for (let i = 0; i < 3; i++) {
   await p.client.mutation(anyApi.poker.move, { id: pid, hand: pm.state.hand, street: pm.state.street, kind: owe > 0 ? "call" : "check" });
 }
 
+// Stonks: the index and a stock with a day of prices.
+const day = Date.parse("2026-10-30T08:00:00Z");
+const walk = (base, k) => Array.from({ length: 16 * 60 }, (_, i) => [day + i * 60_000, +(base * (1 + 0.012 * Math.sin(i / (30 + k)) + i * 0.00002 * (k - 1))).toFixed(2)]);
+await admin.mutation(anyApi.stonks.holdings, { asOf: "2026-10-29", holdings: [{ symbol: "NVDA", name: "NVIDIA CORP", weight: 7.77, base: 200 }, { symbol: "AAPL", name: "APPLE INC", weight: 7.65, base: 270 }] });
+for (const [k, symbol, base, name] of [[0, "^GSPC", 6800, "S&P 500"], [2, "NVDA", 200, "NVIDIA Corporation"], [0.2, "AAPL", 270, "Apple Inc."]]) {
+  const points = walk(base, k);
+  await admin.mutation(anyApi.stonks.series, { symbol, range: "1D", points, prevClose: base, name });
+  await admin.mutation(anyApi.stonks.ingest, { ticks: [{ symbol, price: points.at(-1)[1], time: points.at(-1)[0], recv: Date.now(), source: "yahoo", session: "post" }] });
+}
+
 mkdirSync("e2e/.state", { recursive: true });
 writeFileSync("e2e/.state/admin_key", b.adminKey);
 const pieces = spawn("python3", ["-m", "http.server", "8789", "-d", "public"], { stdio: "ignore" });
@@ -91,6 +101,12 @@ try {
   writeFileSync("e2e/.state/og-poker-match.png", Buffer.from(await (await fetch(`http://127.0.0.1:8788/${imgP}`)).arrayBuffer()));
   writeFileSync("e2e/.state/og-poker.png", Buffer.from(await (await fetch("http://127.0.0.1:8788/og/image/poker.png")).arrayBuffer()));
   writeFileSync("e2e/.state/og-scrabble.png", Buffer.from(await (await fetch("http://127.0.0.1:8788/og/image/scrabble.png")).arrayBuffer()));
+  for (const [path, file] of [["/stonks", "og-stonks.png"], ["/stonks/NVDA", "og-stonks-nvda.png"]]) {
+    const htmlT = await (await fetch(`http://127.0.0.1:8788${path}`)).text();
+    console.log(htmlT.split("\n").filter((l) => /og:(title|description)"/.test(l)).join("\n"));
+    const imgT = htmlT.match(/og\/stonks\/[^"]+\.png\?v=[a-z0-9]+/)[0];
+    writeFileSync(`e2e/.state/${file}`, Buffer.from(await (await fetch(`http://127.0.0.1:8788/${imgT}`)).arrayBuffer()));
+  }
   writeFileSync("e2e/.state/og-chess.png", Buffer.from(await (await fetch("http://127.0.0.1:8788/og/image/chess.png")).arrayBuffer()));
 } finally {
   og.kill();

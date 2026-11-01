@@ -29,11 +29,11 @@ step "Copying the repo to $HOST:$DIR"
 # --delete keeps kiwi's copy identical to this one; excluded paths (secrets, env files) are left alone.
 rsync -az --delete \
   --exclude node_modules --exclude dist --exclude .git --exclude secrets --exclude '.env*' \
-  --exclude .convex --exclude e2e/.state --exclude test-results --exclude playwright-report \
+  --exclude .convex --exclude target --exclude e2e/.state --exclude test-results --exclude playwright-report \
   ./ "$HOST:$DIR/"
 
-step "Rebuilding web and og on $HOST"
-ssh "$HOST" "cd $DIR && docker compose up -d --build web og"
+step "Rebuilding web, og and stonks on $HOST"
+ssh "$HOST" "cd $DIR && docker compose up -d --build web og stonks"
 
 step "Cleaning up old images"
 # Each rebuild leaves the previous image behind untagged. Only ours, plus build cache older than a week.
