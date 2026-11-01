@@ -35,3 +35,20 @@ export function ago(ms: number) {
   const h = Math.round(m / 60);
   return h < 24 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
 }
+
+const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 });
+const compact1 = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
+/** "$5.03T", "41.9M" */
+export const big = (n: number, money = false) => `${money ? "$" : ""}${compact.format(n)}`;
+export const count = (n: number) => compact1.format(n);
+/** A fraction as a percent: 0.0031 -> "0.31%" */
+export const frac = (n: number, signed = false) => `${signed && n > 0 ? "+" : n < 0 ? "−" : ""}${two.format(Math.abs(n) * 100)}%`;
+export const ratio = (n: number) => two.format(n);
+const day = new Intl.DateTimeFormat("en-US", { timeZone: NY, weekday: "short", month: "short", day: "numeric" });
+export const dayOf = (t: number) => day.format(t);
+const dayOnly = new Intl.DateTimeFormat("en-US", { timeZone: NY, weekday: "short" });
+/** "Mon" if it's within the week, else "Nov 12". */
+export const soon = (t: number, now: number) => (t - now < 6 * 86_400_000 ? dayOnly.format(t) : short.format(t));
+/** Points moved on the index: "+12.3", "−4.0" */
+export const pts = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n).toFixed(1)}`;
+export const RATING: Record<string, string> = { strong_buy: "Strong buy", buy: "Buy", hold: "Hold", underperform: "Underperform", sell: "Sell" };

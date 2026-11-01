@@ -26,6 +26,13 @@ async function seed() {
     await a.mutation(anyApi.stonks.series, { symbol, range: "1D", points, prevClose, name });
     await a.mutation(anyApi.stonks.series, { symbol, range: "1W", points: points.filter((_, j) => j % 5 === 0).map(([t, p], j) => [t - (400 - j) * 3_600_000, p * 0.97]) });
     const last = points.at(-1)!;
+    if (symbol !== "^GSPC")
+      await a.mutation(anyApi.stonks.setProfile, {
+        symbol,
+        stats: { marketCap: base * 1e10, trailingPE: 31.4, avgVolume: 40_000_000, targetLow: base * 0.8, targetMean: base * 1.1, targetHigh: base * 1.3, analysts: 38, rating: "buy", sector: "Technology", summary: `${name} makes things.` },
+        news: [{ title: `${name} does a thing`, publisher: "Yahoo Finance", link: "https://example.com/news", time: Date.now() - 3600_000 }],
+      });
+    else await a.mutation(anyApi.stonks.setProfile, { symbol, news: [{ title: "Stocks do stock things", publisher: "Reuters", link: "https://example.com/market", time: Date.now() - 600_000 }] });
     await a.mutation(anyApi.stonks.ingest, { ticks: [{ symbol, price: last[1], time: last[0], recv: Date.now(), source: "yahoo", session: "post" }], feeds: [{ source: "yahoo", state: "live" }] });
   }
   return a;
@@ -42,6 +49,20 @@ async function intoStonks(page: Page) {
   await page.goto("/stonks");
   await expect(page.getByRole("heading", { name: "Stonks" })).toBeVisible();
 }
+
+// Records whether a loading skeleton ever shows from now on (they all carry aria-busy).
+const watchForSkeletons = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as { __skeleton: string | false };
+    const check = () => {
+      const el = document.querySelector("[aria-busy=true]");
+      if (el && !w.__skeleton) w.__skeleton = `${location.pathname}: ${el.querySelector("h1")?.textContent ?? "?"}`;
+    };
+    w.__skeleton = false;
+    check();
+    new MutationObserver(check).observe(document.body, { subtree: true, childList: true, attributes: true });
+  });
+const sawSkeleton = (page: Page) => page.evaluate(() => (window as unknown as { __skeleton: string | false }).__skeleton);
 
 const rowOrder = (page: Page) => page.getByRole("link", { name: /^(NVDA|AAPL|MSFT),/ }).evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")!.split(",")[0]));
 
@@ -101,4 +122,49 @@ test("a stock's page: price, stats, ranges, and a chart you can scrub", async ({
   await expect(section.getByText("Past week")).toBeVisible();
   await page.reload();
   await expect(page.getByRole("radio", { name: "1W" })).toBeChecked();
+});
+
+test("everything you can tap is already loaded: no skeleton from the Games card, the board or a stock", async ({ context }) => {
+  await seed();
+  const page = await phone(context, { player: await createPlayer("Shlok"), notifications: "granted" });
+  await enablePush(page);
+  await page.goto("/games");
+  await page.getByRole("heading", { name: "Stonks" }).scrollIntoViewIfNeeded();
+  // The card on screen starts loading the board: its code and its data.
+  await page.waitForTimeout(1500);
+  await watchForSkeletons(page);
+  await page.getByRole("link", { name: "Play Stonks" }).click();
+  await expect(page.getByRole("heading", { name: "Top 3" })).toBeVisible();
+  // Rows on screen (or nearly) are warm, so a stock opens straight into its page.
+  await page.getByRole("link", { name: /^MSFT,/ }).scrollIntoViewIfNeeded();
+  await page.waitForTimeout(800);
+  await page.getByRole("link", { name: /^MSFT,/ }).click();
+  await expect(page.getByRole("region", { name: "Stats" })).toBeVisible();
+  await expect(page.getByText("Microsoft Corporation does a thing")).toBeVisible();
+  expect(await sawSkeleton(page)).toBe(false);
+});
+
+test("pro mode: key stats, analysts and about, one tap away and remembered", async ({ context }) => {
+  await seed();
+  const page = await phone(context, { player: await createPlayer("Shlok"), notifications: "granted" });
+  await intoStonks(page);
+  await expect(page.getByRole("heading", { name: "Market news" })).toBeVisible();
+  await page.getByRole("link", { name: /^NVDA,/ }).click();
+  await expect(page.getByRole("region", { name: "Key stats" })).toHaveCount(0);
+  // The board slides away; then there's one Pro button, the stock's.
+  await expect(page.getByRole("button", { name: "Pro mode" })).toHaveCount(1);
+  const pro = page.getByRole("button", { name: "Pro mode" });
+  await expect(pro).toHaveAttribute("aria-pressed", "false");
+  await pro.click();
+  await expect(pro).toHaveAttribute("aria-pressed", "true");
+  const stats = page.getByRole("region", { name: "Key stats" });
+  await expect(stats.getByText("Market cap")).toBeVisible();
+  await expect(stats.getByText("$2T")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Analysts" }).getByText("Buy · 38 analysts")).toBeVisible();
+  await expect(page.getByRole("region", { name: "About" }).getByText("NVIDIA Corporation makes things.")).toBeVisible();
+  // The year's chart gets its moving averages, with a key.
+  await page.getByRole("radio", { name: "1W" }).click();
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Pro mode" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("region", { name: "Key stats" })).toBeVisible();
 });

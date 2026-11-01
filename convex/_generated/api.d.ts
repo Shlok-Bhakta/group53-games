@@ -46,6 +46,7 @@ import type * as scrabble_words from "../scrabble/words.js";
 import type * as stonks from "../stonks.js";
 import type * as stonks_board from "../stonks/board.js";
 import type * as stonks_market from "../stonks/market.js";
+import type * as stonks_profile from "../stonks/profile.js";
 import type * as testing from "../testing.js";
 import type * as time from "../time.js";
 import type * as users from "../users.js";
@@ -95,6 +96,7 @@ declare const fullApi: ApiFromModules<{
   stonks: typeof stonks;
   "stonks/board": typeof stonks_board;
   "stonks/market": typeof stonks_market;
+  "stonks/profile": typeof stonks_profile;
   testing: typeof testing;
   time: typeof time;
   users: typeof users;

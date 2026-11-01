@@ -17,6 +17,7 @@ test("stonks screens", async ({ browser }) => {
     const a = admin();
     // The sidecar reads the holdings, then works through every symbol's history.
     await expect.poll(async () => (await a.query(anyApi.stonks.board, {})).rows.length, { timeout: 120_000, intervals: [2000] }).toBe(20);
+    await expect.poll(async () => (await a.query(anyApi.stonks.profile, { symbol: "NVDA" })).stats?.marketCap ?? 0, { timeout: 120_000, intervals: [2000] }).toBeGreaterThan(0);
     await expect.poll(async () => (await a.query(anyApi.stonks.chart, { symbol: "NVDA", range: "5Y" })).points.length, { timeout: 240_000, intervals: [3000] }).toBeGreaterThan(100);
     const player = await createPlayer("Shlok");
     // One phone for both schemes: a signed-in session's refresh token only works once.
@@ -39,8 +40,12 @@ test("stonks screens", async ({ browser }) => {
       await page.goto("/stonks");
       await expect(page.getByRole("heading", { name: "Top 20" })).toBeVisible();
       await shot("board");
-      await page.mouse.wheel(0, 700);
+      await page.mouse.wheel(0, 520);
+      await shot("board-movers");
+      await page.mouse.wheel(0, 900);
       await shot("board-rows");
+      await page.mouse.wheel(0, 3000);
+      await shot("board-news");
       await page.goto("/stonks/NVDA");
       await expect(page.getByRole("region", { name: "Stats" })).toBeVisible();
       await shot("nvda-1d");
@@ -54,6 +59,16 @@ test("stonks screens", async ({ browser }) => {
         await page.waitForTimeout(600);
         await shot(`nvda-${r.toLowerCase()}`);
       }
+      await page.getByRole("button", { name: "Pro mode" }).click();
+      await page.getByRole("radio", { name: "1Y" }).click();
+      await shot("nvda-pro-1y");
+      await page.mouse.wheel(0, 760);
+      await shot("nvda-pro-stats");
+      await page.mouse.wheel(0, 900);
+      await shot("nvda-pro-about");
+      await page.mouse.wheel(0, 3000);
+      await shot("nvda-news");
+      await page.getByRole("button", { name: "Pro mode" }).click();
       await page.getByRole("radio", { name: "1D" }).click();
     }
     await ctx.close();

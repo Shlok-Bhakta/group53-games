@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { api, internal } from "./_generated/api";
-import { downsample, liveWeight, withMinute, type Point } from "./stonks/board";
+import { contribution, downsample, liveWeight, withMinute, type Point } from "./stonks/board";
 import { marketClock, nextOpen, sessionDay } from "./stonks/market";
 import { setup } from "./test.setup";
 
@@ -30,6 +30,12 @@ describe("board math", () => {
     expect(liveWeight(7.5, 110, 100, 6000, 6000)).toBeCloseTo(8.25);
     expect(liveWeight(7.5, 110, 100, 6600, 6000)).toBeCloseTo(7.5);
     expect(liveWeight(7.5, undefined, 100, 6000, 6000)).toBe(7.5);
+  });
+  test("a stock's share times its move is the index points it's moved", () => {
+    // 7.5% of a 6000 index, up 10%: 45 points.
+    expect(contribution(7.5, 110, 100, 100, 6000, 6000)).toBeCloseTo(45);
+    expect(contribution(7.5, 90, 100, 100, 6000, 6000)).toBeCloseTo(-45);
+    expect(contribution(7.5, 90, undefined, 100, 6000, 6000)).toBe(0);
   });
   test("downsampling keeps the ends and at most n points", () => {
     const pts: Point[] = Array.from({ length: 390 }, (_, i) => [i * 60_000, 100 + i]);
@@ -67,6 +73,51 @@ describe("stonks", () => {
     expect(b.rows[0]).toMatchObject({ rank: 1, price: 310, name: "APPLE INC" });
     expect(b.index?.price).toBe(6000);
     expect(b.feeds).toEqual([expect.objectContaining({ source: "yahoo", state: "live" })]);
+  });
+
+  test("the board knows who moved the index, who's up, and who changed places since the close", async () => {
+    const t = setup();
+    await t.mutation(internal.stonks.holdings, {
+      asOf: "2026-10-29",
+      indexBase: 6000,
+      holdings: [
+        { symbol: "NVDA", name: "NVIDIA CORP", weight: 7.77, base: 200 },
+        { symbol: "AAPL", name: "APPLE INC", weight: 7.65, base: 300 },
+      ],
+    });
+    const open = ET("2026-10-30T09:30:00");
+    for (const [symbol, prevClose] of [["^GSPC", 6000], ["NVDA", 200], ["AAPL", 300]] as const) await t.mutation(internal.stonks.series, { symbol, range: "1D", points: [[open, prevClose]], prevClose });
+    await t.mutation(internal.stonks.ingest, { ticks: [tick("^GSPC", 6000, open + 60_000), tick("NVDA", 190, open + 60_000), tick("AAPL", 310, open + 60_000)] });
+    const b = await t.query(api.stonks.board, {});
+    expect(b.rows.map((r) => [r.symbol, r.rank, r.baseRank])).toEqual([["AAPL", 1, 2], ["NVDA", 2, 1]]);
+    expect(b.movers.map((m) => m.symbol)).toEqual(["NVDA", "AAPL"]);
+    expect(b.movers[0].points).toBeCloseTo(-23.31);
+    expect(b.movers[1].points).toBeCloseTo(15.3);
+    expect([b.up, b.down]).toEqual([1, 1]);
+    expect(await t.query(api.stonks.quote, { symbol: "NVDA" })).toMatchObject({ rank: 2, baseRank: 1, price: 190 });
+  });
+
+  test("profiles and news: either can come alone, and the board knows how busy a stock is", async () => {
+    const t = setup();
+    await t.mutation(internal.stonks.holdings, { asOf: "2026-10-29", holdings: [{ symbol: "AAPL", name: "APPLE INC", weight: 7.6 }] });
+    const open = ET("2026-10-30T09:30:00");
+    await t.mutation(internal.stonks.series, { symbol: "AAPL", range: "1D", points: [[open, 300]], prevClose: 298, volume: 84_000_000 });
+    await t.mutation(internal.stonks.setProfile, { symbol: "AAPL", stats: { marketCap: 5.03e12, trailingPE: 39.5, avgVolume: 42_000_000, rating: "buy", earnings: ET("2026-11-02T16:30:00") } });
+    await t.mutation(internal.stonks.setProfile, { symbol: "AAPL", news: [{ title: "Apple takes the top spot", publisher: "Yahoo Finance", link: "https://example.com/a", time: open }] });
+    const p = await t.query(api.stonks.profile, { symbol: "AAPL" });
+    expect(p.stats).toMatchObject({ marketCap: 5.03e12, rating: "buy" });
+    expect(p.news.map((n) => n.title)).toEqual(["Apple takes the top spot"]);
+    const b = await t.query(api.stonks.board, {});
+    expect(b.rows[0].relVolume).toBeCloseTo(2);
+    expect(b.rows[0].earnings).toBe(ET("2026-11-02T16:30:00"));
+    expect(await t.query(api.stonks.profile, { symbol: "MSFT" })).toEqual({ stats: null, news: [], at: null });
+  });
+
+  test("the day's history brings the day's and year's stats", async () => {
+    const t = setup();
+    const open = ET("2026-10-30T09:30:00");
+    await t.mutation(internal.stonks.series, { symbol: "AAPL", range: "1D", points: [[open, 300]], prevClose: 298, dayHigh: 305, dayLow: 297, volume: 51_000_000, yearHigh: 351.7, yearLow: 243.4 });
+    expect(await t.query(api.stonks.quote, { symbol: "AAPL" })).toMatchObject({ dayHigh: 305, dayLow: 297, volume: 51_000_000, yearHigh: 351.7, yearLow: 243.4 });
   });
 
   test("live trades finish minutes onto the day's chart, after hours too, and a new day starts over", async () => {

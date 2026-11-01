@@ -25,12 +25,11 @@ import { Page, TAB_ROUTES, useAppBadge, useNavDirection, useScrollMemory } from 
 import { UpdateOverlay, useVersionCheck } from "@/version";
 import { wantMusic } from "@/sound";
 import { useDeepLinks } from "@/deepLinks";
+import { BoardSkeleton, StockRoute, StockSkeleton, StonksBoardRoute } from "./games/stonks/load";
 
 // Golf loads only when someone opens it, so chess and Scrabble players never download it.
 const GolfWorld = lazy(() => import("./games/golf/GolfWorld"));
-// Stonks too: its charts and the board load on demand.
-const StonksBoard = lazy(() => import("./games/stonks/Stonks").then((m) => ({ default: m.StonksBoard })));
-const StockPage = lazy(() => import("./games/stonks/Stonks").then((m) => ({ default: m.StockPage })));
+
 
 export function App() {
   useVersionCheck();
@@ -100,8 +99,9 @@ function SignedIn() {
                     </NotificationsRequired>
                   }
                 />
-                <Route path="/stonks" element={<NotificationsRequired><Suspense fallback={<LazySkeleton />}><StonksBoard /></Suspense></NotificationsRequired>} />
-                <Route path="/stonks/:symbol" element={<NotificationsRequired><Suspense fallback={<LazySkeleton />}><StockPage /></Suspense></NotificationsRequired>} />
+                {/* Stonks' code loads before it's opened (src/games/stonks/load.tsx); the skeletons are its exact shape. */}
+                <Route path="/stonks" element={<NotificationsRequired><Suspense fallback={<BoardSkeleton />}><StonksBoardRoute /></Suspense></NotificationsRequired>} />
+                <Route path="/stonks/:symbol" element={<NotificationsRequired><Suspense fallback={<StockSkeleton />}><StockRoute /></Suspense></NotificationsRequired>} />
                 {Object.values(GAME_UI).flatMap((g) => [
                   <Route key={g.key} path={g.path} element={<NotificationsRequired><GameHub game={g} /></NotificationsRequired>} />,
                   <Route key={`${g.key}-mode`} path={`${g.path}/mode/:slug`} element={<NotificationsRequired><ModePage game={g} /></NotificationsRequired>} />,
@@ -118,10 +118,6 @@ function SignedIn() {
       <ArrivalPills />
     </>
   );
-}
-
-function LazySkeleton() {
-  return <Skeleton className="mt-[calc(env(safe-area-inset-top)+44px)] h-96 w-full rounded-lg" />;
 }
 
 function NotFound() {

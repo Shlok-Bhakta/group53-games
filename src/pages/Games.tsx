@@ -1,4 +1,5 @@
-import { useRef, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
+import { useConvex } from "convex/react";
 import { Link } from "react-router";
 import { motion, useInView } from "motion/react";
 import { HammerIcon, LockSimpleIcon, PlayIcon, ShareNetworkIcon } from "@phosphor-icons/react";
@@ -14,6 +15,7 @@ import { cn } from "@/lib/utils";
 
 // Every game, one card each, with its art playing in once when you scroll to it.
 export function Games() {
+  const convex = useConvex();
   const push = useNotifications();
   const locked = push.state !== "on" && push.state !== "unsupported";
 
@@ -31,7 +33,7 @@ export function Games() {
           className="overflow-hidden rounded-lg bg-card"
         >
           <div className="relative grid place-items-center bg-muted/60 px-4 py-9 [background-image:radial-gradient(color-mix(in_oklch,var(--foreground)_9%,transparent)_1px,transparent_1px)] [background-size:14px_14px]">
-            <PlayWhenSeen>{g.banner()}</PlayWhenSeen>
+            <PlayWhenSeen onSeen={g.prefetch && (() => g.prefetch!(convex))}>{g.banner()}</PlayWhenSeen>
           </div>
           <div className="p-5">
             <div className="flex items-center justify-between gap-3">
@@ -56,7 +58,7 @@ export function Games() {
                 </Button>
               ) : (
                 <Button size="xl" className="flex-1" asChild>
-                  <Link to={g.path} aria-label={`Play ${g.name}`}>
+                  <Link to={g.path} aria-label={`Play ${g.name}`} onPointerDown={g.prefetch && (() => g.prefetch!(convex))}>
                     <PlayIcon weight="fill" /> Play
                   </Link>
                 </Button>
@@ -91,9 +93,15 @@ function PlayingNow({ gamePath }: { gamePath: string }) {
 
 // A card's art plays in when it mounts, so it waits, hidden but taking its space (nothing shifts), until most
 // of it is on screen, then mounts afresh and plays there. Once.
-function PlayWhenSeen({ children }: { children: ReactNode }) {
+// A card on screen is also when its game starts loading what Play opens (`onSeen`), so Play is instant.
+function PlayWhenSeen({ children, onSeen }: { children: ReactNode; onSeen?: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const seen = useInView(ref, { once: true, amount: 0.6 });
+  const onSeenRef = useRef(onSeen);
+  onSeenRef.current = onSeen;
+  useEffect(() => {
+    if (seen) onSeenRef.current?.();
+  }, [seen]);
   return (
     <div ref={ref} className={cn("w-full", !seen && "invisible")} aria-hidden={seen ? undefined : true} data-art={seen ? "played" : "waiting"}>
       {/* Centred like the card centres its art: full-width art fills it, fixed-width art sits in the middle. */}

@@ -28,7 +28,7 @@ pub async fn run(http: reqwest::Client, mut want: watch::Receiver<BTreeSet<Strin
                     // A poll that returns the same trade again isn't a tick.
                     if seen.insert(s.clone(), price) != Some(price) {
                         let now = now_ms();
-                        out.send(Event::Tick(Tick { symbol: s.clone(), price, time: now, recv: now, source: NAME, day_high: None, day_low: None })).await.ok();
+                        out.send(Event::Tick(Tick { symbol: s.clone(), price, time: now, recv: now, source: NAME, day_high: None, day_low: None, volume: None })).await.ok();
                     }
                 }
                 Err(e) => {

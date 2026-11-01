@@ -33,6 +33,11 @@ pub struct Series {
     pub points: Vec<(i64, f64)>,
     pub prev_close: Option<f64>,
     pub name: Option<String>,
+    pub day_high: Option<f64>,
+    pub day_low: Option<f64>,
+    pub volume: Option<f64>,
+    pub year_high: Option<f64>,
+    pub year_low: Option<f64>,
 }
 
 pub async fn fetch(http: &reqwest::Client, symbol: &str, range: &str, interval: &str, pre_post: bool) -> Result<Series> {
@@ -61,6 +66,11 @@ pub fn parse(v: &serde_json::Value) -> Result<Series> {
         points,
         prev_close: meta["chartPreviousClose"].as_f64().or(meta["previousClose"].as_f64()),
         name: meta["longName"].as_str().or(meta["shortName"].as_str()).map(String::from),
+        day_high: meta["regularMarketDayHigh"].as_f64(),
+        day_low: meta["regularMarketDayLow"].as_f64(),
+        volume: meta["regularMarketVolume"].as_f64().filter(|v| *v > 0.0),
+        year_high: meta["fiftyTwoWeekHigh"].as_f64(),
+        year_low: meta["fiftyTwoWeekLow"].as_f64(),
     })
 }
 
@@ -86,8 +96,7 @@ pub async fn run(http: reqwest::Client, mut want: watch::Receiver<BTreeSet<Strin
         };
         let wait = match fetch(&http, symbol, r.range, r.interval, r.pre_post).await {
             Ok(s) => {
-                let one_day = r.key == "1D";
-                out.send(Write::Series { symbol: symbol.clone(), range: r.key, points: s.points, prev_close: s.prev_close.filter(|_| one_day), name: s.name.filter(|_| one_day) }).await.ok();
+                out.send(Write::Series { symbol: symbol.clone(), range: r.key, series: s, one_day: r.key == "1D" }).await.ok();
                 if trading { r.fresh } else { r.quiet }
             }
             Err(e) => {
@@ -109,6 +118,8 @@ mod tests {
         let s = parse(&v).unwrap();
         assert_eq!(s.prev_close, Some(348.91));
         assert_eq!(s.name.as_deref(), Some("Apple Inc."));
+        assert_eq!((s.year_high, s.year_low), (Some(351.73), Some(243.42)));
+        assert!(s.volume.unwrap() > 1_000_000.0 && s.day_high.unwrap() > s.day_low.unwrap());
         assert!(s.points.len() > 800, "{}", s.points.len());
         let first = s.points[0].0;
         assert_eq!(market::session(first), market::Session::Pre);

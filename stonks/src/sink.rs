@@ -21,8 +21,9 @@ pub struct Holding {
 pub enum Write {
     Tick(Tick),
     Status(Status),
-    Series { symbol: String, range: &'static str, points: Vec<(i64, f64)>, prev_close: Option<f64>, name: Option<String> },
+    Series { symbol: String, range: &'static str, series: crate::history::Series, one_day: bool },
     Holdings { as_of: String, holdings: Vec<Holding>, index_base: Option<f64> },
+    Profile { symbol: String, stats: Option<BTreeMap<String, Value>>, news: Option<Vec<Value>> },
 }
 
 // Convex's optional fields take a missing key, not null, so None leaves the key out.
@@ -46,6 +47,7 @@ pub fn tick_value(t: &Tick) -> Value {
         ("session", str(market::session(t.time).name())),
         ("dayHigh", t.day_high.and_then(num)),
         ("dayLow", t.day_low.and_then(num)),
+        ("volume", t.volume.and_then(num)),
     ])
 }
 
@@ -87,12 +89,22 @@ pub async fn run(mut client: ConvexClient, mut rx: mpsc::Receiver<Write>) {
                         feeds.insert(s.source, s);
                         flush.reset_immediately();
                     }
-                    Write::Series { symbol, range, points, prev_close, name } => {
-                        let pts = points.iter().map(|(t, p)| Value::Array(vec![Value::Float64(*t as f64), Value::Float64(*p)])).collect();
+                    Write::Series { symbol, range, series: s, one_day } => {
+                        let pts = s.points.iter().map(|(t, p)| Value::Array(vec![Value::Float64(*t as f64), Value::Float64(*p)])).collect();
                         let mut args = BTreeMap::from([("symbol".into(), Value::String(symbol)), ("range".into(), Value::String(range.into())), ("points".into(), Value::Array(pts))]);
-                        if let Some(p) = prev_close { args.insert("prevClose".into(), Value::Float64(p)); }
-                        if let Some(n) = name { args.insert("name".into(), Value::String(n)); }
+                        // The day's own stats ride along with the 1D history only.
+                        if one_day {
+                            let stats = [("prevClose", s.prev_close), ("dayHigh", s.day_high), ("dayLow", s.day_low), ("volume", s.volume), ("yearHigh", s.year_high), ("yearLow", s.year_low)];
+                            for (k, v) in stats { if let Some(v) = v { args.insert(k.into(), Value::Float64(v)); } }
+                            if let Some(n) = s.name { args.insert("name".into(), Value::String(n)); }
+                        }
                         call(&mut client, "stonks:series", args).await;
+                    }
+                    Write::Profile { symbol, stats, news } => {
+                        let mut args = BTreeMap::from([("symbol".into(), Value::String(symbol))]);
+                        if let Some(s) = stats { args.insert("stats".into(), Value::Object(s)); }
+                        if let Some(n) = news { args.insert("news".into(), Value::Array(n)); }
+                        call(&mut client, "stonks:setProfile", args).await;
                     }
                     Write::Holdings { as_of, holdings, index_base } => {
                         let hs = holdings.iter().map(|h| obj(vec![("symbol", str(&h.symbol)), ("name", str(&h.name)), ("weight", num(h.weight)), ("base", h.base.and_then(num))])).collect();
@@ -123,7 +135,7 @@ mod tests {
     use super::*;
     #[test]
     fn leaves_missing_fields_out() {
-        let t = Tick { symbol: "AAPL".into(), price: 1.5, time: 1793367000000, recv: 1793367000050, source: "yahoo", day_high: None, day_low: Some(1.0) };
+        let t = Tick { symbol: "AAPL".into(), price: 1.5, time: 1793367000000, recv: 1793367000050, source: "yahoo", day_high: None, day_low: Some(1.0), volume: None };
         let Value::Object(o) = tick_value(&t) else { panic!() };
         assert!(!o.contains_key("dayHigh"));
         assert_eq!(o["dayLow"], Value::Float64(1.0));

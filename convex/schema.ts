@@ -1,6 +1,7 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { authTables } from "@convex-dev/auth/server";
+import { newsItem, profileStats } from "./stonks/profile";
 
 export default defineSchema({
   ...authTables,
@@ -154,6 +155,9 @@ export default defineSchema({
     regularPrice: v.optional(v.number()),
     dayHigh: v.optional(v.number()),
     dayLow: v.optional(v.number()),
+    volume: v.optional(v.number()),
+    yearHigh: v.optional(v.number()),
+    yearLow: v.optional(v.number()),
     // The minute being built from live trades (pre-market and after hours too); it joins the 1D series
     // once the next one starts.
     minute: v.optional(v.number()),
@@ -173,6 +177,14 @@ export default defineSchema({
     holdings: v.array(v.object({ symbol: v.string(), name: v.string(), weight: v.number(), base: v.optional(v.number()) })),
     indexBase: v.optional(v.number()),
   }).index("by_key", ["key"]),
+  // Each holding's profile (key stats, analysts, about) and its latest news, from Yahoo, refreshed by
+  // the sidecar every half hour while trading. One row per symbol; the index has news only.
+  stockProfiles: defineTable({
+    symbol: v.string(),
+    stats: v.optional(v.object(profileStats)),
+    news: v.optional(v.array(newsItem)),
+    at: v.number(),
+  }).index("by_symbol", ["symbol"]),
   stockFeeds: defineTable({ source: v.string(), state: v.string(), detail: v.optional(v.string()), at: v.number() }).index("by_source", ["source"]),
   pushSubscriptions: defineTable({
     userId: v.id("users"),

@@ -2,7 +2,7 @@
 //!
 //! It follows `stonks:watchlist` live (the index and its top holdings), streams those symbols from
 //! Yahoo, polls Nasdaq for anything Yahoo stops covering during the regular session, keeps their
-//! history fresh from Yahoo's charts, reads the index's weights from SPY's holdings file, and writes it
+//! history fresh from Yahoo's charts, keeps each company's key stats and news, reads the index's weights from SPY's holdings file, and writes it
 //! all through convex/stonks.ts's internal mutations with the deployment's admin key.
 //!
 //!   CONVEX_URL       the backend (http://convex:3210 on kiwi)
@@ -11,6 +11,7 @@ mod history;
 mod holdings;
 mod market;
 mod nasdaq;
+mod profile;
 mod router;
 mod sink;
 mod types;
@@ -77,6 +78,7 @@ async fn main() -> Result<()> {
     tokio::spawn(sink::run(client.clone(), write_rx));
     tokio::spawn(holdings::run(http.clone(), write_tx.clone()));
     tokio::spawn(history::run(http.clone(), want_rx.clone(), write_tx.clone()));
+    tokio::spawn(profile::run(want_rx.clone(), write_tx.clone()));
     tokio::spawn(yahoo::run(want_rx.clone(), event_tx.clone()));
     tokio::spawn(nasdaq::run(http.clone(), standby_rx, event_tx.clone()));
 

@@ -11,6 +11,7 @@ pub struct Tick {
     pub source: &'static str,
     pub day_high: Option<f64>,
     pub day_low: Option<f64>,
+    pub volume: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

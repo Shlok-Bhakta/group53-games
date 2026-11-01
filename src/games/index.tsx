@@ -12,6 +12,8 @@ import { ScrabbleGame } from "./scrabble/ScrabbleGame";
 import { scrabbleRules } from "./scrabble/rules";
 import { GolfBanner } from "./golf/GolfBanner";
 import { StonksBanner } from "./stonks/StonksBanner";
+import { prefetchStonks } from "./stonks/load";
+import type { ConvexReactClient } from "convex/react";
 import { PokerBanner, PokerModeArt } from "./poker/art";
 import { PokerGame } from "./poker/PokerGame";
 import { pokerRules } from "./poker/rules";
@@ -67,7 +69,15 @@ export const GAME_UI: Record<GameKey, GameUI> = {
 };
 
 // Cards on the Games tab: every game, then the ones still being built.
-export type GameCard = { path: string; name: string; blurb: string; banner: () => ReactNode; wip?: boolean };
+export type GameCard = {
+  path: string;
+  name: string;
+  blurb: string;
+  banner: () => ReactNode;
+  wip?: boolean;
+  // Called when the card is on screen and when Play is touched: start loading what Play opens.
+  prefetch?: (convex: ConvexReactClient) => void;
+};
 // Golf is an open world everyone shares while its modes are being built: no lobby yet, Play goes
 // straight in (src/games/golf/GolfWorld.tsx).
 const GOLF: GameCard = {
@@ -83,6 +93,7 @@ const STONKS: GameCard = {
   name: "Stonks",
   blurb: "The S&P 500's top 20, ranked by their share of the index, every trade live. Pre-market and after hours too.",
   banner: () => <StonksBanner />,
+  prefetch: prefetchStonks,
 };
 const SOON: GameCard[] = [
   {

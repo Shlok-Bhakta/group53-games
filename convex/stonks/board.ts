@@ -12,6 +12,13 @@ export function liveWeight(w0: number, price?: number, base?: number, index?: nu
   return (w0 * (price / base)) / (index / indexBase);
 }
 
+/** Index points a stock has moved the index today: its share at the previous close times its move. */
+export function contribution(w0: number, price: number, prevClose?: number, base?: number, indexPrev?: number, indexBase?: number) {
+  if (!prevClose || !indexPrev) return 0;
+  const before = liveWeight(w0, prevClose, base, indexPrev, indexBase);
+  return (before / 100) * (price / prevClose - 1) * indexPrev;
+}
+
 /** At most `n` points: the last price in each of n equal time buckets. Keeps the first and last point. */
 export function downsample(points: Point[], n: number): Point[] {
   if (points.length <= n) return points;

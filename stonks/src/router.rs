@@ -45,7 +45,7 @@ impl Router {
 mod tests {
     use super::*;
     fn tick(symbol: &str, source: &'static str, recv: i64) -> Tick {
-        Tick { symbol: symbol.into(), price: 1.0, time: recv, recv, source, day_high: None, day_low: None }
+        Tick { symbol: symbol.into(), price: 1.0, time: recv, recv, source, day_high: None, day_low: None, volume: None }
     }
     #[test]
     fn primary_wins_while_fresh_and_standby_takes_over_when_it_goes_quiet() {

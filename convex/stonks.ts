@@ -1,7 +1,9 @@
 import { v } from "convex/values";
 import { internalMutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
-import { downsample, liveWeight, minuteOf, withMinute, type Point } from "./stonks/board";
+import type { Doc } from "./_generated/dataModel";
+import { contribution, downsample, liveWeight, minuteOf, withMinute, type Point } from "./stonks/board";
 import { INDEX, RANGES } from "./stonks/market";
+import { newsItem, statsValidator } from "./stonks/profile";
 
 // Stonks: live prices for the S&P 500's biggest companies, ranked by their share of the index.
 //
@@ -24,6 +26,11 @@ const seriesOf = (ctx: QueryCtx, symbol: string, range: string) =>
     .query("stockSeries")
     .withIndex("by_symbol_range", (q) => q.eq("symbol", symbol).eq("range", range))
     .unique();
+const profileOf = (ctx: QueryCtx, symbol: string) =>
+  ctx.db
+    .query("stockProfiles")
+    .withIndex("by_symbol", (q) => q.eq("symbol", symbol))
+    .unique();
 const indexDoc = (ctx: QueryCtx) =>
   ctx.db
     .query("stockIndex")
@@ -39,7 +46,7 @@ export const watchlist = query({
   },
 });
 
-const view = (q: { symbol: string; name?: string; price: number; prevClose?: number; regularPrice?: number; time: number; recv: number; source: string; session?: string; dayHigh?: number; dayLow?: number }) => ({
+const view = (q: Doc<"stockQuotes">) => ({
   symbol: q.symbol,
   name: q.name,
   price: q.price,
@@ -51,30 +58,60 @@ const view = (q: { symbol: string; name?: string; price: number; prevClose?: num
   session: q.session,
   dayHigh: q.dayHigh,
   dayLow: q.dayLow,
+  volume: q.volume,
+  yearHigh: q.yearHigh,
+  yearLow: q.yearLow,
 });
 export type QuoteView = ReturnType<typeof view>;
 
-/** The board: the index and the top holdings by live weight, with their prices. Changes with every price. */
+/** Every holding with a price, ranked by live share of the index, with where it ranked at the previous
+ *  close and how many index points it's moved the S&P today. */
+async function ranked(ctx: QueryCtx) {
+  const idx = await indexDoc(ctx);
+  const index = await quoteOf(ctx, INDEX);
+  // Holdings with no price yet (the sidecar's still starting) wait off the board.
+  const rows = (
+    await Promise.all(
+      (idx?.holdings ?? []).map(async (h) => {
+        const q = await quoteOf(ctx, h.symbol);
+        if (!q) return null;
+        const stats = (await profileOf(ctx, h.symbol))?.stats;
+        const before = q.prevClose ? liveWeight(h.weight, q.prevClose, h.base, index?.prevClose, idx?.indexBase) : h.weight;
+        return {
+          ...view(q),
+          name: q.name ?? h.name,
+          weight: liveWeight(h.weight, q.price, h.base, index?.price, idx?.indexBase),
+          before,
+          points: contribution(h.weight, q.price, q.prevClose, h.base, index?.prevClose, idx?.indexBase),
+          // Today's volume against a normal day's: 2 means twice as busy.
+          relVolume: q.volume && stats?.avgVolume ? q.volume / stats.avgVolume : undefined,
+          earnings: stats?.earnings,
+        };
+      }),
+    )
+  ).filter((r) => r !== null);
+  const baseRank = new Map([...rows].sort((a, b) => b.before - a.before).map((r, i) => [r.symbol, i + 1]));
+  rows.sort((a, b) => b.weight - a.weight);
+  return { idx, index, rows: rows.map((r, i) => ({ ...r, rank: i + 1, baseRank: baseRank.get(r.symbol)! })) };
+}
+
+/** The board: the index and the top holdings by live weight, with their prices, who's moved the index
+ *  most today, and how many of the top are up. Changes with every price. */
 export const board = query({
   args: {},
   handler: async (ctx) => {
-    const idx = await indexDoc(ctx);
-    const index = await quoteOf(ctx, INDEX);
-    // Holdings with no price yet (the sidecar's still starting) wait off the board.
-    const rows = (
-      await Promise.all(
-        (idx?.holdings ?? []).map(async (h) => {
-          const q = await quoteOf(ctx, h.symbol);
-          return q && { ...view(q), name: q.name ?? h.name, weight: liveWeight(h.weight, q.price, h.base, index?.price, idx?.indexBase), baseWeight: h.weight };
-        }),
-      )
-    ).filter((r) => r !== null);
-    rows.sort((a, b) => b.weight - a.weight);
+    const { idx, index, rows } = await ranked(ctx);
+    const shown = rows.slice(0, SHOWN);
     const feeds = await ctx.db.query("stockFeeds").collect();
+    const moved = (r: (typeof rows)[number]) => (r.prevClose ? r.price - r.prevClose : 0);
     return {
       asOf: idx?.asOf ?? null,
       index: index ? view(index) : null,
-      rows: rows.slice(0, SHOWN).map((r, i) => ({ ...r, rank: i + 1 })),
+      rows: shown,
+      up: shown.filter((r) => moved(r) > 0).length,
+      down: shown.filter((r) => moved(r) < 0).length,
+      share: shown.reduce((n, r) => n + r.weight, 0),
+      movers: [...rows].filter((r) => r.points !== 0).sort((a, b) => Math.abs(b.points) - Math.abs(a.points)).slice(0, 6).map((r) => ({ symbol: r.symbol, points: r.points })),
       feeds: feeds.map((f) => ({ source: f.source, state: f.state, detail: f.detail, at: f.at })),
     };
   },
@@ -101,15 +138,23 @@ export const chart = query({
   },
 });
 
+/** A company's key stats and news, or the market's news for the index. Changes every half hour or so. */
+export const profile = query({
+  args: { symbol: v.string() },
+  handler: async (ctx, { symbol }) => {
+    const p = await profileOf(ctx, symbol);
+    return { stats: p?.stats ?? null, news: p?.news ?? [], at: p?.at ?? null };
+  },
+});
+
+/** One stock, or the index: its price and stats, and for a holding its place on the board. */
 export const quote = query({
   args: { symbol: v.string() },
   handler: async (ctx, { symbol }) => {
     const q = await quoteOf(ctx, symbol);
     if (!q) return null;
-    const idx = await indexDoc(ctx);
-    const index = symbol === INDEX ? q : await quoteOf(ctx, INDEX);
-    const h = idx?.holdings.find((x) => x.symbol === symbol);
-    return { ...view(q), weight: h ? liveWeight(h.weight, q.price, h.base, index?.price, idx?.indexBase) : undefined, baseWeight: h?.weight };
+    const row = symbol === INDEX ? undefined : (await ranked(ctx)).rows.find((r) => r.symbol === symbol);
+    return { ...view(q), name: row?.name ?? q.name, weight: row?.weight, rank: row?.rank, baseRank: row?.baseRank, points: row?.points };
   },
 });
 
@@ -124,6 +169,7 @@ const tick = v.object({
   session: v.optional(v.string()),
   dayHigh: v.optional(v.number()),
   dayLow: v.optional(v.number()),
+  volume: v.optional(v.number()),
 });
 const feed = v.object({ source: v.string(), state: v.string(), detail: v.optional(v.string()) });
 
@@ -172,20 +218,42 @@ export const ingest = internalMutation({
 const NEW_DAY = 4 * 3600_000;
 
 /** A range's history from the source (Yahoo's chart data), replacing what's there. The 1D one also
- *  brings the previous close and the company's name. */
+ *  brings the previous close, the company's name and the day's and year's stats. */
 export const series = internalMutation({
-  args: { symbol: v.string(), range: v.string(), points: v.array(v.array(v.number())), prevClose: v.optional(v.number()), name: v.optional(v.string()) },
-  handler: async (ctx, { symbol, range, points, prevClose, name }) => {
+  args: {
+    symbol: v.string(),
+    range: v.string(),
+    points: v.array(v.array(v.number())),
+    prevClose: v.optional(v.number()),
+    name: v.optional(v.string()),
+    dayHigh: v.optional(v.number()),
+    dayLow: v.optional(v.number()),
+    volume: v.optional(v.number()),
+    yearHigh: v.optional(v.number()),
+    yearLow: v.optional(v.number()),
+  },
+  handler: async (ctx, { symbol, range, points, ...stats }) => {
     if (!(RANGES as readonly string[]).includes(range)) throw new Error(`unknown range ${range}`);
     await setSeries(ctx, symbol, range, points as Point[]);
-    if (prevClose === undefined && name === undefined) return;
+    const patch = Object.fromEntries(Object.entries(stats).filter(([, v]) => v !== undefined));
+    if (Object.keys(patch).length === 0) return;
     const q = await quoteOf(ctx, symbol);
-    const patch = { ...(prevClose !== undefined && { prevClose }), ...(name !== undefined && { name }) };
     if (q) await ctx.db.patch(q._id, patch);
     else {
       const last = points.at(-1);
       if (last) await ctx.db.insert("stockQuotes", { symbol, price: last[1], time: last[0], recv: Date.now(), source: "history", ...patch });
     }
+  },
+});
+
+/** A company's key stats (and the sidecar's news for it), replacing what's there. Either can come alone. */
+export const setProfile = internalMutation({
+  args: { symbol: v.string(), stats: v.optional(statsValidator), news: v.optional(v.array(newsItem)) },
+  handler: async (ctx, { symbol, stats, news }) => {
+    const row = await profileOf(ctx, symbol);
+    const patch = { ...(stats && { stats }), ...(news && { news }), at: Date.now() };
+    if (row) await ctx.db.patch(row._id, patch);
+    else await ctx.db.insert("stockProfiles", { symbol, ...patch });
   },
 });
 

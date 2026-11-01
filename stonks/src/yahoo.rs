@@ -16,7 +16,7 @@ use crate::types::{log, now_ms, Event, Status, Tick};
 pub const NAME: &str = "yahoo";
 const URL: &str = "wss://streamer.finance.yahoo.com/?version=2";
 
-/// The fields we use from PricingData: id 1, price 2 (float), time 3 (zigzag ms), dayHigh 10, dayLow 11.
+/// The fields we use from PricingData: id 1, price 2 (float), time 3 (zigzag ms), dayVolume 9, dayHigh 10, dayLow 11.
 pub fn decode(b64: &str, recv: i64) -> Result<Tick> {
     let buf = base64::engine::general_purpose::STANDARD.decode(b64)?;
     let mut i = 0usize;
@@ -35,15 +35,18 @@ pub fn decode(b64: &str, recv: i64) -> Result<Tick> {
             }
         }
     };
-    let mut t = Tick { symbol: String::new(), price: 0.0, time: 0, recv, source: NAME, day_high: None, day_low: None };
+    let mut t = Tick { symbol: String::new(), price: 0.0, time: 0, recv, source: NAME, day_high: None, day_low: None, volume: None };
     while i < buf.len() {
         let key = varint(&mut i)?;
         let (field, wire) = (key >> 3, key & 7);
         match wire {
             0 => {
                 let v = varint(&mut i)?;
-                if field == 3 {
-                    t.time = ((v >> 1) as i64) ^ -((v & 1) as i64);
+                let signed = ((v >> 1) as i64) ^ -((v & 1) as i64);
+                match field {
+                    3 => t.time = signed,
+                    9 if signed > 0 => t.volume = Some(signed as f64),
+                    _ => {}
                 }
             }
             1 => i += 8,
@@ -177,6 +180,7 @@ mod tests {
         assert!(t.price > 10_000.0 && t.price < 200_000.0, "{}", t.price);
         assert!(t.time > 1_790_000_000_000, "{}", t.time);
         assert!(t.day_high.unwrap() >= t.day_low.unwrap());
+        assert!(t.volume.unwrap() > 0.0);
     }
     #[test]
     fn refuses_junk() {
