@@ -28,7 +28,7 @@ export const ELEPHANT = { range: 16, hit: 30, stun: 2, recoil: 16 }; // Elephant
 export const STORM = { r: 5, life: 7, every: 0.8, bolt: 1.8, hit: 15, stun: 1.5 }; // Thunderstorm
 export const FREEZE_R = 4.2;
 
-export type CmdKind = "join" | "shot" | "use" | "fire" | "hop" | "brake" | "reset";
+export type CmdKind = "join" | "leave" | "shot" | "use" | "fire" | "hop" | "brake" | "reset";
 export type Cmd = { tick: number; by: string; seq: number; kind: CmdKind; a?: number; p?: number; i?: number; x?: number; y?: number };
 
 export type Mine = { x: number; y: number; live: boolean; fixed: boolean; back: number };
@@ -52,7 +52,8 @@ export type WorldState = {
   // What happened this run, for sounds and effects. Never stored.
   events: WorldEvent[];
 };
-export type WorldEvent = { tick: number; id: string; ev: Ev };
+// `strokes`: on a sink, how many it took.
+export type WorldEvent = { tick: number; id: string; ev: Ev; strokes?: number };
 
 export function newWorld(course: Course, opts: { seed?: number; collide?: boolean } = {}): WorldState {
   return {
@@ -149,7 +150,10 @@ export function applyCmd(s: WorldState, c: Course, cmd: Cmd) {
   if (cmd.kind === "join") {
     if (b) return;
     const sim = newSim(c, idSeed(cmd.by) % 100000) as Ball;
-    b = Object.assign(sim, { id: cmd.by, holes: 0, color: s.balls.length });
+    // The first color nobody's using: on a hole, people come and go.
+    let color = 0;
+    while (s.balls.some((o) => o.color === color)) color++;
+    b = Object.assign(sim, { id: cmd.by, holes: 0, color });
     link(s, b);
     place(b, freeTee(s, c, s.balls.length));
     b.t = s.tick * DT;
@@ -157,6 +161,10 @@ export function applyCmd(s: WorldState, c: Course, cmd: Cmd) {
     return;
   }
   if (!b) return;
+  if (cmd.kind === "leave") {
+    s.balls.splice(s.balls.indexOf(b), 1);
+    return;
+  }
   b.t = s.tick * DT;
   switch (cmd.kind) {
     case "shot": {
@@ -248,34 +256,48 @@ export function applyCmd(s: WorldState, c: Course, cmd: Cmd) {
       break;
     case "reset":
       // Not out of an ice cube or a stun, though.
-      if ((b.mode === "aim" || b.mode === "roll") && b.t >= b.frozenUntil && b.t >= b.stunUntil) place(b, freeTee(s, c, b.color));
+      if ((b.mode === "aim" || b.mode === "roll") && b.t >= b.frozenUntil && b.t >= b.stunUntil) {
+        place(b, freeTee(s, c, b.color));
+        if (!c.open) startOver(b);
+      }
       break;
   }
   drain(s, b);
 }
 
+// On a hole, back on the tee is a fresh try: no strokes, and no items saved up from the last one.
+function startOver(b: Ball) {
+  b.strokes = 0;
+  b.bag = [];
+  b.armed = null;
+  b.history = [];
+}
+
 function drain(s: WorldState, b: Ball) {
-  for (const ev of b.events) s.events.push({ tick: s.tick, id: b.id, ev });
+  for (const ev of b.events) s.events.push({ tick: s.tick, id: b.id, ev, ...(ev.type === "sink" ? { strokes: b.strokes } : {}) });
   b.events.length = 0;
 }
 
 const moving = (b: Ball) => b.mode === "roll";
-// Whether a moving obstacle could reach a ball sitting at `b`: if not, it can't push it.
+// Whether a moving obstacle can touch a ball sitting at `b`. Only what it really sweeps, so a ball
+// parked just outside it doesn't stop the world going quiet.
 function inReach(c: Course, b: Ball) {
   for (const m of c.movers) {
-    if (m.kind === "spinner" && hyp(b.x - m.at.x, b.y - m.at.y) < m.L + m.w + b.r + 0.3) return true;
+    if (m.kind === "spinner" && hyp(b.x - m.at.x, b.y - m.at.y) < m.L + m.w / 2 + b.r + 0.01) return true;
     if (m.kind === "windmill") {
       const q = closest(b, m.mouth[0], m.mouth[1]);
-      if (hyp(b.x - q.x, b.y - q.y) < b.r + 0.6) return true;
+      if (hyp(b.x - q.x, b.y - q.y) < 0.22 + b.r + 0.01) return true;
     }
     if (m.kind === "slider") {
-      const q = closest(b, m.a, m.b);
-      if (hyp(b.x - q.x, b.y - q.y) < Math.max(m.size.x, m.size.y) + b.r + 0.3) return true;
+      const hx = m.size.x / 2 + 0.06 + b.r + 0.01, hy = m.size.y / 2 + 0.06 + b.r + 0.01;
+      if (b.x > Math.min(m.a.x, m.b.x) - hx && b.x < Math.max(m.a.x, m.b.x) + hx && b.y > Math.min(m.a.y, m.b.y) - hy && b.y < Math.max(m.a.y, m.b.y) + hy) return true;
     }
   }
   return false;
 }
-const quiet = (s: WorldState, c: Course) =>
+// Nothing can change until a command or a timer. The server only sleeps when this is true, so a world
+// that isn't quiet never builds up a long stretch to step through.
+export const quiet = (s: WorldState, c: Course) =>
   s.strikes.length === 0 && s.missiles.length === 0 && s.storms.length === 0 && s.balls.every((b) => b.mode === "aim" && b.lipT === 0 && !inReach(c, b));
 
 
@@ -370,6 +392,7 @@ export function stepWorld(s: WorldState, w: World) {
       b.holes++;
       b.strokes = 0;
       place(b, freeTee(s, c, b.color));
+      if (!c.open) startOver(b);
       s.events.push({ tick: s.tick, id: b.id, ev: { type: "spawn", x: b.x, y: b.y, power: 1 } });
     }
   }

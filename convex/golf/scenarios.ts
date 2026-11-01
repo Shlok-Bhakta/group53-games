@@ -1,6 +1,7 @@
-import { compile, rng, type Power } from "./engine";
+import { compile, rng, type Course, type Power } from "./engine";
+import { worldOf } from "./holes";
 import { SANDBOX } from "./sandbox";
-import { advance, cmdOrder, fingerprint, newWorld, TPS, type Cmd } from "./world";
+import { advance, applyCmd, cmdOrder, fingerprint, newWorld, pack, TPS, unpack, type Cmd, type Packed } from "./world";
 
 // Games played by script, for checking that every JavaScript engine (Safari's on iPhones, Chrome's on
 // Android and the server) comes out with exactly the same world. See src/games/golf/determinism.test.ts.
@@ -59,4 +60,33 @@ export function allFingerprints() {
     chaos6: play(chaos(6), ["honey", "coffee", "shield"]),
     chaos7: play(chaos(7), ["flash", "missile", "freeze"]),
   };
+}
+
+// One player alone on a hole, for scripts/golf-solve.ts and the test that replays what it finds.
+const ME = "solver";
+const MAX_ROLL = 16; // seconds a shot may take
+export function start(c: Course) {
+  const s = newWorld(c);
+  applyCmd(s, c, { tick: 0, by: ME, seq: 0, kind: "join" });
+  return pack(s);
+}
+// One shot from a state: the state once the ball's stopped, and whether it went in.
+export function takeShot(c: Course, from: Packed, a: number, p: number) {
+  const w = worldOf(c);
+  const s = unpack(from);
+  const cmds: Cmd[] = [{ tick: s.tick, by: ME, seq: 1, kind: "shot", a, p }];
+  let to = s.tick + 1;
+  advance(s, w, to, cmds);
+  let sunk = false;
+  for (let i = 0; i < MAX_ROLL * 4; i++) {
+    to += TPS / 4;
+    advance(s, w, to, cmds);
+    if (s.events.some((e) => e.ev.type === "sink" && e.id === ME)) {
+      sunk = true;
+      break;
+    }
+    if (s.balls[0].mode === "aim") break;
+  }
+  s.events.length = 0;
+  return { s, sunk };
 }

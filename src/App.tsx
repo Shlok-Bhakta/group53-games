@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router";
 import { Authenticated, AuthLoading, Unauthenticated, useQuery } from "convex/react";
 import { AnimatePresence, MotionConfig } from "motion/react";
@@ -28,7 +28,19 @@ import { useDeepLinks } from "@/deepLinks";
 import { BoardSkeleton, StockRoute, StockSkeleton, StonksBoardRoute } from "./games/stonks/load";
 
 // Golf loads only when someone opens it, so chess and Scrabble players never download it.
-const GolfWorld = lazy(() => import("./games/golf/GolfWorld"));
+const GolfHub = lazy(() => import("./games/golf/GolfHub").then((m) => ({ default: m.GolfHub })));
+const GolfOpenWorld = lazy(() => import("./games/golf/GolfHub").then((m) => ({ default: m.GolfOpenWorld })));
+const GolfHole = lazy(() => import("./games/golf/GolfHub").then((m) => ({ default: m.GolfHole })));
+const golfRoute = (path: string, element: ReactNode) => (
+  <Route
+    path={path}
+    element={
+      <NotificationsRequired>
+        <Suspense fallback={<Skeleton className="mt-[calc(env(safe-area-inset-top)+44px)] h-96 w-full rounded-lg" />}>{element}</Suspense>
+      </NotificationsRequired>
+    }
+  />
+);
 
 
 export function App() {
@@ -89,16 +101,9 @@ function SignedIn() {
                 <Route path="/you" element={<You />} />
                 <Route path="/settings" element={<Navigate to="/you" replace />} />
                 <Route path="/wordle" element={<Wordle />} />
-                <Route
-                  path="/golf"
-                  element={
-                    <NotificationsRequired>
-                      <Suspense fallback={<Skeleton className="mt-[calc(env(safe-area-inset-top)+44px)] h-96 w-full rounded-lg" />}>
-                        <GolfWorld />
-                      </Suspense>
-                    </NotificationsRequired>
-                  }
-                />
+                {golfRoute("/golf", <GolfHub />)}
+                {golfRoute("/golf/world", <GolfOpenWorld />)}
+                {golfRoute("/golf/:course/:hole", <GolfHole />)}
                 {/* Stonks' code loads before it's opened (src/games/stonks/load.tsx); the skeletons are its exact shape. */}
                 <Route path="/stonks" element={<NotificationsRequired><Suspense fallback={<BoardSkeleton />}><StonksBoardRoute /></Suspense></NotificationsRequired>} />
                 <Route path="/stonks/:symbol" element={<NotificationsRequired><Suspense fallback={<StockSkeleton />}><StockRoute /></Suspense></NotificationsRequired>} />

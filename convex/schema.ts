@@ -107,7 +107,7 @@ export default defineSchema({
     tick: v.number(),
     by: v.id("users"),
     seq: v.number(),
-    kind: v.union(v.literal("join"), v.literal("shot"), v.literal("use"), v.literal("fire"), v.literal("hop"), v.literal("brake"), v.literal("reset")),
+    kind: v.union(v.literal("join"), v.literal("leave"), v.literal("shot"), v.literal("use"), v.literal("fire"), v.literal("hop"), v.literal("brake"), v.literal("reset")),
     a: v.optional(v.number()),
     p: v.optional(v.number()),
     i: v.optional(v.number()),
@@ -116,6 +116,9 @@ export default defineSchema({
   }).index("by_world_tick", ["worldId", "tick"]),
   // The settled world (convex/golf/world.ts, packed), advanced by golf:tick, so phones replay from near now.
   golfSnapshots: defineTable({ worldId: v.id("golfWorlds"), tick: v.number(), state: v.any() }).index("by_world", ["worldId"]),
+  // Each player's score on each golf hole, from the server's own run of the world, so it can't be faked.
+  golfScores: defineTable({ hole: v.string(), userId: v.id("users"), best: v.number(), last: v.number(), plays: v.number(), at: v.number() })
+    .index("by_hole_user", ["hole", "userId"]),
   // What players mustn't see: a player's own hand (`userId` set; a Scrabble rack) or the game's (no
   // `userId`; the tile bag). Only ever returned to its owner.
   secrets: defineTable({ matchId: v.id("matches"), userId: v.optional(v.id("users")), data: v.any() }).index("by_match_user", ["matchId", "userId"]),

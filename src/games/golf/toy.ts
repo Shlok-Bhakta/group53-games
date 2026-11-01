@@ -48,9 +48,31 @@ export const PALETTE = {
   stun: "#f3d35b",
   steam: "#efe6d6",
 } as const;
-const C = PALETTE;
+// Cold Start's colors. The board stays a mid-tone glacier blue, so a white ball still stands out on it.
+const ICE_PALETTE: Palette = {
+  ...PALETTE,
+  grass: "#86aec2",
+  mow: "#91b7c9",
+  putting: "#769fb5",
+  rail: "#f0f5f7",
+  railLine: "#cbdbe3",
+  bumper: "#bd5645",
+  cup: "#1d2d38",
+  sand: "#eef4f7", // snow drifts
+  ramp: "#47677f",
+  water: "#3b6a84",
+  waterLight: "#5789a2",
+  foam: "#d4e6ed",
+  wood: "#6d97ad", // blocks of ice
+  woodLine: "#3f667e",
+  ice: "#c7e0ea",
+  iceLine: "#a4c9d9",
+};
+type Palette = Record<keyof typeof PALETTE, string>;
+// Set for each frame from the course's theme; the parts all draw through it.
+let C: Palette = PALETTE;
 const v0: Vec = { x: 0, y: 0 };
-export const CONFETTI = [C.flag, C.box, "#8cbf6a", C.ramp, C.rail];
+export const CONFETTI = [PALETTE.flag, PALETTE.box, "#8cbf6a", PALETTE.ramp, PALETTE.rail];
 
 // The void and its dots come from the app's theme: its background, and its border color for the dots.
 let theme: { bg: string; dot: string } | null = null;
@@ -784,6 +806,12 @@ export const allCups = (c: Course) => [c.cup, ...(c.cups ?? [])];
 const nearestCup = (c: Course, p: Vec) => allCups(c).reduce((a, k) => (Math.hypot(k.x - p.x, k.y - p.y) < Math.hypot(a.x - p.x, a.y - p.y) ? k : a));
 
 export function drawFrame(ctx: Ctx, f: Frame) {
+  C = f.c.theme === "ice" ? ICE_PALETTE : PALETTE;
+  drawScene(ctx, f);
+  C = PALETTE;
+}
+
+function drawScene(ctx: Ctx, f: Frame) {
   const { c, sim, cam, dpr, t } = f;
   const J = f.juice ?? { start: -9, spawn: -9, impact: null };
   const W = ctx.canvas.width, H = ctx.canvas.height;
@@ -816,8 +844,19 @@ export function drawFrame(ctx: Ctx, f: Frame) {
     ctx.globalAlpha = intro;
   }
   drawBoard(ctx, c.greens.map((g) => g.poly), allCups(c), view);
+  // On a hole, what's painted on the ground stops at the edge of the board. (The open world's beaches
+  // run out past the grass on purpose.)
+  if (!c.open) {
+    ctx.save();
+    ctx.beginPath();
+    for (const g of c.greens) {
+      g.poly.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+      ctx.closePath();
+    }
+    ctx.clip("evenodd");
+  }
   for (const z of c.zones) {
-    if (z.kind === "sand") {
+    if (z.kind === "sand" || z.kind === "snow") {
       path(ctx, z.poly);
       ctx.fillStyle = C.sand;
       ctx.fill();
@@ -828,6 +867,8 @@ export function drawFrame(ctx: Ctx, f: Frame) {
     else if (z.kind === "ice") drawIce(ctx, z.poly, Math.round(z.poly[0].x * 7));
     else if (z.kind === "boost" || z.kind === "ramp") drawPad(ctx, z.poly, z.dir, z.kind, t);
   }
+  if (!c.open) ctx.restore();
+  ctx.globalAlpha = intro;
   for (const p of c.portals) {
     drawPortal(ctx, p.a, t);
     drawPortal(ctx, p.b, t);
@@ -835,9 +876,19 @@ export function drawFrame(ctx: Ctx, f: Frame) {
   for (const p of sim.patches ?? []) drawPatch(ctx, p, sim.t);
   for (const m of sim.mines) if (m.live) drawMine(ctx, m, t);
   ctx.fillStyle = "rgba(0,0,0,0.1)";
-  for (const tee of [c.tee, ...(c.tees ?? [])]) {
+  // A hole's tees are one tee box; the open world's are spread round its plaza.
+  const teeSpots = [c.tee, ...(c.tees ?? [])];
+  if (c.open) {
+    for (const tee of teeSpots) {
+      ctx.beginPath();
+      ctx.roundRect(tee.x - 1.1, tee.y - 1.1, 2.2, 2.2, 0.35);
+      ctx.fill();
+    }
+  } else {
+    const x0 = Math.min(...teeSpots.map((p) => p.x)) - 1.1, x1 = Math.max(...teeSpots.map((p) => p.x)) + 1.1;
+    const y0 = Math.min(...teeSpots.map((p) => p.y)) - 1.1, y1 = Math.max(...teeSpots.map((p) => p.y)) + 1.1;
     ctx.beginPath();
-    ctx.roundRect(tee.x - 1.1, tee.y - 1.1, 2.2, 2.2, 0.35);
+    ctx.roundRect(x0, y0, x1 - x0, y1 - y0, 0.5);
     ctx.fill();
   }
   for (const k of allCups(c)) drawCup(ctx, k, CUP_R * (k === nearestCup(c, sim) ? sim.cupScale : 1));

@@ -15,6 +15,7 @@ import { BAG_SIZE, DT, INSTANT, MAX_STROKES, TARGETED, activate, brake, compile,
 import { BATTLE_GROUNDS } from "./battle";
 import { BUMPER_PLAINS } from "./plains";
 import { SANDBOX } from "../../../convex/golf/sandbox";
+import { COLD_START } from "../../../convex/golf/coldstart";
 import { drawFrame, refreshTheme, still, type Camera, type Fx, type Juice } from "./toy";
 import { ITEMS } from "./items";
 import { PALETTES } from "@/themes";
@@ -27,6 +28,7 @@ const POWER_UI = ITEMS;
 const COURSES = [
   { name: "Bumper Plains", holes: BUMPER_PLAINS },
   { name: "Battle Grounds", holes: BATTLE_GROUNDS },
+  { name: "Cold Start", holes: COLD_START },
   { name: "Sandbox", holes: [SANDBOX] },
 ];
 

@@ -3,7 +3,9 @@ import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { MAX_LAG } from "./golf";
 import { compile } from "./golf/engine";
+import { courseOf } from "./golf/holes";
 import { SANDBOX } from "./golf/sandbox";
+import { SOLUTIONS } from "./golf/solutions";
 import { advance, cmdOrder, newWorld, pack, TPS, unpack, type Packed } from "./golf/world";
 import { setup, signedIn } from "./test.setup";
 
@@ -121,6 +123,63 @@ describe("golf's open world", () => {
     expect((await world(t))!.awake).toBe(true);
     const jobs = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
     expect(jobs.filter((j) => j.name === "golf:tick" && j.state.kind === "pending")).toHaveLength(1);
+  });
+
+  test("a hole is its own world: joining, leaving, and a sink landing on the scoreboard", async () => {
+    const t = setup();
+    const ann = await signedIn(t, "Ann");
+    const worldId = await ann.as.mutation(api.golf.join, { key: "plains-1" });
+    expect((await ann.as.query(api.golf.world, { key: "plains-1" }))?.worldId).toBe(worldId);
+    // Not the open world, and no such hole.
+    expect(await ann.as.query(api.golf.world, {})).toBeNull();
+    await expect(ann.as.mutation(api.golf.join, { key: "plains-99" })).rejects.toThrow("no such hole");
+    const w0 = (await t.run((ctx) => ctx.db.get(worldId)))!;
+    const hole = courseOf("plains-1")!;
+    // The line the solver found, played through the real mutations.
+    vi.advanceTimersByTime(500);
+    const [a, p] = SOLUTIONS["plains-1"][0];
+    await ann.as.mutation(api.golf.act, { worldId, kind: "shot", clientTick: Math.floor(((Date.now() - w0.startAt) * TPS) / 1000), seq: 5, a, p });
+    for (let i = 0; i < 25; i++) {
+      vi.advanceTimersByTime(1000);
+      const w = (await t.run((ctx) => ctx.db.get(worldId)))!;
+      if (w.awake) await t.mutation(internal.golf.tick, { worldId });
+    }
+    const scores = await ann.as.query(api.golf.scores, {});
+    expect(scores.map((r) => [r.hole, r.name, r.plays])).toEqual([["plains-1", "Ann", 1]]);
+    expect(scores[0].best).toBeLessThanOrEqual(hole.par);
+    // Each sink counts once, however many times the server ticks after it.
+    expect(scores[0].last).toBe(scores[0].best);
+    // Off the hole: the ball goes, and coming back joins again.
+    await ann.as.mutation(api.golf.leave, { worldId });
+    vi.advanceTimersByTime(3000);
+    await t.mutation(internal.golf.tick, { worldId });
+    expect((await snapshot(t))!.state.balls).toEqual([]);
+    await ann.as.mutation(api.golf.join, { key: "plains-1" });
+    expect((await commands(t)).filter((c) => c.kind === "join").length).toBe(2);
+  });
+
+  test("someone turning up clears balls whose players have wandered off, but not anyone still here", async () => {
+    const t = setup();
+    const gone = await signedIn(t, "Gone");
+    const here = await signedIn(t, "Here");
+    const next = await signedIn(t, "Next");
+    const worldId = await gone.as.mutation(api.golf.join, { key: "plains-2" });
+    await here.as.mutation(api.golf.join, { key: "plains-2" });
+    await settle(t, 3);
+    // Long enough that their last commands are old news.
+    vi.advanceTimersByTime(60_000);
+    await t.run((ctx) => ctx.db.insert("presence", { userId: here.userId, online: true, lastSeen: Date.now(), path: "/golf/plains/2" }));
+    await next.as.mutation(api.golf.join, { key: "plains-2" });
+    const leaves = (await commands(t)).filter((c) => c.kind === "leave" && c.worldId === worldId).map((c) => c.by);
+    expect(leaves).toEqual([gone.userId]);
+  });
+
+  test("the open world keeps your ball when you come back", async () => {
+    const t = setup();
+    const ann = await signedIn(t, "Ann");
+    await ann.as.mutation(api.golf.join, {});
+    await ann.as.mutation(api.golf.join, {});
+    expect((await commands(t)).filter((c) => c.kind === "join")).toHaveLength(1);
   });
 
   test("phones get the commands from the snapshot on", async () => {

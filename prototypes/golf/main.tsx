@@ -3,9 +3,8 @@ import "@fontsource-variable/oxanium/wght.css";
 import "./golf.css";
 import appCss from "@/style.css?raw";
 import { GolfExplorer } from "@/games/golf/GolfExplorer";
-import { BATTLE_GROUNDS } from "@/games/golf/battle";
-import { BUMPER_PLAINS } from "@/games/golf/plains";
 import { SANDBOX } from "../../convex/golf/sandbox";
+import { HOLES } from "../../convex/golf/holes";
 import { still } from "@/games/golf/toy";
 import { renderOffline } from "@/games/golf/audio";
 import { assetSheet } from "./assets";
@@ -37,7 +36,7 @@ document.documentElement.classList.toggle("dark", saved.dark ?? true);
 createRoot(document.getElementById("root")!).render(<GolfExplorer />);
 
 // For review screenshots: a whole hole as one picture.
-(window as unknown as { __golfStill: unknown }).__golfStill = (i: number, width: number) => still([...BUMPER_PLAINS, ...BATTLE_GROUNDS, SANDBOX][i], width).toDataURL("image/png");
+(window as unknown as { __golfStill: unknown }).__golfStill = (i: number, width: number) => still([...HOLES, SANDBOX][i], width).toDataURL("image/png");
 (window as unknown as { __golfAssets: unknown }).__golfAssets = () => {
   const cs = getComputedStyle(document.documentElement);
   return assetSheet(cs.getPropertyValue("--background").trim(), cs.getPropertyValue("--foreground").trim(), cs.getPropertyValue("--muted-foreground").trim()).toDataURL("image/png");

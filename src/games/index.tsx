@@ -78,12 +78,12 @@ export type GameCard = {
   // Called when the card is on screen and when Play is touched: start loading what Play opens.
   prefetch?: (convex: ConvexReactClient) => void;
 };
-// Golf is an open world everyone shares while its modes are being built: no lobby yet, Play goes
-// straight in (src/games/golf/GolfWorld.tsx).
+// Golf: eighteen holes and an open world, all live, while its modes are being built: no lobby yet, Play
+// opens the courses (src/games/golf/GolfHub.tsx).
 const GOLF: GameCard = {
   path: "/golf",
   name: "Golf",
-  blurb: "Mini golf with everyone at once. Grab items, blow up bumpers, knock each other into the sea.",
+  blurb: "Eighteen holes on grass and ice, with whoever's on them. Grab items, blow up bumpers, knock each other in the water.",
   banner: () => <GolfBanner />,
 };
 // Stonks: the S&P 500's biggest companies, live, ranked by their share of the index. No lobby yet either;

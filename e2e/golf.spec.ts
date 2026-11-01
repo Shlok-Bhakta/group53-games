@@ -4,8 +4,9 @@ import { createPlayer, expect, phone, test, type Player } from "./fixtures";
 // Golf's open world on two phones: both in, a shot on one, and the ball ending up in exactly the same
 // place on both (every phone runs the same physics from the same commands).
 
-type BallView = { id: string; x: number; y: number; mode: string; holes: number };
+type BallView = { id: string; x: number; y: number; mode: string; holes: number; strokes: number };
 const balls = (page: Page) => page.evaluate(() => (window as unknown as { __golf?: { balls(): BallView[] } }).__golf?.balls() ?? []);
+const shoot = (page: Page, a: number, p: number) => page.evaluate(([x, y]) => (window as unknown as { __golf: { shoot(a: number, p: number): void } }).__golf.shoot(x, y), [a, p]);
 const meOn = (page: Page) => page.evaluate(() => (window as unknown as { __golf?: { me(): string } }).__golf?.me());
 
 async function otherPhone(browser: Browser, player: Player) {
@@ -20,7 +21,7 @@ async function enablePush(page: Page) {
 }
 
 async function intoGolf(page: Page) {
-  await page.goto("/golf");
+  await page.goto("/golf/world");
   await expect(page.getByLabel("Driftwood Bay, an open course")).toBeVisible();
   await expect(page.getByText("Teeing up")).toHaveCount(0, { timeout: 15_000 });
 }
@@ -35,7 +36,7 @@ async function putt(page: Page, dx: number, dy: number) {
   await page.mouse.up();
 }
 
-test("Golf has a card on Games, and Play goes straight into the world", async ({ context }) => {
+test("Golf has a card on Games, and Play opens the courses and the open world", async ({ context }) => {
   const player = await createPlayer("Shlok");
   const page = await phone(context, { player, notifications: "granted" });
   await enablePush(page);
@@ -46,6 +47,11 @@ test("Golf has a card on Games, and Play goes straight into the world", async ({
   await expect(page.getByRole("img", { name: "A putt rolling into the cup" })).toBeVisible();
   await page.getByRole("link", { name: "Play Golf" }).click();
   await expect(page).toHaveURL(/\/golf$/);
+  await expect(page.getByRole("heading", { name: "Bumper Plains" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Cold Start" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Hole \d, par \d/ })).toHaveCount(18);
+  await page.getByRole("link", { name: /Driftwood Bay/ }).click();
+  await expect(page).toHaveURL(/\/golf\/world$/);
   // Golf loads on demand, then tees up.
   await expect(page.getByLabel("Driftwood Bay, an open course")).toBeVisible();
   await expect(page.getByText("Teeing up")).toHaveCount(0, { timeout: 15_000 });
@@ -129,4 +135,65 @@ test("a shot costs the other phone a few kilobytes, not a stream of positions", 
   // About 8 KB when this was written (the command, the settled snapshot once, presence).
   expect(bytes).toBeLessThan(20_000);
   await other.context.close();
+});
+
+test("a hole: sink it, see the score on both phones, go on to the next, and it's on the course page", async ({ context, browser }) => {
+  const [a, b] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
+  const pa = await phone(context, { player: a, notifications: "granted" });
+  const other = await otherPhone(browser, b);
+  const pb = other.page;
+  await enablePush(pa);
+  await enablePush(pb);
+  await pa.goto("/golf");
+  await pa.getByRole("link", { name: "Hello, Hole 1, par 2" }).click();
+  // (Exactly: the row on the course page has this in its label too.)
+  await expect(pa.getByLabel("Hello, hole 1", { exact: true })).toBeVisible();
+  await expect(pa.getByText("Teeing up")).toHaveCount(0, { timeout: 15_000 });
+  await expect(pa.getByText("Hole 1, par 2").last()).toBeVisible();
+  await pb.goto("/golf/plains/1");
+  await expect(pb.getByText("Teeing up")).toHaveCount(0, { timeout: 15_000 });
+  await expect.poll(async () => (await balls(pa)).length).toBe(2);
+  // A small hole shows whole: no need for the map button.
+  await expect(pa.getByRole("button", { name: "See the whole map" })).toHaveCount(0);
+
+  await expect.poll(async () => (await balls(pa)).every((x) => x.mode === "aim")).toBe(true);
+  // A hole in one off the left rail, clear of the other ball on the next tee.
+  await shoot(pa, -2.78, 0.84);
+  const sheet = pa.getByRole("dialog", { name: "Hole finished" });
+  await expect(sheet).toBeVisible({ timeout: 15_000 });
+  await expect(sheet.getByRole("heading", { name: "Hole in one" })).toBeVisible();
+  // The server counted it, from its own run of the world.
+  await expect(sheet.getByText("Shlok")).toBeVisible({ timeout: 15_000 });
+  // The other phone saw it go in, and its ball's still there.
+  await expect(pb.getByText("Shlok sank one")).toBeVisible({ timeout: 15_000 });
+
+  await sheet.getByRole("button", { name: "Next hole" }).click();
+  await expect(pa).toHaveURL(/\/golf\/plains\/2$/);
+  await expect(pa.getByLabel("Elbow, hole 2", { exact: true })).toBeVisible();
+  await expect(pa.getByText("Teeing up")).toHaveCount(0, { timeout: 15_000 });
+  // Leaving took my ball off the first hole.
+  await expect.poll(async () => (await balls(pb)).map((x) => x.id), { timeout: 15_000 }).toEqual([await meOn(pb)]);
+
+  await pa.getByRole("button", { name: "Back" }).click();
+  await expect(pa).toHaveURL(/\/golf$/);
+  await expect(pa.getByRole("link", { name: "Play Bumper Plains" })).toContainText("Play from hole 2");
+  await other.context.close();
+});
+
+test("an ice hole plays, and the putt goes further than you'd think", async ({ context }) => {
+  const player = await createPlayer("Shlok");
+  const page = await phone(context, { player, notifications: "granted" });
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  await enablePush(page);
+  await page.goto("/golf/cold/1");
+  await expect(page.getByLabel("Thin Ice, hole 1", { exact: true })).toBeVisible();
+  await expect(page.getByText("Teeing up")).toHaveCount(0, { timeout: 15_000 });
+  const me = await balls(page);
+  await shoot(page, -Math.PI / 2, 0.12);
+  await expect.poll(async () => (await balls(page))[0].strokes).toBe(1);
+  await expect.poll(async () => (await balls(page))[0].mode, { timeout: 15_000 }).toBe("aim");
+  // About twice what the same tap would do on grass.
+  expect(me[0].y - (await balls(page))[0].y).toBeGreaterThan(2);
+  expect(errors).toEqual([]);
 });

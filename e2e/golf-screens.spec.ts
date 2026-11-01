@@ -16,6 +16,7 @@ async function putt(page: Page, dx: number, dy: number, hold = 0) {
 
 for (const scheme of ["dark", "light"] as const) {
   test(`golf screens ${scheme}`, async ({ browser }) => {
+    test.setTimeout(180_000);
     const names = ["WashableBowl700", "chrisis14", "Boiler"];
     const players = await Promise.all(names.map((n) => createPlayer(n)));
     const ctxs = await Promise.all(players.map(() => browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: scheme })));
@@ -33,8 +34,18 @@ for (const scheme of ["dark", "light"] as const) {
     await a.waitForTimeout(2600);
     await a.getByRole("heading", { name: "Golf" }).scrollIntoViewIfNeeded();
     await shot("games");
+    await a.goto("/golf");
+    await a.getByRole("heading", { name: "Cold Start" }).waitFor();
+    await shot("hub");
+    await a.screenshot({ path: `e2e/.state/screens/${scheme}-golf-hub-full.png`, fullPage: true, animations: "allow" });
+    for (const [name, path] of [["hole-green", "/golf/plains/3"], ["hole-big", "/golf/plains/7"], ["hole-ice", "/golf/cold/5"], ["hole-floes", "/golf/cold/8"], ["hole-final", "/golf/cold/9"]] as const) {
+      await a.goto(path);
+      await expect(a.getByText("Teeing up")).toHaveCount(0, { timeout: 15_000 });
+      await a.waitForTimeout(1500);
+      await shot(name);
+    }
     for (const p of pages) {
-      await p.goto("/golf");
+      await p.goto("/golf/world");
       await expect(p.getByText("Teeing up")).toHaveCount(0, { timeout: 15_000 });
     }
     await shot("world");

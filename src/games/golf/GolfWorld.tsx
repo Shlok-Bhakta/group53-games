@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
+import { useLocation, useNavigate } from "react-router";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "motion/react";
@@ -12,10 +13,11 @@ import {
 } from "@phosphor-icons/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { BAG_SIZE, INSTANT, TARGETED, canShoot, compile, groundUnder, preview, type Power } from "../../../convex/golf/engine";
-import { SANDBOX } from "../../../convex/golf/sandbox";
+import { BAG_SIZE, INSTANT, TARGETED, canShoot, groundUnder, preview, scoreName, type Course, type Power } from "../../../convex/golf/engine";
+import { worldOf } from "../../../convex/golf/holes";
 import { advance, cmdOrder, newWorld, TPS, unpack, type Ball, type Cmd, type Packed, type WorldState } from "../../../convex/golf/world";
 import { useGoBack } from "@/components/AppHeader";
+import { Button } from "@/components/ui/button";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { usePlayingIn } from "@/presence";
 import { SEAT_COLORS } from "@/games/seats";
@@ -25,13 +27,11 @@ import * as sound from "./audio";
 import { ITEMS } from "./items";
 import { allCups, drawFrame, refreshTheme, type Camera, type Fx, type Juice, type Other } from "./toy";
 
-// Golf's open world: everyone's ball on Driftwood Bay at once. Every phone runs the same physics from
-// the server's settled snapshot plus everyone's commands (convex/golf.ts), so a shot is one tiny insert
-// and the ball flies identically everywhere. Your own shot plays the instant you let go; someone else's
-// arrives a moment late, and their ball eases onto where it really is rather than jumping.
+// A live golf world: the open one, or a hole with whoever's on it right now. Every phone runs the same
+// physics from the server's settled snapshot plus everyone's commands (convex/golf.ts), so a shot is one
+// tiny insert and the ball flies identically everywhere. Your own shot plays the instant you let go;
+// someone else's arrives a moment late, and their ball eases onto where it really is rather than jumping.
 
-const COURSE = SANDBOX;
-const WORLD = compile(COURSE);
 // Ball colors, in the order players first joined. Seat colors, minus the ones lost on grass.
 const BALL_COLORS = [SEAT_COLORS.yellow, SEAT_COLORS.blue, SEAT_COLORS.pink, SEAT_COLORS.orange, SEAT_COLORS.purple, SEAT_COLORS.teal, SEAT_COLORS.red, "#f4f1e8"];
 const colorOf = (b: Ball) => BALL_COLORS[b.color % BALL_COLORS.length];
@@ -40,7 +40,7 @@ const EASE_S = 0.14;
 const SNAP = 4;
 
 
-type Hud = { ready: boolean; mode: Ball["mode"] | null; bag: Power[]; armed: Power | null; shot: Power | null; holes: number; status: string | null; canShoot: boolean };
+type Hud = { ready: boolean; mode: Ball["mode"] | null; bag: Power[]; armed: Power | null; shot: Power | null; holes: number; strokes: number; status: string | null; canShoot: boolean };
 // What's happening to my ball, in a word or two for the dock.
 function statusOf(b: Ball) {
   if (b.t < b.frozenUntil) return "Frozen";
@@ -55,17 +55,36 @@ type Vec = { x: number; y: number };
 
 const round = "pointer-events-auto grid size-11 shrink-0 place-items-center rounded-full bg-card/90 shadow-md backdrop-blur-md transition-transform duration-100 active:scale-[0.94]";
 
-export default function GolfWorld() {
+// Where a hole sits in its course, and where to go after it. The open world has none of this.
+export type HoleInfo = { number: number; total: number; next: string | null };
+
+export default function GolfWorld({ course: COURSE, hole }: { course: Course; hole?: HoleInfo }) {
+  const WORLD = worldOf(COURSE);
+  const key = COURSE.id;
   const me = useQuery(api.users.me);
   const meId = me?._id;
-  const view = useQuery(api.golf.world);
+  const view = useQuery(api.golf.world, { key });
   const join = useMutation(api.golf.join);
+  const leave = useMutation(api.golf.leave);
   const [worldId, setWorldId] = useState<Id<"golfWorlds"> | null>(null);
+  const worldIdRef = useRef<Id<"golfWorlds"> | null>(null);
+  const joinRef = useRef(() => {});
+  joinRef.current = () => {
+    join({ key })
+      .then((id) => {
+        worldIdRef.current = id;
+        setWorldId(id);
+      })
+      .catch(() => toast.error("Couldn't get onto the course."));
+  };
   useEffect(() => {
-    join({})
-      .then(setWorldId)
-      .catch(() => toast.error("Couldn't get into the world."));
-  }, [join]);
+    joinRef.current();
+    // Off a hole, your ball goes with you. The open world keeps it.
+    return () => {
+      if (!COURSE.open && worldIdRef.current) void leave({ worldId: worldIdRef.current }).catch(() => {});
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
   const from = view?.snapshot?.tick ?? 0;
   const fromRef = useRef(from);
   fromRef.current = from;
@@ -78,8 +97,25 @@ export default function GolfWorld() {
     const { worldId: _w, clientTick, ...rest } = args;
     store.setQuery(api.golf.commands, q, [...list, { ...rest, by: meId, tick: Math.floor(clientTick) }]);
   });
-  const goBack = useGoBack("/");
-  const playing = usePlayingIn("/golf");
+  const goBack = useGoBack("/golf");
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const playing = usePlayingIn(pathname);
+  const scores = useQuery(api.golf.scores, hole ? {} : "skip");
+  // What I just shot, for the result sheet.
+  const [result, setResult] = useState<{ strokes: number } | null>(null);
+  // The board's own bounds: a small hole shows whole and stays put; a big one follows the ball.
+  const bounds = useMemo(() => {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const g of COURSE.greens)
+      for (const p of g.poly) {
+        x0 = Math.min(x0, p.x);
+        y0 = Math.min(y0, p.y);
+        x1 = Math.max(x1, p.x);
+        y1 = Math.max(y1, p.y);
+      }
+    return { x0, y0, x1, y1 };
+  }, [COURSE]);
 
   // The world as this phone sees it. Rebuilt from the snapshot whenever the commands change; stepped
   // forward with the clock every frame in between.
@@ -115,7 +151,8 @@ export default function GolfWorld() {
   const top = useRef<HTMLDivElement>(null);
   const dock = useRef<HTMLDivElement>(null);
   const cam = useRef<Camera>({ x: COURSE.tee.x, y: COURSE.tee.y, s: 16, ox: 0, oy: 0 });
-  const box = useRef({ w: 0, h: 0, fit: 4, play: 16, top: 90, bottom: 120, panned: 0 });
+  const box = useRef({ w: 0, h: 0, fit: 4, play: 16, top: 90, bottom: 120, panned: 0, big: true });
+  const [big, setBig] = useState(true);
   const [overview, setOverview] = useState(false);
   const overviewRef = useRef(overview);
   overviewRef.current = overview;
@@ -126,12 +163,13 @@ export default function GolfWorld() {
   const shake = useRef({ t: -9, power: 0, a: 0 });
   const trail = useRef<Vec[]>([]);
   const flagOut = useRef(new Map<number, number>());
+  const sendRef = useRef<(kind: "shot", extra: { a: number; p: number }) => void>(() => {});
   const blind = useRef<HTMLDivElement>(null);
   const [target, setTarget] = useState<{ i: number; kind: Power } | null>(null);
   const targetRef = useRef(target);
   targetRef.current = target;
   const targetAt = useRef<Vec | null>(null);
-  const [hud, setHud] = useState<Hud>({ ready: false, mode: null, bag: [], armed: null, shot: null, holes: 0, status: null, canShoot: false });
+  const [hud, setHud] = useState<Hud>({ ready: false, mode: null, bag: [], armed: null, shot: null, holes: 0, strokes: 0, status: null, canShoot: false });
 
   // Full screen: the sea runs up under the status bar.
   useEffect(() => {
@@ -155,11 +193,17 @@ export default function GolfWorld() {
       b.h = r.height;
       b.top = (top.current?.getBoundingClientRect().bottom ?? 90) - r.top + 8;
       b.bottom = r.bottom - (dock.current?.getBoundingClientRect().top ?? r.bottom - 120) + 8;
-      b.fit = Math.min((r.width - 16) / COURSE.w, (r.height - b.top - b.bottom) / COURSE.h);
+      b.fit = Math.min((r.width - 16) / (bounds.x1 - bounds.x0 + 2), (r.height - b.top - b.bottom) / (bounds.y1 - bounds.y0 + 2));
       b.play = r.width / 24;
+      b.big = COURSE.open === true || b.fit < b.play * 0.8;
+      setBig(b.big);
       cam.current.ox = r.width / 2;
       cam.current.oy = b.top + (r.height - b.top - b.bottom) / 2;
-      if (!overviewRef.current) cam.current.s = b.play;
+      if (!b.big) {
+        cam.current.s = b.fit;
+        cam.current.x = (bounds.x0 + bounds.x1) / 2;
+        cam.current.y = (bounds.y0 + bounds.y1) / 2;
+      } else if (!overviewRef.current) cam.current.s = b.play;
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -167,11 +211,13 @@ export default function GolfWorld() {
 
   useEffect(() => {
     const c = cam.current, b = box.current;
+    if (!b.big) return;
     if (overview) {
       c.s = b.fit;
-      c.x = COURSE.w / 2;
-      c.y = COURSE.h / 2;
+      c.x = (bounds.x0 + bounds.x1) / 2;
+      c.y = (bounds.y0 + bounds.y1) / 2;
     } else c.s = b.play;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [overview]);
 
   // The loop: step the world to now, play what happened, draw.
@@ -185,6 +231,7 @@ export default function GolfWorld() {
     let lastKnock = 0;
     let stoppedAt = -9;
     let wasRolling = false;
+    let lastJoin = performance.now();
     const n = net.current;
 
     const positions = (s: WorldState) => new Map(s.balls.map((b) => [b.id, { x: b.x, y: b.y }]));
@@ -195,7 +242,7 @@ export default function GolfWorld() {
     const play = (s: WorldState, how: "fresh" | "rebuilt" | "arrived") => {
       const fresh = how === "fresh";
       const mine = myBall(s);
-      for (const { tick, id, ev } of s.events) {
+      for (const { tick, id, ev, strokes } of s.events) {
         const key = `${tick}:${id}:${ev.type}:${Math.round(ev.x * 10)}:${Math.round(ev.y * 10)}`;
         if (n.seen.has(key)) continue;
         n.seen.set(key, tick);
@@ -240,6 +287,8 @@ export default function GolfWorld() {
             const ci = allCups(COURSE).findIndex((k) => Math.hypot(k.x - ev.x, k.y - ev.y) < 0.01);
             if (ci >= 0 && !isMe) flagOut.current.set(ci, t);
             if (!isMe) toast(`${namesRef.current.get(id) ?? "Someone"} sank one`);
+            // Long enough to watch it drop.
+            else if (hole && strokes !== undefined) setTimeout(() => setResult({ strokes }), 1100);
             break;
           }
           case "spawn":
@@ -383,7 +432,14 @@ export default function GolfWorld() {
       };
 
       const mine = myBall(s);
-      if (!mine) return;
+      if (!mine) {
+        // Cleared off a hole while the phone was away: straight back on.
+        if (worldIdRef.current && nowMs - lastJoin > 3000) {
+          lastJoin = nowMs;
+          joinRef.current();
+        }
+        return;
+      }
       const at = drawn(mine);
       if (mine.mode === "roll") {
         wasRolling = true;
@@ -399,7 +455,7 @@ export default function GolfWorld() {
 
       // The camera follows my ball, leaning the way it's going (or toward the nearest flag).
       const c = cam.current, bx = box.current;
-      if (!overviewRef.current && nowMs - bx.panned > 1500) {
+      if (bx.big && !overviewRef.current && nowMs - bx.panned > 1500) {
         const cup = allCups(COURSE).reduce((a, q) => (Math.hypot(q.x - at.x, q.y - at.y) < Math.hypot(a.x - at.x, a.y - at.y) ? q : a));
         const dx = cup.x - at.x, dy = cup.y - at.y, d = Math.hypot(dx, dy) || 1;
         const lean = mine.mode === "roll" ? { x: mine.vx * 0.35, y: mine.vy * 0.35 } : { x: (dx / d) * Math.min(5, d * 0.3), y: (dy / d) * Math.min(5, d * 0.3) };
@@ -439,18 +495,19 @@ export default function GolfWorld() {
       // The flash fading off the screen.
       if (blind.current) blind.current.style.opacity = String(Math.max(0, Math.min(1, (mine.blindUntil - mine.t) / 1.2)) * 0.92);
       const status = statusOf(mine), shootable = canShoot(mine);
-      const h = `${mine.mode}|${mine.bag.join()}|${mine.armed}|${mine.shot}|${mine.holes}|${status}|${shootable}`;
+      const h = `${mine.mode}|${mine.bag.join()}|${mine.armed}|${mine.shot}|${mine.holes}|${mine.strokes}|${status}|${shootable}`;
       if (h !== lastHud) {
         lastHud = h;
-        setHud({ ready: true, mode: mine.mode, bag: [...mine.bag], armed: mine.armed, shot: mine.shot, holes: mine.holes, status, canShoot: shootable });
+        setHud({ ready: true, mode: mine.mode, bag: [...mine.bag], armed: mine.armed, shot: mine.shot, holes: mine.holes, strokes: mine.strokes, status, canShoot: shootable });
       }
     };
     raf = requestAnimationFrame(frame);
     // For the e2e suite: every ball as this phone has it.
     (window as unknown as { __golf?: unknown }).__golf = {
-      balls: () => n.state?.balls.map((b) => ({ id: b.id, x: b.x, y: b.y, mode: b.mode, holes: b.holes })) ?? [],
+      balls: () => n.state?.balls.map((b) => ({ id: b.id, x: b.x, y: b.y, mode: b.mode, holes: b.holes, strokes: b.strokes })) ?? [],
       tick: () => n.state?.tick ?? -1,
       me: () => meRef.current,
+      shoot: (angle: number, power: number) => sendRef.current("shot", { a: angle, p: power }),
     };
     return () => {
       cancelAnimationFrame(raf);
@@ -473,6 +530,8 @@ export default function GolfWorld() {
     if (!worldId) return;
     act({ worldId, kind, clientTick: tickNow(), seq: ++net.current.seq, ...extra }).catch(() => toast.error("That didn't go through."));
   };
+
+  sendRef.current = send;
 
   const down = (e: RPointerEvent) => {
     sound.unlock();
@@ -516,11 +575,11 @@ export default function GolfWorld() {
       const power = Math.min(1, pull / maxPull()) ** 1.35;
       const angle = Math.atan2(dy, dx);
       aim.current = { angle, power, line: preview(WORLD, m, angle, power, m.armed === "ghost"), from: g.start, to: p };
-    } else if (g.kind === "pan") {
+    } else if (g.kind === "pan" && box.current.big) {
       cam.current.x -= (p.x - prev.x) / cam.current.s;
       cam.current.y -= (p.y - prev.y) / cam.current.s;
       box.current.panned = performance.now();
-    } else if (g.kind === "pinch" && pointers.current.size === 2) {
+    } else if (g.kind === "pinch" && pointers.current.size === 2 && box.current.big) {
       const [a, b] = [...pointers.current.values()];
       const bx = box.current;
       cam.current.s = Math.max(bx.fit, Math.min(bx.play * 2, g.s0! * (Math.hypot(a.x - b.x, a.y - b.y) / g.d0!)));
@@ -553,6 +612,7 @@ export default function GolfWorld() {
     const wheel = (e: WheelEvent) => {
       e.preventDefault();
       const bx = box.current;
+      if (!bx.big) return;
       cam.current.s = Math.max(bx.fit, Math.min(bx.play * 2, cam.current.s * Math.exp(-e.deltaY * 0.0015)));
       bx.panned = performance.now();
     };
@@ -579,7 +639,7 @@ export default function GolfWorld() {
 
   return (
     <div ref={wrap} data-mode={hud.mode ?? ""} className="relative -mx-4 -mb-[calc(env(safe-area-inset-bottom)+16px)] h-[100dvh] touch-none select-none overflow-hidden bg-background">
-      <canvas ref={cv} className="absolute inset-0 size-full" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} aria-label={`${COURSE.name}, an open course`} />
+      <canvas ref={cv} className="absolute inset-0 size-full" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} aria-label={hole ? `${COURSE.name}, hole ${hole.number}` : `${COURSE.name}, an open course`} />
 
       <div ref={top} className="pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top)+34px)] z-20 flex items-center gap-2 px-3">
         <button type="button" aria-label="Back" onClick={goBack} className={round}>
@@ -588,7 +648,9 @@ export default function GolfWorld() {
         <div className="pointer-events-auto flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-full bg-card/90 py-1 pl-4 pr-1.5 shadow-md backdrop-blur-md">
           <span className="min-w-0 flex-1">
             <span className="block truncate font-display text-callout leading-tight">{COURSE.name}</span>
-            <span className="block truncate text-caption text-muted-foreground">{others.length === 0 ? "Just you" : others.length === 1 ? `${others[0].name} is here` : `${others.length + 1} here`}</span>
+            <span className="block truncate text-caption text-muted-foreground">
+              {hole ? `Hole ${hole.number}, par ${COURSE.par}` : others.length === 0 ? "Just you" : others.length === 1 ? `${others[0].name} is here` : `${others.length + 1} here`}
+            </span>
           </span>
           {others.length > 0 && (
             <span className="flex shrink-0 -space-x-2">
@@ -597,10 +659,16 @@ export default function GolfWorld() {
               ))}
             </span>
           )}
-          <span className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-primary px-3 font-display text-callout text-primary-foreground" aria-label={`${hud.holes} sunk`}>
-            <FlagPennantIcon weight="fill" size={16} />
-            {hud.holes}
-          </span>
+          {hole ? (
+            <span className="flex h-9 min-w-9 shrink-0 items-center justify-center rounded-full bg-primary px-3 font-display text-callout text-primary-foreground" aria-label={`${hud.strokes} strokes`}>
+              {hud.strokes}
+            </span>
+          ) : (
+            <span className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-primary px-3 font-display text-callout text-primary-foreground" aria-label={`${hud.holes} sunk`}>
+              <FlagPennantIcon weight="fill" size={16} />
+              {hud.holes}
+            </span>
+          )}
         </div>
       </div>
 
@@ -662,10 +730,12 @@ export default function GolfWorld() {
           </button>
         ) : (
           <>
-            <button type="button" aria-label={overview ? "Follow my ball" : "See the whole map"} onClick={() => setOverview((o) => !o)} className={cn(round, "size-14")}>
-              {overview ? <CornersInIcon size={24} weight="bold" /> : <CornersOutIcon size={24} weight="bold" />}
-            </button>
-            <button type="button" aria-label="Back to a tee" disabled={hud.mode !== "aim"} onClick={() => send("reset")} className={cn(round, "size-14 disabled:opacity-60")}>
+            {big && (
+              <button type="button" aria-label={overview ? "Follow my ball" : "See the whole map"} onClick={() => setOverview((o) => !o)} className={cn(round, "size-14")}>
+                {overview ? <CornersInIcon size={24} weight="bold" /> : <CornersOutIcon size={24} weight="bold" />}
+              </button>
+            )}
+            <button type="button" aria-label={hole ? "Start the hole again" : "Back to a tee"} disabled={hud.mode !== "aim"} onClick={() => send("reset")} className={cn(round, "size-14 disabled:opacity-60")}>
               <GolfIcon size={24} weight="bold" />
             </button>
           </>
@@ -674,11 +744,89 @@ export default function GolfWorld() {
 
       <div ref={blind} aria-hidden className="pointer-events-none absolute inset-0 z-20 bg-white opacity-0" />
 
+      {hole && (
+        // The hole's name as it comes up.
+        <motion.div
+          initial={{ opacity: 1 }}
+          animate={{ opacity: 0 }}
+          transition={{ delay: 1.1, duration: 0.5 }}
+          className="pointer-events-none absolute inset-x-0 top-1/3 z-10 text-center text-white [text-shadow:0_2px_12px_rgb(0_0_0/0.55)]"
+          aria-hidden
+        >
+          <p className="font-display text-callout">Hole {hole.number}</p>
+          <p className="font-display text-title-lg">{COURSE.name}</p>
+          <p className="text-callout">Par {COURSE.par}</p>
+        </motion.div>
+      )}
+
+      <AnimatePresence>
+        {result && hole && (
+          <HoleResult
+            key="result"
+            strokes={result.strokes}
+            par={COURSE.par}
+            scores={(scores ?? []).filter((r) => r.hole === COURSE.id)}
+            next={hole.next}
+            onAgain={() => setResult(null)}
+            onNext={() => (hole.next ? navigate(hole.next, { replace: true }) : goBack())}
+          />
+        )}
+      </AnimatePresence>
+
       {!hud.ready && (
         <div className="pointer-events-none absolute inset-0 z-30 grid place-items-center">
           <span className="rounded-full bg-card/90 px-4 py-2 font-display text-callout shadow-md">Teeing up</span>
         </div>
       )}
     </div>
+  );
+}
+
+// A sunk hole: what that was called, how the crew's done on it, and on to the next. The ball's already
+// back on the tee behind it, for another go.
+function HoleResult({ strokes, par, scores, next, onAgain, onNext }: { strokes: number; par: number; scores: { userId: string; name: string; image: string | null; best: number }[]; next: string | null; onAgain: () => void; onNext: () => void }) {
+  const tone = strokes < par ? "text-primary" : "";
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-30 flex items-end bg-black/40 p-3 pb-[calc(env(safe-area-inset-bottom)+12px)]">
+      <motion.div
+        initial={{ y: 40 }}
+        animate={{ y: 0 }}
+        exit={{ y: 40 }}
+        transition={{ type: "spring", bounce: 0, duration: 0.35 }}
+        className="flex w-full flex-col gap-4 rounded-3xl bg-card p-5"
+        role="dialog"
+        aria-label="Hole finished"
+      >
+        <div className="text-center">
+          <h2 className={cn("font-display text-title", tone)}>{scoreName(strokes, par)}</h2>
+          <p className="text-callout text-muted-foreground">
+            {strokes} {strokes === 1 ? "stroke" : "strokes"} on a par {par}
+          </p>
+        </div>
+        {scores.length > 0 && (
+          <ul className="flex flex-col gap-2">
+            {scores
+              .slice()
+              .sort((a, b) => a.best - b.best)
+              .slice(0, 4)
+              .map((r) => (
+                <li key={r.userId} className="flex items-center gap-2 text-callout">
+                  <PlayerAvatar name={r.name} image={r.image ?? undefined} size={28} className="rounded-full" />
+                  <span className="min-w-0 flex-1 truncate">{r.name}</span>
+                  <span className="font-display">{r.best}</span>
+                </li>
+              ))}
+          </ul>
+        )}
+        <div className="flex gap-2.5">
+          <Button size="xl" variant="secondary" className="flex-1" onClick={onAgain}>
+            Again
+          </Button>
+          <Button size="xl" className="flex-1" onClick={onNext}>
+            {next ? "Next hole" : "Done"}
+          </Button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }

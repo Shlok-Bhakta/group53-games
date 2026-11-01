@@ -1,8 +1,9 @@
 import { describe, expect, test } from "vitest";
 import { compile, DT, groundUnder, ICE_S, rng, type Power } from "./engine";
 import { datan, datan2, dcos, dexp, dlog, dpow, dsin, hyp } from "./dmath";
+import { courseOf, worldOf } from "./holes";
 import { SANDBOX } from "./sandbox";
-import { advance, applyCmd, BOX_BACK, cmdOrder, fingerprint, MINE_BACK, newWorld, pack, REACH, STORM, TPS, unpack, type Cmd, type Packed, type WorldState } from "./world";
+import { advance, applyCmd, BOX_BACK, cmdOrder, fingerprint, MINE_BACK, newWorld, pack, quiet, REACH, STORM, TPS, unpack, type Cmd, type Packed, type WorldState } from "./world";
 
 const W = compile(SANDBOX);
 const at = (s: WorldState, id: string) => s.balls.find((b) => b.id === id)!;
@@ -373,6 +374,69 @@ describe("the board fights back", () => {
     const back = unpack(JSON.parse(JSON.stringify(old)));
     advance(back, W, TPS * 3, [cmd(1, "a", "shot", { a: 0, p: 0.3 })]);
     expect(at(back, "a").x).toBeGreaterThan(41);
+  });
+});
+
+describe("playing a hole", () => {
+  const hole = courseOf("plains-1")!;
+  const WH = worldOf(hole);
+  const join = (s: WorldState, by: string) => applyCmd(s, hole, { tick: s.tick, by, seq: 0, kind: "join" });
+
+  test("leaving takes your ball away, and the next player gets its color", () => {
+    const s = newWorld(hole);
+    join(s, "a");
+    join(s, "b");
+    expect(s.balls.map((b) => b.color)).toEqual([0, 1]);
+    applyCmd(s, hole, { tick: 0, by: "a", seq: 1, kind: "leave" });
+    expect(s.balls.map((b) => b.id)).toEqual(["b"]);
+    join(s, "c");
+    expect(at(s, "c").color).toBe(0);
+    // Leaving twice, or joining with a ball, changes nothing.
+    applyCmd(s, hole, { tick: 0, by: "a", seq: 2, kind: "leave" });
+    join(s, "b");
+    expect(s.balls).toHaveLength(2);
+  });
+
+  test("a few players start on separate tees", () => {
+    const s = newWorld(hole);
+    for (const id of ["a", "b", "c", "d"]) join(s, id);
+    for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) expect(hyp(s.balls[i].x - s.balls[j].x, s.balls[i].y - s.balls[j].y)).toBeGreaterThan(1.4);
+  });
+
+  test("a sink reports its strokes, then it's a fresh start on the tee", () => {
+    const s = newWorld(hole);
+    join(s, "a");
+    const b = at(s, "a");
+    Object.assign(b, { x: hole.cup.x, y: hole.cup.y + 1.5, rest: { x: hole.cup.x, y: hole.cup.y + 1.5 }, strokes: 2, bag: ["coffee"] });
+    advance(s, WH, TPS * 5, [{ tick: 1, by: "a", seq: 1, kind: "shot", a: -Math.PI / 2, p: 0.1 }]);
+    const sink = s.events.find((e) => e.ev.type === "sink");
+    expect(sink?.strokes).toBe(3);
+    expect(at(s, "a").strokes).toBe(0);
+    expect(at(s, "a").bag).toEqual([]);
+    expect(at(s, "a").mode).toBe("aim");
+  });
+
+  test("starting again wipes the strokes on a hole, but not in the open world", () => {
+    const s = newWorld(hole);
+    join(s, "a");
+    Object.assign(at(s, "a"), { strokes: 4, bag: ["coffee"] });
+    applyCmd(s, hole, { tick: 0, by: "a", seq: 1, kind: "reset" });
+    expect(at(s, "a").strokes).toBe(0);
+    expect(at(s, "a").bag).toEqual([]);
+    const o = crowd(["a"]);
+    Object.assign(at(o, "a"), { strokes: 4 });
+    applyCmd(o, SANDBOX, { tick: 0, by: "a", seq: 1, kind: "reset" });
+    expect(at(o, "a").strokes).toBe(4);
+  });
+
+  test("a ball just outside a moving obstacle's sweep doesn't keep the world from going quiet", () => {
+    const spin = SANDBOX.movers.find((m) => m.kind === "spinner")!;
+    if (spin.kind !== "spinner") throw new Error();
+    const s = crowd(["a"]);
+    Object.assign(at(s, "a"), { x: spin.at.x + spin.L + spin.w / 2 + 0.6, y: spin.at.y });
+    expect(quiet(s, SANDBOX)).toBe(true);
+    Object.assign(at(s, "a"), { x: spin.at.x + 2 });
+    expect(quiet(s, SANDBOX)).toBe(false);
   });
 });
 

@@ -13,7 +13,7 @@ export type Vec = { x: number; y: number };
 export type Theme = "hills" | "desert" | "ice" | "volcano" | "arcade" | "orbit" | "server" | "zen";
 
 // What the ball rolls on. Hazards end the shot: one stroke penalty and back to where it was hit from.
-export type Ground = "green" | "fringe" | "rough" | "dune" | "sand" | "quicksand" | "snow" | "ice" | "bridge" | "stone" | "honey" | "water" | "lava" | "void" | "coolant" | "oob";
+export type Ground = "green" | "fringe" | "rough" | "dune" | "sand" | "quicksand" | "snow" | "ice" | "bridge" | "stone" | "honey" | "packed" | "water" | "lava" | "void" | "coolant" | "oob";
 // "oob" is everything outside the course's walls: only a ball in the air can get there.
 export const HAZARDS: Ground[] = ["water", "lava", "void", "coolant", "oob"];
 // Rolling resistance (units/s²). Green is a fast mini-golf carpet, ice barely slows anything.
@@ -28,6 +28,7 @@ export const DECEL: Record<Ground, number> = {
   sand: 19,
   quicksand: 34,
   honey: 30,
+  packed: 2.6, // Cold Start's fairways: packed snow, about half as grippy as grass
   ice: 0.9,
   water: 0,
   lava: 0,
@@ -81,6 +82,7 @@ export type Course = {
   cups?: Vec[]; // more cups, on an open map with several flags
   tees?: Vec[]; // more places to start, on a map many players share
   off: Ground; // the ground outside every green
+  surface?: Ground; // the ground on the greens themselves, if it isn't grass
   greens: { poly: Vec[]; rim?: boolean }[];
   zones: Zone[];
   walls: Wall[];
@@ -281,7 +283,7 @@ export function groundAt(world: World, p: Vec): Ground {
   // Greens are even-odd: a loop inside another is a hole in it (an island in the fairway).
   let inside = false;
   for (const g of c.greens) if (inPoly(p, g.poly)) inside = !inside;
-  return inside ? "green" : c.off;
+  return inside ? (c.surface ?? "green") : c.off;
 }
 
 // The ground under a ball, with what players have put down: ice over water, honey over anything else.
