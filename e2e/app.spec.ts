@@ -106,6 +106,17 @@ test.describe("signed in", () => {
     await expect(last).toHaveAttribute("data-art", "waiting");
     await last.scrollIntoViewIfNeeded();
     await expect(last).toHaveAttribute("data-art", "played");
+    // Every card's art sits in the middle of its card, whatever its width.
+    await page.waitForTimeout(1200);
+    const offsets = await arts.evaluateAll((els) =>
+      els.map((el) => {
+        const box = el.getBoundingClientRect();
+        const art = (el.firstElementChild!.firstElementChild as HTMLElement).getBoundingClientRect();
+        return Math.round(art.left + art.width / 2 - (box.left + box.width / 2));
+      }),
+    );
+    for (const off of offsets) expect(Math.abs(off)).toBeLessThanOrEqual(2);
+    if (process.env.SCREENS) await page.screenshot({ path: "e2e/.state/screens/games-bottom.png" });
   });
 
   test("the tab bar reaches every tab and sits at native height", async ({ context }) => {

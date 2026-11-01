@@ -10,6 +10,7 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { useNotifications } from "@/notifications";
 import { usePlayingIn } from "@/presence";
 import { shareLink } from "@/share";
+import { cn } from "@/lib/utils";
 
 // Every game, one card each, with its art playing in once when you scroll to it.
 export function Games() {
@@ -94,8 +95,9 @@ function PlayWhenSeen({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const seen = useInView(ref, { once: true, amount: 0.6 });
   return (
-    <div ref={ref} className={seen ? "w-full" : "invisible w-full"} aria-hidden={seen ? undefined : true} data-art={seen ? "played" : "waiting"}>
-      <div key={seen ? "seen" : "waiting"} className="w-full">
+    <div ref={ref} className={cn("w-full", !seen && "invisible")} aria-hidden={seen ? undefined : true} data-art={seen ? "played" : "waiting"}>
+      {/* Centred like the card centres its art: full-width art fills it, fixed-width art sits in the middle. */}
+      <div key={seen ? "seen" : "waiting"} className="grid w-full place-items-center">
         {children}
       </div>
     </div>
