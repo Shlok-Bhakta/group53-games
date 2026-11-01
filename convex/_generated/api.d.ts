@@ -47,6 +47,7 @@ import type * as stonks from "../stonks.js";
 import type * as stonks_board from "../stonks/board.js";
 import type * as stonks_market from "../stonks/market.js";
 import type * as stonks_profile from "../stonks/profile.js";
+import type * as stonks_trade from "../stonks/trade.js";
 import type * as testing from "../testing.js";
 import type * as time from "../time.js";
 import type * as users from "../users.js";
@@ -97,6 +98,7 @@ declare const fullApi: ApiFromModules<{
   "stonks/board": typeof stonks_board;
   "stonks/market": typeof stonks_market;
   "stonks/profile": typeof stonks_profile;
+  "stonks/trade": typeof stonks_trade;
   testing: typeof testing;
   time: typeof time;
   users: typeof users;

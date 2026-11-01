@@ -1,8 +1,8 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import { contribution, downsample, liveWeight, withMinute, type Point } from "./stonks/board";
 import { marketClock, nextOpen, sessionDay } from "./stonks/market";
-import { setup } from "./test.setup";
+import { setup, signedIn } from "./test.setup";
 
 const ET = (s: string) => new Date(`${s}-04:00`).getTime(); // EDT (Oct 2026 is still daylight time until Nov 1)
 const EST = (s: string) => new Date(`${s}-05:00`).getTime();
@@ -160,5 +160,122 @@ describe("stonks", () => {
     const s = await t.query(api.stonks.sparks, {});
     expect(s.AAPL.length).toBeLessThanOrEqual(49);
     expect(s["^GSPC"]).toEqual([]);
+  });
+});
+
+describe("paper trading", () => {
+  afterEach(() => vi.useRealTimers());
+  const open = ET("2026-10-30T09:30:00");
+  async function market() {
+    vi.useFakeTimers();
+    vi.setSystemTime(open);
+    const t = setup();
+    await t.mutation(internal.stonks.ingest, { ticks: [tick("NVDA", 200, open - 1000), tick("TSLA", 400, open - 1000)] });
+    return t;
+  }
+  const tickAt = (t: ReturnType<typeof setup>, symbol: string, price: number, time: number, extra = {}) => t.mutation(internal.stonks.ingest, { ticks: [tick(symbol, price, time, extra)] });
+
+  test("everyone starts with $10,000, before they've done anything", async () => {
+    const t = await market();
+    const { as, userId } = await signedIn(t, "Shlok");
+    await signedIn(t, "Chris");
+    expect(await as.query(api.stonks.portfolio, {})).toMatchObject({ worth: 10000, cash: 10000, free: 10000, gain: 0, positions: [], waiting: [] });
+    const crew = await as.query(api.stonks.crew, {});
+    expect(crew.map((c) => [c.name, c.worth])).toEqual([["Chris", 10000], ["Shlok", 10000]]);
+    expect(crew.find((c) => c.userId === userId)?.me).toBe(true);
+  });
+
+  test("an order waits for a trade after the tap, in the regular session, and fills at that price", async () => {
+    const t = await market();
+    const { as } = await signedIn(t);
+    vi.setSystemTime(open + 10_000);
+    await as.mutation(api.stonks.order, { symbol: "NVDA", side: "buy", dollars: 1000 });
+    // A trade from before the tap, arriving late: knowing that price mustn't help.
+    await tickAt(t, "NVDA", 150, open + 9_000);
+    expect((await as.query(api.stonks.portfolio, {}))?.waiting).toHaveLength(1);
+    // Another stock's trade doesn't touch it, and nor does after hours.
+    await tickAt(t, "TSLA", 410, open + 11_000);
+    await tickAt(t, "NVDA", 160, open + 11_000, { session: "post" });
+    expect((await as.query(api.stonks.portfolio, {}))?.positions).toEqual([]);
+    await tickAt(t, "NVDA", 250, open + 12_000);
+    const p = await as.query(api.stonks.portfolio, {});
+    expect(p).toMatchObject({ cash: 9000, worth: 10000, waiting: [], positions: [expect.objectContaining({ symbol: "NVDA", shares: 4, avg: 250 })] });
+    expect(p?.lastFill).toMatchObject({ side: "buy", symbol: "NVDA", amount: 1000, price: 250 });
+    // The price moves, and so does everything derived from it.
+    await tickAt(t, "NVDA", 300, open + 13_000);
+    const later = await as.query(api.stonks.portfolio, {});
+    expect(later).toMatchObject({ worth: 10200, gain: 200 });
+    expect(later?.positions[0]).toMatchObject({ value: 1200, gain: 200, gainPct: 0.2 });
+    expect((await as.query(api.stonks.crew, {}))[0].worth).toBe(10200);
+    expect((await as.query(api.stonks.trades, {}))[0]).toMatchObject({ side: "buy", symbol: "NVDA", amount: 1000, price: 250 });
+  });
+
+  test("short, then cover at a profit", async () => {
+    const t = await market();
+    const { as } = await signedIn(t);
+    vi.setSystemTime(open + 1000);
+    await as.mutation(api.stonks.order, { symbol: "TSLA", side: "short", dollars: 2000 });
+    await tickAt(t, "TSLA", 400, open + 2000);
+    expect(await as.query(api.stonks.portfolio, {})).toMatchObject({ cash: 12000, worth: 10000, free: 8000 });
+    await expect(as.mutation(api.stonks.order, { symbol: "TSLA", side: "buy", dollars: 100 })).rejects.toThrow("Cover your short first.");
+    vi.setSystemTime(open + 3000);
+    await as.mutation(api.stonks.order, { symbol: "TSLA", side: "cover" });
+    await tickAt(t, "TSLA", 320, open + 4000);
+    expect(await as.query(api.stonks.portfolio, {})).toMatchObject({ cash: 10400, worth: 10400, positions: [] });
+    expect((await as.query(api.stonks.trades, { symbol: "TSLA" }))[0]).toMatchObject({ side: "cover", realized: 400 });
+  });
+
+  test("you can't invest more than you have, and waiting orders count", async () => {
+    const t = await market();
+    const { as } = await signedIn(t);
+    await expect(as.mutation(api.stonks.order, { symbol: "NVDA", side: "buy", dollars: 10001 })).rejects.toThrow("You have $10,000.00 to invest.");
+    await expect(as.mutation(api.stonks.order, { symbol: "NVDA", side: "buy", dollars: 0.5 })).rejects.toThrow("smallest order");
+    await expect(as.mutation(api.stonks.order, { symbol: "^GSPC", side: "buy", dollars: 100 })).rejects.toThrow();
+    await expect(as.mutation(api.stonks.order, { symbol: "NOPE", side: "buy", dollars: 100 })).rejects.toThrow("You can't trade that.");
+    await as.mutation(api.stonks.order, { symbol: "NVDA", side: "buy", dollars: 7000 });
+    expect((await as.query(api.stonks.portfolio, {}))?.free).toBe(3000);
+    await expect(as.mutation(api.stonks.order, { symbol: "TSLA", side: "short", dollars: 3500 })).rejects.toThrow("You have $3,000.00 to invest.");
+  });
+
+  test("the same tap twice is one order, and a waiting order can be cancelled, only by its owner", async () => {
+    const t = await market();
+    const { as } = await signedIn(t);
+    const chris = await signedIn(t, "Chris");
+    const a = await as.mutation(api.stonks.order, { symbol: "NVDA", side: "buy", dollars: 500 });
+    expect(await as.mutation(api.stonks.order, { symbol: "NVDA", side: "buy", dollars: 500 })).toBe(a);
+    await expect(chris.as.mutation(api.stonks.cancelOrder, { id: a })).rejects.toThrow("isn't your order");
+    await as.mutation(api.stonks.cancelOrder, { id: a });
+    await tickAt(t, "NVDA", 210, open + 5000);
+    expect(await as.query(api.stonks.portfolio, {})).toMatchObject({ cash: 10000, positions: [], waiting: [] });
+  });
+
+  test("an order that waited reports back, and betting against a friend tells them", async () => {
+    const t = await market();
+    const shlok = await signedIn(t, "Shlok");
+    const chris = await signedIn(t, "Chris");
+    await chris.as.mutation(api.stonks.order, { symbol: "NVDA", side: "buy", dollars: 1000 });
+    vi.setSystemTime(open + 1000);
+    await tickAt(t, "NVDA", 200, open + 1000);
+    const pushes = async () => (await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect())).filter((f) => f.name.includes("sendToUser")).map((f) => f.args[0] as { userId: string; title: string; body: string });
+    expect(await pushes()).toEqual([]); // filled within the second: Chris saw it
+    await shlok.as.mutation(api.stonks.order, { symbol: "NVDA", side: "short", dollars: 500 });
+    vi.setSystemTime(open + 60_000);
+    await tickAt(t, "NVDA", 205, open + 60_000);
+    const sent = await pushes();
+    expect(sent.find((p) => p.userId === shlok.userId)).toMatchObject({ title: "Shorted NVDA", body: "$500.00 at $205.00" });
+    expect(sent.find((p) => p.userId === chris.userId)).toMatchObject({ title: "Shlok shorted NVDA", body: "And you own it." });
+    expect((await shlok.as.query(api.stonks.holders, { symbol: "NVDA" })).map((h) => [h.name, h.shares > 0])).toEqual(expect.arrayContaining([["Chris", true], ["Shlok", false]]));
+  });
+
+  test("what someone holds keeps streaming, even outside the top", async () => {
+    const t = await market();
+    const { as } = await signedIn(t);
+    await t.mutation(internal.stonks.holdings, { asOf: "2026-10-29", holdings: [{ symbol: "AAPL", name: "APPLE INC", weight: 7 }] });
+    expect(await t.query(api.stonks.watchlist, {})).toEqual(["^GSPC", "AAPL"]);
+    await as.mutation(api.stonks.order, { symbol: "NVDA", side: "buy", dollars: 500 });
+    expect(await t.query(api.stonks.watchlist, {})).toEqual(["^GSPC", "AAPL", "NVDA"]);
+    vi.setSystemTime(open + 1000);
+    await tickAt(t, "NVDA", 200, open + 1000);
+    expect(await t.query(api.stonks.watchlist, {})).toEqual(["^GSPC", "AAPL", "NVDA"]);
   });
 });

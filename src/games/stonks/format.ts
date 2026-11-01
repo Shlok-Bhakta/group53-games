@@ -52,3 +52,9 @@ export const soon = (t: number, now: number) => (t - now < 6 * 86_400_000 ? dayO
 /** Points moved on the index: "+12.3", "−4.0" */
 export const pts = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n).toFixed(1)}`;
 export const RATING: Record<string, string> = { strong_buy: "Strong buy", buy: "Buy", hold: "Hold", underperform: "Underperform", sell: "Sell" };
+
+/** "4.87 shares", "1 share": fractional shares, without trailing zeros. */
+export const shareCount = (n: number) => {
+  const x = Math.abs(n);
+  return `${x.toLocaleString("en-US", { maximumFractionDigits: 3 })} ${x === 1 ? "share" : "shares"}`;
+};

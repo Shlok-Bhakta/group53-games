@@ -18,6 +18,7 @@ export const S = {
   mover: "h-9",
   range: "h-[68px]",
   stat: "h-12",
+  crew: "h-14",
 } as const;
 
 export const MOVERS = 6;
@@ -79,6 +80,22 @@ export function BoardSkeleton() {
   return (
     <div className="flex flex-col gap-6" aria-busy="true">
       <NavBar title="Stonks" back="/games" />
+      <HeroSkeleton extended />
+      <section>
+        <SectionHead wide="w-16" />
+        <Group>
+          {Array.from({ length: 4 }, (_, i) => (
+            <div key={i} className={`flex ${S.crew} items-center gap-3 px-4`}>
+              <Skeleton className="size-9 shrink-0 rounded-full" />
+              <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-3 w-16" />
+              </div>
+              <Skeleton className="h-4 w-20 shrink-0" />
+            </div>
+          ))}
+        </Group>
+      </section>
       <section className="flex flex-col gap-3">
         <HeroSkeleton />
         <ChartSkeleton />
@@ -145,6 +162,10 @@ export function StockSkeleton() {
         <Skeleton className={`${S.segmented} w-full rounded-md`} />
       </section>
       <StatsSkeleton />
+      <div className="sticky bottom-0 -mx-4 flex gap-2.5 bg-background px-4 pt-5" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)", marginBottom: "calc(-1 * (env(safe-area-inset-bottom) + 16px))" }}>
+        <Skeleton className="h-14 flex-1 rounded-lg" />
+        <Skeleton className="h-14 flex-1 rounded-lg" />
+      </div>
     </div>
   );
 }

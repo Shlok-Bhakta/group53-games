@@ -32,6 +32,9 @@ export const savedRange = (): Range => {
 export function warmBoard(convex: ConvexReactClient, ms = 120_000) {
   warm(convex, api.stonks.board, {}, ms);
   warm(convex, api.stonks.sparks, {}, ms);
+  warm(convex, api.stonks.portfolio, {}, ms);
+  warm(convex, api.stonks.crew, {}, ms);
+  warm(convex, api.stonks.trades, {}, ms);
   warm(convex, api.stonks.quote, { symbol: INDEX }, ms);
   warm(convex, api.stonks.profile, { symbol: INDEX }, ms);
   warm(convex, api.stonks.chart, { symbol: INDEX, range: savedRange() }, ms);
@@ -41,6 +44,8 @@ export function warmBoard(convex: ConvexReactClient, ms = 120_000) {
 export function warmStock(convex: ConvexReactClient, symbol: string) {
   warm(convex, api.stonks.quote, { symbol });
   warm(convex, api.stonks.profile, { symbol });
+  warm(convex, api.stonks.holders, { symbol });
+  warm(convex, api.stonks.trades, { symbol });
   warm(convex, api.stonks.chart, { symbol, range: savedRange() });
   // The open (and the after-hours line) comes from the day's chart whatever the range.
   warm(convex, api.stonks.chart, { symbol, range: "1D" });

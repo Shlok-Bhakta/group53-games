@@ -1,6 +1,9 @@
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { internalMutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
+import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import { notify } from "./notify";
+import { buyingPower, fill, MIN_ORDER, netWorth, opens, refusal, START_CASH, type Ask, type Book, type Side } from "./stonks/trade";
 import { contribution, downsample, liveWeight, minuteOf, withMinute, type Point } from "./stonks/board";
 import { INDEX, RANGES } from "./stonks/market";
 import { newsItem, statsValidator } from "./stonks/profile";
@@ -42,7 +45,10 @@ export const watchlist = query({
   args: {},
   handler: async (ctx) => {
     const idx = await indexDoc(ctx);
-    return [INDEX, ...(idx?.holdings.map((h) => h.symbol) ?? [])];
+    // Anything someone holds or has an order on keeps streaming, even if it drops out of the top.
+    const held = (await ctx.db.query("stockPositions").collect()).map((p) => p.symbol);
+    const waiting = (await ctx.db.query("stockOrders").withIndex("by_status_filled", (q) => q.eq("status", "waiting")).collect()).map((o) => o.symbol);
+    return [...new Set([INDEX, ...(idx?.holdings.map((h) => h.symbol) ?? []), ...held, ...waiting])];
   },
 });
 
@@ -202,6 +208,7 @@ export const ingest = internalMutation({
       const row = { ...t, minute, minuteClose: t.price, prevClose, ...(regular ? { regularPrice: t.price } : {}) };
       if (q) await ctx.db.patch(q._id, row);
       else await ctx.db.insert("stockQuotes", row);
+      if (regular) await fillWaiting(ctx, t.symbol, t.price, t.time);
     }
     for (const f of feeds ?? []) {
       const row = await ctx.db
@@ -243,6 +250,233 @@ export const series = internalMutation({
       const last = points.at(-1);
       if (last) await ctx.db.insert("stockQuotes", { symbol, price: last[1], time: last[0], recv: Date.now(), source: "history", ...patch });
     }
+  },
+});
+
+// ---- Paper trading ----
+
+async function bookOf(ctx: QueryCtx, userId: Id<"users">): Promise<Book> {
+  const account = await ctx.db
+    .query("stockAccounts")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .unique();
+  const positions = await ctx.db
+    .query("stockPositions")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .collect();
+  return { cash: account?.cash ?? START_CASH, positions };
+}
+
+const pricesOf = async (ctx: QueryCtx, symbols: string[]) => {
+  const out = new Map<string, Doc<"stockQuotes">>();
+  for (const s of new Set(symbols)) {
+    const q = await quoteOf(ctx, s);
+    if (q) out.set(s, q);
+  }
+  return out;
+};
+
+const askOf = (o: Doc<"stockOrders">): Ask => ({ side: o.side, symbol: o.symbol, dollars: o.dollars, shares: o.shares });
+const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const DID: Record<Side, string> = { buy: "Bought", sell: "Sold", short: "Shorted", cover: "Covered" };
+const stockPath = (symbol: string) => `/stonks/${encodeURIComponent(symbol)}`;
+
+/** A trade came in: every order placed before that trade happened fills at its price. An order can't fill
+ *  on a trade from before the tap, so knowing the price from somewhere else is no edge. */
+async function fillWaiting(ctx: MutationCtx, symbol: string, price: number, time: number) {
+  const orders = await ctx.db
+    .query("stockOrders")
+    .withIndex("by_symbol_status", (q) => q.eq("symbol", symbol).eq("status", "waiting"))
+    .collect();
+  for (const order of orders) {
+    if (order.at >= time) continue;
+    const book = await bookOf(ctx, order.userId);
+    const prices = await pricesOf(ctx, book.positions.map((p) => p.symbol));
+    const power = buyingPower(book, (s) => (s === symbol ? price : prices.get(s)?.price));
+    const done = fill(book, askOf(order), price, power);
+    if ("refused" in done) {
+      await ctx.db.patch(order._id, { status: "refused", reason: done.refused, filledAt: time });
+      await notify(ctx, order.userId, { title: `${symbol} order refused`, body: done.refused, url: stockPath(symbol), tag: `stonks-${symbol}` });
+      continue;
+    }
+    const account = await ctx.db
+      .query("stockAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", order.userId))
+      .unique();
+    if (account) await ctx.db.patch(account._id, { cash: done.cash });
+    else await ctx.db.insert("stockAccounts", { userId: order.userId, cash: done.cash });
+    const row = book.positions.find((p) => p.symbol === symbol) as Doc<"stockPositions"> | undefined;
+    if (done.position && row) await ctx.db.patch(row._id, { shares: done.position.shares, avg: done.position.avg });
+    else if (done.position) await ctx.db.insert("stockPositions", { userId: order.userId, ...done.position });
+    else if (row) await ctx.db.delete(row._id);
+    await ctx.db.patch(order._id, { status: "filled", filledAt: time, price, filledShares: done.shares, amount: done.amount, realized: done.realized });
+
+    // An order that sat waiting (overnight, say) reports back; one that filled in a second was watched.
+    if (time - order.at > 30_000) await notify(ctx, order.userId, { title: `${DID[order.side]} ${symbol}`, body: `${money(done.amount)} at ${money(price)}`, url: stockPath(symbol), tag: `stonks-${symbol}` });
+    await tellTheOtherSide(ctx, order, symbol);
+  }
+}
+
+/** Betting against a friend's position tells them: a short or a sale when they're long, a buy when they're short. */
+async function tellTheOtherSide(ctx: MutationCtx, order: Doc<"stockOrders">, symbol: string) {
+  const me = await ctx.db.get(order.userId);
+  if (!me || me.isTest) return;
+  const holders = await ctx.db
+    .query("stockPositions")
+    .withIndex("by_symbol", (q) => q.eq("symbol", symbol))
+    .collect();
+  for (const h of holders) {
+    if (h.userId === order.userId) continue;
+    const against = order.side === "short" || order.side === "sell" ? h.shares > 0 : order.side === "buy" && h.shares < 0;
+    if (!against) continue;
+    await notify(ctx, h.userId, {
+      title: `${me.name ?? "Someone"} ${DID[order.side].toLowerCase()} ${symbol}`,
+      body: h.shares > 0 ? "And you own it." : "And you're short it.",
+      url: stockPath(symbol),
+      tag: `stonks-${symbol}`,
+    });
+  }
+}
+
+const SIDE = v.union(v.literal("buy"), v.literal("sell"), v.literal("short"), v.literal("cover"));
+
+/** Places an order. It waits for the next trade: the price it fills at is one nobody could know at the tap. */
+export const order = mutation({
+  args: { symbol: v.string(), side: SIDE, dollars: v.optional(v.number()), shares: v.optional(v.number()) },
+  handler: async (ctx, { symbol, side, dollars, shares }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Sign in first.");
+    if (!(await quoteOf(ctx, symbol)) || symbol === INDEX) throw new Error("You can't trade that.");
+    const ask: Ask = { side, symbol, dollars, shares };
+    const book = await bookOf(ctx, userId);
+    const why = refusal(book, ask);
+    if (why) throw new Error(why);
+    const waiting = await ctx.db
+      .query("stockOrders")
+      .withIndex("by_user_status", (q) => q.eq("userId", userId).eq("status", "waiting"))
+      .collect();
+    // The same tap twice in a moment is one order.
+    const now = Date.now();
+    const twin = waiting.find((o) => o.symbol === symbol && o.side === side && o.dollars === dollars && o.shares === shares && now - o.at < 3000);
+    if (twin) return twin._id;
+    if (opens(side)) {
+      if (dollars === undefined || !(dollars >= MIN_ORDER)) throw new Error(`The smallest order is ${money(MIN_ORDER)}.`);
+      const prices = await pricesOf(ctx, book.positions.map((p) => p.symbol));
+      const free = buyingPower(book, (s) => prices.get(s)?.price) - waiting.reduce((n, o) => n + (o.dollars ?? 0), 0);
+      if (dollars > free + 0.005) throw new Error(`You have ${money(Math.max(0, free))} to invest.`);
+    } else if (shares !== undefined && !(shares > 0)) throw new Error("Pick how many.");
+    return ctx.db.insert("stockOrders", { userId, symbol, side, dollars, shares, status: "waiting", at: now });
+  },
+});
+
+export const cancelOrder = mutation({
+  args: { id: v.id("stockOrders") },
+  handler: async (ctx, { id }) => {
+    const userId = await getAuthUserId(ctx);
+    const o = await ctx.db.get(id);
+    if (!o || o.userId !== userId) throw new Error("That isn't your order.");
+    if (o.status === "waiting") await ctx.db.patch(id, { status: "cancelled" });
+  },
+});
+
+/** My money: net worth, what's free, positions at live prices, orders waiting and the latest fill. */
+export const portfolio = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return null;
+    const book = await bookOf(ctx, userId);
+    const quotes = await pricesOf(ctx, book.positions.map((p) => p.symbol));
+    const price = (s: string) => quotes.get(s)?.price;
+    const waiting = await ctx.db
+      .query("stockOrders")
+      .withIndex("by_user_status", (q) => q.eq("userId", userId).eq("status", "waiting"))
+      .collect();
+    const filled = await ctx.db
+      .query("stockOrders")
+      .withIndex("by_user_status", (q) => q.eq("userId", userId).eq("status", "filled"))
+      .order("desc")
+      .first();
+    const worth = netWorth(book, price);
+    return {
+      cash: book.cash,
+      worth,
+      gain: worth - START_CASH,
+      start: START_CASH,
+      free: buyingPower(book, price) - waiting.reduce((n, o) => n + (o.dollars ?? 0), 0),
+      positions: book.positions
+        .map((p) => {
+          const q = quotes.get(p.symbol);
+          const now = q?.price ?? p.avg;
+          return { symbol: p.symbol, name: q?.name, shares: p.shares, avg: p.avg, price: now, value: p.shares * now, gain: p.shares * (now - p.avg), gainPct: (Math.sign(p.shares) * (now - p.avg)) / p.avg };
+        })
+        .sort((a, b) => Math.abs(b.value) - Math.abs(a.value)),
+      waiting: waiting.map((o) => ({ id: o._id, symbol: o.symbol, side: o.side, dollars: o.dollars, shares: o.shares, at: o.at })),
+      lastFill: filled && { id: filled._id, side: filled.side, symbol: filled.symbol, amount: filled.amount ?? 0, price: filled.price ?? 0 },
+    };
+  },
+});
+
+/** The whole crew ranked by net worth, live with every price. */
+export const crew = query({
+  args: {},
+  handler: async (ctx) => {
+    const me = await getAuthUserId(ctx);
+    if (me === null) return [];
+    const users = await ctx.db.query("users").collect();
+    const positions = await ctx.db.query("stockPositions").collect();
+    const accounts = new Map((await ctx.db.query("stockAccounts").collect()).map((a) => [a.userId, a.cash]));
+    const profiles = new Map((await ctx.db.query("profiles").collect()).map((p) => [p.userId, p]));
+    const quotes = await pricesOf(ctx, positions.map((p) => p.symbol));
+    return users
+      .map((u) => {
+        const book = { cash: accounts.get(u._id) ?? START_CASH, positions: positions.filter((p) => p.userId === u._id) };
+        const worth = netWorth(book, (s) => quotes.get(s)?.price);
+        const f = profiles.get(u._id);
+        return { userId: u._id, me: u._id === me, name: u.name ?? "Someone", image: u.image, frame: f?.frame, frameColor: f?.frameColor, glow: f?.glow, badge: f?.badge, worth, gain: worth - START_CASH, positions: book.positions.length };
+      })
+      .sort((a, b) => b.worth - a.worth || a.name.localeCompare(b.name));
+  },
+});
+
+/** The crew's latest trades, for all to see. */
+export const trades = query({
+  args: { symbol: v.optional(v.string()) },
+  handler: async (ctx, { symbol }) => {
+    if ((await getAuthUserId(ctx)) === null) return [];
+    const recent = await ctx.db
+      .query("stockOrders")
+      .withIndex("by_status_filled", (q) => q.eq("status", "filled"))
+      .order("desc")
+      .take(symbol ? 200 : 12);
+    const rows = (symbol ? recent.filter((o) => o.symbol === symbol) : recent).slice(0, 12);
+    return Promise.all(
+      rows.map(async (o) => {
+        const u = await ctx.db.get(o.userId);
+        return { id: o._id, name: u?.name ?? "Someone", image: u?.image, side: o.side, symbol: o.symbol, amount: o.amount ?? 0, price: o.price ?? 0, at: o.filledAt ?? o.at, realized: o.realized };
+      }),
+    );
+  },
+});
+
+/** Who in the crew is in this stock, and which way. */
+export const holders = query({
+  args: { symbol: v.string() },
+  handler: async (ctx, { symbol }) => {
+    const me = await getAuthUserId(ctx);
+    if (me === null) return [];
+    const price = (await quoteOf(ctx, symbol))?.price;
+    const rows = await ctx.db
+      .query("stockPositions")
+      .withIndex("by_symbol", (q) => q.eq("symbol", symbol))
+      .collect();
+    return Promise.all(
+      rows.map(async (p) => {
+        const u = await ctx.db.get(p.userId);
+        const now = price ?? p.avg;
+        return { userId: p.userId, me: p.userId === me, name: u?.name ?? "Someone", image: u?.image, shares: p.shares, value: p.shares * now, gainPct: (Math.sign(p.shares) * (now - p.avg)) / p.avg };
+      }),
+    );
   },
 });
 

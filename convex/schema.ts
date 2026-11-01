@@ -185,6 +185,31 @@ export default defineSchema({
     news: v.optional(v.array(newsItem)),
     at: v.number(),
   }).index("by_symbol", ["symbol"]),
+  // Paper trading: everyone's cash (a row appears with their first order; until then it's $10,000), their
+  // positions, and their orders, which wait until a trade after them comes in (convex/stonks/trade.ts).
+  stockAccounts: defineTable({ userId: v.id("users"), cash: v.number() }).index("by_user", ["userId"]),
+  stockPositions: defineTable({ userId: v.id("users"), symbol: v.string(), shares: v.number(), avg: v.number() })
+    .index("by_user", ["userId"])
+    .index("by_symbol", ["symbol"]),
+  stockOrders: defineTable({
+    userId: v.id("users"),
+    symbol: v.string(),
+    side: v.union(v.literal("buy"), v.literal("sell"), v.literal("short"), v.literal("cover")),
+    dollars: v.optional(v.number()), // opening: how much to put in
+    shares: v.optional(v.number()), // closing: how many (none means all of it)
+    status: v.union(v.literal("waiting"), v.literal("filled"), v.literal("cancelled"), v.literal("refused")),
+    at: v.number(),
+    // Once filled:
+    filledAt: v.optional(v.number()),
+    price: v.optional(v.number()),
+    filledShares: v.optional(v.number()),
+    amount: v.optional(v.number()),
+    realized: v.optional(v.number()),
+    reason: v.optional(v.string()),
+  })
+    .index("by_symbol_status", ["symbol", "status"])
+    .index("by_user_status", ["userId", "status"])
+    .index("by_status_filled", ["status", "filledAt"]),
   stockFeeds: defineTable({ source: v.string(), state: v.string(), detail: v.optional(v.string()), at: v.number() }).index("by_source", ["source"]),
   pushSubscriptions: defineTable({
     userId: v.id("users"),

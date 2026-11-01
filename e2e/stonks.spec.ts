@@ -1,7 +1,7 @@
-import type { Page } from "@playwright/test";
+import type { Browser, Page } from "@playwright/test";
 import { anyApi } from "convex/server";
 import { marketClock } from "../convex/stonks/market";
-import { admin, createPlayer, expect, phone, test } from "./fixtures";
+import { admin, createPlayer, expect, phone, test, type Player } from "./fixtures";
 
 // Stonks on a phone: the card on Games, the board ranked by share of the index, a trade arriving from
 // the sidecar (here, straight through its internal mutation) and moving the board live, and a stock's
@@ -18,7 +18,8 @@ async function seed() {
   const a = admin();
   const { day } = marketClock(Date.now());
   const start = day.open - 5.5 * 3600_000;
-  const walk = (base: number, k: number) => Array.from({ length: 16 * 60 }, (_, i) => [start + i * 60_000, +(base * (1 + 0.01 * Math.sin(i / (40 + k)) + i * 0.00001 * (k - 1))).toFixed(2)]);
+  // Only what's happened by now, so a trade stamped now is the latest whenever the suite runs.
+  const walk = (base: number, k: number) => Array.from({ length: 16 * 60 }, (_, i) => [start + i * 60_000, +(base * (1 + 0.01 * Math.sin(i / (40 + k)) + i * 0.00001 * (k - 1))).toFixed(2)]).filter((p) => p[0] < Date.now());
   await a.mutation(anyApi.stonks.holdings, { asOf: "2026-10-29", holdings: HOLDINGS, indexBase: 6000 });
   const series = [["^GSPC", 6000, "S&P 500", 5990], ["NVDA", 200, "NVIDIA Corporation", 199], ["AAPL", 270, "Apple Inc.", 268], ["MSFT", 520, "Microsoft Corporation", 521]] as const;
   for (const [i, [symbol, base, name, prevClose]] of series.entries()) {
@@ -167,4 +168,96 @@ test("pro mode: key stats, analysts and about, one tap away and remembered", asy
   await page.reload();
   await expect(page.getByRole("button", { name: "Pro mode" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("region", { name: "Key stats" })).toBeVisible();
+});
+
+// A trade in the regular session, stamped after anything already placed: what the sidecar would send.
+const trade = (symbol: string, price: number) => {
+  const now = Date.now() + 1000;
+  return admin().mutation(anyApi.stonks.ingest, { ticks: [{ symbol, price, time: now, recv: now, source: "yahoo", session: "regular" }] });
+};
+
+async function secondPhone(browser: Browser, player: Player) {
+  const context = await browser.newContext({ viewport: { width: 393, height: 852 }, isMobile: true, hasTouch: true });
+  return phone(context, { player, notifications: "granted" });
+}
+
+test("everyone starts with $10,000: buy on one phone, it fills on the next trade, the crew sees it live", async ({ context, browser }) => {
+  await seed();
+  const [a, b] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
+  const page = await phone(context, { player: a, notifications: "granted" });
+  const other = await secondPhone(browser, b);
+  await intoStonks(page);
+  await intoStonks(other);
+  const money = page.getByRole("region", { name: "Your money" });
+  await expect(money).toContainText("$10,000.00");
+  await expect(money).toContainText("#");
+  const crew = other.getByRole("region", { name: "Crew" });
+  await expect(crew.getByText("Shlok")).toBeVisible();
+  await expect(crew.getByText("All cash").first()).toBeVisible();
+
+  await page.getByRole("link", { name: /^NVDA,/ }).click();
+  await expect(page.getByRole("heading", { name: "NVDA", level: 1 })).toBeVisible();
+  // The actions are pinned where thumbs are, however long the page.
+  const buy = page.getByRole("button", { name: "Buy", exact: true });
+  const box = (await buy.boundingBox())!;
+  expect(box.y + box.height).toBeLessThanOrEqual(852);
+  expect(box.height).toBeGreaterThanOrEqual(56);
+  await buy.click();
+  const sheet = page.getByRole("dialog");
+  await sheet.getByRole("button", { name: "10%" }).click();
+  await expect(sheet.getByText("$1,000.00").first()).toBeVisible();
+  await sheet.getByRole("button", { name: "Buy $1,000.00" }).click();
+  await expect(sheet).toHaveCount(0);
+
+  // It waits: a trade hasn't happened since the tap. Nothing's spent, but it's set aside.
+  await expect(page.getByRole("region", { name: "Waiting to fill" })).toContainText("Buy $1,000.00 of NVDA");
+  await trade("NVDA", 250);
+  await expect(page.getByRole("region", { name: "Waiting to fill" })).toHaveCount(0);
+  const position = page.getByRole("region", { name: "Your position" });
+  await expect(position).toContainText("4 shares");
+  await expect(position).toContainText("at $250.00");
+  await expect(page.getByText("Bought $1,000.00 of NVDA at $250.00")).toBeVisible();
+  // The dock now closes it, or adds to it.
+  await expect(page.getByRole("button", { name: "Sell", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Buy more" })).toBeVisible();
+
+  // The other phone saw all of it: the trade, the position, and the price taking Shlok up the board.
+  await expect(other.getByRole("region", { name: "Crew trades" })).toContainText("Shlok bought NVDA");
+  await expect(crew.getByText("1 position")).toBeVisible();
+  await trade("NVDA", 300);
+  await expect(crew.locator("div", { hasText: "Shlok" }).first()).toContainText("$10,200.00");
+  await expect(crew.locator("[class*=h-14]").first()).toContainText("Shlok");
+  await other.context().close();
+});
+
+test("short, cover at a profit; and a waiting order can be cancelled", async ({ context }) => {
+  await seed();
+  const page = await phone(context, { player: await createPlayer("Shlok"), notifications: "granted" });
+  await intoStonks(page);
+  await page.goto("/stonks/MSFT");
+  await page.getByRole("button", { name: "Short", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "25%" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Short $2,500.00" }).click();
+  const waiting = page.getByRole("region", { name: "Waiting to fill" });
+  await expect(waiting).toContainText("Short $2,500.00 of MSFT");
+  await waiting.getByRole("button", { name: "Cancel Short MSFT" }).click();
+  await expect(waiting).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Short", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "25%" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Short $2,500.00" }).click();
+  await expect(waiting).toContainText("Short");
+  await trade("MSFT", 500);
+  await expect(page.getByRole("region", { name: "Your position" })).toContainText("Short 5 shares");
+  await trade("MSFT", 400);
+  await expect(page.getByRole("region", { name: "Your position" })).toContainText("+20.00%");
+
+  await page.getByRole("button", { name: "Cover", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Cover $2,000.00" }).click();
+  await expect(waiting).toContainText("Cover all of MSFT");
+  await trade("MSFT", 400);
+  await expect(page.getByRole("region", { name: "Your position" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Trades in this stock" })).toContainText("made $500.00");
+  await page.goto("/stonks");
+  await expect(page.getByRole("region", { name: "Your money" })).toContainText("$10,500.00");
 });

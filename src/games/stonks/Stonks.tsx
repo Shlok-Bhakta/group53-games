@@ -16,7 +16,9 @@ import { cn } from "@/lib/utils";
 import { movingAverage, PriceChart, Sparkline, type Dir } from "./Chart";
 import { ago, asOfDay, big, count, dayOf, frac, opensAt, percent, periodName, pointTime, price, pts, RATING, ratio, sessionName, signed, soon, tradeTime, weight } from "./format";
 import { BoardSkeleton, S, StockSkeleton } from "./skeletons";
+import { Change, Flash, ink, useWarmWhileSeen } from "./bits";
 import { Ticker } from "./Ticker";
+import { CrewBoard, CrewTrades, Money, Positions, TradeDock, useFillNotice, Waiting, WhoHolds, YourPosition } from "./Trade";
 import { savedRange, warmBoard, warmRanges, warmStock } from "./warm";
 
 // Stonks: the S&P 500's twenty biggest companies, ranked by their share of the index, live.
@@ -104,34 +106,6 @@ function withLive(points: Point[], q: { time: number; price: number } | null | u
 const live = (q: { recv: number } | null | undefined, clock: Clock, now: number) => !!q && clock.state !== "closed" && now - q.recv < 2 * 60_000;
 const dirOf = (p?: number, base?: number): Dir => (p !== undefined && base !== undefined && p < base ? "down" : "up");
 const sourceName = (s: string) => ({ yahoo: "Yahoo", nasdaq: "Nasdaq", history: "Yahoo" })[s] ?? s;
-const ink = (d: Dir) => `var(--${d})`;
-
-/** Keeps a stock warm while its row is on screen, or about to be (within 120px of it): its page opens
- *  from cache. Rows further away aren't, so a long list stays light. */
-function useWarmWhileSeen<T extends Element>(symbol: string) {
-  const convex = useConvex();
-  const ref = useRef<T>(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    let timer: ReturnType<typeof setInterval> | undefined;
-    const io = new IntersectionObserver(
-      ([e]) => {
-        clearInterval(timer);
-        if (!e.isIntersecting) return;
-        warmStock(convex, symbol);
-        timer = setInterval(() => warmStock(convex, symbol), 45_000);
-      },
-      { rootMargin: "120px 0px" },
-    );
-    io.observe(el);
-    return () => {
-      io.disconnect();
-      clearInterval(timer);
-    };
-  }, [convex, symbol]);
-  return ref;
-}
 
 // ---- The board ----
 
@@ -143,6 +117,10 @@ export function StonksBoard() {
   const board = useQuery(api.stonks.board);
   const sparks = useQuery(api.stonks.sparks);
   const market = useQuery(api.stonks.profile, { symbol: INDEX });
+  const me = useQuery(api.stonks.portfolio);
+  const crew = useQuery(api.stonks.crew);
+  const trades = useQuery(api.stonks.trades, {});
+  useFillNotice(me);
   const [pro] = usePro();
   const now = useNow(15_000);
   const clock = marketClock(now);
@@ -150,11 +128,16 @@ export function StonksBoard() {
     warmBoard(convex, 180_000);
     warmRanges(convex, INDEX);
   }, [convex]);
-  if (board === undefined) return <BoardSkeleton />;
+  if (board === undefined || !me || crew === undefined) return <BoardSkeleton />;
 
   return (
     <div className="flex flex-col gap-6">
       <NavBar title="Stonks" back="/games" action={<ProToggle />} />
+      <Money me={me} crew={crew} />
+      <CrewBoard crew={crew} />
+      <Positions me={me} />
+      <Waiting orders={me.waiting} clock={clock} />
+      <CrewTrades trades={trades ?? []} now={now} />
       <StockChart symbol={INDEX} quote={board.index ?? undefined} clock={clock} title="S&P 500" />
       <Group>
         <RangeRow label="Today" low={board.index?.dayLow} high={board.index?.dayHigh} value={board.index?.price} symbol={INDEX} />
@@ -328,56 +311,6 @@ function Sources({ board, now }: { board: Board; now: number }) {
   return <p className="px-1 text-footnote text-muted-foreground">{parts.filter(Boolean).join(" · ")}</p>;
 }
 
-// A price that just changed lights up for a moment, green if it went up and red if it went down.
-function Flash({ value, className, children }: { value: number; className?: string; children: ReactNode }) {
-  const prev = useRef(value);
-  const [hit, setHit] = useState<{ dir: Dir; n: number } | null>(null);
-  useEffect(() => {
-    if (value !== prev.current)
-      setHit((h) => ({
-        dir: value > prev.current ? "up" : "down",
-        n: (h?.n ?? 0) + 1,
-      }));
-    prev.current = value;
-  }, [value]);
-  return (
-    <span className={cn("relative -mx-1 rounded-sm px-1", className)}>
-      <AnimatePresence>
-        {hit && (
-          <motion.span
-            key={hit.n}
-            aria-hidden
-            className="absolute inset-0 rounded-sm"
-            style={{
-              background: `color-mix(in oklch, var(--${hit.dir}) 28%, transparent)`,
-            }}
-            initial={{ opacity: 1 }}
-            animate={{ opacity: 0 }}
-            transition={{ duration: 0.9, ease: "easeOut" }}
-          />
-        )}
-      </AnimatePresence>
-      <span className="relative">{children}</span>
-    </span>
-  );
-}
-
-// "▲ +1.23 (0.45%)": the caret carries the color; the numbers stay in text color, with a sign, so up and
-// down never depend on telling green from red. The numbers roll when they change.
-function Change({ change, base, symbol, small, label, instant }: { change: number; base: number; symbol?: string; small?: boolean; label?: string; instant?: boolean }) {
-  const dir: Dir = change < 0 ? "down" : "up";
-  const Icon = dir === "up" ? CaretUpIcon : CaretDownIcon;
-  const pct = (change / base) * 100;
-  const text = small ? `${change < 0 ? "−" : "+"}${percent(pct)}` : `${signed(change, symbol)} (${percent(pct)})`;
-  return (
-    <span className={cn("inline-flex items-center gap-1 whitespace-nowrap font-semibold", small ? "text-footnote" : "text-callout")}>
-      <Icon weight="fill" className="shrink-0" style={{ color: ink(dir) }} aria-label={dir} />
-      <Ticker value={change} text={text} instant={instant} />
-      {label && <span className="font-medium text-muted-foreground">{label}</span>}
-    </span>
-  );
-}
-
 // ---- One stock's chart, with its price above it ----
 
 function StockChart({ symbol, quote, clock, title, stats }: { symbol: string; quote: QuoteView | undefined; clock: Clock; title?: string; stats?: ProfileStats | null }) {
@@ -530,6 +463,10 @@ export function StockPage() {
   const quote = useQuery(api.stonks.quote, { symbol });
   const profile = useQuery(api.stonks.profile, { symbol });
   const dayChart = useQuery(api.stonks.chart, { symbol, range: "1D" });
+  const me = useQuery(api.stonks.portfolio);
+  const holders = useQuery(api.stonks.holders, { symbol });
+  const trades = useQuery(api.stonks.trades, { symbol });
+  useFillNotice(me);
   const [pro] = usePro();
   const now = useNow(5_000);
   const clock = marketClock(now);
@@ -537,7 +474,7 @@ export function StockPage() {
     warmRanges(convex, symbol);
     warmBoard(convex); // back to the board is instant too
   }, [convex, symbol]);
-  if (quote === undefined) return <StockSkeleton />;
+  if (quote === undefined || !me) return <StockSkeleton />;
   if (quote === null)
     return (
       <div className="flex flex-col gap-6">
@@ -549,11 +486,14 @@ export function StockPage() {
   const stats = profile?.stats ?? null;
   const open = dayChart?.points.find((p) => p[0] >= clock.day.open && p[0] < clock.day.close)?.[1];
   const moved = quote.rank && quote.baseRank ? quote.baseRank - quote.rank : 0;
+  const held = me.positions.find((p) => p.symbol === symbol);
 
   return (
     <div className="flex flex-col gap-6">
       <NavBar title={display(symbol)} subtitle={quote.name ?? display(symbol)} back="/stonks" action={<ProToggle />} />
       <StockChart symbol={symbol} quote={quote} clock={clock} title={quote.name ?? display(symbol)} stats={stats} />
+      {held && <YourPosition p={held} />}
+      <Waiting orders={me.waiting.filter((o) => o.symbol === symbol)} clock={clock} />
       <Section title="Stats">
         <RangeRow label="Today" low={quote.dayLow} high={quote.dayHigh} value={quote.price} symbol={symbol} />
         <RangeRow label="52 weeks" low={quote.yearLow} high={quote.yearHigh} value={quote.price} symbol={symbol} />
@@ -595,7 +535,10 @@ export function StockPage() {
           </motion.div>
         )}
       </AnimatePresence>
+      <WhoHolds holders={holders ?? []} />
+      <CrewTrades trades={trades ?? []} now={now} title="Trades in this stock" />
       {profile && profile.news.length > 0 && <News title="News" items={profile.news} now={now} />}
+      {symbol !== INDEX && <TradeDock symbol={symbol} last={quote.price} me={me} clock={clock} />}
     </div>
   );
 }
