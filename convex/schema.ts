@@ -113,9 +113,12 @@ export default defineSchema({
     i: v.optional(v.number()),
     x: v.optional(v.number()),
     y: v.optional(v.number()),
+    bag: v.optional(v.array(v.string())),
   }).index("by_world_tick", ["worldId", "tick"]),
   // The settled world (convex/golf/world.ts, packed), advanced by golf:tick, so phones replay from near now.
   golfSnapshots: defineTable({ worldId: v.id("golfWorlds"), tick: v.number(), state: v.any() }).index("by_world", ["worldId"]),
+  // What a player's carrying to the next golf hole of their run on a course.
+  golfBags: defineTable({ course: v.string(), userId: v.id("users"), bag: v.array(v.string()), at: v.number() }).index("by_course_user", ["course", "userId"]),
   // Each player's score on each golf hole, from the server's own run of the world, so it can't be faked.
   golfScores: defineTable({ hole: v.string(), userId: v.id("users"), best: v.number(), last: v.number(), plays: v.number(), at: v.number() })
     .index("by_hole_user", ["hole", "userId"]),

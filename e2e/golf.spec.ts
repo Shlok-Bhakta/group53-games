@@ -5,7 +5,7 @@ import { createPlayer, expect, phone, test, type Player } from "./fixtures";
 // Golf's open world on two phones: both in, a shot on one, and the ball ending up in exactly the same
 // place on both (every phone runs the same physics from the same commands).
 
-type BallView = { id: string; x: number; y: number; mode: string; holes: number; strokes: number };
+type BallView = { id: string; x: number; y: number; mode: string; holes: number; strokes: number; t: number };
 const balls = (page: Page) => page.evaluate(() => (window as unknown as { __golf?: { balls(): BallView[] } }).__golf?.balls() ?? []);
 const shoot = (page: Page, a: number, p: number) => page.evaluate(([x, y]) => (window as unknown as { __golf: { shoot(a: number, p: number): void } }).__golf.shoot(x, y), [a, p]);
 const meOn = (page: Page) => page.evaluate(() => (window as unknown as { __golf?: { me(): string } }).__golf?.me());
@@ -89,8 +89,10 @@ test("a shot on one phone lands in exactly the same spot on the other", async ({
   await expect.poll(async () => (await balls(pa)).find((x) => x.id === idA)?.mode, { timeout: 15_000 }).toBe("aim");
 
   // Exactly the same world on both: every coordinate, to the last bit.
-  const onA = (await balls(pa)).sort((p, q) => p.id.localeCompare(q.id));
-  const onB = (await balls(pb)).sort((p, q) => p.id.localeCompare(q.id));
+  // (Not the clock: each phone's is wherever that phone has got to.)
+  const settled = async (page: Page) => (await balls(page)).map(({ t: _t, ...b }) => b).sort((p, q) => p.id.localeCompare(q.id));
+  const onA = await settled(pa);
+  const onB = await settled(pb);
   expect(onB).toEqual(onA);
   await other.context.close();
 });
@@ -285,4 +287,20 @@ test("on a slow connection, sinking one still shows the score", async ({ context
   await shoot(page, angle, power);
   await expect(page.getByRole("dialog", { name: "Hole finished" }).getByRole("heading", { name: "Hole in one" })).toBeVisible({ timeout: 15_000 });
   await expect.poll(async () => (await balls(page))[0].holes, { timeout: 15_000 }).toBe(1);
+});
+
+test("moving obstacles keep moving while your ball sits still", async ({ context }) => {
+  const player = await createPlayer("Shlok");
+  const page = await phone(context, { player, notifications: "granted" });
+  await enablePush(page);
+  await page.goto("/golf/cold/7");
+  await expect(page.getByLabel("Avalanche, hole 7", { exact: true })).toBeVisible();
+  await expect(page.getByText("Teeing up")).toHaveCount(0, { timeout: 15_000 });
+  // What they're drawn from: a ball that's still, on a clock that isn't.
+  const first = (await balls(page))[0];
+  expect(first.mode).toBe("aim");
+  await page.waitForTimeout(1500);
+  const later = (await balls(page))[0];
+  expect(later.mode).toBe("aim");
+  expect(later.t - first.t).toBeGreaterThan(1);
 });

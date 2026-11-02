@@ -34,6 +34,12 @@ export const COURSES = [nine("plains", "Bumper Plains", [...BUMPER_PLAINS, ...BA
 export const HOLES = COURSES.flatMap((c) => c.holes);
 export const courseById = (id: string) => COURSES.find((c) => c.id === id) ?? null;
 
+// Which course a hole's in, and which hole of it, from its id.
+export function holeOf(key: string) {
+  const co = COURSES.find((c) => c.holes.some((h) => h.id === key));
+  return co ? { course: co.id, number: co.holes.findIndex((h) => h.id === key) + 1 } : null;
+}
+
 // What a world is played on, from its key: a hole's id, or the open world's.
 export function courseOf(key: string): Course | null {
   return key === SANDBOX.id ? SANDBOX : (HOLES.find((h) => h.id === key) ?? null);

@@ -3,9 +3,10 @@ import { v } from "convex/values";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { courseOf, worldOf } from "./golf/holes";
+import { courseOf, holeOf, worldOf } from "./golf/holes";
 import { SANDBOX } from "./golf/sandbox";
-import { advance, cmdOrder, newWorld, pack, quiet, TPS, unpack, type Cmd, type Packed } from "./golf/world";
+import type { Power } from "./golf/engine";
+import { advance, carryOf, cmdOrder, newWorld, pack, quiet, TPS, unpack, type Cmd, type Packed } from "./golf/world";
 import { ONLINE_WINDOW_MS } from "./presenceConfig";
 
 // Golf, played live: the open world, and each of the holes (convex/golf/holes.ts), every one its own
@@ -54,7 +55,7 @@ async function commandsFrom(ctx: QueryCtx, worldId: Id<"golfWorlds">, from: numb
     .collect();
   return rows.map(toCmd).sort(cmdOrder);
 }
-const toCmd = (r: Doc<"golfCommands">): Cmd => ({ tick: r.tick, by: r.by, seq: r.seq, kind: r.kind, a: r.a, p: r.p, i: r.i, x: r.x, y: r.y });
+const toCmd = (r: Doc<"golfCommands">): Cmd => ({ tick: r.tick, by: r.by, seq: r.seq, kind: r.kind, a: r.a, p: r.p, i: r.i, x: r.x, y: r.y, ...(r.bag ? { bag: r.bag as Power[] } : {}) });
 
 async function wake(ctx: MutationCtx, world: Doc<"golfWorlds">) {
   if (world.awake) return;
@@ -121,22 +122,56 @@ export const join = mutation({
     // The open world keeps your ball for good, so one join is all it ever needs. A hole's ball goes when
     // you leave, so every visit joins.
     if (!known || !course.open) {
-      await ctx.db.insert("golfCommands", { worldId: w._id, tick: tickAt(w, now), by: userId, seq: now % 1_000_000_000, kind: "join" });
+      const bag = course.open ? undefined : await bagForHole(ctx, key, userId);
+      await ctx.db.insert("golfCommands", { worldId: w._id, tick: tickAt(w, now), by: userId, seq: now % 1_000_000_000, kind: "join", ...(bag?.length ? { bag } : {}) });
       await wake(ctx, w);
     }
     return w._id;
   },
 });
 
-// Off a hole: your ball goes with you.
+async function bagRow(ctx: QueryCtx, course: string, userId: Id<"users">) {
+  return ctx.db
+    .query("golfBags")
+    .withIndex("by_course_user", (q) => q.eq("course", course).eq("userId", userId))
+    .unique();
+}
+
+// What a player brings onto a hole: what they finished the last one holding. The first hole of a
+// course starts a new run, empty-handed.
+async function bagForHole(ctx: MutationCtx, key: string, userId: Id<"users">) {
+  const hole = holeOf(key);
+  if (!hole) return undefined;
+  const row = await bagRow(ctx, hole.course, userId);
+  if (hole.number === 1) {
+    if (row) await ctx.db.delete(row._id);
+    return undefined;
+  }
+  return row?.bag;
+}
+
+// Off a hole: your ball goes with you, and if you finished it, what you were holding goes on to the
+// next. The hole's run right up to now, so a sink that hasn't settled yet still counts.
 export const leave = mutation({
   args: { worldId: v.id("golfWorlds") },
   handler: async (ctx, { worldId }) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) return;
     const w = await ctx.db.get(worldId);
-    if (!w || courseOf(w.key)?.open) return;
+    const course = w && courseOf(w.key);
+    if (!w || !course || course.open) return;
     const now = Date.now();
+    const snap = await snapshotOf(ctx, worldId);
+    const state = snap ? unpack(snap.state as Packed) : newWorld(course, { collide: w.collide });
+    advance(state, worldOf(course), Math.max(state.tick, tickAt(w, now)), await commandsFrom(ctx, worldId, state.tick));
+    const ball = state.balls.find((b) => b.id === userId);
+    const carry = ball && carryOf(ball);
+    const hole = holeOf(w.key);
+    if (carry && hole) {
+      const row = await bagRow(ctx, hole.course, userId);
+      if (row) await ctx.db.patch(row._id, { bag: carry, at: now });
+      else await ctx.db.insert("golfBags", { course: hole.course, userId, bag: carry, at: now });
+    }
     await ctx.db.insert("golfCommands", { worldId, tick: tickAt(w, now), by: userId, seq: now % 1_000_000_000, kind: "leave" });
     await wake(ctx, w);
   },

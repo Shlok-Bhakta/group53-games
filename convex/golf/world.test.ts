@@ -1,9 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { compile, DT, groundUnder, ICE_S, rng, type Power } from "./engine";
+import { canShoot, compile, DT, groundUnder, ICE_S, poseOf, rng, type Power } from "./engine";
 import { datan, datan2, dcos, dexp, dlog, dpow, dsin, hyp } from "./dmath";
 import { courseOf, worldOf } from "./holes";
 import { SANDBOX } from "./sandbox";
-import { advance, applyCmd, BOX_BACK, cmdOrder, fingerprint, MINE_BACK, newWorld, pack, quiet, REACH, STORM, TPS, unpack, withPending, type Cmd, type Packed, type Pending, type WorldState } from "./world";
+import { advance, applyCmd, BOX_BACK, carryOf, cmdOrder, fingerprint, MINE_BACK, newWorld, pack, quiet, REACH, STORM, stepWorld, TPS, unpack, withPending, type Cmd, type Packed, type Pending, type WorldState } from "./world";
 
 const W = compile(SANDBOX);
 const at = (s: WorldState, id: string) => s.balls.find((b) => b.id === id)!;
@@ -374,6 +374,92 @@ describe("the board fights back", () => {
     const back = unpack(JSON.parse(JSON.stringify(old)));
     advance(back, W, TPS * 3, [cmd(1, "a", "shot", { a: 0, p: 0.3 })]);
     expect(at(back, "a").x).toBeGreaterThan(41);
+  });
+});
+
+describe("time keeps moving in a still world", () => {
+  test("a moving obstacle keeps going while every ball sits still", () => {
+    // Regression: obstacles are drawn from the ball's clock, which stopped while the world was quiet, so
+    // they froze when you stopped and jumped when you shot.
+    for (const key of ["cold-7", "cold-9"]) {
+      const c = courseOf(key)!;
+      const s = newWorld(c);
+      applyCmd(s, c, { tick: 0, by: "a", seq: 0, kind: "join" });
+      const ball = at(s, "a");
+      const m = c.movers[0];
+      const poses: string[] = [];
+      for (let k = 1; k <= 4; k++) {
+        advance(s, worldOf(c), k * 37, []);
+        expect(ball.mode).toBe("aim");
+        expect(ball.t).toBeCloseTo((k * 37) / TPS, 9);
+        poses.push(JSON.stringify(poseOf(m, ball.t)));
+      }
+      expect(new Set(poses).size).toBe(4);
+    }
+  });
+
+  test("a stun wears off with nobody moving, so you can putt again", () => {
+    const s = crowd(["a"]);
+    const a = at(s, "a");
+    advance(s, W, 10, []);
+    a.stunUntil = a.t + 1;
+    expect(canShoot(a)).toBe(false);
+    advance(s, W, 10 + TPS * 2, []);
+    expect(canShoot(a)).toBe(true);
+  });
+
+  test("the clock lands where stepping would have left it, to the last bit", () => {
+    const c = courseOf("cold-7")!;
+    // A world that's quiet jumps; one kept busy by a second, rolling ball steps every tick.
+    const jumped = newWorld(c);
+    applyCmd(jumped, c, { tick: 0, by: "a", seq: 0, kind: "join" });
+    advance(jumped, worldOf(c), 500, []);
+    const stepped = newWorld(c);
+    applyCmd(stepped, c, { tick: 0, by: "a", seq: 0, kind: "join" });
+    for (let k = 0; k < 500; k++) stepWorld(stepped, worldOf(c));
+    expect(at(jumped, "a").t).toBe(at(stepped, "a").t);
+  });
+});
+
+describe("items through a run", () => {
+  const hole = courseOf("plains-1")!;
+  const WH = worldOf(hole);
+  const sinkFrom = (s: WorldState, by: string, tick: number) => {
+    const b = at(s, by);
+    Object.assign(b, { x: hole.cup.x, y: hole.cup.y + 1.5, rest: { x: hole.cup.x, y: hole.cup.y + 1.5 } });
+    return { tick, by, seq: 9, kind: "shot", a: -Math.PI / 2, p: 0.1 } as Cmd;
+  };
+
+  test("you start a hole with what you carried in", () => {
+    const s = newWorld(hole);
+    applyCmd(s, hole, { tick: 0, by: "a", seq: 0, kind: "join", bag: ["laser", "coffee"] });
+    expect(at(s, "a").bag).toEqual(["laser", "coffee"]);
+    expect(carryOf(at(s, "a"))).toBeNull();
+  });
+
+  test("what you hold when it goes in is what goes on, armed items included", () => {
+    const s = newWorld(hole);
+    applyCmd(s, hole, { tick: 0, by: "a", seq: 0, kind: "join", bag: ["laser"] });
+    Object.assign(at(s, "a"), { bag: ["laser", "coffee"], armed: "ghost" });
+    const cmd = sinkFrom(s, "a", 1);
+    advance(s, WH, TPS / 2, [cmd]);
+    expect(at(s, "a").mode).toBe("sunk");
+    expect(carryOf(at(s, "a"))).toEqual(expect.arrayContaining(["laser", "coffee"]));
+    // Back on the tee for another go: the bag's what you came in with, and the carry's kept for the next.
+    advance(s, WH, TPS * 5, [cmd]);
+    expect(at(s, "a").mode).toBe("aim");
+    expect(at(s, "a").bag).toEqual(["laser"]);
+    expect(carryOf(at(s, "a"))).toEqual(expect.arrayContaining(["laser", "coffee"]));
+  });
+
+  test("starting the hole again goes back to what you came in with", () => {
+    const s = newWorld(hole);
+    applyCmd(s, hole, { tick: 0, by: "a", seq: 0, kind: "join", bag: ["laser"] });
+    Object.assign(at(s, "a"), { bag: ["laser", "coffee", "ghost"] });
+    applyCmd(s, hole, { tick: 0, by: "a", seq: 1, kind: "reset" });
+    expect(at(s, "a").bag).toEqual(["laser"]);
+    // Not finished, so nothing goes on.
+    expect(carryOf(at(s, "a"))).toBeNull();
   });
 });
 

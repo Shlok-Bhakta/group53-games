@@ -1,6 +1,6 @@
 import {
   activate, BALL_R, blast, BLIND_S, brake, closest, compile, DT, fireTargeted, FREEZE_S, hop, landStrikes, newSim, rng, setMode, shoot, stepBall, TARGETED,
-  type Course, type Ev, type Patch, type Sim, type Vec, type World,
+  type Course, type Ev, type Patch, type Power, type Sim, type Vec, type World,
 } from "./engine";
 import { dcos, dsin, DTWO_PI, hyp } from "./dmath";
 
@@ -29,10 +29,13 @@ export const STORM = { r: 5, life: 7, every: 0.8, bolt: 1.8, hit: 15, stun: 1.5 
 export const FREEZE_R = 4.2;
 
 export type CmdKind = "join" | "leave" | "shot" | "use" | "fire" | "hop" | "brake" | "reset";
-export type Cmd = { tick: number; by: string; seq: number; kind: CmdKind; a?: number; p?: number; i?: number; x?: number; y?: number };
+// `bag`, on a join: what the player's carrying from the last hole of their run.
+export type Cmd = { tick: number; by: string; seq: number; kind: CmdKind; a?: number; p?: number; i?: number; x?: number; y?: number; bag?: Power[] };
 
 export type Mine = { x: number; y: number; live: boolean; fixed: boolean; back: number };
-export type Ball = Sim & { id: string; holes: number; color: number };
+// `startBag`: what they came onto this hole with, what a retry goes back to. `carry`: what they held
+// when they last sank it, what goes on to the next hole.
+export type Ball = Sim & { id: string; holes: number; color: number; startBag: Power[]; carry: Power[] | null };
 export type Missile = { x: number; y: number; vx: number; vy: number; target: string; by: string; until: number };
 export type Storm = { x: number; y: number; r: number; until: number; next: number };
 export type WorldState = {
@@ -153,7 +156,7 @@ export function applyCmd(s: WorldState, c: Course, cmd: Cmd) {
     // The first color nobody's using: on a hole, people come and go.
     let color = 0;
     while (s.balls.some((o) => o.color === color)) color++;
-    b = Object.assign(sim, { id: cmd.by, holes: 0, color });
+    b = Object.assign(sim, { id: cmd.by, holes: 0, color, startBag: [...(cmd.bag ?? [])], carry: null, bag: [...(cmd.bag ?? [])] });
     link(s, b);
     place(b, freeTee(s, c, s.balls.length));
     b.t = s.tick * DT;
@@ -265,10 +268,17 @@ export function applyCmd(s: WorldState, c: Course, cmd: Cmd) {
   drain(s, b);
 }
 
-// On a hole, back on the tee is a fresh try: no strokes, and no items saved up from the last one.
+// What a ball's holding, including anything armed for its next shot.
+const holding = (b: Ball): Power[] => [...b.bag, ...(b.armed ? [b.armed] : [])];
+// What goes on to the next hole, if this one's been finished: whatever they held when it went in.
+// Leaving without finishing carries nothing new, so walking off a hole can't farm its boxes.
+export const carryOf = (b: Ball) => (b.mode === "sunk" ? holding(b) : b.carry);
+
+// On a hole, back on the tee is a fresh try: no strokes, and only what you came onto the hole with, so
+// retrying isn't a way to stock up.
 function startOver(b: Ball) {
   b.strokes = 0;
-  b.bag = [];
+  b.bag = [...b.startBag];
   b.armed = null;
   b.history = [];
 }
@@ -391,6 +401,7 @@ export function stepWorld(s: WorldState, w: World) {
     if (b.mode === "sunk" && b.modeT > SINK_RESPAWN) {
       b.holes++;
       b.strokes = 0;
+      b.carry = holding(b);
       place(b, freeTee(s, c, b.color));
       if (!c.open) startOver(b);
       s.events.push({ tick: s.tick, id: b.id, ev: { type: "spawn", x: b.x, y: b.y, power: 1 } });
@@ -458,6 +469,9 @@ export function advance(s: WorldState, w: World, to: number, cmds: readonly Cmd[
       const next = Math.min(to, ci < cmds.length ? cmds[ci].tick : to, nextTimer(s));
       if (next > s.tick) {
         s.tick = next;
+        // Everyone's clock moves on too, to exactly what stepping would've left it at. Nothing in the
+        // physics reads it here, but what's drawn does (moving obstacles, how long a status has left).
+        for (const b of s.balls) b.t = (next - 1) * DT + DT;
         timers(s);
         continue;
       }
@@ -512,6 +526,8 @@ export function unpack(p: Packed): WorldState {
     b.blindUntil ??= 0;
     b.coffeeUntil ??= 0;
     b.rattled ??= false;
+    b.startBag ??= [];
+    b.carry ??= null;
     link(s, b);
     s.balls.push(b);
   }

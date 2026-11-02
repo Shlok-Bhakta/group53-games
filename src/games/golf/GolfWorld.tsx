@@ -515,7 +515,7 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
     raf = requestAnimationFrame(frame);
     // For the e2e suite: every ball as this phone has it.
     (window as unknown as { __golf?: unknown }).__golf = {
-      balls: () => n.state?.balls.map((b) => ({ id: b.id, x: b.x, y: b.y, mode: b.mode, holes: b.holes, strokes: b.strokes })) ?? [],
+      balls: () => n.state?.balls.map((b) => ({ id: b.id, x: b.x, y: b.y, mode: b.mode, holes: b.holes, strokes: b.strokes, t: b.t })) ?? [],
       tick: () => n.state?.tick ?? -1,
       me: () => meRef.current,
       // Which snapshot the phone is subscribed from, and where my ball was last drawn.

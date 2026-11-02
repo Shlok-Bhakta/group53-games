@@ -159,6 +159,37 @@ describe("golf's open world", () => {
     expect((await commands(t)).filter((c) => c.kind === "join").length).toBe(2);
   });
 
+  test("items carry from hole to hole through a run, and the first hole starts a new one", async () => {
+    const t = setup();
+    const ann = await signedIn(t, "Ann");
+    const joins = async () => (await commands(t)).filter((c) => c.kind === "join").map((c) => c.bag ?? []);
+    await t.run((ctx) => ctx.db.insert("golfBags", { course: "plains", userId: ann.userId, bag: ["coffee"], at: 0 }));
+    // Hole 2: comes with what was carried, and plays the solver's line to sink it.
+    const worldId = await ann.as.mutation(api.golf.join, { key: "plains-2" });
+    expect(await joins()).toEqual([["coffee"]]);
+    const w0 = (await t.run((ctx) => ctx.db.get(worldId)))!;
+    vi.advanceTimersByTime(500);
+    const [a, p] = SOLUTIONS["plains-2"][0];
+    await ann.as.mutation(api.golf.act, { worldId, kind: "shot", clientTick: Math.floor(((Date.now() - w0.startAt) * TPS) / 1000), seq: 5, a, p });
+    vi.advanceTimersByTime(9000);
+    // Straight off it, sink not settled yet on the server: it still counts.
+    await ann.as.mutation(api.golf.leave, { worldId });
+    const bag = () => t.run(async (ctx) => (await ctx.db.query("golfBags").collect())[0]?.bag);
+    expect(await bag()).toEqual(expect.arrayContaining(["coffee"]));
+    // On to hole 3, carrying it.
+    await ann.as.mutation(api.golf.join, { key: "plains-3" });
+    expect((await joins()).at(-1)).toEqual(expect.arrayContaining(["coffee"]));
+    // Walking off without finishing leaves the bag as it was.
+    const before = await bag();
+    const w3 = await ann.as.mutation(api.golf.join, { key: "plains-3" });
+    await ann.as.mutation(api.golf.leave, { worldId: w3 });
+    expect(await bag()).toEqual(before);
+    // Back to hole 1: a new run, empty-handed.
+    await ann.as.mutation(api.golf.join, { key: "plains-1" });
+    expect((await joins()).at(-1)).toEqual([]);
+    expect(await bag()).toBeFalsy();
+  });
+
   test("someone turning up clears balls whose players have wandered off, but not anyone still here", async () => {
     const t = setup();
     const gone = await signedIn(t, "Gone");
