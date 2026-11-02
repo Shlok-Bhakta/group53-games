@@ -234,6 +234,7 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
     let stoppedAt = -9;
     let wasRolling = false;
     let lastJoin = performance.now();
+    const smoked = new Map<string, number>();
     const n = net.current;
 
     const positions = (s: WorldState) => new Map(s.balls.map((b) => [b.id, { x: b.x, y: b.y }]));
@@ -256,11 +257,17 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
         const seed = (tick * 31 + ev.x * 7) | 0;
         const now = performance.now();
         switch (ev.type) {
-          case "hit":
-            if (near) sound.putt(ev.power);
+          case "hit": {
             if (isMe) trail.current = [];
+            // A Rocket Driver goes off with a bang, not a tap.
+            if (s.balls.find((b) => b.id === id)?.shot === "rocket") {
+              if (near) sound.rocket();
+              fx.current.push({ kind: "boom", x: ev.x, y: ev.y, t, seed }, { kind: "ring", x: ev.x, y: ev.y, t, seed, big: 1.4, color: "#f19a35" }, { kind: "spark", x: ev.x, y: ev.y, t, seed, color: "#f19a35" });
+              if (isMe) shake.current = { t, power: 0.22, a: seed };
+            } else if (near) sound.putt(ev.power);
             fx.current.push({ kind: "puff", x: ev.x, y: ev.y, t, seed });
             break;
+          }
           case "bounce":
           case "clack":
             if (near && now - lastKnock > 60) sound.knock(ev.type === "clack" ? Math.max(0.5, ev.power) : ev.power);
@@ -478,6 +485,12 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
       const shook = sk !== 0 ? { ...c, x: c.x + Math.cos(shake.current.a) * sk, y: c.y + Math.sin(shake.current.a) * sk } : c;
 
       fx.current = fx.current.filter((f) => t - f.t < 2);
+      // Rockets trail smoke.
+      for (const b of s.balls)
+        if (b.shot === "rocket" && b.mode === "roll" && Math.hypot(b.vx, b.vy) > 6 && t - (smoked.get(b.id) ?? -9) > 0.06) {
+          smoked.set(b.id, t);
+          fx.current.push({ kind: "puff", x: b.x, y: b.y - b.z * 0.5, t, seed: (t * 977) | 0, color: "#9c9a92" });
+        }
       const others: Other[] = s.balls.filter((b) => b !== mine).map((b) => ({ sim: b, at: drawn(b), color: colorOf(b), name: namesRef.current.get(b.id) ?? "" }));
       const tg = targetRef.current;
       drawFrame(ctx, {

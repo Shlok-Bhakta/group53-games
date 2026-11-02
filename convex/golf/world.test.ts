@@ -377,6 +377,53 @@ describe("the board fights back", () => {
   });
 });
 
+describe("off the ground", () => {
+  const hole = courseOf("plains-1")!;
+  const WH = worldOf(hole);
+  const flying = (x: number, y: number, vx: number, vy: number) => {
+    const s = newWorld(hole);
+    applyCmd(s, hole, { tick: 0, by: "a", seq: 0, kind: "join" });
+    const b = at(s, "a");
+    Object.assign(b, { x, y, vx, vy, z: 1, vz: 6, mode: "roll", rest: { x: 11, y: 31 } });
+    return { s, b };
+  };
+
+  test("a ball in the air flies over mines and boxes", () => {
+    const { s, b } = flying(hole.boxes[0].x, hole.boxes[0].y + 3, 0, -9);
+    s.mines.push({ x: b.x, y: b.y - 1.5, live: true, fixed: true, back: -1 });
+    for (let i = 0; i < 90; i++) stepWorld(s, WH);
+    expect(b.z).toBeGreaterThan(0);
+    expect(s.boxes[0]).toBe(false);
+    expect(s.mines.at(-1)?.live).toBe(true);
+    expect(b.bag).toEqual([]);
+  });
+
+  test("a mine still goes off, and a box still opens, for a ball on the ground", () => {
+    const s = newWorld(hole);
+    applyCmd(s, hole, { tick: 0, by: "a", seq: 0, kind: "join" });
+    const b = at(s, "a");
+    s.mines.push({ x: b.x, y: b.y - 3, live: true, fixed: true, back: -1 });
+    advance(s, WH, TPS, [{ tick: 1, by: "a", seq: 1, kind: "shot", a: -Math.PI / 2, p: 0.3 }]);
+    expect(evs(s, "mine", "a")).toHaveLength(1);
+  });
+
+  test("blown off the board, it sails out with no invisible wall, comes down and goes back to its last shot", () => {
+    const { s, b } = flying(14, 20, 20, 0);
+    let last = b.x, turnedBack = false;
+    for (let i = 0; i < TPS && b.mode === "roll"; i++) {
+      stepWorld(s, WH);
+      if (b.x < last) turnedBack = true;
+      last = b.x;
+    }
+    expect(turnedBack).toBe(false);
+    expect(b.x).toBeGreaterThan(hole.w);
+    expect(b.mode).toBe("out");
+    expect(evs(s, "splash", "a")).toHaveLength(1);
+    advance(s, WH, s.tick + TPS * 2, []);
+    expect([b.x, b.y, b.mode]).toEqual([11, 31, "aim"]);
+  });
+});
+
 describe("time keeps moving in a still world", () => {
   test("a moving obstacle keeps going while every ball sits still", () => {
     // Regression: obstacles are drawn from the ball's clock, which stopped while the world was quiet, so

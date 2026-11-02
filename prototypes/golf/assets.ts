@@ -2,7 +2,7 @@ import { BALL_R, CUP_R, newSim, v, type Sim } from "@/games/golf/engine";
 import { BUMPER_PLAINS } from "@/games/golf/plains";
 import {
   PALETTE, drawBall, drawBox, drawBumper, drawCup, drawFlag, drawFx, drawMine, drawPad, drawRail, drawBoard, drawWater, drawIce, drawWind, drawMover, drawPortal, drawPatch, drawMissile,
-  drawStorm, drawStatus, type Fx,
+  drawStorm, drawStatus, drawFlame, type Fx,
 } from "@/games/golf/toy";
 
 // The asset sheet: the palette, then every part of the course and the frames of its animations, drawn
@@ -133,6 +133,16 @@ export function assetSheet(bg: string, fg: string, muted: string): HTMLCanvasEle
       { label: "Coffee", ...tile((c) => (drawBall(c, 0, 0, BALL_R * 1.6), drawStatus(c, ballWith({ r: BALL_R * 1.6, coffeeUntil: 5 }), v(0, 0), 0.3))) },
       { label: "Air Horn'd", ...tile((c) => (drawBall(c, 0, 0, BALL_R * 1.6), drawStatus(c, ballWith({ r: BALL_R * 1.6, rattled: true }), v(0, 0), T))) },
       { label: "Air Horn", ...tile((c) => drawFx(c, [{ kind: "horn", x: 0, y: 0, t: 0, seed: 9, big: 1.6 } as Fx], 0.3, false)) },
+    ],
+  });
+
+  rows.push({
+    title: "Rocket Driver",
+    cells: [
+      { label: "Armed", ...tile((c) => (drawBall(c, 0, 0, BALL_R * 1.6), drawStatus(c, ballWith({ r: BALL_R * 1.6, armed: "rocket" }), v(0, 0), 0.32))) },
+      { label: "Launch", ...tile((c) => (drawFx(c, [{ kind: "boom", x: 0, y: 0, t: 0, seed: 1 } as Fx], 0.12, true), drawFx(c, [{ kind: "ring", x: 0, y: 0, t: 0, seed: 2, big: 1.4, color: "#f19a35" } as Fx], 0.12, true), drawFx(c, [{ kind: "spark", x: 0, y: 0, t: 0, seed: 3, color: "#f19a35" } as Fx], 0.12, false), drawBall(c, 0, 0, BALL_R * 1.6))) },
+      { label: "Flying", ...tile((c) => (drawFlame(c, 1, -0.6, BALL_R * 1.6, -0.5, 0.3, 1), drawBall(c, 1, -0.6, BALL_R * 1.6, { dir: -0.5, stretch: 1.3 }))) },
+      { label: "Slowing", ...tile((c) => (drawFlame(c, 0.6, -0.3, BALL_R * 1.6, -0.5, 0.7, 0.4), drawBall(c, 0.6, -0.3, BALL_R * 1.6, { dir: -0.5, stretch: 1.1 }))) },
     ],
   });
 

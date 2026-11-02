@@ -102,7 +102,7 @@ export function stop() {
   rolling(0, null);
 }
 
-type Name = "putt" | "knock" | "bump" | "plunk" | "drop" | "blast" | "whoosh" | "land" | "pickup" | "brake" | "lip" | "rolling" | "horn" | "camera" | "thunder" | "freeze" | "gun" | "shieldUp" | "coffee" | "honey" | "fizzle";
+type Name = "putt" | "knock" | "bump" | "plunk" | "drop" | "blast" | "whoosh" | "land" | "pickup" | "brake" | "lip" | "rolling" | "horn" | "camera" | "thunder" | "freeze" | "gun" | "shieldUp" | "coffee" | "honey" | "fizzle" | "rocket";
 function rec(name: Name, args: unknown[]) {
   if (offline) return;
   const log = (window as unknown as { __golfSounds?: unknown[] }).__golfSounds;
@@ -226,6 +226,17 @@ export function whoosh() {
   const c = live();
   if (!c) return;
   burst(c, now(c), 0.4, "bandpass", 450, 0.9, 0.16, 1500, 0.6);
+}
+
+// A Rocket Driver going off: a thump under a rising roar.
+export function rocket() {
+  rec("rocket", []);
+  const c = live();
+  if (!c) return;
+  const t = now(c);
+  tone(c, t, 95, 0.35, 0.42, 45, 0.5, 0.003);
+  burst(c, t, 0.7, "bandpass", 350, 0.8, 0.34, 2400, 0.7);
+  burst(c, t, 0.12, "lowpass", 1400, 0.7, 0.3, 300, 0.4);
 }
 
 // Coming down from a jump.
@@ -375,7 +386,7 @@ export function rolling(speed: number, ground: Ground | null) {
   g.roll.filter.frequency.setTargetAtTime(180 + s * 900 * rough, t, 0.05);
 }
 
-const PLAY: Record<Name, (...a: never[]) => void> = { putt, knock, bump, plunk, drop, blast, whoosh, land, pickup, brake, lip, rolling, horn, camera, thunder, freeze, gun, shieldUp, coffee, honey, fizzle };
+const PLAY: Record<Name, (...a: never[]) => void> = { putt, knock, bump, plunk, drop, blast, whoosh, land, pickup, brake, lip, rolling, horn, camera, thunder, freeze, gun, shieldUp, coffee, honey, fizzle, rocket };
 
 // Renders a log of sounds (from `window.__golfSounds`) into a buffer, `t0` being the log time (ms)
 // at which the buffer starts.

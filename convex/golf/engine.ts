@@ -103,6 +103,7 @@ export const MAX_SPEED = 32;
 export const GRAVITY = 30;
 export const DT = 1 / 240;
 export const MAX_STROKES = 10;
+const TOUCHING = 0.15; // how high a ball can be and still set off a mine or open a box: it flies over them
 
 // Ours (Ghost, Magnet, Brake, Mulligan, Big cup, Jump, Bouncy), every one of Super Battle Golf's, made
 // to work on a ball on a board (Rocket Driver, Spring Boots, Golf Cart, Jumbo Burger, Smoke Bomb, Orbital
@@ -249,10 +250,13 @@ export function compile(course: Course): World {
     if (bl.roof) continue;
     for (const [a, b] of edges(bl.poly)) segs.push({ a, b, r: 0.04, h: bl.h, bounce: 0.6, rim: false });
   }
-  // The map's own edge, so nothing ever rolls off the world.
-  const m = 0.2;
-  const box = [v(m, m), v(course.w - m, m), v(course.w - m, course.h - m), v(m, course.h - m)];
-  for (const [a, b] of edges(box)) segs.push({ a, b, r: 0.2, h: 99, bounce: 0.6, rim: true });
+  // The map's own edge, so nothing ever rolls off the world. Only where something could: off a board in
+  // the void or the sea, a ball just keeps flying until it comes down, and that's the end of the shot.
+  if (!HAZARDS.includes(course.off)) {
+    const m = 0.2;
+    const box = [v(m, m), v(course.w - m, m), v(course.w - m, course.h - m), v(m, course.h - m)];
+    for (const [a, b] of edges(box)) segs.push({ a, b, r: 0.2, h: 99, bounce: 0.6, rim: true });
+  }
   // Each wall goes in every cell within reach of a ball touching it, including the cells next door.
   const cells = new Map<number, Seg[]>();
   for (const s of segs) {
@@ -780,7 +784,7 @@ export function stepBall(sim: Sim, world: World, dt = DT) {
 
   // Landmines.
   for (const m of sim.mines) {
-    if (!m.live || sim.z > 0.5 || sim.shot === "smoke" || hyp(sim.x - m.x, sim.y - m.y) > sim.r + 0.55) continue;
+    if (!m.live || sim.z > TOUCHING || sim.shot === "smoke" || hyp(sim.x - m.x, sim.y - m.y) > sim.r + 0.55) continue;
     m.live = false;
     blast(sim, m.x, m.y, 20);
     sim.events.push({ type: "mine", x: m.x, y: m.y, power: 1 });
@@ -813,7 +817,7 @@ export function stepBall(sim: Sim, world: World, dt = DT) {
 
   // Mystery boxes.
   c.boxes.forEach((b, i) => {
-    if (sim.boxes[i] || sim.z > 1.6 || len(sim.x - b.x, sim.y - b.y) > 1.1) return;
+    if (sim.boxes[i] || sim.z > TOUCHING || len(sim.x - b.x, sim.y - b.y) > 1.1) return;
     if (sim.bag.length >= BAG_SIZE) return;
     sim.boxes[i] = true;
     const r = rng(sim.seed * 977 + i * 131 + sim.strokes * 7 + Math.round(sim.t * 240))();

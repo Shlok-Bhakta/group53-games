@@ -429,6 +429,30 @@ export function drawStorm(ctx: Ctx, st: { x: number; y: number; r: number; until
   ctx.globalAlpha = base;
 }
 
+// A Rocket Driver's flame, out the back of a ball going `dir`, as long as it's fast: three teardrops
+// flickering against each other. `k` runs 0 to 1 with its speed.
+export function drawFlame(ctx: Ctx, x: number, y: number, r: number, dir: number, t: number, k: number) {
+  if (k <= 0.02) return;
+  const flick = 1 + 0.16 * Math.sin(t * 41) + 0.1 * Math.sin(t * 67 + 1);
+  const L = r * (1.4 + 3.6 * k) * flick;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(dir + Math.PI);
+  const layers: [string, number, number][] = [["#d9602a", 1, 0.95], ["#f19a35", 0.68, 0.72], ["#fff0b8", 0.36, 0.46]];
+  for (const [color, len, wide] of layers) {
+    const l = L * len, w = r * wide;
+    ctx.beginPath();
+    ctx.moveTo(r * 0.2, -w);
+    ctx.quadraticCurveTo(l * 0.55, -w * 0.9 + Math.sin(t * 31) * 0.05, l + r * 0.2, Math.sin(t * 23) * 0.08);
+    ctx.quadraticCurveTo(l * 0.55, w * 0.9 + Math.sin(t * 29) * 0.05, r * 0.2, w);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+  ctx.restore();
+}
+const flameK = (b: Sim) => (b.shot === "rocket" && b.mode === "roll" ? Math.min(1, Math.hypot(b.vx, b.vy) / 16) : 0);
+
 // What's happening to a ball: frozen in an ice cube, stunned (stars round it), shielded (a bubble),
 // on Coffee (steam), or rattled by an Air Horn (sound waves).
 export function drawStatus(ctx: Ctx, b: Sim, at: Vec, t: number) {
@@ -491,6 +515,24 @@ export function drawStatus(ctx: Ctx, b: Sim, at: Vec, t: number) {
       ctx.quadraticCurveTo(x + 0.2, y + 0.2, x, y);
       ctx.quadraticCurveTo(x - 0.2, y - 0.2, x, y - 0.35);
       ctx.stroke();
+    }
+    ctx.globalAlpha = base;
+  }
+  // A Rocket Driver armed: lit and straining, with embers at its base.
+  if (b.armed === "rocket") {
+    const base = ctx.globalAlpha;
+    ctx.globalAlpha = base * (0.65 + 0.2 * Math.sin(t * 13));
+    ctx.strokeStyle = "#f19a35";
+    ctx.lineWidth = 0.1;
+    circ(ctx, at.x, at.y, r * 1.55 + 0.03 * Math.sin(t * 19));
+    ctx.stroke();
+    ctx.globalAlpha = base;
+    for (let k = 0; k < 5; k++) {
+      const ph = (t * 1.4 + k * 0.21) % 1, a = k * 1.257 + 0.4;
+      ctx.globalAlpha = base * (1 - ph);
+      ctx.fillStyle = k % 2 ? "#f19a35" : "#fff0b8";
+      circ(ctx, at.x + Math.cos(a) * r * (1.3 + ph), at.y + Math.sin(a) * r * (1.3 + ph) - ph * 0.3, 0.07 * (1 - ph * 0.6));
+      ctx.fill();
     }
     ctx.globalAlpha = base;
   }
@@ -680,6 +722,7 @@ function drawOther(ctx: Ctx, c: Course, o: Other, t: number) {
     ctx.fill();
   }
   const speed = Math.hypot(b.vx, b.vy);
+  drawFlame(ctx, x, y - lift, b.r, Math.atan2(b.vy, b.vx), t, flameK(b));
   drawBall(ctx, x, y - lift, b.r * (1 + b.z * 0.18), { dir: Math.atan2(b.vy, b.vx), stretch: b.mode === "roll" ? 1 + Math.min(0.35, speed / 70) : 1, scale, alpha, ring: o.color });
   const base = ctx.globalAlpha;
   ctx.globalAlpha = base * alpha;
@@ -905,7 +948,8 @@ function drawScene(ctx: Ctx, f: Frame) {
   if (f.trail.length > 1 && ta > 0)
     for (let i = 1; i < f.trail.length; i++) {
       const k = i / f.trail.length;
-      ctx.strokeStyle = `rgba(251,249,243,${0.4 * k * ta})`;
+      // A rocket's streak burns orange.
+      ctx.strokeStyle = sim.shot === "rocket" ? `rgba(241,154,53,${0.55 * k * ta})` : `rgba(251,249,243,${0.4 * k * ta})`;
       ctx.lineWidth = BALL_R * 1.5 * k;
       ctx.lineCap = "butt"; // round caps overlap at every joint and bead the streak
       ctx.beginPath();
@@ -942,6 +986,7 @@ function drawScene(ctx: Ctx, f: Frame) {
       ctx.fillStyle = "rgba(0,0,0,0.22)";
       ctx.fill();
     }
+    drawFlame(ctx, bx, by - lift, sim.r, Math.atan2(sim.vy, sim.vx), t, flameK(sim));
     drawBall(ctx, bx, by - lift, sim.r * (1 + sim.z * 0.18), {
       dir: Math.atan2(sim.vy, sim.vx),
       stretch: 1 + Math.min(0.35, speed / 70),
@@ -1032,7 +1077,7 @@ function drawScene(ctx: Ctx, f: Frame) {
       ctx.fill();
     }
     T();
-    ctx.strokeStyle = C.ink;
+    ctx.strokeStyle = sim.armed === "rocket" ? "#f19a35" : C.ink;
     ctx.lineCap = "round";
     ctx.lineWidth = 0.2;
     ctx.setLineDash([0.02, 0.45]);
