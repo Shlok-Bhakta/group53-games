@@ -20,8 +20,10 @@ import { ONLINE_WINDOW_MS } from "./presenceConfig";
 // command wakes it.
 
 export const KEY = SANDBOX.id;
-export const MAX_LAG = TPS / 2; // half a second
-const SLACK = TPS / 20; // how far ahead of the server a phone's clock may be
+// How late a command can land and still count from when it was taken. Generous, for phones on bad
+// connections: past this, the shot's moved later and the ball on their screen has to be corrected.
+export const MAX_LAG = TPS * 2;
+export const SLACK = TPS / 4; // how far ahead of the server a phone's clock may be
 const TICK_MS = 1000;
 // The snapshot is only rewritten this often (or when the world goes quiet), since every write is sent
 // to every phone.

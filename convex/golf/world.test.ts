@@ -3,7 +3,7 @@ import { compile, DT, groundUnder, ICE_S, rng, type Power } from "./engine";
 import { datan, datan2, dcos, dexp, dlog, dpow, dsin, hyp } from "./dmath";
 import { courseOf, worldOf } from "./holes";
 import { SANDBOX } from "./sandbox";
-import { advance, applyCmd, BOX_BACK, cmdOrder, fingerprint, MINE_BACK, newWorld, pack, quiet, REACH, STORM, TPS, unpack, type Cmd, type Packed, type WorldState } from "./world";
+import { advance, applyCmd, BOX_BACK, cmdOrder, fingerprint, MINE_BACK, newWorld, pack, quiet, REACH, STORM, TPS, unpack, withPending, type Cmd, type Packed, type Pending, type WorldState } from "./world";
 
 const W = compile(SANDBOX);
 const at = (s: WorldState, id: string) => s.balls.find((b) => b.id === id)!;
@@ -374,6 +374,36 @@ describe("the board fights back", () => {
     const back = unpack(JSON.parse(JSON.stringify(old)));
     advance(back, W, TPS * 3, [cmd(1, "a", "shot", { a: 0, p: 0.3 })]);
     expect(at(back, "a").x).toBeGreaterThan(41);
+  });
+});
+
+describe("a phone's own unconfirmed commands", () => {
+  const shot = (tick: number, seq: number): Pending => ({ tick, by: "me", seq, kind: "shot", a: 0, p: 0.5 });
+  const server: Cmd[] = [{ tick: 5, by: "them", seq: 1, kind: "shot", a: 0, p: 0.5 }];
+
+  test("play alongside the server's, in order", () => {
+    const { cmds, pending } = withPending(server, [shot(9, 7)], 0);
+    expect(cmds.map((c) => c.tick)).toEqual([5, 9]);
+    expect(pending).toHaveLength(1);
+  });
+
+  test("give way to the server's copy, at the tick the server gave it", () => {
+    const { cmds, pending } = withPending([...server, { ...shot(14, 7) }], [shot(9, 7)], 0);
+    expect(cmds.map((c) => c.tick)).toEqual([5, 14]);
+    expect(pending).toEqual([]);
+  });
+
+  test("survive the server's list not having them yet, even with a newer snapshot", () => {
+    // Older than the snapshot and unconfirmed: played from the snapshot on, not lost.
+    const { cmds, pending } = withPending([], [shot(9, 7)], 20);
+    expect(cmds.map((c) => c.tick)).toEqual([20]);
+    expect(pending).toHaveLength(1);
+  });
+
+  test("go once confirmed and inside the snapshot", () => {
+    const { cmds, pending } = withPending([], [{ ...shot(9, 7), acked: true }], 20);
+    expect(cmds).toEqual([]);
+    expect(pending).toEqual([]);
   });
 });
 

@@ -518,6 +518,18 @@ export function unpack(p: Packed): WorldState {
   return s;
 }
 
+// What a phone runs: the server's commands, plus this phone's own that the server hasn't confirmed yet,
+// so a shot plays the moment it's taken whatever the connection's doing. Keeping these apart from the
+// server's list is the point: that list goes away for a whole round trip each time the snapshot moves.
+export type Pending = Cmd & { acked?: boolean; at?: number };
+export function withPending(server: readonly Cmd[], pending: readonly Pending[], baseTick: number) {
+  const seen = (p: Pending) => server.some((c) => c.by === p.by && c.seq === p.seq);
+  // Gone once it's in the server's list, or confirmed and already inside the snapshot. Unconfirmed and
+  // older than the snapshot, it plays from the snapshot on rather than vanishing.
+  const still = pending.filter((p) => !seen(p) && !(p.acked && p.tick < baseTick)).map((p) => (p.tick < baseTick ? { ...p, tick: baseTick } : p));
+  return { pending: still, cmds: [...server, ...still].sort(cmdOrder) };
+}
+
 // Everything the world is, as one number: what the tests and the phones compare.
 export function fingerprint(s: WorldState) {
   let h = 2166136261;

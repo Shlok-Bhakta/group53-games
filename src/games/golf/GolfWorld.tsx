@@ -15,7 +15,7 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { BAG_SIZE, INSTANT, TARGETED, canShoot, groundUnder, preview, scoreName, type Course, type Power } from "../../../convex/golf/engine";
 import { worldOf } from "../../../convex/golf/holes";
-import { advance, cmdOrder, newWorld, TPS, unpack, type Ball, type Cmd, type Packed, type WorldState } from "../../../convex/golf/world";
+import { advance, cmdOrder, newWorld, TPS, unpack, withPending, type Ball, type Cmd, type Packed, type Pending, type WorldState } from "../../../convex/golf/world";
 import { useGoBack } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
@@ -35,12 +35,17 @@ import { allCups, drawFrame, refreshTheme, type Camera, type Fx, type Juice, typ
 // Ball colors, in the order players first joined. Seat colors, minus the ones lost on grass.
 const BALL_COLORS = [SEAT_COLORS.yellow, SEAT_COLORS.blue, SEAT_COLORS.pink, SEAT_COLORS.orange, SEAT_COLORS.purple, SEAT_COLORS.teal, SEAT_COLORS.red, "#f4f1e8"];
 const colorOf = (b: Ball) => BALL_COLORS[b.color % BALL_COLORS.length];
-// How long a correction takes to ease out, and the most it eases (past that it snaps).
+// How long a correction takes to ease out: quick for a small one, a touch longer for a long way, so a
+// ball glides onto where it really is however late the news came. Only a real teleport (sinking and
+// going back to a tee) jumps.
 const EASE_S = 0.14;
-const SNAP = 4;
+const EASE_FAR_S = 0.28;
+const FAR = 4;
+// A command the server hasn't confirmed after this long means the connection's struggling.
+const SLOW_MS = 1200;
 
 
-type Hud = { ready: boolean; mode: Ball["mode"] | null; bag: Power[]; armed: Power | null; shot: Power | null; holes: number; strokes: number; status: string | null; canShoot: boolean };
+type Hud = { ready: boolean; mode: Ball["mode"] | null; bag: Power[]; armed: Power | null; shot: Power | null; holes: number; strokes: number; status: string | null; canShoot: boolean; slow: boolean };
 // What's happening to my ball, in a word or two for the dock.
 function statusOf(b: Ball) {
   if (b.t < b.frozenUntil) return "Frozen";
@@ -90,13 +95,7 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
   fromRef.current = from;
   const cmds = useQuery(api.golf.commands, worldId ? { worldId, from } : "skip");
   const clock = useServerClock();
-  const act = useMutation(api.golf.act).withOptimisticUpdate((store, args) => {
-    const q = { worldId: args.worldId, from: fromRef.current };
-    const list = store.getQuery(api.golf.commands, q);
-    if (!list || !meId) return;
-    const { worldId: _w, clientTick, ...rest } = args;
-    store.setQuery(api.golf.commands, q, [...list, { ...rest, by: meId, tick: Math.floor(clientTick) }]);
-  });
+  const act = useMutation(api.golf.act);
   const goBack = useGoBack("/golf");
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -123,21 +122,23 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
     state: WorldState | null;
     dirty: boolean;
     base: Packed | null;
-    cmds: Cmd[];
+    server: Cmd[]; // the server's commands from the snapshot on
+    pending: Pending[]; // mine it hasn't confirmed yet: they play right away regardless
+    cmds: Cmd[]; // both, in order: what the world runs on
     startAt: number;
     collide: boolean;
     prev: Map<string, Vec>; // each ball a tick ago, to draw between ticks
-    off: Map<string, Vec>; // corrections still easing out
+    off: Map<string, Vec & { tau: number }>; // corrections still easing out
     seen: Map<string, number>; // events already played, by when
     seq: number;
-  }>({ state: null, dirty: false, base: null, cmds: [], startAt: 0, collide: true, prev: new Map(), off: new Map(), seen: new Map(), seq: Date.now() % 1_000_000_000 });
+  }>({ state: null, dirty: false, base: null, server: [], pending: [], cmds: [], startAt: 0, collide: true, prev: new Map(), off: new Map(), seen: new Map(), seq: Date.now() % 1_000_000_000 });
   useEffect(() => {
     if (!view || !cmds) return;
     const n = net.current;
     n.base = view.snapshot;
     n.startAt = view.startAt;
     n.collide = view.collide;
-    n.cmds = (cmds as Cmd[]).slice().sort(cmdOrder);
+    n.server = (cmds as Cmd[]).slice().sort(cmdOrder);
     n.dirty = true;
   }, [view, cmds]);
   const names = useMemo(() => new Map((view?.players ?? []).map((p) => [p.id as string, p.name.split(" ")[0]])), [view?.players]);
@@ -163,13 +164,14 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
   const shake = useRef({ t: -9, power: 0, a: 0 });
   const trail = useRef<Vec[]>([]);
   const flagOut = useRef(new Map<number, number>());
+  const lastDrawn = useRef<Vec | null>(null);
   const sendRef = useRef<(kind: "shot", extra: { a: number; p: number }) => void>(() => {});
   const blind = useRef<HTMLDivElement>(null);
   const [target, setTarget] = useState<{ i: number; kind: Power } | null>(null);
   const targetRef = useRef(target);
   targetRef.current = target;
   const targetAt = useRef<Vec | null>(null);
-  const [hud, setHud] = useState<Hud>({ ready: false, mode: null, bag: [], armed: null, shot: null, holes: 0, strokes: 0, status: null, canShoot: false });
+  const [hud, setHud] = useState<Hud>({ ready: false, mode: null, bag: [], armed: null, shot: null, holes: 0, strokes: 0, status: null, canShoot: false, slow: false });
 
   // Full screen: the sea runs up under the status bar.
   useEffect(() => {
@@ -247,8 +249,9 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
         if (n.seen.has(key)) continue;
         n.seen.set(key, tick);
         // Rebuilt history only plays what's recent: a late command's first moments, not old news.
-        if (how === "arrived" || (!fresh && tick < s.tick - TPS / 2)) continue;
         const isMe = id === meRef.current;
+        // (Except my own sink, however late the news: that's the whole point of the hole.)
+        if (how === "arrived" || (!fresh && tick < s.tick - TPS / 2 && !(isMe && ev.type === "sink"))) continue;
         const near = Math.hypot(ev.x - cam.current.x, ev.y - cam.current.y) < 30;
         const seed = (tick * 31 + ev.x * 7) | 0;
         const now = performance.now();
@@ -397,15 +400,21 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
       if (n.dirty) {
         n.dirty = false;
         const before = n.state ? positions(n.state) : null;
+        const sunkBefore = new Map(n.state?.balls.map((b) => [b.id, b.holes]));
         const s = n.base ? unpack(n.base) : newWorld(COURSE, { collide: n.collide });
+        const merged = withPending(n.server, n.pending, s.tick);
+        n.pending = merged.pending;
+        n.cmds = merged.cmds;
         advance(s, WORLD, Math.max(s.tick, target), n.cmds);
         if (before)
           for (const b of s.balls) {
             const was = before.get(b.id);
             if (!was) continue;
-            const o = n.off.get(b.id) ?? { x: 0, y: 0 };
+            const o = n.off.get(b.id) ?? { x: 0, y: 0, tau: EASE_S };
             const dx = was.x + o.x - b.x, dy = was.y + o.y - b.y;
-            n.off.set(b.id, Math.hypot(dx, dy) > SNAP ? { x: 0, y: 0 } : { x: dx, y: dy });
+            // Sunk and back on a tee in the meantime: that's a real jump. Anything else glides.
+            if (sunkBefore.get(b.id) !== b.holes) n.off.delete(b.id);
+            else n.off.set(b.id, { x: dx, y: dy, tau: Math.hypot(dx, dy) > FAR ? EASE_FAR_S : EASE_S });
           }
         n.state = s;
         n.prev = positions(s);
@@ -418,8 +427,8 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
         advance(s, WORLD, target, n.cmds);
         play(s, "fresh");
       }
-      const k = 1 - Math.exp(-dt / EASE_S);
       for (const [id, o] of n.off) {
+        const k = 1 - Math.exp(-dt / o.tau);
         o.x -= o.x * k;
         o.y -= o.y * k;
         if (Math.abs(o.x) + Math.abs(o.y) < 1e-3) n.off.delete(id);
@@ -441,6 +450,7 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
         return;
       }
       const at = drawn(mine);
+      lastDrawn.current = at;
       if (mine.mode === "roll") {
         wasRolling = true;
         const tr = trail.current;
@@ -495,10 +505,11 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
       // The flash fading off the screen.
       if (blind.current) blind.current.style.opacity = String(Math.max(0, Math.min(1, (mine.blindUntil - mine.t) / 1.2)) * 0.92);
       const status = statusOf(mine), shootable = canShoot(mine);
-      const h = `${mine.mode}|${mine.bag.join()}|${mine.armed}|${mine.shot}|${mine.holes}|${mine.strokes}|${status}|${shootable}`;
+      const slow = n.pending.some((p) => !p.acked && nowMs - (p.at ?? nowMs) > SLOW_MS);
+      const h = `${mine.mode}|${mine.bag.join()}|${mine.armed}|${mine.shot}|${mine.holes}|${mine.strokes}|${status}|${shootable}|${slow}`;
       if (h !== lastHud) {
         lastHud = h;
-        setHud({ ready: true, mode: mine.mode, bag: [...mine.bag], armed: mine.armed, shot: mine.shot, holes: mine.holes, strokes: mine.strokes, status, canShoot: shootable });
+        setHud({ ready: true, mode: mine.mode, bag: [...mine.bag], armed: mine.armed, shot: mine.shot, holes: mine.holes, strokes: mine.strokes, status, canShoot: shootable, slow });
       }
     };
     raf = requestAnimationFrame(frame);
@@ -507,6 +518,9 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
       balls: () => n.state?.balls.map((b) => ({ id: b.id, x: b.x, y: b.y, mode: b.mode, holes: b.holes, strokes: b.strokes })) ?? [],
       tick: () => n.state?.tick ?? -1,
       me: () => meRef.current,
+      // Which snapshot the phone is subscribed from, and where my ball was last drawn.
+      from: () => fromRef.current,
+      drawn: () => lastDrawn.current,
       shoot: (angle: number, power: number) => sendRef.current("shot", { a: angle, p: power }),
     };
     return () => {
@@ -527,8 +541,23 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
   const mine = () => net.current.state?.balls.find((b) => b.id === meRef.current);
   const tickNow = () => Math.max(0, Math.floor(((clock.now() - net.current.startAt) * TPS) / 1000));
   const send = (kind: "shot" | "use" | "fire" | "hop" | "brake" | "reset", extra: { a?: number; p?: number; i?: number; x?: number; y?: number } = {}) => {
-    if (!worldId) return;
-    act({ worldId, kind, clientTick: tickNow(), seq: ++net.current.seq, ...extra }).catch(() => toast.error("That didn't go through."));
+    const n = net.current;
+    if (!worldId || !meRef.current) return;
+    const tick = tickNow(), seq = ++n.seq;
+    // It plays from here, right now. The server's copy replaces it when that turns up.
+    const mine: Pending = { tick, by: meRef.current, seq, kind, at: performance.now(), ...extra };
+    n.pending.push(mine);
+    n.dirty = true;
+    act({ worldId, kind, clientTick: tick, seq, ...extra })
+      .then(() => {
+        mine.acked = true;
+        n.pending.forEach((p) => p.seq === seq && (p.acked = true));
+      })
+      .catch(() => {
+        n.pending = n.pending.filter((p) => p.seq !== seq);
+        n.dirty = true;
+        toast.error("That didn't go through.");
+      });
   };
 
   sendRef.current = send;
@@ -721,6 +750,7 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
           })}
         </div>
         <span className="min-w-0 flex-1 text-center font-display text-footnote text-foreground [text-shadow:0_1px_3px_var(--background)]" aria-live="polite">
+          {hud.slow && <span className="block truncate">Slow connection</span>}
           {hud.status && <span className="block truncate">{hud.status}</span>}
           {hud.armed && <span className="block truncate">{ITEMS[hud.armed].name} next shot</span>}
         </span>

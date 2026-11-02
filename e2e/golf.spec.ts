@@ -1,4 +1,5 @@
 import type { Browser, Page } from "@playwright/test";
+import { SOLUTIONS } from "../convex/golf/solutions";
 import { createPlayer, expect, phone, test, type Player } from "./fixtures";
 
 // Golf's open world on two phones: both in, a shot on one, and the ball ending up in exactly the same
@@ -196,4 +197,92 @@ test("an ice hole plays, and the putt goes further than you'd think", async ({ c
   // About twice what the same tap would do on grass.
   expect(me[0].y - (await balls(page))[0].y).toBeGreaterThan(2);
   expect(errors).toEqual([]);
+});
+
+// Airplane wifi: every WebSocket message held back this long, each way.
+async function slowConnection(page: Page, ms: number) {
+  await page.addInitScript((delay) => {
+    const Real = window.WebSocket;
+    class Slow extends Real {
+      private handler: ((e: MessageEvent) => void) | null = null;
+      constructor(url: string | URL, protocols?: string | string[]) {
+        super(url, protocols);
+        super.addEventListener("message", (e) => setTimeout(() => this.handler?.call(this, e), delay));
+      }
+      set onmessage(f: ((e: MessageEvent) => void) | null) {
+        this.handler = f;
+      }
+      get onmessage() {
+        return this.handler;
+      }
+      send(data: string | ArrayBufferLike | Blob | ArrayBufferView) {
+        setTimeout(() => {
+          if (this.readyState === Real.OPEN) super.send(data);
+        }, delay);
+      }
+    }
+    window.WebSocket = Slow as unknown as typeof WebSocket;
+  }, ms);
+}
+
+test("on a slow connection a putt plays at once and the ball never jumps, even as the snapshot changes", async ({ context }) => {
+  test.setTimeout(120_000);
+  const player = await createPlayer("Shlok");
+  const page = await phone(context, { player, notifications: "granted" });
+  await enablePush(page);
+  await slowConnection(page, 600);
+  await page.goto("/golf/plains/3");
+  await expect(page.getByLabel("Tilt, hole 3", { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("Teeing up")).toHaveCount(0, { timeout: 30_000 });
+
+  const from = () => page.evaluate(() => (window as unknown as { __golf: { from(): number } }).__golf.from());
+  let was = -1;
+  for (let i = 0; i < 3; i++) {
+    // Wait for the ball to stop and for the server's snapshot of that to reach the phone: the moment the
+    // phone is between subscriptions, which on this connection lasts over a second.
+    if (i > 0) await expect.poll(from, { timeout: 20_000, intervals: [5] }).not.toBe(was);
+    was = await from();
+    const result = await page.evaluate(
+      ([angle]) =>
+        new Promise<{ movedAfter: number | null; biggest: number }>((done) => {
+          const g = (window as unknown as { __golf: { drawn(): { x: number; y: number }; shoot(a: number, p: number): void } }).__golf;
+          const start = g.drawn();
+          g.shoot(angle, 0.14);
+          const t0 = performance.now();
+          let movedAfter: number | null = null, biggest = 0, last = start;
+          const frame = () => {
+            const at = g.drawn();
+            biggest = Math.max(biggest, Math.hypot(at.x - last.x, at.y - last.y));
+            last = at;
+            if (movedAfter === null && Math.hypot(at.x - start.x, at.y - start.y) > 0.05) movedAfter = performance.now() - t0;
+            if (performance.now() - t0 > 1500) done({ movedAfter, biggest });
+            else requestAnimationFrame(frame);
+          };
+          requestAnimationFrame(frame);
+        }),
+      [i % 2 ? 0 : Math.PI],
+    );
+    console.log(`putt ${i + 1}: moved after ${result.movedAfter}ms, biggest step ${result.biggest.toFixed(2)}`);
+    // Moving within a few frames, not a round trip later.
+    expect(result.movedAfter).not.toBeNull();
+    expect(result.movedAfter!).toBeLessThan(250);
+    // Gliding: never more than a step of a fast ball in one frame.
+    expect(result.biggest).toBeLessThan(1.5);
+  }
+});
+
+test("on a slow connection, sinking one still shows the score", async ({ context }) => {
+  test.setTimeout(90_000);
+  const player = await createPlayer("Shlok");
+  const page = await phone(context, { player, notifications: "granted" });
+  await enablePush(page);
+  await slowConnection(page, 600);
+  await page.goto("/golf/plains/1");
+  await expect(page.getByLabel("Hello, hole 1", { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("Teeing up")).toHaveCount(0, { timeout: 30_000 });
+  // Alone on the hole, so the solver's line.
+  const [angle, power] = SOLUTIONS["plains-1"][0];
+  await shoot(page, angle, power);
+  await expect(page.getByRole("dialog", { name: "Hole finished" }).getByRole("heading", { name: "Hole in one" })).toBeVisible({ timeout: 15_000 });
+  await expect.poll(async () => (await balls(page))[0].holes, { timeout: 15_000 }).toBe(1);
 });

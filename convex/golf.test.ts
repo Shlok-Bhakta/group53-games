@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { MAX_LAG } from "./golf";
+import { MAX_LAG, SLACK } from "./golf";
 import { compile } from "./golf/engine";
 import { courseOf } from "./golf/holes";
 import { SANDBOX } from "./golf/sandbox";
@@ -60,7 +60,7 @@ describe("golf's open world", () => {
     const pulled = await ann.as.mutation(api.golf.act, { worldId, kind: "shot", clientTick: now - 5000, seq: 2, a: -1.5, p: 0.5 });
     expect(pulled - (now - MAX_LAG)).toBeGreaterThanOrEqual(0);
     expect(pulled - (now - MAX_LAG)).toBeLessThanOrEqual(1);
-    expect(await ann.as.mutation(api.golf.act, { worldId, kind: "shot", clientTick: now + 5000, seq: 3, a: -1.5, p: 2 })).toBeLessThanOrEqual(now + 1 + TPS / 20);
+    expect(await ann.as.mutation(api.golf.act, { worldId, kind: "shot", clientTick: now + 5000, seq: 3, a: -1.5, p: 2 })).toBeLessThanOrEqual(now + 1 + SLACK);
     // Power is capped, and junk is refused.
     expect((await commands(t)).find((c) => c.seq === 3)?.p).toBe(1);
     await expect(ann.as.mutation(api.golf.act, { worldId, kind: "shot", clientTick: now, seq: 4, a: NaN, p: 0.5 })).rejects.toThrow("number");
@@ -119,10 +119,11 @@ describe("golf's open world", () => {
     const worldId = await ann.as.mutation(api.golf.join, {});
     await settle(t, 3);
     expect((await world(t))!.awake).toBe(false);
+    const ticks = async () => (await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect())).filter((j) => j.name === "golf:tick" && j.state.kind === "pending").length;
+    const before = await ticks();
     await ann.as.mutation(api.golf.act, { worldId, kind: "reset", clientTick: await tickNow(t), seq: 1 });
     expect((await world(t))!.awake).toBe(true);
-    const jobs = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
-    expect(jobs.filter((j) => j.name === "golf:tick" && j.state.kind === "pending")).toHaveLength(1);
+    expect(await ticks()).toBe(before + 1);
   });
 
   test("a hole is its own world: joining, leaving, and a sink landing on the scoreboard", async () => {
