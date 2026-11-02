@@ -78,4 +78,36 @@ export function marketClock(ms: number): Clock {
   return { state, day, nextOpen: nextOpen(ms) };
 }
 
-export const display = (symbol: string) => (symbol === INDEX ? "S&P 500" : symbol.replace("-", "."));
+// Yahoo writes share classes with a dash (BRK-B), which everyone else writes with a dot. BTC-USD stays as it is.
+export const display = (symbol: string) => (symbol === INDEX ? "S&P 500" : symbol.replace(/-(?=[A-Z]$)/, "."));
+
+// ---- Everything else on Yahoo ----
+
+// Yahoo's codes for New York's markets, which run on the clock above. Anywhere else, its own quote says.
+const NEW_YORK = new Set(["NMS", "NYQ", "NGM", "NCM", "ASE", "PCX", "BTS", "NAS", "PNK", "OQB", "OQX", "PIN", "SNP", "DJI", "NIM", "WCB", "CXI"]);
+
+export type Instrument = { type?: string; exchange?: string; state?: string; periodOpen?: number; periodClose?: number; time?: number; recv?: number };
+export type Market = {
+  kind: "newYork" | "always" | "other";
+  open: boolean;
+  /** The regular session the day's chart runs over, when it has one. */
+  day: { open: number; close: number } | null;
+  clock: Clock | null;
+  /** How far behind the feed is, in minutes, when that's worth saying: Tokyo's runs 15 late. */
+  late: number;
+};
+
+export function marketOf(q: Instrument | null | undefined, now: number): Market {
+  const fresh = q?.recv !== undefined && q.time !== undefined && now - q.recv < 120_000;
+  const behind = fresh ? Math.round((q!.recv! - q!.time!) / 60_000) : 0;
+  const late = behind >= 5 ? behind : 0;
+  if (q?.type === "CRYPTOCURRENCY") return { kind: "always", open: true, day: null, clock: null, late };
+  const newYork = !q?.exchange || NEW_YORK.has(q.exchange);
+  if (newYork && (!q?.type || ["EQUITY", "ETF", "INDEX"].includes(q.type))) {
+    const clock = marketClock(now);
+    return { kind: "newYork", open: clock.state === "open", day: clock.day, clock, late };
+  }
+  const open = q?.state === "REGULAR";
+  const session = q?.type !== "CURRENCY" && q?.type !== "FUTURE" && q?.type !== "MUTUALFUND" && q?.periodOpen && q.periodClose ? { open: q.periodOpen, close: q.periodClose } : null;
+  return { kind: "other", open, day: session, clock: null, late };
+}

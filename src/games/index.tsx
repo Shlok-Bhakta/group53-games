@@ -91,7 +91,7 @@ const GOLF: GameCard = {
 const STONKS: GameCard = {
   path: "/stonks",
   name: "Stonks",
-  blurb: "The S&P 500's top 20, ranked by their share of the index, every trade live. Pre-market and after hours too.",
+  blurb: "$10,000 of fake money and everything on Yahoo Finance to lose it on: stocks anywhere, crypto, forex, futures. Beat the crew, live.",
   banner: () => <StonksBanner />,
   prefetch: prefetchStonks,
 };

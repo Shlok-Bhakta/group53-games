@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { notify } from "./notify";
-import { buyingPower, fill, MIN_ORDER, netWorth, opens, refusal, START_CASH, type Ask, type Book, type Side } from "./stonks/trade";
+import { buyingPower, fill, fxPair, MIN_ORDER, netWorth, opens, refusal, START_CASH, toUsd, type Ask, type Book, type Side } from "./stonks/trade";
 import { contribution, downsample, liveWeight, minuteOf, withMinute, type Point } from "./stonks/board";
 import { INDEX, RANGES } from "./stonks/market";
 import { newsItem, statsValidator } from "./stonks/profile";
@@ -40,15 +40,49 @@ const indexDoc = (ctx: QueryCtx) =>
     .withIndex("by_key", (q) => q.eq("key", "spx"))
     .unique();
 
-/** What the sidecar should stream: the index, and every holding in the file. */
+const TOP = 25; // always streaming, so the ranking can change hands live
+
+/** Everything that needs a live price: the index and its top, anything held or on order, anything someone's
+ *  looking at, and the exchange rates to value them in dollars. The sidecar streams exactly this. */
 export const watchlist = query({
   args: {},
   handler: async (ctx) => {
-    const idx = await indexDoc(ctx);
-    // Anything someone holds or has an order on keeps streaming, even if it drops out of the top.
-    const held = (await ctx.db.query("stockPositions").collect()).map((p) => p.symbol);
-    const waiting = (await ctx.db.query("stockOrders").withIndex("by_status_filled", (q) => q.eq("status", "waiting")).collect()).map((o) => o.symbol);
-    return [...new Set([INDEX, ...(idx?.holdings.map((h) => h.symbol) ?? []), ...held, ...waiting])];
+    const { core, seen } = await watched(ctx);
+    const symbols = [...new Set([...core, ...seen])];
+    const pairs: string[] = [];
+    for (const s of symbols) {
+      const pair = fxPair((await quoteOf(ctx, s))?.currency);
+      if (pair) pairs.push(pair);
+    }
+    return [...new Set([...symbols, ...pairs])];
+  },
+});
+
+/** What also needs history, stats and news: the top, what's held or on order, and what's open on a phone. */
+export const deepWatch = query({
+  args: {},
+  handler: async (ctx) => (await watched(ctx)).deep,
+});
+
+async function watched(ctx: QueryCtx) {
+  const idx = await indexDoc(ctx);
+  const held = (await ctx.db.query("stockPositions").collect()).map((p) => p.symbol);
+  const waiting = (await ctx.db.query("stockOrders").withIndex("by_status_filled", (q) => q.eq("status", "waiting")).collect()).map((o) => o.symbol);
+  const views = await ctx.db.query("stockViews").collect();
+  const core = [INDEX, ...(idx?.holdings.slice(0, TOP).map((h) => h.symbol) ?? []), ...held, ...waiting];
+  return { core, seen: views.map((v) => v.symbol), deep: [...new Set([...core, ...views.filter((v) => v.level === "open").map((v) => v.symbol)])] };
+}
+
+/** When each thing was last fetched, so a restarted sidecar doesn't ask Yahoo for it all again. */
+export const freshness = query({
+  args: {},
+  handler: async (ctx) => {
+    const series = await ctx.db.query("stockSeries").collect();
+    const profiles = await ctx.db.query("stockProfiles").collect();
+    return [
+      ...series.map((s) => ({ symbol: s.symbol, kind: s.range, at: s.at })),
+      ...profiles.flatMap((p) => [...(p.statsAt ? [{ symbol: p.symbol, kind: "stats", at: p.statsAt }] : []), ...(p.newsAt ? [{ symbol: p.symbol, kind: "news", at: p.newsAt }] : [])]),
+    ];
   },
 });
 
@@ -67,6 +101,13 @@ const view = (q: Doc<"stockQuotes">) => ({
   volume: q.volume,
   yearHigh: q.yearHigh,
   yearLow: q.yearLow,
+  currency: q.currency,
+  type: q.type,
+  exchange: q.exchange,
+  state: q.state,
+  hint: q.hint,
+  periodOpen: q.periodOpen,
+  periodClose: q.periodClose,
 });
 export type QuoteView = ReturnType<typeof view>;
 
@@ -159,8 +200,10 @@ export const quote = query({
   handler: async (ctx, { symbol }) => {
     const q = await quoteOf(ctx, symbol);
     if (!q) return null;
-    const row = symbol === INDEX ? undefined : (await ranked(ctx)).rows.find((r) => r.symbol === symbol);
-    return { ...view(q), name: row?.name ?? q.name, weight: row?.weight, rank: row?.rank, baseRank: row?.baseRank, points: row?.points };
+    // Only the index's members have a place on the board, and only working that out depends on every price.
+    const member = (await indexDoc(ctx))?.holdings.some((h) => h.symbol === symbol);
+    const row = member ? (await ranked(ctx)).rows.find((r) => r.symbol === symbol) : undefined;
+    return { ...view(q), name: row?.name ?? q.name, weight: row?.weight, rank: row?.rank, baseRank: row?.baseRank, points: row?.points, rate: await usdRate(ctx, q.currency) };
   },
 });
 
@@ -238,18 +281,200 @@ export const series = internalMutation({
     volume: v.optional(v.number()),
     yearHigh: v.optional(v.number()),
     yearLow: v.optional(v.number()),
+    currency: v.optional(v.string()),
+    type: v.optional(v.string()),
+    exchange: v.optional(v.string()),
+    hint: v.optional(v.number()),
+    periodOpen: v.optional(v.number()),
+    periodClose: v.optional(v.number()),
   },
   handler: async (ctx, { symbol, range, points, ...stats }) => {
     if (!(RANGES as readonly string[]).includes(range)) throw new Error(`unknown range ${range}`);
     await setSeries(ctx, symbol, range, points as Point[]);
-    const patch = Object.fromEntries(Object.entries(stats).filter(([, v]) => v !== undefined));
-    if (Object.keys(patch).length === 0) return;
+    const patch: Partial<Doc<"stockQuotes">> = Object.fromEntries(Object.entries(stats).filter(([, v]) => v !== undefined));
     const q = await quoteOf(ctx, symbol);
+    const last = points.at(-1);
+    // Something nobody's watched in a while: its history can be newer than its last known price.
+    if (range === "1D" && last && (!q || last[0] > q.time)) Object.assign(patch, { price: last[1], time: last[0], recv: Date.now(), source: "history" });
+    if (Object.keys(patch).length === 0) return;
     if (q) await ctx.db.patch(q._id, patch);
-    else {
-      const last = points.at(-1);
-      if (last) await ctx.db.insert("stockQuotes", { symbol, price: last[1], time: last[0], recv: Date.now(), source: "history", ...patch });
+    else if (last) await ctx.db.insert("stockQuotes", { symbol, price: last[1], time: last[0], recv: Date.now(), source: "history", ...patch });
+  },
+});
+
+/** Yahoo's batch quotes: what each thing is, and its latest regular-session trade. It's how anything the
+ *  stream doesn't carry (futures, some currencies, funds) gets a price and fills its orders. */
+export const snapshot = internalMutation({
+  args: {
+    rows: v.array(
+      v.object({
+        symbol: v.string(),
+        price: v.number(),
+        time: v.number(),
+        name: v.optional(v.string()),
+        prevClose: v.optional(v.number()),
+        dayHigh: v.optional(v.number()),
+        dayLow: v.optional(v.number()),
+        volume: v.optional(v.number()),
+        yearHigh: v.optional(v.number()),
+        yearLow: v.optional(v.number()),
+        currency: v.optional(v.string()),
+        type: v.optional(v.string()),
+        exchange: v.optional(v.string()),
+        state: v.optional(v.string()),
+        hint: v.optional(v.number()),
+      }),
+    ),
+  },
+  handler: async (ctx, { rows }) => {
+    for (const { symbol, price, time, ...meta } of rows) {
+      const q = await quoteOf(ctx, symbol);
+      const newer = !q || time > q.time;
+      const patch = Object.fromEntries(Object.entries(meta).filter(([, x]) => x !== undefined));
+      if (q) await ctx.db.patch(q._id, { ...patch, ...(newer ? { price, time, recv: Date.now(), source: "snapshot" } : {}) });
+      else await ctx.db.insert("stockQuotes", { symbol, price, time, recv: Date.now(), source: "snapshot", ...patch });
+      // The latest regular-session trade, whenever it was: an order from before it fills on it.
+      await fillWaiting(ctx, symbol, price, time);
     }
+  },
+});
+
+// ---- Finding things ----
+
+const searchText = (symbol: string, name: string) => `${symbol} ${symbol.replace(/[-.=^]/g, " ")} ${name}`;
+const symbolRow = v.object({ symbol: v.string(), name: v.string(), type: v.optional(v.string()), exchange: v.optional(v.string()) });
+
+async function upsertSymbols(ctx: MutationCtx, rows: { symbol: string; name: string; type?: string; exchange?: string }[]) {
+  for (const r of rows) {
+    const row = await ctx.db
+      .query("stockSymbols")
+      .withIndex("by_symbol", (q) => q.eq("symbol", r.symbol))
+      .unique();
+    const doc = { ...r, search: searchText(r.symbol, r.name) };
+    if (!row) await ctx.db.insert("stockSymbols", doc);
+    else if (row.name !== r.name || row.type !== r.type || row.exchange !== r.exchange) await ctx.db.patch(row._id, doc);
+  }
+}
+
+/** US listings from Nasdaq's daily files, in chunks. */
+export const addSymbols = internalMutation({
+  args: { rows: v.array(symbolRow) },
+  handler: (ctx, { rows }) => upsertSymbols(ctx, rows),
+});
+
+const LOOKUP_DAYS = 7;
+const normal = (q: string) => q.trim().toLowerCase().slice(0, 40);
+
+/** Asks Yahoo about a search, unless that's been asked lately. Phones never talk to Yahoo themselves. */
+export const lookup = mutation({
+  args: { q: v.string() },
+  handler: async (ctx, { q }) => {
+    if ((await getAuthUserId(ctx)) === null) return;
+    const text = normal(q);
+    if (!text) return;
+    const row = await ctx.db
+      .query("stockLookups")
+      .withIndex("by_q", (x) => x.eq("q", text))
+      .unique();
+    if (row && (!row.done || Date.now() - row.at < LOOKUP_DAYS * 86_400_000)) return;
+    if (row) await ctx.db.patch(row._id, { done: false, at: Date.now() });
+    else await ctx.db.insert("stockLookups", { q: text, done: false, at: Date.now() });
+  },
+});
+
+export const pendingLookups = query({
+  args: {},
+  handler: async (ctx) =>
+    (
+      await ctx.db
+        .query("stockLookups")
+        .withIndex("by_done", (q) => q.eq("done", false))
+        .take(20)
+    ).map((l) => l.q),
+});
+
+export const lookedUp = internalMutation({
+  args: { q: v.string(), rows: v.array(symbolRow) },
+  handler: async (ctx, { q, rows }) => {
+    await upsertSymbols(ctx, rows);
+    const row = await ctx.db
+      .query("stockLookups")
+      .withIndex("by_q", (x) => x.eq("q", q))
+      .unique();
+    if (row) await ctx.db.patch(row._id, { done: true, at: Date.now(), symbols: rows.map((r) => r.symbol) });
+  },
+});
+
+/** Search anything: an exact ticker first, then Yahoo's own order for this search, tickers starting with
+ *  it, and names. Instant from what's already known, and fills in as Yahoo answers. */
+export const search = query({
+  args: { q: v.string() },
+  handler: async (ctx, { q }) => {
+    const text = normal(q);
+    if (!text) return [];
+    const upper = text.toUpperCase();
+    const ticker = upper.replace(/\./g, "-");
+    const yahoo = await ctx.db
+      .query("stockLookups")
+      .withIndex("by_q", (x) => x.eq("q", text))
+      .unique();
+    const prefix = await ctx.db
+      .query("stockSymbols")
+      .withIndex("by_symbol", (x) => x.gte("symbol", ticker).lt("symbol", `${ticker}\uffff`))
+      .take(8);
+    const named = await ctx.db
+      .query("stockSymbols")
+      .withSearchIndex("search_text", (x) => x.search("search", text))
+      .take(15);
+    const order = [...(prefix[0]?.symbol === ticker ? [ticker] : []), ...(yahoo?.symbols ?? []), ...prefix.map((p) => p.symbol), ...named.map((n) => n.symbol)];
+    const rows = [];
+    for (const symbol of [...new Set(order)].slice(0, 20)) {
+      const s = prefix.find((p) => p.symbol === symbol) ?? named.find((n) => n.symbol === symbol) ?? (await ctx.db.query("stockSymbols").withIndex("by_symbol", (x) => x.eq("symbol", symbol)).unique());
+      if (!s) continue;
+      const quote = await quoteOf(ctx, symbol);
+      rows.push({ symbol, name: quote?.name ?? s.name, type: quote?.type ?? s.type, exchange: s.exchange, price: quote?.price, prevClose: quote?.prevClose, currency: quote?.currency });
+    }
+    return rows;
+  },
+});
+
+// Anything on Yahoo can be opened, so charts of what nobody looks at any more are cleared out. What's held
+// or at the top is refetched well inside this, so it never goes; an old chart comes back when it's opened.
+const KEEP_SERIES_MS = 14 * 86_400_000;
+export const sweepSeries = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const old = await ctx.db
+      .query("stockSeries")
+      .withIndex("by_at", (q) => q.lt("at", Date.now() - KEEP_SERIES_MS))
+      .take(200);
+    for (const s of old) await ctx.db.delete(s._id);
+  },
+});
+
+/** A phone is showing these: stream them (and if "open", fetch their charts and news) for a while. */
+export const watching = mutation({
+  args: { symbols: v.array(v.string()), level: v.union(v.literal("seen"), v.literal("open")) },
+  handler: async (ctx, { symbols, level }) => {
+    if ((await getAuthUserId(ctx)) === null) return;
+    const until = Date.now() + 90_000;
+    for (const symbol of symbols.slice(0, 40)) {
+      // Anything shaped like a Yahoo ticker: a link can name something search hasn't found yet.
+      if (!/^[\^A-Z0-9.=-]{1,20}$/.test(symbol)) continue;
+      const row = await ctx.db
+        .query("stockViews")
+        .withIndex("by_symbol", (x) => x.eq("symbol", symbol))
+        .unique();
+      if (!row) await ctx.db.insert("stockViews", { symbol, level, until });
+      else await ctx.db.patch(row._id, { until, level: row.level === "open" && row.until > Date.now() ? "open" : level });
+    }
+  },
+});
+
+export const sweepViews = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    for (const v of await ctx.db.query("stockViews").collect()) if (v.until < Date.now()) await ctx.db.delete(v._id);
   },
 });
 
@@ -276,6 +501,23 @@ const pricesOf = async (ctx: QueryCtx, symbols: string[]) => {
   return out;
 };
 
+/** What a stock's worth in dollars, whatever it's quoted in. Undefined until its exchange rate is known. */
+async function usdRate(ctx: QueryCtx, currency: string | undefined) {
+  const pair = fxPair(currency);
+  return toUsd(currency, pair ? (await quoteOf(ctx, pair))?.price : undefined);
+}
+
+/** Dollar prices for these symbols. A rate that isn't known yet leaves the symbol out. */
+async function usdPrices(ctx: QueryCtx, symbols: string[]) {
+  const quotes = await pricesOf(ctx, symbols);
+  const out = new Map<string, number>();
+  for (const [s, q] of quotes) {
+    const rate = await usdRate(ctx, q.currency);
+    if (rate !== undefined) out.set(s, q.price * rate);
+  }
+  return { quotes, usd: out };
+}
+
 const askOf = (o: Doc<"stockOrders">): Ask => ({ side: o.side, symbol: o.symbol, dollars: o.dollars, shares: o.shares });
 const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const DID: Record<Side, string> = { buy: "Bought", sell: "Sold", short: "Shorted", cover: "Covered" };
@@ -288,12 +530,17 @@ async function fillWaiting(ctx: MutationCtx, symbol: string, price: number, time
     .query("stockOrders")
     .withIndex("by_symbol_status", (q) => q.eq("symbol", symbol).eq("status", "waiting"))
     .collect();
+  if (!orders.some((o) => o.at < time)) return;
+  const currency = (await quoteOf(ctx, symbol))?.currency;
+  const rate = await usdRate(ctx, currency);
+  if (rate === undefined) return; // its exchange rate is on the way: the next trade fills it
+  const usdPrice = price * rate;
   for (const order of orders) {
     if (order.at >= time) continue;
     const book = await bookOf(ctx, order.userId);
-    const prices = await pricesOf(ctx, book.positions.map((p) => p.symbol));
-    const power = buyingPower(book, (s) => (s === symbol ? price : prices.get(s)?.price));
-    const done = fill(book, askOf(order), price, power);
+    const { usd } = await usdPrices(ctx, book.positions.map((p) => p.symbol));
+    const power = buyingPower(book, (s) => (s === symbol ? usdPrice : usd.get(s)));
+    const done = fill(book, askOf(order), usdPrice, power);
     if ("refused" in done) {
       await ctx.db.patch(order._id, { status: "refused", reason: done.refused, filledAt: time });
       await notify(ctx, order.userId, { title: `${symbol} order refused`, body: done.refused, url: stockPath(symbol), tag: `stonks-${symbol}` });
@@ -309,10 +556,10 @@ async function fillWaiting(ctx: MutationCtx, symbol: string, price: number, time
     if (done.position && row) await ctx.db.patch(row._id, { shares: done.position.shares, avg: done.position.avg });
     else if (done.position) await ctx.db.insert("stockPositions", { userId: order.userId, ...done.position });
     else if (row) await ctx.db.delete(row._id);
-    await ctx.db.patch(order._id, { status: "filled", filledAt: time, price, filledShares: done.shares, amount: done.amount, realized: done.realized });
+    await ctx.db.patch(order._id, { status: "filled", filledAt: time, price, currency, filledShares: done.shares, amount: done.amount, realized: done.realized });
 
     // An order that sat waiting (overnight, say) reports back; one that filled in a second was watched.
-    if (time - order.at > 30_000) await notify(ctx, order.userId, { title: `${DID[order.side]} ${symbol}`, body: `${money(done.amount)} at ${money(price)}`, url: stockPath(symbol), tag: `stonks-${symbol}` });
+    if (time - order.at > 30_000) await notify(ctx, order.userId, { title: `${DID[order.side]} ${symbol}`, body: `${money(done.amount)} at ${money(usdPrice)}`, url: stockPath(symbol), tag: `stonks-${symbol}` });
     await tellTheOtherSide(ctx, order, symbol);
   }
 }
@@ -346,7 +593,7 @@ export const order = mutation({
   handler: async (ctx, { symbol, side, dollars, shares }) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) throw new Error("Sign in first.");
-    if (!(await quoteOf(ctx, symbol)) || symbol === INDEX) throw new Error("You can't trade that.");
+    if (!(await quoteOf(ctx, symbol))) throw new Error("You can't trade that.");
     const ask: Ask = { side, symbol, dollars, shares };
     const book = await bookOf(ctx, userId);
     const why = refusal(book, ask);
@@ -361,8 +608,8 @@ export const order = mutation({
     if (twin) return twin._id;
     if (opens(side)) {
       if (dollars === undefined || !(dollars >= MIN_ORDER)) throw new Error(`The smallest order is ${money(MIN_ORDER)}.`);
-      const prices = await pricesOf(ctx, book.positions.map((p) => p.symbol));
-      const free = buyingPower(book, (s) => prices.get(s)?.price) - waiting.reduce((n, o) => n + (o.dollars ?? 0), 0);
+      const { usd } = await usdPrices(ctx, book.positions.map((p) => p.symbol));
+      const free = buyingPower(book, (s) => usd.get(s)) - waiting.reduce((n, o) => n + (o.dollars ?? 0), 0);
       if (dollars > free + 0.005) throw new Error(`You have ${money(Math.max(0, free))} to invest.`);
     } else if (shares !== undefined && !(shares > 0)) throw new Error("Pick how many.");
     return ctx.db.insert("stockOrders", { userId, symbol, side, dollars, shares, status: "waiting", at: now });
@@ -386,8 +633,8 @@ export const portfolio = query({
     const userId = await getAuthUserId(ctx);
     if (userId === null) return null;
     const book = await bookOf(ctx, userId);
-    const quotes = await pricesOf(ctx, book.positions.map((p) => p.symbol));
-    const price = (s: string) => quotes.get(s)?.price;
+    const { quotes, usd } = await usdPrices(ctx, book.positions.map((p) => p.symbol));
+    const price = (s: string) => usd.get(s);
     const waiting = await ctx.db
       .query("stockOrders")
       .withIndex("by_user_status", (q) => q.eq("userId", userId).eq("status", "waiting"))
@@ -406,13 +653,17 @@ export const portfolio = query({
       free: buyingPower(book, price) - waiting.reduce((n, o) => n + (o.dollars ?? 0), 0),
       positions: book.positions
         .map((p) => {
-          const q = quotes.get(p.symbol);
-          const now = q?.price ?? p.avg;
-          return { symbol: p.symbol, name: q?.name, shares: p.shares, avg: p.avg, price: now, value: p.shares * now, gain: p.shares * (now - p.avg), gainPct: (Math.sign(p.shares) * (now - p.avg)) / p.avg };
+          const now = usd.get(p.symbol) ?? p.avg; // all in dollars, so a currency's moves count too
+          return { symbol: p.symbol, name: quotes.get(p.symbol)?.name, shares: p.shares, avg: p.avg, price: now, value: p.shares * now, gain: p.shares * (now - p.avg), gainPct: (Math.sign(p.shares) * (now - p.avg)) / p.avg };
         })
         .sort((a, b) => Math.abs(b.value) - Math.abs(a.value)),
-      waiting: waiting.map((o) => ({ id: o._id, symbol: o.symbol, side: o.side, dollars: o.dollars, shares: o.shares, at: o.at })),
-      lastFill: filled && { id: filled._id, side: filled.side, symbol: filled.symbol, amount: filled.amount ?? 0, price: filled.price ?? 0 },
+      waiting: await Promise.all(
+        waiting.map(async (o) => {
+          const q = await quoteOf(ctx, o.symbol);
+          return { id: o._id, symbol: o.symbol, side: o.side, dollars: o.dollars, shares: o.shares, at: o.at, quote: q && { type: q.type, exchange: q.exchange, state: q.state, time: q.time, recv: q.recv, periodOpen: q.periodOpen, periodClose: q.periodClose } };
+        }),
+      ),
+      lastFill: filled && { id: filled._id, side: filled.side, symbol: filled.symbol, amount: filled.amount ?? 0, price: filled.price ?? 0, currency: filled.currency },
     };
   },
 });
@@ -427,11 +678,11 @@ export const crew = query({
     const positions = await ctx.db.query("stockPositions").collect();
     const accounts = new Map((await ctx.db.query("stockAccounts").collect()).map((a) => [a.userId, a.cash]));
     const profiles = new Map((await ctx.db.query("profiles").collect()).map((p) => [p.userId, p]));
-    const quotes = await pricesOf(ctx, positions.map((p) => p.symbol));
+    const { usd } = await usdPrices(ctx, positions.map((p) => p.symbol));
     return users
       .map((u) => {
         const book = { cash: accounts.get(u._id) ?? START_CASH, positions: positions.filter((p) => p.userId === u._id) };
-        const worth = netWorth(book, (s) => quotes.get(s)?.price);
+        const worth = netWorth(book, (s) => usd.get(s));
         const f = profiles.get(u._id);
         return { userId: u._id, me: u._id === me, name: u.name ?? "Someone", image: u.image, frame: f?.frame, frameColor: f?.frameColor, glow: f?.glow, badge: f?.badge, worth, gain: worth - START_CASH, positions: book.positions.length };
       })
@@ -453,7 +704,7 @@ export const trades = query({
     return Promise.all(
       rows.map(async (o) => {
         const u = await ctx.db.get(o.userId);
-        return { id: o._id, name: u?.name ?? "Someone", image: u?.image, side: o.side, symbol: o.symbol, amount: o.amount ?? 0, price: o.price ?? 0, at: o.filledAt ?? o.at, realized: o.realized };
+        return { id: o._id, name: u?.name ?? "Someone", image: u?.image, side: o.side, symbol: o.symbol, amount: o.amount ?? 0, price: o.price ?? 0, currency: o.currency, at: o.filledAt ?? o.at, realized: o.realized };
       }),
     );
   },
@@ -465,7 +716,8 @@ export const holders = query({
   handler: async (ctx, { symbol }) => {
     const me = await getAuthUserId(ctx);
     if (me === null) return [];
-    const price = (await quoteOf(ctx, symbol))?.price;
+    const { usd } = await usdPrices(ctx, [symbol]);
+    const price = usd.get(symbol);
     const rows = await ctx.db
       .query("stockPositions")
       .withIndex("by_symbol", (q) => q.eq("symbol", symbol))
@@ -485,7 +737,8 @@ export const setProfile = internalMutation({
   args: { symbol: v.string(), stats: v.optional(statsValidator), news: v.optional(v.array(newsItem)) },
   handler: async (ctx, { symbol, stats, news }) => {
     const row = await profileOf(ctx, symbol);
-    const patch = { ...(stats && { stats }), ...(news && { news }), at: Date.now() };
+    const now = Date.now();
+    const patch = { ...(stats && { stats, statsAt: now }), ...(news && { news, newsAt: now }), at: now };
     if (row) await ctx.db.patch(row._id, patch);
     else await ctx.db.insert("stockProfiles", { symbol, ...patch });
   },

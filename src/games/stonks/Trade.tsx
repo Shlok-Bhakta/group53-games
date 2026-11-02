@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { XIcon } from "@phosphor-icons/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { display, type Clock } from "../../../convex/stonks/market";
+import { display, marketOf, type Market } from "../../../convex/stonks/market";
 import { MIN_ORDER, type Side } from "../../../convex/stonks/trade";
 import { AsyncButton } from "@/components/AsyncButton";
 import { Section } from "@/components/parts";
@@ -35,7 +35,11 @@ export type Holders = FunctionReturnType<typeof api.stonks.holders>;
 const VERB: Record<Side, string> = { buy: "Buy", sell: "Sell", short: "Short", cover: "Cover" };
 const DID: Record<Side, string> = { buy: "bought", sell: "sold", short: "shorted", cover: "covered" };
 const stockPath = (symbol: string) => `/stonks/${encodeURIComponent(symbol)}`;
-const whenFills = (clock: Clock) => (clock.state === "open" ? "Next trade" : `At the open, ${opensAt(clock.nextOpen)}`);
+/** When an order on this would fill. A late feed means a wait: it fills on a trade stamped after the tap. */
+export function whenFills(m: Market) {
+  if (m.open) return m.late ? `Next trade, about ${m.late} min` : "Next trade";
+  return m.clock ? `At the open, ${opensAt(m.clock.nextOpen)}` : "When it next trades";
+}
 
 /** Says so when one of my orders fills while I'm looking. */
 export function useFillNotice(me: Portfolio | null | undefined) {
@@ -50,7 +54,7 @@ export function useFillNotice(me: Portfolio | null | undefined) {
     seen.current = id;
     if (!fill) return;
     sfx("land");
-    toast.success(`${DID[fill.side][0].toUpperCase()}${DID[fill.side].slice(1)} ${price(fill.amount)} of ${display(fill.symbol)} at ${price(fill.price)}`);
+    toast.success(`${DID[fill.side][0].toUpperCase()}${DID[fill.side].slice(1)} ${price(fill.amount)} of ${display(fill.symbol)} at ${price(fill.price, fill.currency)}`);
   }, [fill, loaded]);
 }
 
@@ -112,7 +116,7 @@ function PositionRow({ p }: { p: Portfolio["positions"][number] }) {
     <motion.div ref={ref} layout="position" transition={{ type: "spring", bounce: 0, duration: 0.5 }}>
       <Link
         to={stockPath(p.symbol)}
-        onPointerDown={() => warmStock(convex, p.symbol)}
+        onPointerDown={() => warmStock(convex, p.symbol, "open")}
         aria-label={`Your position in ${display(p.symbol)}`}
         className={`flex ${S.row} items-center gap-3 px-4 transition-transform duration-100 active:scale-[0.97]`}
       >
@@ -120,7 +124,7 @@ function PositionRow({ p }: { p: Portfolio["positions"][number] }) {
           <span className="block font-display text-body">{display(p.symbol)}</span>
           <span className="block truncate text-footnote text-muted-foreground">
             {short ? "Short " : ""}
-            {shareCount(p.shares)} at {price(p.avg)}
+            {shareCount(p.shares, p.symbol)} at {price(p.avg)}
           </span>
         </span>
         <span className="flex shrink-0 flex-col items-end gap-1">
@@ -145,7 +149,7 @@ export function Positions({ me }: { me: Portfolio }) {
   );
 }
 
-export function Waiting({ orders, clock }: { orders: Portfolio["waiting"]; clock: Clock }) {
+export function Waiting({ orders, now }: { orders: Portfolio["waiting"]; now: number }) {
   const cancel = useMutation(api.stonks.cancelOrder);
   if (orders.length === 0) return null;
   return (
@@ -154,10 +158,10 @@ export function Waiting({ orders, clock }: { orders: Portfolio["waiting"]; clock
         <div key={o.id} className={`flex ${S.row} items-center gap-3 px-4`}>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-callout font-semibold">
-              {VERB[o.side]} {o.dollars !== undefined ? `${price(o.dollars)} of ` : o.shares !== undefined ? `${shareCount(o.shares)} of ` : "all of "}
+              {VERB[o.side]} {o.dollars !== undefined ? `${price(o.dollars)} of ` : o.shares !== undefined ? `${shareCount(o.shares, o.symbol)} of ` : "all of "}
               {display(o.symbol)}
             </span>
-            <span className="block text-footnote text-muted-foreground">{whenFills(clock)}</span>
+            <span className="block text-footnote text-muted-foreground">{whenFills(marketOf(o.quote, now))}</span>
           </span>
           <AsyncButton variant="ghost" size="icon" aria-label={`Cancel ${VERB[o.side]} ${display(o.symbol)}`} icon={<XIcon weight="bold" />} onClick={() => cancel({ id: o.id as Id<"stockOrders"> })} />
         </div>
@@ -178,7 +182,7 @@ export function CrewTrades({ trades, now, title = "Crew trades" }: { trades: Tra
               {t.name} {DID[t.side]} {display(t.symbol)}
             </span>
             <span className="block truncate text-footnote text-muted-foreground">
-              {price(t.amount)} at {price(t.price)} · {ago(now - t.at)}
+              {price(t.amount)} at {price(t.price, t.currency)} · {ago(now - t.at)}
               {t.realized ? ` · ${t.realized > 0 ? "made" : "lost"} ${price(Math.abs(t.realized))}` : ""}
             </span>
           </span>
@@ -197,7 +201,7 @@ export function YourPosition({ p }: { p: Portfolio["positions"][number] }) {
         <span className="min-w-0">
           <span className="block text-callout font-semibold">
             {p.shares < 0 ? "Short " : ""}
-            {shareCount(p.shares)}
+            {shareCount(p.shares, p.symbol)}
           </span>
           <span className="block text-footnote text-muted-foreground">at {price(p.avg)}</span>
         </span>
@@ -234,7 +238,7 @@ export function WhoHolds({ holders }: { holders: Holders }) {
 }
 
 // The two actions you can take, where thumbs are: pinned to the bottom of the screen as it scrolls.
-export function TradeDock({ symbol, last, me, clock }: { symbol: string; last: number; me: Portfolio; clock: Clock }) {
+export function TradeDock({ symbol, last, unit, rate, me, market }: { symbol: string; last: number; unit: string; rate: number | undefined; me: Portfolio; market: Market }) {
   const [side, setSide] = useState<Side | null>(null);
   const held = me.positions.find((p) => p.symbol === symbol);
   const canOpen = me.free >= MIN_ORDER;
@@ -260,27 +264,27 @@ export function TradeDock({ symbol, last, me, clock }: { symbol: string; last: n
         className="sticky bottom-0 z-10 -mx-4 flex gap-2.5 bg-linear-to-t from-background from-70% to-transparent px-4 pt-5"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)", marginBottom: "calc(-1 * (env(safe-area-inset-bottom) + 16px))" }}
       >
-        <Button size="xl" className="h-14 flex-1" disabled={!closes(primary.side) && !canOpen} onClick={() => setSide(primary.side)}>
+        <Button size="xl" className="h-14 flex-1" disabled={rate === undefined || (!closes(primary.side) && !canOpen)} onClick={() => setSide(primary.side)}>
           {primary.label}
         </Button>
-        <Button size="xl" variant="secondary" className="h-14 flex-1" disabled={!canOpen} onClick={() => setSide(secondary.side)}>
+        <Button size="xl" variant="secondary" className="h-14 flex-1" disabled={rate === undefined || !canOpen} onClick={() => setSide(secondary.side)}>
           {secondary.label}
         </Button>
       </div>
-      {side && <TradeSheet symbol={symbol} side={side} last={last} free={me.free} held={held?.shares ?? 0} clock={clock} onClose={() => setSide(null)} />}
+      {side && <TradeSheet symbol={symbol} side={side} last={last} unit={unit} usd={last * (rate ?? 1)} free={me.free} held={held?.shares ?? 0} market={market} onClose={() => setSide(null)} />}
     </>
   );
 }
 
-function TradeSheet({ symbol, side, last, free, held, clock, onClose }: { symbol: string; side: Side; last: number; free: number; held: number; clock: Clock; onClose: () => void }) {
+function TradeSheet({ symbol, side, last, unit, usd, free, held, market, onClose }: { symbol: string; side: Side; last: number; unit: string; usd: number; free: number; held: number; market: Market; onClose: () => void }) {
   const order = useMutation(api.stonks.order);
   const closing = side === "sell" || side === "cover";
   // Opening picks dollars, up to what's free; closing picks a share of the position, all of it by default.
   const max = closing ? 100 : Math.floor(free);
   const [amount, setAmount] = useState(() => (closing ? 100 : Math.min(max, Math.max(MIN_ORDER, Math.round(free / 40) * 10))));
   const exactMax = amount >= max;
-  const dollars = closing ? (Math.abs(held) * amount * last) / 100 : exactMax ? free : amount;
-  const shares = closing ? (Math.abs(held) * amount) / 100 : dollars / last;
+  const dollars = closing ? (Math.abs(held) * amount * usd) / 100 : exactMax ? free : amount;
+  const shares = closing ? (Math.abs(held) * amount) / 100 : dollars / usd;
   const presets = closing
     ? [25, 50, 75].map((p) => ({ label: `${p}%`, value: p })).concat({ label: "All", value: 100 })
     : [10, 25, 50].map((p) => ({ label: `${p}%`, value: Math.max(MIN_ORDER, Math.round((free * p) / 1000) * 10) })).concat({ label: "Max", value: max });
@@ -304,7 +308,7 @@ function TradeSheet({ symbol, side, last, free, held, clock, onClose }: { symbol
               {price(dollars)}
             </div>
             <div className="text-footnote text-muted-foreground">
-              About {shareCount(shares)} at {price(last)}
+              About {shareCount(shares, symbol)} at {price(last, unit)}
             </div>
           </div>
           <Slider.Root className="relative flex h-11 touch-none select-none items-center" min={closing ? 1 : MIN_ORDER} max={max} step={1} value={[amount]} onValueChange={([v]) => setAmount(snap(v))} aria-label="Amount">
@@ -322,7 +326,7 @@ function TradeSheet({ symbol, side, last, free, held, clock, onClose }: { symbol
           </div>
           <div className="flex items-center justify-between text-footnote text-muted-foreground">
             <span>Fills</span>
-            <span className="font-semibold">{whenFills(clock)}</span>
+            <span className="font-semibold">{whenFills(market)}</span>
           </div>
           <AsyncButton
             size="xl"

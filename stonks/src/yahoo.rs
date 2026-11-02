@@ -16,7 +16,7 @@ use crate::types::{log, now_ms, Event, Status, Tick};
 pub const NAME: &str = "yahoo";
 const URL: &str = "wss://streamer.finance.yahoo.com/?version=2";
 
-/// The fields we use from PricingData: id 1, price 2 (float), time 3 (zigzag ms), dayVolume 9, dayHigh 10, dayLow 11.
+/// The fields we use from PricingData: id 1, price 2 (float), time 3 (zigzag ms), marketHours 7, dayVolume 9, dayHigh 10, dayLow 11.
 pub fn decode(b64: &str, recv: i64) -> Result<Tick> {
     let buf = base64::engine::general_purpose::STANDARD.decode(b64)?;
     let mut i = 0usize;
@@ -35,7 +35,7 @@ pub fn decode(b64: &str, recv: i64) -> Result<Tick> {
             }
         }
     };
-    let mut t = Tick { symbol: String::new(), price: 0.0, time: 0, recv, source: NAME, day_high: None, day_low: None, volume: None };
+    let mut t = Tick { symbol: String::new(), price: 0.0, time: 0, recv, source: NAME, day_high: None, day_low: None, volume: None, session: "pre" };
     while i < buf.len() {
         let key = varint(&mut i)?;
         let (field, wire) = (key >> 3, key & 7);
@@ -45,6 +45,7 @@ pub fn decode(b64: &str, recv: i64) -> Result<Tick> {
                 let signed = ((v >> 1) as i64) ^ -((v & 1) as i64);
                 match field {
                     3 => t.time = signed,
+                    7 => t.session = hours(v),
                     9 if signed > 0 => t.volume = Some(signed as f64),
                     _ => {}
                 }
@@ -76,6 +77,18 @@ pub fn decode(b64: &str, recv: i64) -> Result<Tick> {
         bail!("incomplete tick {t:?}");
     }
     Ok(t)
+}
+
+/// Yahoo's MarketHoursType. Left out on the wire when it's 0, so that's where "pre" comes from.
+fn hours(v: u64) -> &'static str {
+    match v {
+        0 => "pre",
+        1 => "regular",
+        2 => "post",
+        3 => "extended",
+        4 => "overnight",
+        _ => "other",
+    }
 }
 
 /// Prices come as float32 (344.63 arrives as 344.6300048828125): back to 7 significant digits.
@@ -181,6 +194,7 @@ mod tests {
         assert!(t.time > 1_790_000_000_000, "{}", t.time);
         assert!(t.day_high.unwrap() >= t.day_low.unwrap());
         assert!(t.volume.unwrap() > 0.0);
+        assert_eq!(t.session, "regular");
     }
     #[test]
     fn refuses_junk() {

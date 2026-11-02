@@ -66,6 +66,7 @@ describe("stonks", () => {
       ],
     });
     expect(await t.query(api.stonks.watchlist, {})).toEqual(["^GSPC", "NVDA", "AAPL"]);
+    expect(await t.query(api.stonks.deepWatch, {})).toEqual(["^GSPC", "NVDA", "AAPL"]);
     const now = ET("2026-10-30T10:00:00");
     await t.mutation(internal.stonks.ingest, { ticks: [tick("^GSPC", 6000, now), tick("NVDA", 190, now), tick("AAPL", 310, now)], feeds: [{ source: "yahoo", state: "live" }] });
     const b = await t.query(api.stonks.board, {});
@@ -230,7 +231,6 @@ describe("paper trading", () => {
     const { as } = await signedIn(t);
     await expect(as.mutation(api.stonks.order, { symbol: "NVDA", side: "buy", dollars: 10001 })).rejects.toThrow("You have $10,000.00 to invest.");
     await expect(as.mutation(api.stonks.order, { symbol: "NVDA", side: "buy", dollars: 0.5 })).rejects.toThrow("smallest order");
-    await expect(as.mutation(api.stonks.order, { symbol: "^GSPC", side: "buy", dollars: 100 })).rejects.toThrow();
     await expect(as.mutation(api.stonks.order, { symbol: "NOPE", side: "buy", dollars: 100 })).rejects.toThrow("You can't trade that.");
     await as.mutation(api.stonks.order, { symbol: "NVDA", side: "buy", dollars: 7000 });
     expect((await as.query(api.stonks.portfolio, {}))?.free).toBe(3000);
@@ -277,5 +277,97 @@ describe("paper trading", () => {
     vi.setSystemTime(open + 1000);
     await tickAt(t, "NVDA", 200, open + 1000);
     expect(await t.query(api.stonks.watchlist, {})).toEqual(["^GSPC", "AAPL", "NVDA"]);
+  });
+
+  test("anything in any currency: dollars go in, the local price fills it, and the currency counts", async () => {
+    const t = await market();
+    const { as } = await signedIn(t);
+    // Toyota in yen, with the rate from a batch quote: the stream doesn't carry this pair.
+    await t.mutation(internal.stonks.snapshot, { rows: [{ symbol: "7203.T", price: 3000, time: open - 5000, currency: "JPY", type: "EQUITY", exchange: "JPX", state: "REGULAR", name: "TOYOTA MOTOR CORP" }] });
+    expect(await t.query(api.stonks.watchlist, {})).toEqual(["^GSPC"]);
+    vi.setSystemTime(open + 1000);
+    const id = await as.mutation(api.stonks.order, { symbol: "7203.T", side: "buy", dollars: 1000 });
+    expect(await t.query(api.stonks.watchlist, {})).toEqual(expect.arrayContaining(["7203.T", "JPYUSD=X"]));
+    // Yahoo's feed from Tokyo runs 15 minutes late. A trade stamped before the tap can't fill it, however
+    // late it arrives, and without a rate it waits too.
+    await tickAt(t, "7203.T", 3010, open + 500);
+    await tickAt(t, "7203.T", 3020, open + 2000);
+    expect((await as.query(api.stonks.portfolio, {}))?.waiting.map((w) => w.id)).toEqual([id]);
+    await t.mutation(internal.stonks.snapshot, { rows: [{ symbol: "JPYUSD=X", price: 0.005, time: open + 2000, type: "CURRENCY", currency: "USD" }] });
+    await tickAt(t, "7203.T", 3200, open + 3000);
+    const p = await as.query(api.stonks.portfolio, {});
+    expect(p?.positions[0]).toMatchObject({ symbol: "7203.T", avg: 16, shares: 62.5, value: 1000 }); // 3200 yen is $16
+    expect(p?.lastFill).toMatchObject({ price: 3200, currency: "JPY", amount: 1000 });
+    // The yen strengthens: the same shares are worth more dollars.
+    await t.mutation(internal.stonks.snapshot, { rows: [{ symbol: "JPYUSD=X", price: 0.006, time: open + 4000 }] });
+    expect(await as.query(api.stonks.portfolio, {})).toMatchObject({ worth: 10200 });
+  });
+
+  test("London is quoted in pence", async () => {
+    const t = await market();
+    const { as } = await signedIn(t);
+    await t.mutation(internal.stonks.snapshot, { rows: [{ symbol: "GBPUSD=X", price: 1.25, time: open, currency: "USD" }, { symbol: "VOD.L", price: 100, time: open, currency: "GBp" }] });
+    vi.setSystemTime(open + 1000);
+    await as.mutation(api.stonks.order, { symbol: "VOD.L", side: "buy", dollars: 500 });
+    await tickAt(t, "VOD.L", 100, open + 2000);
+    expect((await as.query(api.stonks.portfolio, {}))?.positions[0]).toMatchObject({ avg: 1.25, shares: 400 });
+  });
+
+  test("overnight trades don't fill, and something the stream doesn't carry fills from a batch quote", async () => {
+    const t = await market();
+    const { as } = await signedIn(t);
+    vi.setSystemTime(open + 1000);
+    await t.mutation(internal.stonks.snapshot, { rows: [{ symbol: "ES=F", price: 7600, time: open, type: "FUTURE", currency: "USD" }] });
+    await as.mutation(api.stonks.order, { symbol: "NVDA", side: "buy", dollars: 100 });
+    await as.mutation(api.stonks.order, { symbol: "ES=F", side: "short", dollars: 760 });
+    await tickAt(t, "NVDA", 180, open + 2000, { session: "overnight" });
+    // The batch's latest trade is from before the tap: nothing yet.
+    await t.mutation(internal.stonks.snapshot, { rows: [{ symbol: "ES=F", price: 7500, time: open + 500 }] });
+    expect((await as.query(api.stonks.portfolio, {}))?.waiting).toHaveLength(2);
+    await t.mutation(internal.stonks.snapshot, { rows: [{ symbol: "ES=F", price: 7600, time: open + 3000 }] });
+    const p = await as.query(api.stonks.portfolio, {});
+    expect(p?.positions[0]).toMatchObject({ symbol: "ES=F", shares: -0.1 });
+    expect(p?.waiting).toHaveLength(1);
+  });
+
+  test("search: instant from what's known, ask Yahoo once, and its answers join in", async () => {
+    const t = await market();
+    const { as } = await signedIn(t);
+    await t.mutation(internal.stonks.addSymbols, { rows: [{ symbol: "AAPL", name: "Apple Inc.", type: "EQUITY", exchange: "NMS" }, { symbol: "AAP", name: "Advance Auto Parts", type: "EQUITY" }, { symbol: "TM", name: "Toyota Motor Corporation", type: "EQUITY" }] });
+    expect((await as.query(api.stonks.search, { q: "aap" })).map((r) => r.symbol)).toEqual(["AAP", "AAPL"]);
+    expect((await as.query(api.stonks.search, { q: "toyota" })).map((r) => r.symbol)).toEqual(["TM"]);
+    expect(await as.query(api.stonks.search, { q: " " })).toEqual([]);
+    await as.mutation(api.stonks.lookup, { q: "Toyota" });
+    await as.mutation(api.stonks.lookup, { q: "toyota " });
+    expect(await t.query(api.stonks.pendingLookups, {})).toEqual(["toyota"]);
+    await t.mutation(internal.stonks.lookedUp, { q: "toyota", rows: [{ symbol: "TM", name: "Toyota Motor Corporation", type: "EQUITY" }, { symbol: "7203.T", name: "TOYOTA MOTOR CORP", type: "EQUITY", exchange: "Tokyo Stock Exchange" }] });
+    expect(await t.query(api.stonks.pendingLookups, {})).toEqual([]);
+    await as.mutation(api.stonks.lookup, { q: "toyota" });
+    expect(await t.query(api.stonks.pendingLookups, {})).toEqual([]); // asked once
+    expect((await as.query(api.stonks.search, { q: "toyota" })).map((r) => r.symbol)).toEqual(["TM", "7203.T"]);
+  });
+
+  test("charts nobody has opened in two weeks are cleared out", async () => {
+    const t = await market();
+    await t.mutation(internal.stonks.series, { symbol: "OLD", range: "1Y", points: [[open, 1]] });
+    vi.setSystemTime(open + 10 * 86_400_000);
+    await t.mutation(internal.stonks.series, { symbol: "NEW", range: "1Y", points: [[open, 1]] });
+    vi.setSystemTime(open + 15 * 86_400_000);
+    await t.mutation(internal.stonks.sweepSeries, {});
+    expect((await t.query(api.stonks.chart, { symbol: "OLD", range: "1Y" })).points).toEqual([]);
+    expect((await t.query(api.stonks.chart, { symbol: "NEW", range: "1Y" })).points).toHaveLength(1);
+  });
+
+  test("what's on someone's screen streams while it's there, and only what's open gets history", async () => {
+    const t = await market();
+    const { as } = await signedIn(t);
+    await t.mutation(internal.stonks.addSymbols, { rows: [{ symbol: "SHOP", name: "Shopify" }, { symbol: "KO", name: "Coca-Cola" }] });
+    await as.mutation(api.stonks.watching, { symbols: ["SHOP", "not a thing!"], level: "seen" });
+    await as.mutation(api.stonks.watching, { symbols: ["KO"], level: "open" });
+    expect(await t.query(api.stonks.watchlist, {})).toEqual(["^GSPC", "SHOP", "KO"]);
+    expect(await t.query(api.stonks.deepWatch, {})).toEqual(["^GSPC", "KO"]);
+    vi.setSystemTime(open + 100_000);
+    await t.mutation(internal.stonks.sweepViews, {});
+    expect(await t.query(api.stonks.watchlist, {})).toEqual(["^GSPC"]);
   });
 });

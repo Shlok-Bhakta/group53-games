@@ -3,6 +3,7 @@
 //! once a day, after the close. Each holding also gets its price on the file's day, so live weights can
 //! follow prices (convex/stonks/board.ts).
 use std::io::Cursor;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
@@ -10,6 +11,7 @@ use calamine::{open_workbook_from_rs, Data, Reader, Xlsx};
 use tokio::sync::mpsc;
 
 use crate::history;
+use crate::rest::Rest;
 use crate::sink::{Holding, Write};
 use crate::types::log;
 
@@ -68,9 +70,9 @@ pub fn parse(bytes: &[u8]) -> Result<(String, Vec<Holding>)> {
     Ok((as_of, out))
 }
 
-pub async fn run(http: reqwest::Client, out: mpsc::Sender<Write>) {
+pub async fn run(rest: Arc<Rest>, out: mpsc::Sender<Write>) {
     loop {
-        let wait = match once(&http, &out).await {
+        let wait = match once(&rest, &out).await {
             Ok(()) => Duration::from_secs(6 * 3600),
             Err(e) => {
                 log(format!("holdings: {e:#}"));
@@ -81,18 +83,17 @@ pub async fn run(http: reqwest::Client, out: mpsc::Sender<Write>) {
     }
 }
 
-async fn once(http: &reqwest::Client, out: &mpsc::Sender<Write>) -> Result<()> {
-    let bytes = http.get(URL).send().await?.error_for_status()?.bytes().await?;
+async fn once(rest: &Arc<Rest>, out: &mpsc::Sender<Write>) -> Result<()> {
+    let bytes = rest.http.get(URL).send().await?.error_for_status()?.bytes().await?;
     let (as_of, mut holdings) = parse(&bytes)?;
     // Each one's close on the file's day, from a month of daily prices.
     let base = |sym: String| {
-        let http = http.clone();
+        let rest = rest.clone();
         let as_of = as_of.clone();
-        async move { history::fetch(&http, &sym, "1mo", "1d", false).await.ok().and_then(|s| history::close_on(&s.points, &as_of)) }
+        async move { history::fetch(&rest, &sym, "1mo", "1d", false).await.ok().and_then(|s| history::close_on(&s.points, &as_of)) }
     };
     for h in holdings.iter_mut() {
         h.base = base(h.symbol.clone()).await;
-        tokio::time::sleep(Duration::from_millis(300)).await;
     }
     let index_base = base(INDEX.to_string()).await;
     log(format!("holdings: {} as of {as_of}, top {} ({})", holdings.len(), holdings[0].symbol, holdings.iter().filter(|h| h.base.is_some()).count()));

@@ -65,3 +65,22 @@ export function fill(book: Book, ask: Ask, price: number, power: number): Fill |
     realized,
   };
 }
+
+// ---- Other currencies ----
+
+// Yahoo quotes a few markets in cents of their currency: London's GBp is a hundredth of a pound.
+const MINOR: Record<string, [string, number]> = { GBp: ["GBP", 100], GBX: ["GBP", 100], ILA: ["ILS", 100], ZAc: ["ZAR", 100], ZAC: ["ZAR", 100] };
+
+/** The currency's pair against the dollar, or null for dollars. */
+export function fxPair(currency: string | undefined): string | null {
+  if (!currency || currency === "USD") return null;
+  const major = MINOR[currency]?.[0] ?? currency.toUpperCase();
+  return major === "USD" ? null : `${major}USD=X`;
+}
+
+/** Dollars per one unit of the quoted currency, given the pair's price; undefined until the pair's known. */
+export function toUsd(currency: string | undefined, pairPrice: number | undefined): number | undefined {
+  if (!fxPair(currency)) return 1;
+  if (!pairPrice) return undefined;
+  return pairPrice / (MINOR[currency!]?.[1] ?? 1);
+}

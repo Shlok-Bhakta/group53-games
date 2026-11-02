@@ -7,19 +7,41 @@ import { ArrowSquareOutIcon, CalendarBlankIcon, CaretDownIcon, CaretUpIcon } fro
 import { api } from "../../../convex/_generated/api";
 import type { QuoteView } from "../../../convex/stonks";
 import type { Point } from "../../../convex/stonks/board";
-import { display, INDEX, marketClock, RANGES, type Clock, type Range } from "../../../convex/stonks/market";
+import { display, INDEX, marketClock, marketOf, RANGES, type Clock, type Market, type Range } from "../../../convex/stonks/market";
 import type { NewsItem, ProfileStats } from "../../../convex/stonks/profile";
 import { NavBar } from "@/components/AppHeader";
 import { Group, Section } from "@/components/parts";
 import { Segmented } from "@/components/Segmented";
 import { cn } from "@/lib/utils";
 import { movingAverage, PriceChart, Sparkline, type Dir } from "./Chart";
-import { ago, asOfDay, big, count, dayOf, frac, opensAt, percent, periodName, pointTime, price, pts, RATING, ratio, sessionName, signed, soon, tradeTime, weight } from "./format";
+import {
+  ago,
+  asOfDay,
+  unitOf,
+  big,
+  count,
+  dayOf,
+  frac,
+  opensAt,
+  percent,
+  periodName,
+  pointTime,
+  price,
+  pts,
+  RATING,
+  ratio,
+  sessionName,
+  signed,
+  soon,
+  tradeTime,
+  weight,
+} from "./format";
 import { BoardSkeleton, S, StockSkeleton } from "./skeletons";
 import { Change, Flash, ink, useWarmWhileSeen } from "./bits";
 import { Ticker } from "./Ticker";
 import { CrewBoard, CrewTrades, Money, Positions, TradeDock, useFillNotice, Waiting, WhoHolds, YourPosition } from "./Trade";
-import { savedRange, warmBoard, warmRanges, warmStock } from "./warm";
+import { StockSearch } from "./Search";
+import { report, savedRange, warmBoard, warmRanges, warmStock } from "./warm";
 
 // Stonks: the S&P 500's twenty biggest companies, ranked by their share of the index, live.
 // Prices stream in from the stonks sidecar through convex/stonks.ts; every phone sees each trade the
@@ -103,7 +125,6 @@ function withLive(points: Point[], q: { time: number; price: number } | null | u
   return [...pts, [q.time, q.price] as Point];
 }
 
-const live = (q: { recv: number } | null | undefined, clock: Clock, now: number) => !!q && clock.state !== "closed" && now - q.recv < 2 * 60_000;
 const dirOf = (p?: number, base?: number): Dir => (p !== undefined && base !== undefined && p < base ? "down" : "up");
 const sourceName = (s: string) => ({ yahoo: "Yahoo", nasdaq: "Nasdaq", history: "Yahoo" })[s] ?? s;
 
@@ -121,6 +142,7 @@ export function StonksBoard() {
   const crew = useQuery(api.stonks.crew);
   const trades = useQuery(api.stonks.trades, {});
   useFillNotice(me);
+  const [searching, setSearching] = useState(false);
   const [pro] = usePro();
   const now = useNow(15_000);
   const clock = marketClock(now);
@@ -133,28 +155,33 @@ export function StonksBoard() {
   return (
     <div className="flex flex-col gap-6">
       <NavBar title="Stonks" back="/games" action={<ProToggle />} />
-      <Money me={me} crew={crew} />
-      <CrewBoard crew={crew} />
-      <Positions me={me} />
-      <Waiting orders={me.waiting} clock={clock} />
-      <CrewTrades trades={trades ?? []} now={now} />
-      <StockChart symbol={INDEX} quote={board.index ?? undefined} clock={clock} title="S&P 500" />
-      <Group>
-        <RangeRow label="Today" low={board.index?.dayLow} high={board.index?.dayHigh} value={board.index?.price} symbol={INDEX} />
-        <RangeRow label="52 weeks" low={board.index?.yearLow} high={board.index?.yearHigh} value={board.index?.price} symbol={INDEX} />
-      </Group>
-      {board.movers.length > 0 && <Movers movers={board.movers} />}
-      {board.rows.length === 0 ? (
-        <p className="px-1 text-callout text-muted-foreground">Waiting for prices</p>
-      ) : (
-        <Section title={`Top ${board.rows.length}`} action={<Breadth up={board.up} down={board.down} />}>
-          {board.rows.map((r) => (
-            <Row key={r.symbol} r={r} spark={sparks?.[r.symbol]} open={clock.day.open} close={clock.day.close} pro={pro} now={now} />
-          ))}
-        </Section>
+      <StockSearch onActive={setSearching} />
+      {searching ? null : (
+        <>
+          <Money me={me} crew={crew} />
+          <CrewBoard crew={crew} />
+          <Positions me={me} />
+          <Waiting orders={me.waiting} now={now} />
+          <CrewTrades trades={trades ?? []} now={now} />
+          <StockChart symbol={INDEX} quote={board.index ?? undefined} title="S&P 500" />
+          <Group>
+            <RangeRow label="Today" low={board.index?.dayLow} high={board.index?.dayHigh} value={board.index?.price} unit="" />
+            <RangeRow label="52 weeks" low={board.index?.yearLow} high={board.index?.yearHigh} value={board.index?.price} unit="" />
+          </Group>
+          {board.movers.length > 0 && <Movers movers={board.movers} />}
+          {board.rows.length === 0 ? (
+            <p className="px-1 text-callout text-muted-foreground">Waiting for prices</p>
+          ) : (
+            <Section title={`Top ${board.rows.length}`} action={<Breadth up={board.up} down={board.down} />}>
+              {board.rows.map((r) => (
+                <Row key={r.symbol} r={r} spark={sparks?.[r.symbol]} open={clock.day.open} close={clock.day.close} pro={pro} now={now} />
+              ))}
+            </Section>
+          )}
+          {market && market.news.length > 0 && <News title="Market news" items={market.news.slice(0, 5)} now={now} />}
+          <Sources board={board} now={now} />
+        </>
       )}
-      {market && market.news.length > 0 && <News title="Market news" items={market.news.slice(0, 5)} now={now} />}
-      <Sources board={board} now={now} />
     </div>
   );
 }
@@ -187,7 +214,7 @@ const Row = memo(
       <motion.div ref={ref} layout="position" transition={{ type: "spring", bounce: 0, duration: 0.5 }}>
         <Link
           to={`/stonks/${encodeURIComponent(r.symbol)}`}
-          onPointerDown={() => warmStock(convex, r.symbol)}
+          onPointerDown={() => warmStock(convex, r.symbol, "open")}
           className={`flex ${S.row} items-center gap-3 px-4 transition-transform duration-100 active:scale-[0.97]`}
           aria-label={`${display(r.symbol)}, ${r.name}`}
         >
@@ -214,7 +241,10 @@ const Row = memo(
             <span className="flex items-center gap-1.5">
               <span className="font-display text-body">{display(r.symbol)}</span>
               {earnings && (
-                <span className="flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full bg-muted px-1.5 text-caption font-semibold text-muted-foreground" aria-label={`Earnings ${soon(earnings, now)}`}>
+                <span
+                  className="flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full bg-muted px-1.5 text-caption font-semibold text-muted-foreground"
+                  aria-label={`Earnings ${soon(earnings, now)}`}
+                >
                   <CalendarBlankIcon weight="bold" aria-hidden />
                   {soon(earnings, now)}
                 </span>
@@ -263,7 +293,7 @@ function Movers({ movers }: { movers: Board["movers"] }) {
           <MoverRow key={m.symbol} symbol={m.symbol}>
             <Link
               to={`/stonks/${encodeURIComponent(m.symbol)}`}
-              onPointerDown={() => warmStock(convex, m.symbol)}
+              onPointerDown={() => warmStock(convex, m.symbol, "open")}
               className={`grid ${S.mover} grid-cols-[52px_minmax(0,1fr)_56px] items-center gap-2 px-4 transition-transform duration-100 active:scale-[0.97]`}
               aria-label={`${display(m.symbol)} moved the S&P ${pts(m.points)} points`}
             >
@@ -313,24 +343,35 @@ function Sources({ board, now }: { board: Board; now: number }) {
 
 // ---- One stock's chart, with its price above it ----
 
-function StockChart({ symbol, quote, clock, title, stats }: { symbol: string; quote: QuoteView | undefined; clock: Clock; title?: string; stats?: ProfileStats | null }) {
+function StockChart({ symbol, quote, title, stats }: { symbol: string; quote: QuoteView | undefined; title?: string; stats?: ProfileStats | null }) {
   const [range, setRange] = useRange();
   const [pro] = usePro();
   const chart = useHeld(useQuery(api.stonks.chart, { symbol, range }));
   const [scrub, setScrub] = useState<Point | null>(null);
   const now = useNow(5_000);
-  const { open, close } = clock.day;
-  const day = useMemo(() => (range === "1D" ? dayDomain(open, close) : undefined), [range, open, close]);
+  const unit = unitOf(quote ?? (symbol === INDEX ? { type: "INDEX" } : null));
+  const market = marketOf(quote, now);
+  // The day's axis: 4am to 8pm in New York, the session elsewhere, and just the points for what never shuts.
+  const open = range === "1D" ? market.day?.open : undefined;
+  const close = range === "1D" ? market.day?.close : undefined;
+  const newYork = market.kind === "newYork";
+  const day = useMemo<[number, number] | undefined>(
+    () => (open === undefined || close === undefined ? undefined : newYork ? dayDomain(open, close) : [open, close]),
+    [open, close, newYork],
+  );
   const points = useMemo(() => withLive(chart.value?.points ?? [], quote, day), [chart.value, quote, day]);
-  const domain = useMemo(() => (range === "1D" ? axisFor(open, close, points, quote) : undefined), [range, open, close, points, quote]);
-  const regular = useMemo<[number, number] | undefined>(() => (range === "1D" ? [open, close] : undefined), [range, open, close]);
-  const period = range === "1D" ? sessionName(open, now) : periodName[range];
+  const domain = useMemo(
+    () => (open === undefined || close === undefined ? undefined : newYork ? axisFor(open, close, points, quote) : ([open, close] as [number, number])),
+    [open, close, newYork, points, quote],
+  );
+  const regular = useMemo<[number, number] | undefined>(() => (open === undefined || close === undefined || !newYork ? undefined : [open, close]), [open, close, newYork]);
+  const period = range === "1D" ? (open === undefined ? "Today" : sessionName(open, now)) : periodName[range];
   const base = range === "1D" ? quote?.prevClose : points[0]?.[1];
   const last = scrub?.[1] ?? quote?.price ?? points.at(-1)?.[1];
   const dir = dirOf(points.at(-1)?.[1], base);
   // After hours (or before the open), the move since the bell is its own line.
-  const ext = !scrub && range === "1D" && quote?.regularPrice !== undefined && quote.session && quote.session !== "regular" ? quote.price - quote.regularPrice : null;
-  const isLive = live(quote, clock, now);
+  const ext = !scrub && newYork && range === "1D" && quote?.regularPrice !== undefined && quote.session && quote.session !== "regular" ? quote.price - quote.regularPrice : null;
+  const isLive = !!quote && now - quote.recv < 2 * 60_000;
   // Pro: the 50- and 200-day moving averages on the year (on five years, 10 and 40 weeks are the same).
   const overlays = useMemo(() => {
     if (!pro || (range !== "1Y" && range !== "5Y")) return undefined;
@@ -355,18 +396,23 @@ function StockChart({ symbol, quote, clock, title, stats }: { symbol: string; qu
       <div className="px-1">
         <div className={`flex ${S.heroTop} items-center justify-between gap-3`}>
           <span className="truncate text-callout font-semibold text-muted-foreground">{title ?? quote?.name ?? display(symbol)}</span>
-          <MarketState clock={clock} earnings={stats?.earnings} now={now} />
+          <MarketState market={market} earnings={stats?.earnings} now={now} />
         </div>
         <div className={`flex ${S.heroPrice} items-center font-display text-title-lg`}>
-          {last !== undefined && <Ticker value={last} text={price(last, symbol)} instant={!!scrub} />}
+          {last !== undefined && <Ticker value={last} text={price(last, unit)} instant={!!scrub} />}
         </div>
         <div className={`flex ${S.heroLine} items-center`}>
-          {last !== undefined && base ? <Change change={last - base} base={base} symbol={symbol} label={scrub ? pointTime(scrub[0], range) : period} instant={!!scrub} /> : null}
+          {last !== undefined && base ? <Change change={last - base} base={base} unit={unit} label={scrub ? pointTime(scrub[0], range) : period} instant={!!scrub} /> : null}
         </div>
         {symbol !== INDEX && (
           <div className={`flex ${S.heroLine} items-center`}>
             {ext !== null && quote?.regularPrice ? (
-              <Change change={ext} base={quote.regularPrice} symbol={symbol} label={quote.session === "pre" ? "Pre-market" : "After hours"} />
+              <Change
+                change={ext}
+                base={quote.regularPrice}
+                unit={unit}
+                label={quote.session === "pre" ? "Pre-market" : quote.session === "overnight" ? "Overnight" : "After hours"}
+              />
             ) : null}
           </div>
         )}
@@ -378,7 +424,7 @@ function StockChart({ symbol, quote, clock, title, stats }: { symbol: string; qu
         regular={regular}
         dir={dir}
         live={isLive && range === "1D"}
-        label={`${title ?? display(symbol)}, ${period.toLowerCase()}${last !== undefined ? `, ${price(last, symbol)}` : ""}`}
+        label={`${title ?? display(symbol)}, ${period.toLowerCase()}${last !== undefined ? `, ${price(last, unit)}` : ""}`}
         timeLabel={(t) => pointTime(t, range)}
         onScrub={setScrub}
         stale={chart.stale}
@@ -391,28 +437,43 @@ function StockChart({ symbol, quote, clock, title, stats }: { symbol: string; qu
   );
 }
 
-function MarketState({ clock, earnings, now }: { clock: Clock; earnings?: number; now: number }) {
-  const text = clock.state === "open" ? "Market open" : clock.state === "pre" ? "Pre-market" : clock.state === "post" ? "After hours" : `Opens ${opensAt(clock.nextOpen)}`;
+function MarketState({ market, earnings, now }: { market: Market; earnings?: number; now: number }) {
+  const clock = market.clock;
+  const text =
+    market.kind === "always"
+      ? "Open 24/7"
+      : clock
+        ? clock.state === "open"
+          ? "Market open"
+          : clock.state === "pre"
+            ? "Pre-market"
+            : clock.state === "post"
+              ? "After hours"
+              : `Opens ${opensAt(clock.nextOpen)}`
+        : market.open
+          ? "Market open"
+          : "Market closed";
   // An earnings report this week beats the market's hours: it's what's about to move the price.
-  if (earnings && earnings > now - 12 * HOUR && earnings - now < 6 * 86_400_000)
+  if (!market.late && earnings && earnings > now - 12 * HOUR && earnings - now < 6 * 86_400_000)
     return <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-footnote font-semibold text-muted-foreground">Earnings {soon(earnings, now)}</span>;
   return (
     <span className="flex shrink-0 items-center gap-1.5 text-footnote font-medium text-muted-foreground">
-      {clock.state === "open" && <span className="size-2 rounded-full bg-online" />}
+      {market.open && <span className="size-2 rounded-full bg-online" />}
       {text}
+      {market.open && market.late > 0 && ` · ${market.late} min late`}
     </span>
   );
 }
 
 // A range as a track with a dot where the price is: today's low to high, the year's, analysts' targets.
-function RangeRow({ label, low, high, value, symbol, mark }: { label: string; low?: number; high?: number; value?: number; symbol: string; mark?: { at: number; name: string } }) {
+function RangeRow({ label, low, high, value, unit, mark }: { label: string; low?: number; high?: number; value?: number; unit: string; mark?: { at: number; name: string } }) {
   const known = low !== undefined && high !== undefined && high > low;
   const at = (x: number) => `${Math.max(0, Math.min(1, (x - low!) / (high! - low!))) * 100}%`;
   return (
-    <div className={`${S.range} flex flex-col justify-center gap-2.5 px-4`} aria-label={known ? `${label}: ${price(low, symbol)} to ${price(high, symbol)}` : label}>
+    <div className={`${S.range} flex flex-col justify-center gap-2.5 px-4`} aria-label={known ? `${label}: ${price(low, unit)} to ${price(high, unit)}` : label}>
       <div className="flex items-center justify-between gap-3">
         <span className="text-callout text-muted-foreground">{label}</span>
-        <span className="text-callout font-semibold tabular-nums">{known ? `${price(low, symbol)} – ${price(high, symbol)}` : "—"}</span>
+        <span className="text-callout font-semibold tabular-nums">{known ? `${price(low, unit)} – ${price(high, unit)}` : "—"}</span>
       </div>
       <div className="relative h-1.5 rounded-full bg-muted" aria-hidden>
         {known && mark && <span className="absolute -top-1 h-3.5 w-0.5 -translate-x-1/2 rounded-full bg-muted-foreground" style={{ left: at(mark.at) }} title={mark.name} />}
@@ -469,12 +530,18 @@ export function StockPage() {
   useFillNotice(me);
   const [pro] = usePro();
   const now = useNow(5_000);
-  const clock = marketClock(now);
   useEffect(() => {
     warmRanges(convex, symbol);
     warmBoard(convex); // back to the board is instant too
+    // Open on a phone: keep it streaming, with its charts, stats and news fresh.
+    report(convex, symbol, "open");
+    const i = setInterval(() => report(convex, symbol, "open"), 45_000);
+    return () => clearInterval(i);
   }, [convex, symbol]);
-  if (quote === undefined || !me) return <StockSkeleton />;
+  // Something nobody's looked at yet: its first quote is a moment away. Yahoo not knowing it takes longer.
+  const [opened] = useState(() => Date.now());
+  const givenUp = quote === null && now - opened > 8_000;
+  if (quote === undefined || !me || (quote === null && !givenUp)) return <StockSkeleton />;
   if (quote === null)
     return (
       <div className="flex flex-col gap-6">
@@ -484,38 +551,36 @@ export function StockPage() {
     );
 
   const stats = profile?.stats ?? null;
-  const open = dayChart?.points.find((p) => p[0] >= clock.day.open && p[0] < clock.day.close)?.[1];
+  const market = marketOf(quote, now);
+  const unit = unitOf(quote);
+  const open = market.day && dayChart?.points.find((p) => p[0] >= market.day!.open && p[0] < market.day!.close)?.[1];
   const moved = quote.rank && quote.baseRank ? quote.baseRank - quote.rank : 0;
   const held = me.positions.find((p) => p.symbol === symbol);
 
   return (
     <div className="flex flex-col gap-6">
       <NavBar title={display(symbol)} subtitle={quote.name ?? display(symbol)} back="/stonks" action={<ProToggle />} />
-      <StockChart symbol={symbol} quote={quote} clock={clock} title={quote.name ?? display(symbol)} stats={stats} />
+      <StockChart symbol={symbol} quote={quote} title={quote.name ?? display(symbol)} stats={stats} />
       {held && <YourPosition p={held} />}
-      <Waiting orders={me.waiting.filter((o) => o.symbol === symbol)} clock={clock} />
+      <Waiting orders={me.waiting.filter((o) => o.symbol === symbol)} now={now} />
       <Section title="Stats">
-        <RangeRow label="Today" low={quote.dayLow} high={quote.dayHigh} value={quote.price} symbol={symbol} />
-        <RangeRow label="52 weeks" low={quote.yearLow} high={quote.yearHigh} value={quote.price} symbol={symbol} />
-        <Stat label="Share of the S&P 500">
-          {quote.weight !== undefined ? (
-            <>
-              {weight(quote.weight)}
-              {quote.rank ? ` · #${quote.rank}` : ""}
-              {moved !== 0 && (
-                <span className="ml-1 inline-flex items-center text-footnote">
-                  {moved > 0 ? <CaretUpIcon weight="fill" style={{ color: ink("up") }} /> : <CaretDownIcon weight="fill" style={{ color: ink("down") }} />}
-                  {Math.abs(moved)}
-                </span>
-              )}
-            </>
-          ) : (
-            "—"
-          )}
-        </Stat>
-        <Stat label="Moved the S&P today">{quote.points !== undefined ? `${pts(quote.points)} points` : "—"}</Stat>
-        <Stat label="Open">{open !== undefined ? price(open, symbol) : "—"}</Stat>
-        <Stat label="Previous close">{quote.prevClose !== undefined ? price(quote.prevClose, symbol) : "—"}</Stat>
+        <RangeRow label="Today" low={quote.dayLow} high={quote.dayHigh} value={quote.price} unit={unit} />
+        <RangeRow label="52 weeks" low={quote.yearLow} high={quote.yearHigh} value={quote.price} unit={unit} />
+        {quote.weight !== undefined && (
+          <Stat label="Share of the S&P 500">
+            {weight(quote.weight)}
+            {quote.rank ? ` · #${quote.rank}` : ""}
+            {moved !== 0 && (
+              <span className="ml-1 inline-flex items-center text-footnote">
+                {moved > 0 ? <CaretUpIcon weight="fill" style={{ color: ink("up") }} /> : <CaretDownIcon weight="fill" style={{ color: ink("down") }} />}
+                {Math.abs(moved)}
+              </span>
+            )}
+          </Stat>
+        )}
+        {quote.points !== undefined && <Stat label="Moved the S&P today">{`${pts(quote.points)} points`}</Stat>}
+        <Stat label="Open">{open !== undefined && open !== null ? price(open, unit) : "—"}</Stat>
+        <Stat label="Previous close">{quote.prevClose !== undefined ? price(quote.prevClose, unit) : "—"}</Stat>
         <Stat label="Volume">
           {quote.volume !== undefined ? `${count(quote.volume)}${stats?.avgVolume ? ` · ${(quote.volume / stats.avgVolume).toFixed(1)}× normal` : ""}` : "—"}
         </Stat>
@@ -531,14 +596,14 @@ export function StockPage() {
             transition={{ type: "spring", bounce: 0, duration: 0.35 }}
             className="flex flex-col gap-6"
           >
-            <ProStats stats={stats} price={quote.price} symbol={symbol} />
+            <ProStats stats={stats} price={quote.price} unit={unit} />
           </motion.div>
         )}
       </AnimatePresence>
       <WhoHolds holders={holders ?? []} />
       <CrewTrades trades={trades ?? []} now={now} title="Trades in this stock" />
       {profile && profile.news.length > 0 && <News title="News" items={profile.news} now={now} />}
-      {symbol !== INDEX && <TradeDock symbol={symbol} last={quote.price} me={me} clock={clock} />}
+      <TradeDock symbol={symbol} last={quote.price} unit={unit} rate={quote.rate} me={me} market={market} />
     </div>
   );
 }
@@ -573,7 +638,7 @@ function Pairs({ items }: { items: [string, string | undefined][] }) {
   );
 }
 
-function ProStats({ stats: s, price: p, symbol }: { stats: ProfileStats; price: number; symbol: string }) {
+function ProStats({ stats: s, price: p, unit }: { stats: ProfileStats; price: number; unit: string }) {
   const [more, setMore] = useState(false);
   const opt = <T,>(x: T | undefined, f: (x: T) => string) => (x === undefined ? undefined : f(x));
   return (
@@ -588,25 +653,25 @@ function ProStats({ stats: s, price: p, symbol }: { stats: ProfileStats; price: 
             ["Beta", opt(s.beta, ratio)],
             ["P/E", opt(s.trailingPE, ratio)],
             ["Forward P/E", opt(s.forwardPE, ratio)],
-            ["EPS", opt(s.eps, (x) => price(x, symbol))],
+            ["EPS", opt(s.eps, (x) => price(x, unit))],
             ["Dividend yield", opt(s.dividendYield, (x) => frac(x))],
             ["Avg volume", opt(s.avgVolume, count)],
             ["Shares", opt(s.shares, count)],
-            ["50-day avg", opt(s.fiftyDay, (x) => price(x, symbol))],
-            ["200-day avg", opt(s.twoHundredDay, (x) => price(x, symbol))],
+            ["50-day avg", opt(s.fiftyDay, (x) => price(x, unit))],
+            ["200-day avg", opt(s.twoHundredDay, (x) => price(x, unit))],
             ["Profit margin", opt(s.profitMargin, (x) => frac(x))],
             ["Revenue growth", opt(s.revenueGrowth, (x) => frac(x, true))],
             ["Short of float", opt(s.shortOfFloat, (x) => frac(x))],
             ["Ex-dividend", opt(s.exDividend, dayOf)],
-            ["Next earnings", opt(s.earnings, (t) => `${dayOf(t)}${s.epsEstimate !== undefined ? ` · est. ${price(s.epsEstimate, symbol)}` : ""}`)],
+            ["Next earnings", opt(s.earnings, (t) => `${dayOf(t)}${s.epsEstimate !== undefined ? ` · est. ${price(s.epsEstimate, unit)}` : ""}`)],
           ]}
         />
       </section>
       {s.targetMean !== undefined && (
         <Section title="Analysts">
-          <RangeRow label="Price targets" low={s.targetLow} high={s.targetHigh} value={p} symbol={symbol} mark={{ at: s.targetMean, name: "Mean target" }} />
+          <RangeRow label="Price targets" low={s.targetLow} high={s.targetHigh} value={p} unit={unit} mark={{ at: s.targetMean, name: "Mean target" }} />
           <Stat label="Mean target">
-            {price(s.targetMean, symbol)}
+            {price(s.targetMean, unit)}
             <span className="ml-1 text-footnote text-muted-foreground">({frac(s.targetMean / p - 1, true)})</span>
           </Stat>
           {s.rating && <Stat label="Rating">{`${RATING[s.rating] ?? s.rating}${s.analysts ? ` · ${s.analysts} analysts` : ""}`}</Stat>}

@@ -1,11 +1,38 @@
-import { INDEX, type Range } from "../../../convex/stonks/market";
+import type { Range } from "../../../convex/stonks/market";
 
 const two = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-/** "$1,234.56", or "6,812.34" for the index (points, not dollars). */
-export const price = (n: number, symbol?: string) => (symbol === INDEX ? two.format(n) : `$${two.format(n)}`);
+const formats = new Map<string, Intl.NumberFormat>();
+function money(n: number, currency: string, digits: number) {
+  const key = `${currency}:${digits}`;
+  let f = formats.get(key);
+  if (!f) {
+    try {
+      f = new Intl.NumberFormat("en-US", { style: "currency", currency, minimumFractionDigits: digits, maximumFractionDigits: digits });
+    } catch {
+      f = new Intl.NumberFormat("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+    }
+    formats.set(key, f);
+  }
+  return f.format(n);
+}
+// Cheap things need more places: a dogecoin's 7 cents, a yen's 0.6 of a cent.
+const placesFor = (n: number) => (n === 0 || Math.abs(n) >= 1 ? 2 : Math.abs(n) >= 0.01 ? 4 : 6);
+// Quoted in cents of a currency, as London is.
+const MINOR: Record<string, string> = { GBp: "p", GBX: "p", ILA: "ag", ZAc: "c", ZAC: "c" };
+
+/** How a thing's prices read: a currency code, or "" for plain numbers (index points, exchange rates). */
+export const unitOf = (q: { type?: string; currency?: string } | null | undefined) => (q?.type === "INDEX" || q?.type === "CURRENCY" ? "" : (q?.currency ?? "USD"));
+
+/** "$1,234.56", "¥3,056.00", "119.10p", or "6,812.34" where there's no unit. */
+export function price(n: number, unit: string = "USD") {
+  const places = placesFor(n);
+  if (unit === "") return new Intl.NumberFormat("en-US", { minimumFractionDigits: Math.max(places, 2), maximumFractionDigits: Math.max(places, 2) }).format(n);
+  if (MINOR[unit]) return `${two.format(n)}${MINOR[unit]}`;
+  return money(n, unit, places);
+}
 /** "+12.34" / "−0.56" with a real minus. */
-export const signed = (n: number, symbol?: string) => `${n >= 0 ? "+" : "−"}${price(Math.abs(n), symbol)}`;
+export const signed = (n: number, unit?: string) => `${n >= 0 ? "+" : "−"}${price(Math.abs(n), unit)}`;
 export const percent = (n: number) => `${two.format(Math.abs(n))}%`;
 export const weight = (n: number) => `${two.format(n)}%`;
 
@@ -53,8 +80,16 @@ export const soon = (t: number, now: number) => (t - now < 6 * 86_400_000 ? dayO
 export const pts = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n).toFixed(1)}`;
 export const RATING: Record<string, string> = { strong_buy: "Strong buy", buy: "Buy", hold: "Hold", underperform: "Underperform", sell: "Sell" };
 
-/** "4.87 shares", "1 share": fractional shares, without trailing zeros. */
-export const shareCount = (n: number) => {
+/** "4.87 shares", "1 share", "0.024 BTC", "100 units": how much of something, in what it comes in. */
+export const shareCount = (n: number, symbol = "") => {
   const x = Math.abs(n);
-  return `${x.toLocaleString("en-US", { maximumFractionDigits: 3 })} ${x === 1 ? "share" : "shares"}`;
+  const amount = x.toLocaleString("en-US", { maximumFractionDigits: x < 1 ? 6 : 3 });
+  const coin = symbol.match(/^([A-Z0-9]+)-[A-Z]{3,4}$/)?.[1];
+  if (coin) return `${amount} ${coin}`;
+  if (symbol.includes("=")) return `${amount} ${x === 1 ? "unit" : "units"}`;
+  return `${amount} ${x === 1 ? "share" : "shares"}`;
 };
+
+const KINDS: Record<string, string> = { ETF: "ETF", CRYPTOCURRENCY: "Crypto", CURRENCY: "Forex", FUTURE: "Future", INDEX: "Index", MUTUALFUND: "Fund" };
+/** What a search result is, when it isn't simply a stock. */
+export const kindOf = (type?: string) => (type ? KINDS[type] : undefined);

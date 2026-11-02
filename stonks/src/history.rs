@@ -1,12 +1,14 @@
 //! Price history from Yahoo's chart endpoint, kept fresh per symbol and range. The 1D range includes
 //! pre-market and after hours (4am to 8pm) and brings the previous close and the company's name.
 use std::collections::{BTreeSet, HashMap};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use tokio::sync::{mpsc, watch};
 
 use crate::market;
+use crate::rest::Rest;
 use crate::sink::Write;
 use crate::types::{log, now_ms};
 
@@ -38,15 +40,16 @@ pub struct Series {
     pub volume: Option<f64>,
     pub year_high: Option<f64>,
     pub year_low: Option<f64>,
+    pub currency: Option<String>,
+    pub kind: Option<String>,
+    pub exchange: Option<String>,
+    pub hint: Option<f64>,
+    pub period_open: Option<f64>,
+    pub period_close: Option<f64>,
 }
 
-pub async fn fetch(http: &reqwest::Client, symbol: &str, range: &str, interval: &str, pre_post: bool) -> Result<Series> {
-    let url = format!(
-        "https://query1.finance.yahoo.com/v8/finance/chart/{}?range={range}&interval={interval}&includePrePost={pre_post}",
-        symbol.replace('^', "%5E")
-    );
-    let v: serde_json::Value = http.get(url).send().await?.error_for_status()?.json().await?;
-    parse(&v)
+pub async fn fetch(rest: &Rest, symbol: &str, range: &str, interval: &str, pre_post: bool) -> Result<Series> {
+    parse(&rest.chart(symbol, range, interval, pre_post).await?)
 }
 
 pub fn parse(v: &serde_json::Value) -> Result<Series> {
@@ -71,6 +74,12 @@ pub fn parse(v: &serde_json::Value) -> Result<Series> {
         volume: meta["regularMarketVolume"].as_f64().filter(|v| *v > 0.0),
         year_high: meta["fiftyTwoWeekHigh"].as_f64(),
         year_low: meta["fiftyTwoWeekLow"].as_f64(),
+        currency: meta["currency"].as_str().map(String::from),
+        kind: meta["instrumentType"].as_str().map(String::from),
+        exchange: meta["exchangeName"].as_str().map(String::from),
+        hint: meta["priceHint"].as_f64(),
+        period_open: meta["currentTradingPeriod"]["regular"]["start"].as_f64().map(|s| s * 1000.0),
+        period_close: meta["currentTradingPeriod"]["regular"]["end"].as_f64().map(|s| s * 1000.0),
     })
 }
 
@@ -79,12 +88,19 @@ pub fn close_on(points: &[(i64, f64)], date: &str) -> Option<f64> {
     points.iter().find(|(t, _)| market::ny_date(*t) == date).map(|p| p.1)
 }
 
-pub async fn run(http: reqwest::Client, mut want: watch::Receiver<BTreeSet<String>>, out: mpsc::Sender<Write>) {
+/// `fresh` is when Convex last got each (symbol, range): a restart picks up from there, not from nothing.
+pub async fn run(rest: Arc<Rest>, mut want: watch::Receiver<BTreeSet<String>>, out: mpsc::Sender<Write>, ticks: Arc<Mutex<HashMap<String, i64>>>, fresh: Vec<(String, String, i64)>) {
     let mut due: HashMap<(String, &'static str), i64> = HashMap::new();
+    let trading_now = market::session(now_ms()).trading();
+    for (symbol, kind, at) in fresh {
+        if let Some(r) = RANGES.iter().find(|r| r.key == kind) {
+            due.insert((symbol, r.key), at + if trading_now { r.fresh } else { r.quiet } * 60_000);
+        }
+    }
     loop {
         let symbols = want.borrow_and_update().clone();
         let now = now_ms();
-        let trading = market::session(now).trading();
+        let us_trading = market::session(now).trading();
         // Every symbol's day first, so the board fills in fast after a restart, then the longer ranges.
         let next = RANGES.iter().flat_map(|r| symbols.iter().map(move |s| (s, r))).find(|(s, r)| due.get(&((*s).clone(), r.key)).is_none_or(|&at| at <= now));
         let Some((symbol, r)) = next else {
@@ -94,8 +110,10 @@ pub async fn run(http: reqwest::Client, mut want: watch::Receiver<BTreeSet<Strin
             }
             continue;
         };
-        let wait = match fetch(&http, symbol, r.range, r.interval, r.pre_post).await {
+        let wait = match fetch(&rest, symbol, r.range, r.interval, r.pre_post).await {
             Ok(s) => {
+                // Trading here means New York's hours, or that this one's been ticking: Tokyo, crypto.
+                let trading = us_trading || ticks.lock().unwrap().get(symbol).is_some_and(|t| now - t < 300_000);
                 out.send(Write::Series { symbol: symbol.clone(), range: r.key, series: s, one_day: r.key == "1D" }).await.ok();
                 if trading { r.fresh } else { r.quiet }
             }
@@ -105,7 +123,6 @@ pub async fn run(http: reqwest::Client, mut want: watch::Receiver<BTreeSet<Strin
             }
         };
         due.insert((symbol.clone(), r.key), now + wait * 60_000);
-        tokio::time::sleep(Duration::from_millis(250)).await; // gentle on Yahoo
     }
 }
 

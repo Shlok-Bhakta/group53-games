@@ -12,6 +12,9 @@ pub struct Tick {
     pub day_high: Option<f64>,
     pub day_low: Option<f64>,
     pub volume: Option<f64>,
+    /// Yahoo's market hours for the trade: "pre", "regular", "post", "extended" or "overnight". Only
+    /// regular-session trades fill orders.
+    pub session: &'static str,
 }
 
 #[derive(Debug, Clone, PartialEq)]

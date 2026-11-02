@@ -470,8 +470,10 @@ async function renderCard(card) {
 
 const INDEX = "^GSPC";
 const UP = "#5fae57", DOWN = "#e5484d";
-const stockName = (s) => (s === INDEX ? "S&P 500" : s.replace("-", "."));
-const money = (n, s) => `${s === INDEX ? "" : "$"}${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const stockName = (s) => (s === INDEX ? "S&P 500" : s.replace(/-(?=[A-Z]$)/, "."));
+const money = (n, s) => `${s === INDEX ? "" : "$"}${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: n !== 0 && Math.abs(n) < 1 ? 6 : 2 })}`;
+// Anything on Yahoo: in its own currency, named after the number where it isn't dollars.
+const quoted = (n, q) => (!q.currency || q.currency === "USD" || q.symbol === INDEX ? money(n, q.symbol) : `${money(n, INDEX)} ${q.currency}`);
 
 async function stockData(symbol) {
   const [q, chart] = await Promise.all([convex.query(anyApi.stonks.quote, { symbol }), convex.query(anyApi.stonks.chart, { symbol, range: "1D" })]);
@@ -481,7 +483,7 @@ async function stockData(symbol) {
   return { symbol, q, points: chart.points, base, change, pct: base ? (change / base) * 100 : 0 };
 }
 // Plain ASCII signs: the card's font has no arrows.
-const changeText = (d) => `${d.change < 0 ? "-" : "+"}${money(Math.abs(d.change), d.symbol)} (${Math.abs(d.pct).toFixed(2)}%)`;
+const changeText = (d) => `${d.change < 0 ? "-" : "+"}${quoted(Math.abs(d.change), d.q)} (${Math.abs(d.pct).toFixed(2)}%)`;
 const pctText = (d) => `${d.change < 0 ? "-" : "+"}${Math.abs(d.pct).toFixed(2)}%`;
 
 // The day's line as an SVG image: the previous close dotted, a wash under the line.
@@ -509,7 +511,7 @@ async function renderStock(d) {
         "div",
         { flexDirection: "column", gap: 4 },
         h("div", { fontSize: 34, fontWeight: 500, color: "#cfe9dd" }, d.symbol === INDEX ? "S&P 500" : `${stockName(d.symbol)}${d.q.name ? ` · ${d.q.name}` : ""}`),
-        h("div", { alignItems: "baseline", gap: 28 }, h("div", { fontSize: 92, fontWeight: 800 }, money(d.q.price, d.symbol)), h("div", { fontSize: 42, fontWeight: 800, color }, changeText(d))),
+        h("div", { alignItems: "baseline", gap: 28 }, h("div", { fontSize: 92, fontWeight: 800 }, quoted(d.q.price, d.q)), h("div", { fontSize: 42, fontWeight: 800, color }, changeText(d))),
       ),
       lineChart(d.points, d.base, color, 1072, 230),
     ),
@@ -529,7 +531,7 @@ async function pageHtml(pathname, search) {
   const stock = symbol ? await stockData(symbol).catch(() => null) : null;
   if (stock) {
     // The live price in the title, the day so far in the picture.
-    title = `${stockName(symbol)} ${money(stock.q.price, symbol)} ${pctText(stock)}`;
+    title = `${stockName(symbol)} ${quoted(stock.q.price, stock.q)} ${pctText(stock)}`;
     if (symbol === INDEX) {
       const board = await convex.query(anyApi.stonks.board, {});
       description = board.rows

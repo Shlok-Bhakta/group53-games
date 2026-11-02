@@ -40,8 +40,31 @@ export function warmBoard(convex: ConvexReactClient, ms = 120_000) {
   warm(convex, api.stonks.chart, { symbol: INDEX, range: savedRange() }, ms);
 }
 
+// What's on screen, sent in one go a moment after it appears: the sidecar streams it while it's reported.
+// "seen" gets its price streamed; "open" also gets its charts, stats and news.
+const reported = new Map<string, number>();
+let queue: Record<Level, Set<string>> = { seen: new Set(), open: new Set() };
+let flushing: ReturnType<typeof setTimeout> | null = null;
+type Level = "seen" | "open";
+
+export function report(convex: ConvexReactClient, symbol: string, level: Level) {
+  const key = `${level}:${symbol}`;
+  const now = Date.now();
+  if ((reported.get(key) ?? 0) > now - 40_000) return;
+  reported.set(key, now);
+  queue[level].add(symbol);
+  flushing ??= setTimeout(() => {
+    const { seen, open } = queue;
+    queue = { seen: new Set(), open: new Set() };
+    flushing = null;
+    if (open.size) void convex.mutation(api.stonks.watching, { symbols: [...open], level: "open" }).catch(() => {});
+    if (seen.size) void convex.mutation(api.stonks.watching, { symbols: [...seen], level: "seen" }).catch(() => {});
+  }, 60);
+}
+
 /** One stock's page as it'll open: its price and stats, and its chart in your range. */
-export function warmStock(convex: ConvexReactClient, symbol: string) {
+export function warmStock(convex: ConvexReactClient, symbol: string, level: Level = "seen") {
+  report(convex, symbol, level);
   warm(convex, api.stonks.quote, { symbol });
   warm(convex, api.stonks.profile, { symbol });
   warm(convex, api.stonks.holders, { symbol });

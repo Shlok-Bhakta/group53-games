@@ -19,6 +19,7 @@ export const S = {
   range: "h-[68px]",
   stat: "h-12",
   crew: "h-14",
+  search: "h-11",
 } as const;
 
 export const MOVERS = 6;
@@ -80,6 +81,7 @@ export function BoardSkeleton() {
   return (
     <div className="flex flex-col gap-6" aria-busy="true">
       <NavBar title="Stonks" back="/games" />
+      <Skeleton className={`${S.search} w-full rounded-md`} />
       <HeroSkeleton extended />
       <section>
         <SectionHead wide="w-16" />

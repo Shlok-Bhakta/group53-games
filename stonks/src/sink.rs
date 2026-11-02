@@ -7,7 +7,6 @@ use std::time::{Duration, Instant};
 use convex::{ConvexClient, FunctionResult, Value};
 use tokio::sync::mpsc;
 
-use crate::market;
 use crate::types::{log, Status, Tick};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -24,6 +23,22 @@ pub enum Write {
     Series { symbol: String, range: &'static str, series: crate::history::Series, one_day: bool },
     Holdings { as_of: String, holdings: Vec<Holding>, index_base: Option<f64> },
     Profile { symbol: String, stats: Option<BTreeMap<String, Value>>, news: Option<Vec<Value>> },
+    Snapshot(Vec<Value>),
+    Symbols(Vec<Symbol>),
+    LookedUp { q: String, rows: Vec<Symbol> },
+}
+
+/// Something that can be traded, for search.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Symbol {
+    pub symbol: String,
+    pub name: String,
+    pub kind: Option<String>,
+    pub exchange: Option<String>,
+}
+
+fn symbol_values(rows: Vec<Symbol>) -> Value {
+    Value::Array(rows.iter().map(|s| obj(vec![("symbol", str(&s.symbol)), ("name", str(&s.name)), ("type", s.kind.as_deref().and_then(str)), ("exchange", s.exchange.as_deref().and_then(str))])).collect())
 }
 
 // Convex's optional fields take a missing key, not null, so None leaves the key out.
@@ -44,7 +59,7 @@ pub fn tick_value(t: &Tick) -> Value {
         ("time", num(t.time as f64)),
         ("recv", num(t.recv as f64)),
         ("source", str(t.source)),
-        ("session", str(market::session(t.time).name())),
+        ("session", str(t.session)),
         ("dayHigh", t.day_high.and_then(num)),
         ("dayLow", t.day_low.and_then(num)),
         ("volume", t.volume.and_then(num)),
@@ -94,11 +109,21 @@ pub async fn run(mut client: ConvexClient, mut rx: mpsc::Receiver<Write>) {
                         let mut args = BTreeMap::from([("symbol".into(), Value::String(symbol)), ("range".into(), Value::String(range.into())), ("points".into(), Value::Array(pts))]);
                         // The day's own stats ride along with the 1D history only.
                         if one_day {
-                            let stats = [("prevClose", s.prev_close), ("dayHigh", s.day_high), ("dayLow", s.day_low), ("volume", s.volume), ("yearHigh", s.year_high), ("yearLow", s.year_low)];
+                            let stats = [("prevClose", s.prev_close), ("dayHigh", s.day_high), ("dayLow", s.day_low), ("volume", s.volume), ("yearHigh", s.year_high), ("yearLow", s.year_low), ("hint", s.hint), ("periodOpen", s.period_open), ("periodClose", s.period_close)];
                             for (k, v) in stats { if let Some(v) = v { args.insert(k.into(), Value::Float64(v)); } }
-                            if let Some(n) = s.name { args.insert("name".into(), Value::String(n)); }
+                            let texts = [("name", s.name), ("currency", s.currency), ("type", s.kind), ("exchange", s.exchange)];
+                            for (k, v) in texts { if let Some(v) = v { args.insert(k.into(), Value::String(v)); } }
                         }
                         call(&mut client, "stonks:series", args).await;
+                    }
+                    Write::Snapshot(rows) => {
+                        call(&mut client, "stonks:snapshot", BTreeMap::from([("rows".into(), Value::Array(rows))])).await;
+                    }
+                    Write::Symbols(rows) => {
+                        call(&mut client, "stonks:addSymbols", BTreeMap::from([("rows".into(), symbol_values(rows))])).await;
+                    }
+                    Write::LookedUp { q, rows } => {
+                        call(&mut client, "stonks:lookedUp", BTreeMap::from([("q".into(), Value::String(q)), ("rows".into(), symbol_values(rows))])).await;
                     }
                     Write::Profile { symbol, stats, news } => {
                         let mut args = BTreeMap::from([("symbol".into(), Value::String(symbol))]);
@@ -135,7 +160,7 @@ mod tests {
     use super::*;
     #[test]
     fn leaves_missing_fields_out() {
-        let t = Tick { symbol: "AAPL".into(), price: 1.5, time: 1793367000000, recv: 1793367000050, source: "yahoo", day_high: None, day_low: Some(1.0), volume: None };
+        let t = Tick { symbol: "AAPL".into(), price: 1.5, time: 1793367000000, recv: 1793367000050, source: "yahoo", day_high: None, day_low: Some(1.0), volume: None, session: "regular" };
         let Value::Object(o) = tick_value(&t) else { panic!() };
         assert!(!o.contains_key("dayHigh"));
         assert_eq!(o["dayLow"], Value::Float64(1.0));

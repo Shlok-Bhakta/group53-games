@@ -17,14 +17,6 @@ pub enum Session {
 }
 
 impl Session {
-    pub fn name(self) -> &'static str {
-        match self {
-            Session::Pre => "pre",
-            Session::Regular => "regular",
-            Session::Post => "post",
-            Session::Closed => "closed",
-        }
-    }
     /// Anything trading at all: 4am to 8pm.
     pub fn trading(self) -> bool {
         self != Session::Closed

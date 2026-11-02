@@ -164,16 +164,23 @@ export default defineSchema({
     volume: v.optional(v.number()),
     yearHigh: v.optional(v.number()),
     yearLow: v.optional(v.number()),
+    // What it is and where it trades, for anything on Yahoo. Missing means a US stock in dollars.
+    currency: v.optional(v.string()),
+    type: v.optional(v.string()), // EQUITY, ETF, CRYPTOCURRENCY, CURRENCY, FUTURE, INDEX, MUTUALFUND
+    exchange: v.optional(v.string()),
+    state: v.optional(v.string()), // REGULAR, PRE, POST, CLOSED...
+    hint: v.optional(v.number()), // decimal places
+    periodOpen: v.optional(v.number()), // today's regular session, away from New York
+    periodClose: v.optional(v.number()),
     // The minute being built from live trades (pre-market and after hours too); it joins the 1D series
     // once the next one starts.
     minute: v.optional(v.number()),
     minuteClose: v.optional(v.number()),
   }).index("by_symbol", ["symbol"]),
   // Price history per symbol and range ("1D", "1W", "1M", "1Y", "5Y"), as [ms, price] points.
-  stockSeries: defineTable({ symbol: v.string(), range: v.string(), points: v.array(v.array(v.number())), at: v.number() }).index("by_symbol_range", [
-    "symbol",
-    "range",
-  ]),
+  stockSeries: defineTable({ symbol: v.string(), range: v.string(), points: v.array(v.array(v.number())), at: v.number() })
+    .index("by_symbol_range", ["symbol", "range"])
+    .index("by_at", ["at"]),
   // The index's holdings (from SPY's daily file): weights as of a day's close, and each price that day,
   // so live weights can follow the prices.
   stockIndex: defineTable({
@@ -190,6 +197,8 @@ export default defineSchema({
     stats: v.optional(v.object(profileStats)),
     news: v.optional(v.array(newsItem)),
     at: v.number(),
+    statsAt: v.optional(v.number()),
+    newsAt: v.optional(v.number()),
   }).index("by_symbol", ["symbol"]),
   // Paper trading: everyone's cash (a row appears with their first order; until then it's $10,000), their
   // positions, and their orders, which wait until a trade after them comes in (convex/stonks/trade.ts).
@@ -208,6 +217,7 @@ export default defineSchema({
     // Once filled:
     filledAt: v.optional(v.number()),
     price: v.optional(v.number()),
+    currency: v.optional(v.string()),
     filledShares: v.optional(v.number()),
     amount: v.optional(v.number()),
     realized: v.optional(v.number()),
@@ -216,6 +226,18 @@ export default defineSchema({
     .index("by_symbol_status", ["symbol", "status"])
     .index("by_user_status", ["userId", "status"])
     .index("by_status_filled", ["status", "filledAt"]),
+  // Everything that can be traded: US listings from Nasdaq's daily files, plus whatever Yahoo's search has
+  // turned up. `search` is the ticker and name together.
+  stockSymbols: defineTable({ symbol: v.string(), name: v.string(), type: v.optional(v.string()), exchange: v.optional(v.string()), search: v.string() })
+    .index("by_symbol", ["symbol"])
+    .searchIndex("search_text", { searchField: "search" }),
+  // Searches sent to Yahoo, so each is asked once a week. The sidecar answers what's pending.
+  stockLookups: defineTable({ q: v.string(), done: v.boolean(), at: v.number(), symbols: v.optional(v.array(v.string())) })
+    .index("by_q", ["q"])
+    .index("by_done", ["done"]),
+  // Who's looking at what, so it streams only while someone is. "seen" streams its price; "open" also
+  // keeps its charts, stats and news fresh.
+  stockViews: defineTable({ symbol: v.string(), level: v.string(), until: v.number() }).index("by_symbol", ["symbol"]),
   stockFeeds: defineTable({ source: v.string(), state: v.string(), detail: v.optional(v.string()), at: v.number() }).index("by_source", ["source"]),
   pushSubscriptions: defineTable({
     userId: v.id("users"),

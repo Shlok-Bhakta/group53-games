@@ -9,6 +9,12 @@ use crate::types::Tick;
 pub const RANK: [&str; 2] = [crate::yahoo::NAME, crate::nasdaq::NAME];
 pub const STALE_MS: i64 = 30_000;
 
+/// Nasdaq only knows US tickers: letters, and maybe a share class (BRK-B). Not 7203.T, EURUSD=X, BTC-USD.
+pub fn us_ticker(s: &str) -> bool {
+    let (base, class) = s.split_once('-').unwrap_or((s, "A"));
+    (1..=5).contains(&base.len()) && class.len() == 1 && s.chars().all(|c| c.is_ascii_uppercase() || c == '-')
+}
+
 #[derive(Default)]
 pub struct Router {
     last: HashMap<String, HashMap<&'static str, i64>>,
@@ -45,7 +51,7 @@ impl Router {
 mod tests {
     use super::*;
     fn tick(symbol: &str, source: &'static str, recv: i64) -> Tick {
-        Tick { symbol: symbol.into(), price: 1.0, time: recv, recv, source, day_high: None, day_low: None, volume: None }
+        Tick { symbol: symbol.into(), price: 1.0, time: recv, recv, source, day_high: None, day_low: None, volume: None, session: "regular" }
     }
     #[test]
     fn primary_wins_while_fresh_and_standby_takes_over_when_it_goes_quiet() {
@@ -58,6 +64,15 @@ mod tests {
         assert_eq!(r.uncovered(&watch, 1_000 + STALE_MS), watch);
         assert!(r.accept(&tick("AAPL", "yahoo", 40_000)));
         assert_eq!(r.uncovered(&watch, 41_000), ["MSFT".to_string()].into());
+    }
+    #[test]
+    fn nasdaq_only_knows_us_tickers() {
+        for s in ["AAPL", "BRK-B", "V", "GOOGL"] {
+            assert!(us_ticker(s), "{s}");
+        }
+        for s in ["7203.T", "EURUSD=X", "BTC-USD", "^GSPC", "ES=F", "VOD.L", "005930.KS"] {
+            assert!(!us_ticker(s), "{s}");
+        }
     }
     #[test]
     fn a_down_source_is_skipped_at_once() {

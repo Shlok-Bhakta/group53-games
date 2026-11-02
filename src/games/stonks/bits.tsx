@@ -75,11 +75,11 @@ export function Flash({ value, className, children }: { value: number; className
 
 // "▲ +1.23 (0.45%)": the caret carries the color; the numbers stay in text color, with a sign, so up and
 // down never depend on telling green from red. The numbers roll when they change.
-export function Change({ change, base, symbol, small, label, instant }: { change: number; base: number; symbol?: string; small?: boolean; label?: string; instant?: boolean }) {
+export function Change({ change, base, unit, small, label, instant }: { change: number; base: number; unit?: string; small?: boolean; label?: string; instant?: boolean }) {
   const dir: Dir = change < 0 ? "down" : "up";
   const Icon = dir === "up" ? CaretUpIcon : CaretDownIcon;
   const pct = (change / base) * 100;
-  const text = small ? `${change < 0 ? "−" : "+"}${percent(pct)}` : `${signed(change, symbol)} (${percent(pct)})`;
+  const text = small ? `${change < 0 ? "−" : "+"}${percent(pct)}` : `${signed(change, unit)} (${percent(pct)})`;
   return (
     <span className={cn("inline-flex items-center gap-1 whitespace-nowrap font-semibold", small ? "text-footnote" : "text-callout")}>
       <Icon weight="fill" className="shrink-0" style={{ color: ink(dir) }} aria-label={dir} />

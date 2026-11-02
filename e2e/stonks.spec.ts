@@ -261,3 +261,78 @@ test("short, cover at a profit; and a waiting order can be cancelled", async ({ 
   await page.goto("/stonks");
   await expect(page.getByRole("region", { name: "Your money" })).toContainText("$10,500.00");
 });
+
+test("search finds anything, even what Yahoo has to be asked about, and it trades in its own currency", async ({ context }) => {
+  const a = await seed();
+  const page = await phone(context, { player: await createPlayer("Shlok"), notifications: "granted" });
+  await intoStonks(page);
+  await a.mutation(anyApi.stonks.addSymbols, { rows: [{ symbol: "TM", name: "Toyota Motor Corporation", type: "EQUITY", exchange: "NYSE" }] });
+  const box = page.getByRole("searchbox", { name: "Search anything" });
+  // Tapping in shows there's more than stocks, and the board steps aside.
+  await box.click();
+  await expect(page.getByRole("region", { name: "Not just stocks" })).toContainText("Bitcoin");
+  await expect(page.getByRole("region", { name: "Your money" })).toHaveCount(0);
+  // What's known answers at once, and the sidecar's told to ask Yahoo, once.
+  await box.fill("toyota");
+  await expect(page.getByRole("link", { name: /^TM,/ })).toBeVisible();
+  await expect.poll(() => a.query(anyApi.stonks.pendingLookups, {})).toEqual(["toyota"]);
+  // Yahoo answers, and Tokyo joins the list live.
+  await a.mutation(anyApi.stonks.lookedUp, {
+    q: "toyota",
+    rows: [{ symbol: "TM", name: "Toyota Motor Corporation", type: "EQUITY", exchange: "NYSE" }, { symbol: "7203.T", name: "Toyota Motor Corporation", type: "EQUITY", exchange: "Tokyo Stock Exchange" }],
+  });
+  const tokyo = page.getByRole("link", { name: /^7203\.T,/ });
+  await expect(tokyo).toContainText("Tokyo Stock Exchange");
+  // On screen, it's reported, so it streams; the sidecar's first batch quote gives it a price.
+  await expect.poll(() => a.query(anyApi.stonks.watchlist, {})).toContain("7203.T");
+  const now = Date.now();
+  await a.mutation(anyApi.stonks.snapshot, {
+    rows: [
+      { symbol: "JPYUSD=X", price: 0.005, time: now - 1000, type: "CURRENCY", currency: "USD" },
+      { symbol: "7203.T", price: 3000, time: now - 900_000, prevClose: 2900, currency: "JPY", type: "EQUITY", exchange: "JPX", state: "REGULAR", name: "TOYOTA MOTOR CORP" },
+    ],
+  });
+  await expect(tokyo).toContainText("¥3,000.00");
+  await tokyo.click();
+  await expect(page.getByRole("heading", { name: "7203.T", level: 1 })).toBeVisible();
+  await expect.poll(() => a.query(anyApi.stonks.deepWatch, {})).toContain("7203.T");
+  const hero = page.getByRole("region", { name: "TOYOTA MOTOR CORP chart" });
+  await expect(hero).toContainText("¥3,000.00");
+  await expect(hero).toContainText("Market open");
+  // Not in the S&P, so none of that.
+  await expect(page.getByText("Share of the S&P 500")).toHaveCount(0);
+
+  // $1,000 of it, bought in dollars, valued in dollars, filled by a trade stamped after the tap.
+  await page.getByRole("button", { name: "Buy", exact: true }).click();
+  const sheet = page.getByRole("dialog");
+  await sheet.getByRole("button", { name: "10%" }).click();
+  await expect(sheet).toContainText("66.667 shares at ¥3,000.00");
+  await sheet.getByRole("button", { name: "Buy $1,000.00" }).click();
+  await expect(page.getByRole("region", { name: "Waiting to fill" })).toContainText("Buy $1,000.00 of 7203.T");
+  await trade("7203.T", 3200);
+  const position = page.getByRole("region", { name: "Your position" });
+  await expect(position).toContainText("62.5 shares");
+  await expect(position).toContainText("at $16.00");
+  await expect(page.getByText("Bought $1,000.00 of 7203.T at ¥3,200.00")).toBeVisible();
+});
+
+test("crypto never shuts, and a feed that runs late says so", async ({ context }) => {
+  const a = await seed();
+  const page = await phone(context, { player: await createPlayer("Shlok"), notifications: "granted" });
+  await intoStonks(page);
+  const now = Date.now();
+  await a.mutation(anyApi.stonks.snapshot, { rows: [{ symbol: "BTC-USD", price: 78000, time: now - 2000, prevClose: 77000, currency: "USD", type: "CRYPTOCURRENCY", exchange: "CCC", state: "REGULAR", name: "Bitcoin USD" }] });
+  await page.goto("/stonks/BTC-USD");
+  await expect(page.getByRole("region", { name: "Bitcoin USD chart" })).toContainText("Open 24/7");
+  await expect(page.getByRole("region", { name: "Bitcoin USD chart" })).toContainText("$78,000.00");
+  await page.getByRole("button", { name: "Buy", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("Next trade");
+  await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+
+  await a.mutation(anyApi.stonks.ingest, { ticks: [{ symbol: "7203.T", price: 3000, time: now - 900_000, recv: now, source: "yahoo", session: "regular" }] });
+  await a.mutation(anyApi.stonks.snapshot, { rows: [{ symbol: "7203.T", price: 3000, time: now - 900_000, currency: "USD", type: "EQUITY", exchange: "JPX", state: "REGULAR", name: "Toyota" }] });
+  await page.goto("/stonks/7203.T");
+  await expect(page.getByRole("region", { name: "Toyota chart" })).toContainText("15 min late");
+  await page.getByRole("button", { name: "Buy", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("Next trade, about 15 min");
+});

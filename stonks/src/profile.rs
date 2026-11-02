@@ -1,68 +1,17 @@
-//! Each company's key stats (Yahoo's quote summary) and news (Yahoo's search), for Stonks' pro view and
-//! news. The quote summary wants a cookie and a "crumb" token: we get the cookie from fc.yahoo.com, the
-//! crumb from getcrumb, keep both, and fetch a new pair when Yahoo refuses the old one. Search needs
-//! neither. The index gets market news only.
+//! Each company's key stats (Yahoo's quote summary) and news (its search and ticker feed), for what's open
+//! on a phone, held, or at the top. Crypto, currencies, futures and indexes have news only.
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use convex::Value;
 use tokio::sync::{mpsc, watch};
 
-use crate::holdings::INDEX;
 use crate::market;
+use crate::rest::Rest;
 use crate::sink::Write;
 use crate::types::{log, now_ms};
-
-const MODULES: &str = "price,summaryDetail,defaultKeyStatistics,financialData,calendarEvents,assetProfile";
-
-pub struct Yahoo {
-    http: reqwest::Client,
-    crumb: Option<String>,
-}
-
-impl Yahoo {
-    pub fn new() -> Result<Self> {
-        let http = reqwest::Client::builder().cookie_store(true).user_agent("Mozilla/5.0 (group53 stonks)").timeout(Duration::from_secs(20)).build()?;
-        Ok(Self { http, crumb: None })
-    }
-
-    async fn crumb(&mut self) -> Result<String> {
-        if let Some(c) = &self.crumb {
-            return Ok(c.clone());
-        }
-        // fc.yahoo.com answers 404 but sets the cookie the crumb is tied to.
-        let _ = self.http.get("https://fc.yahoo.com").send().await;
-        let c = self.http.get("https://query1.finance.yahoo.com/v1/test/getcrumb").send().await?.error_for_status()?.text().await?;
-        if c.is_empty() || c.len() > 64 || c.contains('<') || c.contains(' ') {
-            bail!("no crumb ({c:.40})");
-        }
-        self.crumb = Some(c.clone());
-        Ok(c)
-    }
-
-    pub async fn summary(&mut self, symbol: &str) -> Result<serde_json::Value> {
-        for _ in 0..2 {
-            let crumb = self.crumb().await?;
-            let url = format!("https://query1.finance.yahoo.com/v10/finance/quoteSummary/{symbol}?modules={MODULES}&crumb={crumb}");
-            let r = self.http.get(url).send().await?;
-            if r.status() == 401 || r.status() == 403 {
-                self.crumb = None; // stale: shake hands again
-                continue;
-            }
-            return Ok(r.error_for_status()?.json().await?);
-        }
-        bail!("Yahoo refused a fresh crumb")
-    }
-
-    /// Yahoo's search (publishers and thumbnails, but loosely related) and its ticker feed (summaries).
-    pub async fn news(&self, symbol: &str) -> Result<(serde_json::Value, String)> {
-        let q = symbol.replace('^', "%5E");
-        let search = self.http.get(format!("https://query1.finance.yahoo.com/v1/finance/search?q={q}&newsCount=40&quotesCount=0")).send().await?.error_for_status()?.json().await?;
-        let rss = self.http.get(format!("https://feeds.finance.yahoo.com/rss/2.0/headline?s={q}&region=US&lang=en-US")).send().await?.error_for_status()?.text().await?;
-        Ok((search, rss))
-    }
-}
 
 fn raw(v: &serde_json::Value) -> Option<f64> {
     v["raw"].as_f64().or(v.as_f64()).filter(|x| x.is_finite())
@@ -270,23 +219,36 @@ pub fn pick_news(search: &[Story], feed: &[Story], symbol: &str, name: Option<&s
         .collect()
 }
 
-pub async fn run(mut want: watch::Receiver<BTreeSet<String>>, out: mpsc::Sender<Write>) {
-    let mut yahoo = match Yahoo::new() {
-        Ok(y) => y,
-        Err(e) => return log(format!("profile: {e:#}")),
-    };
-    // (symbol, "stats" | "news") -> when it's next due
+/// A company has stats, and news worth filtering to its name. A pair or an index just has news.
+fn is_company(symbol: &str) -> bool {
+    !(symbol.contains('=') || symbol.contains('^') || symbol.ends_with("-USD"))
+}
+
+pub async fn run(rest: Arc<Rest>, mut want: watch::Receiver<BTreeSet<String>>, out: mpsc::Sender<Write>, ticks: Arc<Mutex<HashMap<String, i64>>>, fresh: Vec<(String, String, i64)>) {
+    // (symbol, "stats" | "news") -> when it's next due. A restart picks up from what Convex has.
     let mut due: HashMap<(String, &'static str), i64> = HashMap::new();
+    let wait_for = |kind: &str, trading: bool| match (kind, trading) {
+        ("news", true) => 10,
+        ("news", false) => 60,
+        (_, true) => 30,
+        _ => 360,
+    };
+    let trading_now = market::session(now_ms()).trading();
+    for (symbol, kind, at) in fresh {
+        if kind == "stats" || kind == "news" {
+            let key: &'static str = if kind == "stats" { "stats" } else { "news" };
+            due.insert((symbol, key), at + wait_for(key, trading_now) * 60_000);
+        }
+    }
     // Company names from the quote summary, so news can be checked for what it's about.
     let mut names: HashMap<String, String> = HashMap::new();
     loop {
         let symbols = want.borrow_and_update().clone();
         let now = now_ms();
-        let trading = market::session(now).trading();
         let next = ["stats", "news"]
             .iter()
             .flat_map(|kind| symbols.iter().map(move |s| (s, *kind)))
-            .filter(|(s, kind)| !(s.as_str() == INDEX && *kind == "stats"))
+            .filter(|(s, kind)| *kind == "news" || is_company(s))
             .find(|(s, kind)| due.get(&((*s).clone(), *kind)).is_none_or(|&at| at <= now));
         let Some((symbol, kind)) = next else {
             tokio::select! {
@@ -295,8 +257,9 @@ pub async fn run(mut want: watch::Receiver<BTreeSet<String>>, out: mpsc::Sender<
             }
             continue;
         };
+        let trading = market::session(now).trading() || ticks.lock().unwrap().get(symbol).is_some_and(|t| now - t < 300_000);
         let result = if kind == "stats" {
-            yahoo.summary(symbol).await.and_then(|v| {
+            rest.summary(symbol).await.and_then(|v| {
                 if let Some(n) = v["quoteSummary"]["result"][0]["price"]["shortName"].as_str() {
                     names.insert(symbol.clone(), n.to_string());
                 }
@@ -304,32 +267,26 @@ pub async fn run(mut want: watch::Receiver<BTreeSet<String>>, out: mpsc::Sender<
             })
             .map(|stats| Write::Profile { symbol: symbol.clone(), stats: Some(stats), news: None })
         } else {
-            yahoo
-                .news(symbol)
-                .await
-                .map(|(search, rss)| {
-                    let news = pick_news(&search_stories(&search), &feed_stories(&rss), symbol, names.get(symbol).map(String::as_str), symbol == INDEX);
-                    Write::Profile { symbol: symbol.clone(), stats: None, news: Some(news) }
-                })
-                .context("news")
+            match (rest.search(symbol, 40, 0).await, rest.feed(symbol).await) {
+                (Ok(search), Ok(rss)) => {
+                    let news = pick_news(&search_stories(&search), &feed_stories(&rss), symbol, names.get(symbol).map(String::as_str), !is_company(symbol));
+                    Ok(Write::Profile { symbol: symbol.clone(), stats: None, news: Some(news) })
+                }
+                (Err(e), _) | (_, Err(e)) => Err(e),
+            }
         };
         let wait_min = match result {
             Ok(w) => {
                 out.send(w).await.ok();
-                match (kind, trading) {
-                    ("news", true) => 10,
-                    ("news", false) => 60,
-                    (_, true) => 30,
-                    _ => 360,
-                }
+                wait_for(kind, trading)
             }
             Err(e) => {
                 log(format!("profile: {symbol} {kind}: {e:#}"));
-                15
+                // Yahoo's "no summary for that" won't change soon.
+                if e.to_string().contains("no result") { 360 } else { 15 }
             }
         };
         due.insert((symbol.clone(), kind), now + wait_min * 60_000);
-        tokio::time::sleep(Duration::from_millis(600)).await; // gentle on Yahoo
     }
 }
 

@@ -11,7 +11,7 @@ const BIN = "stonks/target/release/stonks";
 test.skip(!process.env.SCREENS || !existsSync(BIN), "Set SCREENS=1 and build the sidecar to capture review screenshots");
 
 test("stonks screens", async ({ browser }) => {
-  test.setTimeout(420_000);
+  test.setTimeout(480_000);
   const { url, adminKey } = JSON.parse(readFileSync("e2e/.state/backend.json", "utf8"));
   const sidecar = spawn(BIN, [], { env: { ...process.env, CONVEX_URL: url, ADMIN_KEY: adminKey }, stdio: ["ignore", "inherit", "inherit"] });
   try {
@@ -89,6 +89,30 @@ test("stonks screens", async ({ browser }) => {
         await fills();
         await page.waitForTimeout(600);
         await shot("position");
+      }
+      if (scheme === "dark") {
+        // The real thing, end to end: ask Yahoo about something, open it, and trade crypto, which never shuts.
+        await page.goto("/stonks");
+        const box = page.getByRole("searchbox", { name: "Search anything" });
+        await box.click();
+        await shot("search-picks");
+        await box.fill("toyota");
+        await expect(page.getByRole("link", { name: /^7203\.T,/ })).toBeVisible({ timeout: 20_000 });
+        await page.waitForTimeout(4000);
+        await shot("search-results");
+        await page.getByRole("link", { name: /^7203\.T,/ }).click();
+        await page.waitForTimeout(5000);
+        await shot("tokyo");
+        await page.goto("/stonks/BTC-USD");
+        await expect(page.getByRole("button", { name: "Buy", exact: true })).toBeEnabled({ timeout: 20_000 });
+        await page.waitForTimeout(5000);
+        await shot("bitcoin");
+        await page.getByRole("button", { name: "Buy", exact: true }).click();
+        await page.getByRole("dialog").getByRole("button", { name: /^Buy \$/ }).click();
+        await expect(page.getByRole("region", { name: "Your position" })).toBeVisible({ timeout: 30_000 });
+        await shot("bitcoin-bought");
+        await page.goto("/stonks/NVDA");
+        await expect(page.getByRole("region", { name: "Stats" })).toBeVisible();
       }
       await page.getByRole("button", { name: "Pro mode" }).click();
       await page.getByRole("radio", { name: "1Y" }).click();
