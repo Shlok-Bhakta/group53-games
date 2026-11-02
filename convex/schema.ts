@@ -238,6 +238,9 @@ export default defineSchema({
   // Who's looking at what, so it streams only while someone is. "seen" streams its price; "open" also
   // keeps its charts, stats and news fresh.
   stockViews: defineTable({ symbol: v.string(), level: v.string(), until: v.number() }).index("by_symbol", ["symbol"]),
+  // Everyone's net worth over the game: one row per moment, for those who've traded (anyone missing is still
+  // on $10,000). Written every 15 minutes and on every fill, and thinned out as it ages (`thinWorth`).
+  stockWorth: defineTable({ t: v.number(), worths: v.array(v.object({ u: v.id("users"), w: v.number() })) }).index("by_t", ["t"]),
   stockFeeds: defineTable({ source: v.string(), state: v.string(), detail: v.optional(v.string()), at: v.number() }).index("by_source", ["source"]),
   pushSubscriptions: defineTable({
     userId: v.id("users"),

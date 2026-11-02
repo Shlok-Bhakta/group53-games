@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
+import { ChartLineUpIcon } from "@phosphor-icons/react";
 import { useQuery } from "convex/react";
 import { motion } from "motion/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { LargeTitle } from "@/components/AppHeader";
 import { PlayerCard } from "@/components/PlayerCard";
+import { Button } from "@/components/ui/button";
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import { Skeleton } from "@/components/ui/skeleton";
 import { lastSeenText, usePresence } from "@/presence";
@@ -65,6 +67,11 @@ export function Crew() {
               <DrawerTitle className="sr-only">{open.name}</DrawerTitle>
               <PlayerCard player={open} online={isOnline(open._id)} size="hero" />
               <DrawerDescription className="mt-4 text-center">{lastSeenText(isOnline(open._id), byUser.get(open._id)?.lastSeen)}</DrawerDescription>
+              <Button size="xl" variant="secondary" className="mt-4 w-full" asChild>
+                <Link to={`/stonks/u/${open._id}`}>
+                  <ChartLineUpIcon weight="bold" /> Stonks profile
+                </Link>
+              </Button>
             </div>
           )}
         </DrawerContent>

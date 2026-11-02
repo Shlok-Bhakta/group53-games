@@ -775,6 +775,20 @@
   --board-dark: #538d4e;
 }
 
+/* Chart series: a player's line when they haven't a frame color of their own. Validated with the dataviz
+   palette checker; the order matters, so don't reshuffle it. --deep is how much up or down color is left in the
+   biggest moves on the pie: darker the bigger, but still visible on a dark background. */
+:root {
+  --deep: 62%;
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
+  --series-5: #e87ba4; --series-6: #008300; --series-7: #6250d6; --series-8: #e34948;
+}
+.dark {
+  --deep: 80%;
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+  --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
+}
+
 :root {
   --radius: 16px;
   --ui-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
@@ -980,6 +994,12 @@
     repeating-linear-gradient(to bottom, rgb(0 0 0 / 0.26) 0 1px, transparent 1px 3px),
     radial-gradient(ellipse at center, transparent 55%, rgb(0 0 0 / 0.45) 100%);
   animation: fx-flicker 3.2s steps(1) infinite;
+}
+/* The same effect over a chart: a trace of it, fading out before the edges so it never draws a box. */
+.chart-fx {
+  opacity: 0.3;
+  mask-image: linear-gradient(to right, transparent, #000 10%, #000 90%, transparent), linear-gradient(to bottom, transparent, #000 10%, #000 90%, transparent);
+  mask-composite: intersect;
 }
 @media (prefers-reduced-motion: reduce) { .pcard-fx { animation: none !important; } }
 

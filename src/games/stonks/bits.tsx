@@ -2,9 +2,12 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useConvex } from "convex/react";
 import { AnimatePresence, motion } from "motion/react";
 import { CaretDownIcon, CaretUpIcon } from "@phosphor-icons/react";
+import { Group } from "@/components/parts";
 import { cn } from "@/lib/utils";
+import { CUSTOM_COLOR_FRAMES } from "../../../convex/profileOptions";
 import type { Dir } from "./Chart";
 import { percent, signed } from "./format";
+import { S } from "./skeletons";
 import { Ticker } from "./Ticker";
 import { warmStock } from "./warm";
 
@@ -87,4 +90,79 @@ export function Change({ change, base, unit, small, label, instant }: { change: 
       {label && <span className="font-medium text-muted-foreground">{label}</span>}
     </span>
   );
+}
+
+export function Stat({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className={`flex ${S.stat} items-center justify-between gap-3 px-4`}>
+      <span className="text-callout text-muted-foreground">{label}</span>
+      <span className="flex items-center text-callout font-semibold tabular-nums">{children}</span>
+    </div>
+  );
+}
+
+// Two numbers to a row, the way trading apps pack them.
+export function Pairs({ items }: { items: [string, string | undefined][] }) {
+  const shown = items.filter((i): i is [string, string] => i[1] !== undefined);
+  const rows: [string, string][][] = [];
+  for (let i = 0; i < shown.length; i += 2) rows.push(shown.slice(i, i + 2));
+  return (
+    <Group>
+      {rows.map((row, i) => (
+        <div key={i} className="grid grid-cols-2 divide-x divide-border">
+          {row.map(([label, value]) => (
+            <div key={label} className={cn("flex min-h-14 flex-col justify-center px-4 py-2", row.length === 1 && "col-span-2")}>
+              <span className="text-footnote text-muted-foreground">{label}</span>
+              <span className="text-callout font-semibold tabular-nums">{value}</span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </Group>
+  );
+}
+
+export type Colored = { color: string; dash?: string };
+// The color a card's frame shows: picked for these, built in for the rest. Holo and RGB are every color, so none.
+const FRAME_HUES: Record<string, string> = { gold: "#e3b341", fire: "#e5484d", ice: "#22d3ee", toxic: "#5fae57" };
+// Too light to see on a light theme, as a line.
+const UNUSABLE = new Set(["#f8fafc"]);
+export function cardColor(frame?: string, frameColor?: string) {
+  if (!frame) return undefined;
+  const own = (CUSTOM_COLOR_FRAMES as readonly string[]).includes(frame) ? frameColor : FRAME_HUES[frame];
+  return own && !UNUSABLE.has(own) ? own : undefined;
+}
+
+/** Each player's color on the charts, the same for the whole game whoever's winning: their own frame's color if
+ *  they've customized one that's free, otherwise the next fixed slot. Past eight players, slots repeat dashed. */
+export function playerColors(crew: { userId: string; joinedAt: number; frame?: string; frameColor?: string }[]) {
+  const taken = new Set<string>();
+  const out = new Map<string, Colored>();
+  const byJoin = [...crew].sort((a, b) => a.joinedAt - b.joinedAt);
+  // Frame colors first, so a slot never takes one someone chose; the slots are themselves distinct hues.
+  for (const c of byJoin) {
+    const own = cardColor(c.frame, c.frameColor);
+    if (own && !taken.has(own)) {
+      taken.add(own);
+      out.set(c.userId, { color: own });
+    }
+  }
+  let slot = 0;
+  for (const c of byJoin) {
+    if (out.has(c.userId)) continue;
+    out.set(c.userId, { color: `var(--series-${(slot % 8) + 1})`, dash: slot >= 8 ? "6 4" : undefined });
+    slot++;
+  }
+  return out;
+}
+
+/** A position's color by how it's doing: paler for a small move, darker the bigger the gain or loss. */
+export function gainColor(pct: number) {
+  const size = Math.abs(pct);
+  if (size < 0.0025) return "color-mix(in oklch, var(--muted-foreground) 45%, var(--card))";
+  const hue = pct > 0 ? "var(--up)" : "var(--down)";
+  if (size < 0.02) return `color-mix(in oklch, ${hue} 45%, white)`;
+  if (size < 0.05) return `color-mix(in oklch, ${hue} 72%, white)`;
+  if (size < 0.1) return hue;
+  return `color-mix(in oklch, ${hue} var(--deep), black)`;
 }

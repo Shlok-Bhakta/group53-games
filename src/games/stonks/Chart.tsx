@@ -33,6 +33,8 @@ export function PriceChart({
   reveal,
   surface = "var(--background)",
   overlays,
+  color,
+  glow,
 }: {
   points: Point[];
   baseline?: number;
@@ -47,6 +49,10 @@ export function PriceChart({
   stale?: boolean;
   reveal?: string;
   surface?: string;
+  /** Overrides the up or down color: a player's own, on their net worth. */
+  color?: string;
+  /** A soft glow on the line, for a player who's turned theirs on. */
+  glow?: boolean;
   /** Extra lines on the same scale (moving averages), one value per point, null where there's none. */
   overlays?: { values: (number | null)[]; color: string; name: string }[];
 }) {
@@ -55,6 +61,7 @@ export function PriceChart({
   const [at, setAt] = useState<number | null>(null);
   const still = useReducedMotion();
   const id = useId();
+  const lineColor = color ?? ink(dir);
 
   useLayoutEffect(() => {
     const el = box.current!;
@@ -176,11 +183,11 @@ export function PriceChart({
       data-scrubbing={scrub ? "" : undefined}
     >
       {geo && end && prev && (
-        <svg width={width} height={height} className="absolute inset-0 overflow-visible" aria-hidden>
+        <svg width={width} height={height} className="absolute inset-0 overflow-visible" aria-hidden style={glow ? { filter: `drop-shadow(0 0 6px ${lineColor})` } : undefined}>
           <defs>
             <linearGradient id={`${id}g`} x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor={ink(dir)} stopOpacity={0.16} />
-              <stop offset="100%" stopColor={ink(dir)} stopOpacity={0} />
+              <stop offset="0%" stopColor={lineColor} stopOpacity={0.16} />
+              <stop offset="100%" stopColor={lineColor} stopOpacity={0} />
             </linearGradient>
             {/* A new range or stock draws in from the left. */}
             <clipPath id={`${id}c`}>
@@ -194,7 +201,7 @@ export function PriceChart({
               <path key={`o${k}`} d={l.d} fill="none" stroke={l.color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
             ))}
             {geo.runs.map((r, k) => (
-              <path key={k} d={geo.path(r.from, r.to)} fill="none" stroke={ink(dir)} strokeOpacity={r.dim ? 0.45 : 1} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+              <path key={k} d={geo.path(r.from, r.to)} fill="none" stroke={lineColor} strokeOpacity={r.dim ? 0.45 : 1} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
             ))}
             <motion.line
               x1={prev.x}
@@ -202,7 +209,7 @@ export function PriceChart({
               initial={false}
               animate={{ x2: end.x, y2: end.y }}
               transition={glide}
-              stroke={ink(dir)}
+              stroke={lineColor}
               strokeOpacity={geo.lastDim ? 0.45 : 1}
               strokeWidth={2}
               strokeLinecap="round"
@@ -216,7 +223,7 @@ export function PriceChart({
                 key={trade}
                 cx={end.x}
                 cy={end.y}
-                fill={ink(dir)}
+                fill={lineColor}
                 initial={{ r: 4.5, opacity: 0.5 }}
                 animate={{ r: 16, opacity: 0 }}
                 exit={{ opacity: 0 }}
@@ -225,16 +232,16 @@ export function PriceChart({
             )}
           </AnimatePresence>
           {scrub ? (
-            <circle cx={scrub.x} cy={scrub.y} r={4.5} fill={ink(dir)} stroke={surface} strokeWidth={2} />
+            <circle cx={scrub.x} cy={scrub.y} r={4.5} fill={lineColor} stroke={surface} strokeWidth={2} />
           ) : (
-            <motion.circle initial={false} animate={{ cx: end.x, cy: end.y }} transition={glide} r={4.5} fill={ink(dir)} stroke={surface} strokeWidth={2} />
+            <motion.circle initial={false} animate={{ cx: end.x, cy: end.y }} transition={glide} r={4.5} fill={lineColor} stroke={surface} strokeWidth={2} />
           )}
         </svg>
       )}
       {/* Two or more lines get a key: drawn as short strokes, names in text color. */}
       {!scrub && overlays && overlays.length > 0 && (
         <div className="pointer-events-none absolute top-0 left-1 flex gap-3 text-caption font-medium text-muted-foreground">
-          <Key color={ink(dir)} name="Price" />
+          <Key color={lineColor} name="Price" />
           {overlays.map((o) => (
             <Key key={o.name} color={o.color} name={o.name} />
           ))}
@@ -289,3 +296,133 @@ export const Sparkline = memo(function Sparkline({ points, baseline, domain, dir
     </svg>
   );
 });
+
+const axisDay = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
+
+export type Series = { id: string; color: string; dash?: string; points: Point[]; me?: boolean };
+
+/** What a line was worth at a moment: its last point at or before it. */
+export function valueAt(points: Point[], t: number) {
+  let last = points[0]?.[1];
+  for (const p of points) {
+    if (p[0] > t) break;
+    last = p[1];
+  }
+  return last;
+}
+
+// Everyone's net worth over the game on one axis: a line per player in their own color, the $10,000 they started
+// with dotted, and the rows underneath as the key. A finger on it finds a moment, and the rows show that moment.
+export function CrewChart({ series, base, height = 190, label, timeLabel, onScrub, money }: { series: Series[]; base: number; height?: number; label: string; timeLabel: (t: number) => string; onScrub?: (t: number | null) => void; money: (n: number) => string }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  const [at, setAt] = useState<number | null>(null);
+  const still = useReducedMotion();
+  const id = useId();
+  useLayoutEffect(() => {
+    const el = box.current!;
+    const ro = new ResizeObserver(() => setWidth(el.clientWidth));
+    ro.observe(el);
+    setWidth(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+
+  const TOP = 22, BOTTOM = 22, LEFT = 2, RIGHT = 8;
+  const geo = useMemo(() => {
+    if (!width) return null;
+    const all = series.flatMap((s) => s.points);
+    if (all.length === 0) return null;
+    let lo = base, hi = base, t0 = Infinity, t1 = -Infinity;
+    for (const p of all) {
+      if (p[1] < lo) lo = p[1];
+      if (p[1] > hi) hi = p[1];
+      if (p[0] < t0) t0 = p[0];
+      if (p[0] > t1) t1 = p[0];
+    }
+    const span = hi - lo || base * 0.01;
+    const top = hi + span * 0.08, bottom = lo - span * 0.08;
+    const w = width - LEFT - RIGHT, h = height - TOP - BOTTOM;
+    const x = (t: number) => LEFT + w * (t1 === t0 ? 1 : (t - t0) / (t1 - t0));
+    const y = (v: number) => TOP + h * (1 - (v - bottom) / (top - bottom));
+    const times = [...new Set(all.map((p) => p[0]))].sort((a, b) => a - b);
+    // Who's "me" draws last, so your own line is never buried.
+    const lines = [...series]
+      .sort((a, b) => Number(!!a.me) - Number(!!b.me))
+      .map((s) => ({ ...s, d: s.points.map((p, i) => `${i ? "L" : "M"}${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join("") }));
+    return { x, y, lines, times, lo, hi, t0, t1 };
+  }, [series, base, width, height]);
+
+  const pick = (clientX: number) => {
+    if (!geo || !box.current) return;
+    const px = clientX - box.current.getBoundingClientRect().left;
+    let best = geo.times[0];
+    for (const t of geo.times) if (Math.abs(geo.x(t) - px) < Math.abs(geo.x(best) - px)) best = t;
+    if (best !== at) {
+      setAt(best);
+      onScrub?.(best);
+    }
+  };
+  const stop = () => {
+    setAt(null);
+    onScrub?.(null);
+  };
+  return (
+    <div
+      ref={box}
+      role="img"
+      aria-label={label}
+      className="relative w-full touch-pan-y select-none"
+      style={{ height }}
+      onPointerDown={(e) => {
+        (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+        pick(e.clientX);
+      }}
+      onPointerMove={(e) => (e.pointerType === "mouse" || e.buttons ? pick(e.clientX) : undefined)}
+      onPointerUp={(e) => e.pointerType !== "mouse" && stop()}
+      onPointerCancel={stop}
+      onPointerLeave={(e) => e.pointerType === "mouse" && stop()}
+      data-scrubbing={at !== null ? "" : undefined}
+    >
+      {geo && (
+        <svg width={width} height={height} className="absolute inset-0 overflow-visible" aria-hidden>
+          <defs>
+            <clipPath id={`${id}c`}>
+              <motion.rect x={-12} y={-12} height={height + 24} initial={{ width: still ? width + 24 : 0 }} animate={{ width: width + 24 }} transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }} />
+            </clipPath>
+          </defs>
+          <line x1={LEFT} x2={width - RIGHT} y1={geo.y(base)} y2={geo.y(base)} stroke="var(--muted-foreground)" strokeOpacity={0.55} strokeDasharray="1 4" strokeLinecap="round" />
+          <text x={width - RIGHT} y={geo.y(base) + 13} textAnchor="end" className="text-caption font-medium tabular-nums" fill="var(--muted-foreground)" stroke="var(--background)" strokeWidth={3} paintOrder="stroke">
+            {money(base)}
+          </text>
+          <g clipPath={`url(#${id}c)`}>
+            {geo.lines.map((l) => (
+              <path key={l.id} d={l.d} fill="none" stroke={l.color} strokeWidth={l.me ? 2.5 : 2} strokeDasharray={l.dash} strokeLinejoin="round" strokeLinecap="round" />
+            ))}
+          </g>
+          {at !== null && <line x1={geo.x(at)} x2={geo.x(at)} y1={TOP - 4} y2={height - BOTTOM + 6} stroke="var(--muted-foreground)" strokeOpacity={0.6} />}
+          {geo.lines.map((l) => {
+            const last = l.points.at(-1);
+            if (!last) return null;
+            const t = at ?? last[0];
+            const v = at !== null ? valueAt(l.points, at) : last[1];
+            return <motion.circle key={l.id} initial={false} animate={{ cx: geo.x(t), cy: geo.y(v) }} transition={at !== null || still ? { duration: 0 } : { type: "spring", bounce: 0, duration: 0.45 }} r={4} fill={l.color} stroke="var(--background)" strokeWidth={2} />;
+          })}
+        </svg>
+      )}
+      {geo && at === null && geo.hi > base && (
+        <div className="pointer-events-none absolute top-0 left-1 text-caption font-medium text-muted-foreground tabular-nums">{money(geo.hi)}</div>
+      )}
+      {geo && (
+        <div className="pointer-events-none absolute inset-x-1 bottom-0 flex justify-between text-caption font-medium text-muted-foreground tabular-nums">
+          <span>{axisDay.format(geo.t0)}</span>
+          <span>Now</span>
+        </div>
+      )}
+      {at !== null && (
+        <div className="pointer-events-none absolute top-0 -translate-x-1/2 whitespace-nowrap text-caption font-medium text-muted-foreground tabular-nums" style={{ left: Math.max(50, Math.min(width - 50, geo?.x(at) ?? 0)) }}>
+          {timeLabel(at)}
+        </div>
+      )}
+    </div>
+  );
+}

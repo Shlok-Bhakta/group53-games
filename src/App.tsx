@@ -25,7 +25,7 @@ import { Page, TAB_ROUTES, useAppBadge, useNavDirection, useScrollMemory } from 
 import { UpdateOverlay, useVersionCheck } from "@/version";
 import { wantMusic } from "@/sound";
 import { useDeepLinks } from "@/deepLinks";
-import { BoardSkeleton, StockRoute, StockSkeleton, StonksBoardRoute } from "./games/stonks/load";
+import { BoardSkeleton, PlayerRoute, PlayerSkeleton, StockRoute, StockSkeleton, StonksBoardRoute } from "./games/stonks/load";
 
 // Golf loads only when someone opens it, so chess and Scrabble players never download it.
 const GolfHub = lazy(() => import("./games/golf/GolfHub").then((m) => ({ default: m.GolfHub })));
@@ -106,6 +106,7 @@ function SignedIn() {
                 {golfRoute("/golf/:course/:hole", <GolfHole />)}
                 {/* Stonks' code loads before it's opened (src/games/stonks/load.tsx); the skeletons are its exact shape. */}
                 <Route path="/stonks" element={<NotificationsRequired><Suspense fallback={<BoardSkeleton />}><StonksBoardRoute /></Suspense></NotificationsRequired>} />
+                <Route path="/stonks/u/:id" element={<NotificationsRequired><Suspense fallback={<PlayerSkeleton />}><PlayerRoute /></Suspense></NotificationsRequired>} />
                 <Route path="/stonks/:symbol" element={<NotificationsRequired><Suspense fallback={<StockSkeleton />}><StockRoute /></Suspense></NotificationsRequired>} />
                 {Object.values(GAME_UI).flatMap((g) => [
                   <Route key={g.key} path={g.path} element={<NotificationsRequired><GameHub game={g} /></NotificationsRequired>} />,

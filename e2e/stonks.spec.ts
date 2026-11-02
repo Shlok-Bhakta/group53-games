@@ -230,6 +230,75 @@ test("everyone starts with $10,000: buy on one phone, it fills on the next trade
   await other.context().close();
 });
 
+test("a friend's profile: everyone on one chart, then what they hold, what's waiting and what they've done, and Buy one tap away", async ({ context, browser }) => {
+  await seed();
+  const [a, b] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
+  const page = await phone(context, { player: a, notifications: "granted" });
+  const other = await secondPhone(browser, b);
+  await intoStonks(page);
+  await intoStonks(other);
+
+  // Chris buys NVDA, and lines up Apple with nothing trading it yet.
+  const order = async (symbol: string) => {
+    await other.goto(`/stonks/${symbol}`);
+    await other.getByRole("button", { name: "Buy", exact: true }).click();
+    const sheet = other.getByRole("dialog");
+    await sheet.getByRole("button", { name: "10%" }).click();
+    await sheet.getByRole("button", { name: /^Buy \$/ }).click();
+    await expect(sheet).toHaveCount(0);
+  };
+  await order("NVDA");
+  await expect(other.getByRole("region", { name: "Waiting to fill" })).toBeVisible();
+  await trade("NVDA", 200);
+  await expect(other.getByRole("region", { name: "Your position" })).toBeVisible();
+  await order("AAPL");
+  await expect(other.getByRole("region", { name: "Waiting to fill" })).toBeVisible();
+  await trade("NVDA", 250);
+
+  // One chart with everyone on it, live, and each row is the key to its line.
+  const crew = page.getByRole("region", { name: "Crew", exact: true });
+  await expect(crew.getByRole("img", { name: /^Everyone's net worth over the game\./ })).toBeVisible();
+  await expect(crew.getByRole("link", { name: "Chris's profile" })).toContainText("$10,250.00");
+
+  // Their profile is already there when you tap it.
+  await page.waitForTimeout(500);
+  await watchForSkeletons(page);
+  await crew.getByRole("link", { name: "Chris's profile" }).click();
+  await expect(page.getByRole("heading", { name: "Chris", level: 1 })).toBeVisible();
+  expect(await sawSkeleton(page)).toBe(false);
+  await expect(page.getByRole("region", { name: "Chris's money" })).toContainText("$10,250.00");
+  await expect(page.getByRole("img", { name: /^Chris's net worth over the game/ })).toBeVisible();
+  await expect(page.getByRole("img", { name: /^1 up, 0 down\. NVDA/ })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Waiting to fill" })).toContainText("Buy $900.00 of AAPL");
+  // Somebody else's order is only there to read.
+  await expect(page.getByRole("button", { name: /^Cancel/ })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "History" })).toContainText("Bought NVDA");
+  await expect(page.getByRole("region", { name: "Record" })).toContainText("Trades");
+
+  // What they hold is one tap from the same stock page, and Buy is where it always is.
+  await page.getByRole("link", { name: "Chris's position in NVDA" }).click();
+  await expect(page.getByRole("heading", { name: "NVDA", level: 1 })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Crew in this stock" }).getByRole("link", { name: "Chris's profile" })).toBeVisible();
+  await page.getByRole("button", { name: "Buy", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "10%" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /^Buy \$/ }).click();
+  await expect(page.getByRole("region", { name: "Waiting to fill" })).toContainText("of NVDA");
+
+  // And my own profile is one tap from my money, where I can cancel what's waiting.
+  await page.goto("/stonks");
+  await page.getByRole("link", { name: "Your profile" }).click();
+  await expect(page.getByRole("heading", { name: "You", level: 1 })).toBeVisible();
+  // One, once the board has finished sliding away: it lists the same order.
+  await expect(page.getByRole("button", { name: "Cancel Buy NVDA" })).toHaveCount(1);
+
+  // It's a tap away from the Crew tab too.
+  await page.goto("/crew");
+  await page.getByRole("button", { name: /Chris/ }).first().click();
+  await page.getByRole("link", { name: "Stonks profile" }).click();
+  await expect(page.getByRole("heading", { name: "Chris", level: 1 })).toBeVisible();
+  await other.context().close();
+});
+
 test("short, cover at a profit; and a waiting order can be cancelled", async ({ context }) => {
   await seed();
   const page = await phone(context, { player: await createPlayer("Shlok"), notifications: "granted" });

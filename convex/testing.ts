@@ -146,7 +146,7 @@ export const playAs = internalMutation({
 });
 
 // Not stockSymbols: thousands of rows of plain reference data, and more than one function may read.
-const TABLES = ["stockLookups", "stockViews", "stockAccounts", "stockPositions", "stockOrders", "stockProfiles", "stockQuotes", "stockSeries", "stockIndex", "stockFeeds", "golfBags", "golfScores", "golfCommands", "golfSnapshots", "golfPlayers", "golfWorlds", "handoffs", "taps", "rtCommands", "rtSnapshots", "secrets", "drafts", "matches", "ratings", "presence", "pushSubscriptions", "profiles", "authRefreshTokens", "authSessions", "authAccounts", "users"] as const;
+const TABLES = ["stockWorth", "stockLookups", "stockViews", "stockAccounts", "stockPositions", "stockOrders", "stockProfiles", "stockQuotes", "stockSeries", "stockIndex", "stockFeeds", "golfBags", "golfScores", "golfCommands", "golfSnapshots", "golfPlayers", "golfWorlds", "handoffs", "taps", "rtCommands", "rtSnapshots", "secrets", "drafts", "matches", "ratings", "presence", "pushSubscriptions", "profiles", "authRefreshTokens", "authSessions", "authAccounts", "users"] as const;
 
 // Wipes everything. Refuses if any real (non-test) player exists, so it can't touch prod data.
 export const reset = internalMutation({
@@ -188,6 +188,10 @@ export const removeTestData = internalMutation({
     for (const table of ["golfScores", "golfBags"] as const) for (const r of await ctx.db.query(table).collect()) if (testIds.has(r.userId)) await ctx.db.delete(r._id);
     for (const table of ["ratings", "presence", "taps", "profiles", "pushSubscriptions", "handoffs", "stockAccounts", "stockPositions", "stockOrders"] as const) {
       for (const doc of await ctx.db.query(table).collect()) if (testIds.has(doc.userId)) await ctx.db.delete(doc._id);
+    }
+    for (const row of await ctx.db.query("stockWorth").collect()) {
+      const worths = row.worths.filter((x) => !testIds.has(x.u));
+      if (worths.length !== row.worths.length) await ctx.db.patch(row._id, { worths });
     }
     for (const s of await ctx.db.query("authSessions").collect()) {
       if (!testIds.has(s.userId)) continue;

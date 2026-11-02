@@ -1,6 +1,6 @@
 import { use } from "react";
 import type { ConvexReactClient } from "convex/react";
-import { BoardSkeleton, StockSkeleton } from "./skeletons";
+import { BoardSkeleton, PlayerSkeleton, StockSkeleton } from "./skeletons";
 import { warmBoard } from "./warm";
 
 // Stonks' code downloads on its own (it's charts nobody else needs), but never while you wait: the Games
@@ -44,4 +44,9 @@ export function StockRoute() {
   return <m.StockPage />;
 }
 
-export { BoardSkeleton, StockSkeleton };
+export function PlayerRoute() {
+  const m = use(loadStonks());
+  return <m.PlayerPage />;
+}
+
+export { BoardSkeleton, PlayerSkeleton, StockSkeleton };

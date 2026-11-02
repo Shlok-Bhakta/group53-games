@@ -370,4 +370,68 @@ describe("paper trading", () => {
     await t.mutation(internal.stonks.sweepViews, {});
     expect(await t.query(api.stonks.watchlist, {})).toEqual(["^GSPC"]);
   });
+
+  test("net worth history: on every fill and every 15 minutes, skipping what hasn't changed, thinning what's old", async () => {
+    const t = await market();
+    const shlok = await signedIn(t, "Shlok");
+    await signedIn(t, "Chris");
+    // Nobody's traded: nothing to record, everyone's on $10,000.
+    await t.mutation(internal.stonks.recordWorth, {});
+    expect(await t.query(api.stonks.worthHistory, {})).toEqual([]);
+    vi.setSystemTime(open + 1000);
+    await shlok.as.mutation(api.stonks.order, { symbol: "NVDA", side: "buy", dollars: 1000 });
+    await tickAt(t, "NVDA", 200, open + 2000);
+    const first = await t.query(api.stonks.worthHistory, {});
+    expect(first.map((r) => r.worths.map((x) => x.w))).toEqual([[10000]]);
+    await t.mutation(internal.stonks.recordWorth, {}); // nothing's moved
+    expect(await t.query(api.stonks.worthHistory, {})).toHaveLength(1);
+    await tickAt(t, "NVDA", 220, open + 3000);
+    await t.mutation(internal.stonks.recordWorth, {});
+    expect((await t.query(api.stonks.worthHistory, {})).at(-1)?.worths[0].w).toBe(10100);
+    // Four rows an hour for a month, then thinned: hourly after 3 days, daily after 14.
+    const uid = shlok.userId;
+    const day = 86_400_000;
+    await t.run(async (ctx) => {
+      for (const r of await ctx.db.query("stockWorth").collect()) await ctx.db.delete(r._id);
+      for (let h = 0; h < 30 * 24 * 4; h++) await ctx.db.insert("stockWorth", { t: open + (h * day) / 96, worths: [{ u: uid, w: 10000 + h }] });
+    });
+    vi.setSystemTime(open + 30 * day);
+    await t.mutation(internal.stonks.thinWorth, {});
+    const rows = await t.query(api.stonks.worthHistory, {});
+    const span = (from: number, to: number) => rows.filter((r) => r.t >= open + from * day && r.t < open + to * day).length;
+    expect(span(0, 16)).toBeLessThanOrEqual(17); // daily
+    expect(span(17, 27)).toBeLessThanOrEqual(10 * 24 + 1); // hourly
+    expect(span(27.5, 30)).toBeGreaterThan(2 * 96); // untouched
+    expect(rows.length).toBeLessThan(600);
+  });
+
+  test("a player's profile: their money, positions, what they're waiting on and their record, for anyone to see", async () => {
+    const t = await market();
+    const shlok = await signedIn(t, "Shlok");
+    const chris = await signedIn(t, "Chris");
+    vi.setSystemTime(open + 1000);
+    await shlok.as.mutation(api.stonks.order, { symbol: "NVDA", side: "buy", dollars: 2000 });
+    await shlok.as.mutation(api.stonks.order, { symbol: "TSLA", side: "short", dollars: 1000 });
+    await t.mutation(internal.stonks.ingest, { ticks: [tick("NVDA", 200, open + 2000), tick("TSLA", 400, open + 2000)] });
+    vi.setSystemTime(open + 3000);
+    await shlok.as.mutation(api.stonks.order, { symbol: "NVDA", side: "sell", shares: 5 });
+    await tickAt(t, "NVDA", 240, open + 4000);
+    vi.setSystemTime(open + 5000);
+    await shlok.as.mutation(api.stonks.order, { symbol: "TSLA", side: "cover", shares: 1 });
+    await tickAt(t, "TSLA", 500, open + 6000);
+    vi.setSystemTime(open + 7000);
+    await shlok.as.mutation(api.stonks.order, { symbol: "NVDA", side: "buy", dollars: 500 });
+    const p = await chris.as.query(api.stonks.player, { userId: shlok.userId });
+    expect(p).toMatchObject({ me: false, place: 1, of: 2, start: 10000, gain: 150 });
+    expect(p?.card.name).toBe("Shlok");
+    expect(p?.positions.map((x) => x.symbol)).toEqual(["NVDA", "TSLA"]);
+    expect(p?.positions.find((x) => x.symbol === "TSLA")).toMatchObject({ shares: -1.5, gain: -150 });
+    expect(p?.waiting.map((o) => [o.symbol, o.side, o.dollars])).toEqual([["NVDA", "buy", 500]]);
+    expect(p?.record).toMatchObject({ trades: 4, wins: 1, losses: 1, realized: 100, best: { symbol: "NVDA", realized: 200 }, worst: { symbol: "TSLA", realized: -100 } });
+    expect(p?.history[0]).toMatchObject({ side: "cover", symbol: "TSLA", realized: -100 });
+    // The positions and what's idle add up to the net worth.
+    const held = p!.positions.reduce((n, x) => n + Math.abs(x.value), 0);
+    expect(held + p!.idle).toBeCloseTo(p!.worth);
+    expect((await shlok.as.query(api.stonks.player, { userId: shlok.userId }))?.me).toBe(true);
+  });
 });

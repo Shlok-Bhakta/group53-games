@@ -20,6 +20,7 @@ export const S = {
   stat: "h-12",
   crew: "h-14",
   search: "h-11",
+  crewChart: 190,
 } as const;
 
 export const MOVERS = 6;
@@ -85,6 +86,9 @@ export function BoardSkeleton() {
       <HeroSkeleton extended />
       <section>
         <SectionHead wide="w-16" />
+        <div className="pb-3" aria-hidden>
+          <Skeleton className="w-full rounded-sm opacity-60" style={{ height: S.crewChart }} />
+        </div>
         <Group>
           {Array.from({ length: 4 }, (_, i) => (
             <div key={i} className={`flex ${S.crew} items-center gap-3 px-4`}>
@@ -168,6 +172,32 @@ export function StockSkeleton() {
         <Skeleton className="h-14 flex-1 rounded-lg" />
         <Skeleton className="h-14 flex-1 rounded-lg" />
       </div>
+    </div>
+  );
+}
+
+export function PlayerSkeleton() {
+  return (
+    <div className="flex flex-col gap-6" aria-busy="true">
+      <NavBar title="" subtitle={<span className="inline-block h-[17px]" />} back="/stonks" />
+      <div className="flex gap-4">
+        <Skeleton className="aspect-[3/4] w-[132px] shrink-0 rounded-lg" />
+        <div className="flex min-w-0 flex-1 flex-col justify-center gap-3">
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-4 w-1/2" />
+        </div>
+      </div>
+      <ChartSkeleton />
+      <Skeleton className="mx-auto size-[220px] rounded-full opacity-60" />
+      <section>
+        <SectionHead wide="w-28" />
+        <Group>
+          {Array.from({ length: 4 }, (_, i) => (
+            <RowSkeleton key={i} />
+          ))}
+        </Group>
+      </section>
     </div>
   );
 }

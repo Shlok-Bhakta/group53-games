@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { notify } from "./notify";
+import { card } from "./profiles";
 import { buyingPower, fill, fxPair, MIN_ORDER, netWorth, opens, refusal, START_CASH, toUsd, type Ask, type Book, type Side } from "./stonks/trade";
 import { contribution, downsample, liveWeight, minuteOf, withMinute, type Point } from "./stonks/board";
 import { INDEX, RANGES } from "./stonks/market";
@@ -535,6 +536,7 @@ async function fillWaiting(ctx: MutationCtx, symbol: string, price: number, time
   const rate = await usdRate(ctx, currency);
   if (rate === undefined) return; // its exchange rate is on the way: the next trade fills it
   const usdPrice = price * rate;
+  let filled = false;
   for (const order of orders) {
     if (order.at >= time) continue;
     const book = await bookOf(ctx, order.userId);
@@ -561,8 +563,51 @@ async function fillWaiting(ctx: MutationCtx, symbol: string, price: number, time
     // An order that sat waiting (overnight, say) reports back; one that filled in a second was watched.
     if (time - order.at > 30_000) await notify(ctx, order.userId, { title: `${DID[order.side]} ${symbol}`, body: `${money(done.amount)} at ${money(usdPrice)}`, url: stockPath(symbol), tag: `stonks-${symbol}` });
     await tellTheOtherSide(ctx, order, symbol);
+    filled = true;
   }
+  if (filled) await writeWorth(ctx);
 }
+
+/** Today's standings as a row of history, unless nothing's changed since the last. */
+async function writeWorth(ctx: MutationCtx) {
+  const worths = (await standings(ctx)).filter((c) => c.traded).map((c) => ({ u: c.userId, w: Math.round(c.worth * 100) / 100 }));
+  if (worths.length === 0) return;
+  const last = await ctx.db.query("stockWorth").withIndex("by_t").order("desc").first();
+  const same = last && last.worths.length === worths.length && last.worths.every((x) => worths.find((y) => y.u === x.u)?.w === x.w);
+  if (!same) await ctx.db.insert("stockWorth", { t: Date.now(), worths });
+}
+
+export const recordWorth = internalMutation({ args: {}, handler: writeWorth });
+
+// Fine detail for the last few days, then hourly, then daily, so a game can run for a year.
+const HOURLY_AFTER = 3 * 86_400_000;
+const DAILY_AFTER = 14 * 86_400_000;
+export const thinWorth = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const old = await ctx.db
+      .query("stockWorth")
+      .withIndex("by_t", (q) => q.lt("t", now - HOURLY_AFTER))
+      .collect();
+    let bucket = -1;
+    for (const row of old) {
+      const size = now - row.t > DAILY_AFTER ? 86_400_000 : 3_600_000;
+      const b = Math.floor(row.t / size);
+      if (b === bucket) await ctx.db.delete(row._id);
+      bucket = b;
+    }
+  },
+});
+
+/** The whole game's net worth, for the crew's chart and each player's. */
+export const worthHistory = query({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("stockWorth").withIndex("by_t").collect();
+    return rows.map((r) => ({ t: r.t, worths: r.worths }));
+  },
+});
 
 /** Betting against a friend's position tells them: a short or a sale when they're long, a buy when they're short. */
 async function tellTheOtherSide(ctx: MutationCtx, order: Doc<"stockOrders">, symbol: string) {
@@ -668,25 +713,107 @@ export const portfolio = query({
   },
 });
 
+/** Everyone, richest first, at live prices. */
+async function standings(ctx: QueryCtx) {
+  const users = await ctx.db.query("users").collect();
+  const positions = await ctx.db.query("stockPositions").collect();
+  const accounts = new Map((await ctx.db.query("stockAccounts").collect()).map((a) => [a.userId, a.cash]));
+  const profiles = new Map((await ctx.db.query("profiles").collect()).map((p) => [p.userId, p]));
+  const { usd } = await usdPrices(ctx, positions.map((p) => p.symbol));
+  return users
+    .map((u) => {
+      const book = { cash: accounts.get(u._id) ?? START_CASH, positions: positions.filter((p) => p.userId === u._id) };
+      const worth = netWorth(book, (s) => usd.get(s));
+      const f = profiles.get(u._id);
+      return {
+        userId: u._id,
+        name: u.name ?? "Someone",
+        image: u.image,
+        joinedAt: u._creationTime,
+        frame: f?.frame,
+        frameColor: f?.frameColor,
+        glow: f?.glow,
+        badge: f?.badge,
+        worth,
+        gain: worth - START_CASH,
+        positions: book.positions.length,
+        traded: accounts.has(u._id),
+      };
+    })
+    .sort((a, b) => b.worth - a.worth || a.name.localeCompare(b.name));
+}
+
 /** The whole crew ranked by net worth, live with every price. */
 export const crew = query({
   args: {},
   handler: async (ctx) => {
     const me = await getAuthUserId(ctx);
     if (me === null) return [];
-    const users = await ctx.db.query("users").collect();
-    const positions = await ctx.db.query("stockPositions").collect();
-    const accounts = new Map((await ctx.db.query("stockAccounts").collect()).map((a) => [a.userId, a.cash]));
-    const profiles = new Map((await ctx.db.query("profiles").collect()).map((p) => [p.userId, p]));
-    const { usd } = await usdPrices(ctx, positions.map((p) => p.symbol));
-    return users
-      .map((u) => {
-        const book = { cash: accounts.get(u._id) ?? START_CASH, positions: positions.filter((p) => p.userId === u._id) };
-        const worth = netWorth(book, (s) => usd.get(s));
-        const f = profiles.get(u._id);
-        return { userId: u._id, me: u._id === me, name: u.name ?? "Someone", image: u.image, frame: f?.frame, frameColor: f?.frameColor, glow: f?.glow, badge: f?.badge, worth, gain: worth - START_CASH, positions: book.positions.length };
+    return (await standings(ctx)).map((c) => ({ ...c, me: c.userId === me }));
+  },
+});
+
+/** A player's stock profile: their card, money, positions, what they're waiting on, and their record. All public. */
+export const player = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, { userId }) => {
+    const me = await getAuthUserId(ctx);
+    if (me === null) return null;
+    const user = await ctx.db.get(userId);
+    if (!user) return null;
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+    const book = await bookOf(ctx, userId);
+    const { quotes, usd } = await usdPrices(ctx, book.positions.map((p) => p.symbol));
+    const worth = netWorth(book, (s) => usd.get(s));
+    const ranks = await standings(ctx);
+    const positions = book.positions
+      .map((p) => {
+        const now = usd.get(p.symbol) ?? p.avg;
+        return { symbol: p.symbol, name: quotes.get(p.symbol)?.name, shares: p.shares, avg: p.avg, price: now, value: p.shares * now, gain: p.shares * (now - p.avg), gainPct: (Math.sign(p.shares) * (now - p.avg)) / p.avg };
       })
-      .sort((a, b) => b.worth - a.worth || a.name.localeCompare(b.name));
+      .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+    const waiting = await ctx.db
+      .query("stockOrders")
+      .withIndex("by_user_status", (q) => q.eq("userId", userId).eq("status", "waiting"))
+      .collect();
+    const fills = await ctx.db
+      .query("stockOrders")
+      .withIndex("by_user_status", (q) => q.eq("userId", userId).eq("status", "filled"))
+      .order("desc")
+      .collect();
+    const closes = fills.filter((o) => o.realized !== undefined && o.realized !== 0);
+    const best = closes.reduce<(typeof closes)[number] | null>((m, o) => (!m || o.realized! > m.realized! ? o : m), null);
+    const worst = closes.reduce<(typeof closes)[number] | null>((m, o) => (!m || o.realized! < m.realized! ? o : m), null);
+    return {
+      card: card(user, profile),
+      me: userId === me,
+      worth,
+      gain: worth - START_CASH,
+      start: START_CASH,
+      // What isn't backing a position: with the positions, this adds up to their net worth.
+      idle: Math.max(0, worth - positions.reduce((n, p) => n + Math.abs(p.value), 0)),
+      place: ranks.findIndex((r) => r.userId === userId) + 1,
+      of: ranks.length,
+      positions,
+      waiting: await Promise.all(
+        waiting.map(async (o) => {
+          const q = await quoteOf(ctx, o.symbol);
+          return { id: o._id, symbol: o.symbol, side: o.side, dollars: o.dollars, shares: o.shares, at: o.at, quote: q && { type: q.type, exchange: q.exchange, state: q.state, time: q.time, recv: q.recv, periodOpen: q.periodOpen, periodClose: q.periodClose } };
+        }),
+      ),
+      record: {
+        trades: fills.length,
+        wins: closes.filter((o) => o.realized! > 0).length,
+        losses: closes.filter((o) => o.realized! < 0).length,
+        realized: closes.reduce((n, o) => n + o.realized!, 0),
+        best: best && { symbol: best.symbol, realized: best.realized! },
+        worst: worst && { symbol: worst.symbol, realized: worst.realized! },
+      },
+      history: fills.slice(0, 50).map((o) => ({ id: o._id, side: o.side, symbol: o.symbol, amount: o.amount ?? 0, price: o.price ?? 0, currency: o.currency, at: o.filledAt ?? o.at, realized: o.realized })),
+    };
   },
 });
 
@@ -704,7 +831,7 @@ export const trades = query({
     return Promise.all(
       rows.map(async (o) => {
         const u = await ctx.db.get(o.userId);
-        return { id: o._id, name: u?.name ?? "Someone", image: u?.image, side: o.side, symbol: o.symbol, amount: o.amount ?? 0, price: o.price ?? 0, currency: o.currency, at: o.filledAt ?? o.at, realized: o.realized };
+        return { id: o._id, userId: o.userId, name: u?.name ?? "Someone", image: u?.image, side: o.side, symbol: o.symbol, amount: o.amount ?? 0, price: o.price ?? 0, currency: o.currency, at: o.filledAt ?? o.at, realized: o.realized };
       }),
     );
   },

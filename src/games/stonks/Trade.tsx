@@ -1,27 +1,29 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useMutation, useConvex } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { motion } from "motion/react";
 import { Slider } from "radix-ui";
 import { toast } from "sonner";
-import { XIcon } from "@phosphor-icons/react";
+import { CaretRightIcon, XIcon } from "@phosphor-icons/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { display, marketOf, type Market } from "../../../convex/stonks/market";
 import { MIN_ORDER, type Side } from "../../../convex/stonks/trade";
 import { AsyncButton } from "@/components/AsyncButton";
-import { Section } from "@/components/parts";
+import { Group, Section } from "@/components/parts";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { Button } from "@/components/ui/button";
 import { Drawer, DrawerClose, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { cn } from "@/lib/utils";
 import { sfx } from "@/sound";
-import { Change, Flash, useWarmWhileSeen } from "./bits";
+import type { Point } from "../../../convex/stonks/board";
+import { Change, Flash, playerColors, useWarmWhileSeen } from "./bits";
+import { CrewChart, valueAt, type Series } from "./Chart";
 import { ago, frac, opensAt, price, shareCount } from "./format";
 import { S } from "./skeletons";
 import { Ticker } from "./Ticker";
-import { warmStock } from "./warm";
+import { playerPath, warmPlayer, warmStock } from "./warm";
 
 // Stonks' paper trading: everyone has $10,000 to buy and short with, and the crew's standings move with
 // every price. An order waits for the next trade (convex/stonks.ts), so nobody knows the price they'll
@@ -62,14 +64,16 @@ export function useFillNotice(me: Portfolio | null | undefined) {
 
 export function Money({ me, crew }: { me: Portfolio; crew: Crew }) {
   const place = crew.findIndex((c) => c.me) + 1;
+  const mine = crew.find((c) => c.me);
   return (
     <section aria-label="Your money" className="px-1">
       <div className={`flex ${S.heroTop} items-center justify-between gap-3`}>
         <span className="text-callout font-semibold text-muted-foreground">Your money</span>
-        {place > 0 && crew.length > 1 && (
-          <span className="text-footnote font-medium text-muted-foreground">
-            #{place} of {crew.length}
-          </span>
+        {mine && (
+          <Link to={playerPath(mine.userId)} aria-label="Your profile" className="-mr-1 flex h-11 items-center gap-0.5 pl-3 text-footnote font-medium text-muted-foreground active:scale-[0.97]">
+            {crew.length > 1 ? `#${place} of ${crew.length}` : "Your profile"}
+            <CaretRightIcon weight="bold" aria-hidden />
+          </Link>
         )}
       </div>
       <div className={`flex ${S.heroPrice} items-center font-display text-title-lg`}>
@@ -83,32 +87,86 @@ export function Money({ me, crew }: { me: Portfolio; crew: Crew }) {
   );
 }
 
-export function CrewBoard({ crew }: { crew: Crew }) {
+export type History = FunctionReturnType<typeof api.stonks.worthHistory>;
+const scrubTime = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+/** One player's net worth over the game, with where they are right now on the end. */
+export function worthLine(history: History, userId: string, now: { t: number; worth: number } | null, start = 10_000): Point[] {
+  const points: Point[] = history.map((r) => [r.t, r.worths.find((x) => x.u === userId)?.w ?? start]);
+  if (now && (!points.length || now.t > points[points.length - 1][0])) points.push([now.t, now.worth]);
+  return points;
+}
+
+// The crew's standings, under everyone's net worth over the game. The rows are the chart's key, and while a finger's
+// on the chart they show that moment. Tap someone for their profile.
+export function CrewBoard({ crew, history }: { crew: Crew; history: History }) {
+  const convex = useConvex();
+  const [at, setAt] = useState<number | null>(null);
+  const colors = useMemo(() => playerColors(crew), [crew]);
+  const worths = crew.map((c) => c.worth.toFixed(2)).join();
+  const series = useMemo<Series[]>(
+    () =>
+      history.length === 0
+        ? []
+        : crew.map((c) => ({ id: c.userId, me: c.me, color: colors.get(c.userId)!.color, dash: colors.get(c.userId)!.dash, points: worthLine(history, c.userId, { t: Math.max(Date.now(), history[history.length - 1].t + 1), worth: c.worth }) })),
+    // Rebuilt when someone's worth or the history changes, not on every render.
+    [history, worths, colors], // eslint-disable-line
+  );
+  useEffect(() => {
+    for (const c of crew) warmPlayer(convex, c.userId);
+  }, [convex, crew]);
   return (
-    <Section title="Crew">
-      {crew.map((c, i) => (
-        <motion.div key={c.userId} layout="position" transition={{ type: "spring", bounce: 0, duration: 0.5 }} className={cn(`flex ${S.crew} items-center gap-3 px-4`, c.me && "bg-accent/40")}>
-          <span className="w-4 shrink-0 text-right text-footnote font-semibold text-muted-foreground tabular-nums">{i + 1}</span>
-          <PlayerAvatar name={c.name} image={c.image} frame={c.frame} frameColor={c.frameColor} glow={c.glow} badge={c.badge} size={36} />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-callout font-semibold">{c.name}</span>
-            <span className="block text-footnote text-muted-foreground">
-              {c.positions === 0 ? "All cash" : `${c.positions} ${c.positions === 1 ? "position" : "positions"}`}
-            </span>
-          </span>
-          <span className="flex shrink-0 flex-col items-end gap-0.5">
-            <Flash value={c.worth} className="text-callout font-semibold">
-              <Ticker value={c.worth} text={price(c.worth)} />
-            </Flash>
-            <Change change={c.gain} base={10_000} small />
-          </span>
-        </motion.div>
-      ))}
-    </Section>
+    <section aria-label="Crew">
+      <div className="flex items-end justify-between px-1 pb-2.5">
+        <h2 className="font-display text-heading">Crew</h2>
+      </div>
+      {series.length > 0 && (
+        <div className="pb-3">
+          <CrewChart series={series} base={10_000} label={`Everyone's net worth over the game. ${crew.map((c) => `${c.name} ${price(c.worth)}`).join(", ")}`} timeLabel={(t) => scrubTime.format(t)} onScrub={setAt} money={(n) => price(n)} />
+        </div>
+      )}
+      <Group>
+        {crew.map((c, i) => {
+          const line = at !== null ? series.find((s) => s.id === c.userId) : undefined;
+          const worth = line ? valueAt(line.points, at!) : c.worth;
+          const key = colors.get(c.userId)!;
+          return (
+            <motion.div key={c.userId} layout="position" transition={{ type: "spring", bounce: 0, duration: 0.5 }}>
+              <Link
+                to={playerPath(c.userId)}
+                onPointerDown={() => warmPlayer(convex, c.userId)}
+                aria-label={`${c.name}'s profile`}
+                className={cn(`flex ${S.crew} items-center gap-3 px-4 transition-transform duration-100 active:scale-[0.97]`, c.me && "bg-accent/40")}
+              >
+                <span className="w-4 shrink-0 text-right text-footnote font-semibold text-muted-foreground tabular-nums">{i + 1}</span>
+                <PlayerAvatar name={c.name} image={c.image} frame={c.frame} frameColor={c.frameColor} glow={c.glow} badge={c.badge} size={36} />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-1.5">
+                    {series.length > 0 && (
+                      <svg width={14} height={4} className="shrink-0" aria-hidden>
+                        <line x1={1} x2={13} y1={2} y2={2} stroke={key.color} strokeWidth={3} strokeLinecap="round" strokeDasharray={key.dash ? "3 3" : undefined} />
+                      </svg>
+                    )}
+                    <span className="truncate text-callout font-semibold">{c.name}</span>
+                  </span>
+                  <span className="block text-footnote text-muted-foreground">{c.positions === 0 ? "All cash" : `${c.positions} ${c.positions === 1 ? "position" : "positions"}`}</span>
+                </span>
+                <span className="flex shrink-0 flex-col items-end gap-0.5">
+                  <Flash value={worth} className="text-callout font-semibold">
+                    <Ticker value={worth} text={price(worth)} instant={at !== null} />
+                  </Flash>
+                  <Change change={worth - 10_000} base={10_000} small instant={at !== null} />
+                </span>
+              </Link>
+            </motion.div>
+          );
+        })}
+      </Group>
+    </section>
   );
 }
 
-function PositionRow({ p }: { p: Portfolio["positions"][number] }) {
+export function PositionRow({ p, owner, swatch }: { p: Portfolio["positions"][number]; owner?: string; swatch?: string }) {
   const convex = useConvex();
   const ref = useWarmWhileSeen<HTMLDivElement>(p.symbol);
   const short = p.shares < 0;
@@ -117,9 +175,10 @@ function PositionRow({ p }: { p: Portfolio["positions"][number] }) {
       <Link
         to={stockPath(p.symbol)}
         onPointerDown={() => warmStock(convex, p.symbol, "open")}
-        aria-label={`Your position in ${display(p.symbol)}`}
+        aria-label={`${owner ? `${owner}'s` : "Your"} position in ${display(p.symbol)}`}
         className={`flex ${S.row} items-center gap-3 px-4 transition-transform duration-100 active:scale-[0.97]`}
       >
+        {swatch && <span className="size-3 shrink-0 rounded-sm" style={{ background: swatch }} aria-hidden />}
         <span className="min-w-0 flex-1">
           <span className="block font-display text-body">{display(p.symbol)}</span>
           <span className="block truncate text-footnote text-muted-foreground">
@@ -149,21 +208,21 @@ export function Positions({ me }: { me: Portfolio }) {
   );
 }
 
-export function Waiting({ orders, now }: { orders: Portfolio["waiting"]; now: number }) {
+export function Waiting({ orders, now, readOnly }: { orders: Portfolio["waiting"]; now: number; readOnly?: boolean }) {
   const cancel = useMutation(api.stonks.cancelOrder);
   if (orders.length === 0) return null;
   return (
     <Section title="Waiting to fill">
       {orders.map((o) => (
         <div key={o.id} className={`flex ${S.row} items-center gap-3 px-4`}>
-          <span className="min-w-0 flex-1">
+          <Link to={stockPath(o.symbol)} className="min-w-0 flex-1 transition-transform duration-100 active:scale-[0.97]">
             <span className="block truncate text-callout font-semibold">
               {VERB[o.side]} {o.dollars !== undefined ? `${price(o.dollars)} of ` : o.shares !== undefined ? `${shareCount(o.shares, o.symbol)} of ` : "all of "}
               {display(o.symbol)}
             </span>
             <span className="block text-footnote text-muted-foreground">{whenFills(marketOf(o.quote, now))}</span>
-          </span>
-          <AsyncButton variant="ghost" size="icon" aria-label={`Cancel ${VERB[o.side]} ${display(o.symbol)}`} icon={<XIcon weight="bold" />} onClick={() => cancel({ id: o.id as Id<"stockOrders"> })} />
+          </Link>
+          {!readOnly && <AsyncButton variant="ghost" size="icon" aria-label={`Cancel ${VERB[o.side]} ${display(o.symbol)}`} icon={<XIcon weight="bold" />} onClick={() => cancel({ id: o.id as Id<"stockOrders"> })} />}
         </div>
       ))}
     </Section>
@@ -175,9 +234,11 @@ export function CrewTrades({ trades, now, title = "Crew trades" }: { trades: Tra
   return (
     <Section title={title}>
       {trades.slice(0, 6).map((t) => (
-        <Link key={t.id} to={stockPath(t.symbol)} className={`flex ${S.crew} items-center gap-3 px-4 transition-transform duration-100 active:scale-[0.97]`}>
-          <PlayerAvatar name={t.name} image={t.image} size={32} />
-          <span className="min-w-0 flex-1">
+        <div key={t.id} className={`flex ${S.crew} items-center gap-3 px-4`}>
+          <Link to={playerPath(t.userId)} aria-label={`${t.name}'s profile`} className="grid size-11 shrink-0 place-items-center transition-transform duration-100 active:scale-[0.97]">
+            <PlayerAvatar name={t.name} image={t.image} size={32} />
+          </Link>
+          <Link to={stockPath(t.symbol)} className="min-w-0 flex-1 transition-transform duration-100 active:scale-[0.97]">
             <span className="block truncate text-callout font-semibold">
               {t.name} {DID[t.side]} {display(t.symbol)}
             </span>
@@ -185,8 +246,8 @@ export function CrewTrades({ trades, now, title = "Crew trades" }: { trades: Tra
               {price(t.amount)} at {price(t.price, t.currency)} · {ago(now - t.at)}
               {t.realized ? ` · ${t.realized > 0 ? "made" : "lost"} ${price(Math.abs(t.realized))}` : ""}
             </span>
-          </span>
-        </Link>
+          </Link>
+        </div>
       ))}
     </Section>
   );
@@ -224,14 +285,14 @@ export function WhoHolds({ holders }: { holders: Holders }) {
   return (
     <Section title="Crew in this stock">
       {others.map((h) => (
-        <div key={h.userId} className={`flex ${S.crew} items-center gap-3 px-4`}>
+        <Link key={h.userId} to={playerPath(h.userId)} aria-label={`${h.name}'s profile`} className={`flex ${S.crew} items-center gap-3 px-4 transition-transform duration-100 active:scale-[0.97]`}>
           <PlayerAvatar name={h.name} image={h.image} size={32} />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-callout font-semibold">{h.name}</span>
             <span className="block text-footnote text-muted-foreground">{h.shares < 0 ? "Short" : "Long"}</span>
           </span>
           <span className="shrink-0 text-footnote font-semibold tabular-nums">{frac(h.gainPct, true)}</span>
-        </div>
+        </Link>
       ))}
     </Section>
   );

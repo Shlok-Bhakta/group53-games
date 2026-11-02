@@ -4,7 +4,7 @@ import { mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { BADGES, DEFAULT_PROFILE, EFFECTS, FRAMES, TAGLINE_MAX, isHexColor } from "./profileOptions";
 
-function card(user: Doc<"users">, profile: Doc<"profiles"> | null) {
+export function card(user: Doc<"users">, profile: Doc<"profiles"> | null) {
   return {
     _id: user._id,
     name: user.name ?? "Player",

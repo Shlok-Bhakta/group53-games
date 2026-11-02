@@ -1,9 +1,11 @@
 import { useState, type ReactNode } from "react";
+import { Link } from "react-router";
 import { useMutation, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import {
   BellRingingIcon,
   CaretRightIcon,
+  ChartLineUpIcon,
   CheckIcon,
   BellSlashIcon,
   MusicNotesIcon,
@@ -55,6 +57,13 @@ export function You() {
         <Button size="xl" variant="secondary" className="mt-3 w-full" onClick={() => setEditing(true)} disabled={!mine}>
           <PencilSimpleIcon weight="bold" /> Edit card
         </Button>
+        {mine && (
+          <Button size="xl" variant="secondary" className="mt-2.5 w-full" asChild>
+            <Link to={`/stonks/u/${mine._id}`}>
+              <ChartLineUpIcon weight="bold" /> Stonks profile
+            </Link>
+          </Button>
+        )}
       </div>
 
       {mine && <CardEditor open={editing} onOpenChange={setEditing} player={mine} />}

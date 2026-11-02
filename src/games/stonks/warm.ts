@@ -1,6 +1,7 @@
 import type { ConvexReactClient } from "convex/react";
 import { getFunctionName, type FunctionReference } from "convex/server";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import { INDEX, RANGES, type Range } from "../../../convex/stonks/market";
 
 // Stonks never makes you wait on a tap: whatever you can tap next is already subscribed, so its screen
@@ -35,6 +36,7 @@ export function warmBoard(convex: ConvexReactClient, ms = 120_000) {
   warm(convex, api.stonks.portfolio, {}, ms);
   warm(convex, api.stonks.crew, {}, ms);
   warm(convex, api.stonks.trades, {}, ms);
+  warm(convex, api.stonks.worthHistory, {}, ms);
   warm(convex, api.stonks.quote, { symbol: INDEX }, ms);
   warm(convex, api.stonks.profile, { symbol: INDEX }, ms);
   warm(convex, api.stonks.chart, { symbol: INDEX, range: savedRange() }, ms);
@@ -72,6 +74,13 @@ export function warmStock(convex: ConvexReactClient, symbol: string, level: Leve
   warm(convex, api.stonks.chart, { symbol, range: savedRange() });
   // The open (and the after-hours line) comes from the day's chart whatever the range.
   warm(convex, api.stonks.chart, { symbol, range: "1D" });
+}
+
+export const playerPath = (userId: string) => `/stonks/u/${userId}`;
+
+/** A player's profile, so tapping them opens it at once. */
+export function warmPlayer(convex: ConvexReactClient, userId: string) {
+  warm(convex, api.stonks.player, { userId: userId as Id<"users"> });
 }
 
 /** Every range of one chart, so switching ranges is instant. */

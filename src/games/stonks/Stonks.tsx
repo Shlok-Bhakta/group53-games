@@ -37,7 +37,7 @@ import {
   weight,
 } from "./format";
 import { BoardSkeleton, S, StockSkeleton } from "./skeletons";
-import { Change, Flash, ink, useWarmWhileSeen } from "./bits";
+import { Change, Flash, ink, Pairs, Stat, useWarmWhileSeen } from "./bits";
 import { Ticker } from "./Ticker";
 import { CrewBoard, CrewTrades, Money, Positions, TradeDock, useFillNotice, Waiting, WhoHolds, YourPosition } from "./Trade";
 import { StockSearch } from "./Search";
@@ -141,6 +141,7 @@ export function StonksBoard() {
   const me = useQuery(api.stonks.portfolio);
   const crew = useQuery(api.stonks.crew);
   const trades = useQuery(api.stonks.trades, {});
+  const history = useQuery(api.stonks.worthHistory);
   useFillNotice(me);
   const [searching, setSearching] = useState(false);
   const [pro] = usePro();
@@ -150,7 +151,7 @@ export function StonksBoard() {
     warmBoard(convex, 180_000);
     warmRanges(convex, INDEX);
   }, [convex]);
-  if (board === undefined || !me || crew === undefined) return <BoardSkeleton />;
+  if (board === undefined || !me || crew === undefined || history === undefined) return <BoardSkeleton />;
 
   return (
     <div className="flex flex-col gap-6">
@@ -159,7 +160,7 @@ export function StonksBoard() {
       {searching ? null : (
         <>
           <Money me={me} crew={crew} />
-          <CrewBoard crew={crew} />
+          <CrewBoard crew={crew} history={history} />
           <Positions me={me} />
           <Waiting orders={me.waiting} now={now} />
           <CrewTrades trades={trades ?? []} now={now} />
@@ -608,36 +609,6 @@ export function StockPage() {
   );
 }
 
-function Stat({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className={`flex ${S.stat} items-center justify-between gap-3 px-4`}>
-      <span className="text-callout text-muted-foreground">{label}</span>
-      <span className="flex items-center text-callout font-semibold tabular-nums">{children}</span>
-    </div>
-  );
-}
-
-// Two numbers to a row, the way trading apps pack them.
-function Pairs({ items }: { items: [string, string | undefined][] }) {
-  const shown = items.filter((i): i is [string, string] => i[1] !== undefined);
-  const rows: [string, string][][] = [];
-  for (let i = 0; i < shown.length; i += 2) rows.push(shown.slice(i, i + 2));
-  return (
-    <Group>
-      {rows.map((row, i) => (
-        <div key={i} className="grid grid-cols-2 divide-x divide-border">
-          {row.map(([label, value]) => (
-            <div key={label} className={cn("flex min-h-14 flex-col justify-center px-4 py-2", row.length === 1 && "col-span-2")}>
-              <span className="text-footnote text-muted-foreground">{label}</span>
-              <span className="text-callout font-semibold tabular-nums">{value}</span>
-            </div>
-          ))}
-        </div>
-      ))}
-    </Group>
-  );
-}
-
 function ProStats({ stats: s, price: p, unit }: { stats: ProfileStats; price: number; unit: string }) {
   const [more, setMore] = useState(false);
   const opt = <T,>(x: T | undefined, f: (x: T) => string) => (x === undefined ? undefined : f(x));
@@ -702,5 +673,7 @@ function ProStats({ stats: s, price: p, unit }: { stats: ProfileStats; price: nu
     </>
   );
 }
+
+export { PlayerPage } from "./Profile";
 
 export default StonksBoard;
