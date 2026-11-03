@@ -61,6 +61,8 @@ export function generateVars() {
   };
 }
 
+let running = null;
+
 export async function startBackend({ build = true } = {}) {
   const apiPort = await freePort();
   // The backend verifies session tokens by fetching its own site origin from inside the container,
@@ -69,6 +71,7 @@ export async function startBackend({ build = true } = {}) {
   const name = `group53-e2e-${randomBytes(3).toString("hex")}`;
   const url = `http://127.0.0.1:${apiPort}`;
   const siteUrl = `http://127.0.0.1:${sitePort}`;
+  running = name;
   execFileSync("docker", [
     "run", "-d", "--rm", "--name", name,
     "-p", `127.0.0.1:${apiPort}:3210`, "-p", `127.0.0.1:${sitePort}:3211`,
@@ -77,31 +80,42 @@ export async function startBackend({ build = true } = {}) {
     "-e", "DO_NOT_REQUIRE_SSL=true", "-e", "DISABLE_BEACON=true",
     resolveImage(),
   ], { stdio: ["ignore", "ignore", "inherit"] });
-  await waitFor(`${url}/version`);
-  const adminKey = execFileSync("docker", ["exec", name, "./generate_admin_key.sh"]).toString().trim().split("\n").pop();
+  // Anything failing from here on must not leave the container holding port 3211.
+  try {
+    await waitFor(`${url}/version`);
+    const adminKey = execFileSync("docker", ["exec", name, "./generate_admin_key.sh"]).toString().trim().split("\n").pop();
 
-  const env = { ...process.env, CONVEX_SELF_HOSTED_URL: url, CONVEX_SELF_HOSTED_ADMIN_KEY: adminKey, CONVEX_DEPLOYMENT: "" };
-  const vars = { ...generateVars(), SITE_URL: "http://127.0.0.1:4573", ALLOW_TEST_HELPERS: "1" };
-  // The CLI reads the self-hosted target from the environment; deploy first so env vars apply to a live deployment.
-  execSync("npx convex deploy -y", { cwd: ROOT, env, stdio: "inherit" });
-  for (const [k, v] of Object.entries(vars)) execFileSync("npx", ["convex", "env", "set", "--", k, v], { cwd: ROOT, env, stdio: "ignore" });
-  if (build) execSync("npx vite build --outDir e2e/.state/dist --emptyOutDir", { cwd: ROOT, env: { ...env, VITE_CONVEX_URL: url }, stdio: "inherit" });
+    const env = { ...process.env, CONVEX_SELF_HOSTED_URL: url, CONVEX_SELF_HOSTED_ADMIN_KEY: adminKey, CONVEX_DEPLOYMENT: "" };
+    const vars = { ...generateVars(), SITE_URL: "http://127.0.0.1:4573", ALLOW_TEST_HELPERS: "1" };
+    // The CLI reads the self-hosted target from the environment; deploy first so env vars apply to a live deployment.
+    execSync("npx convex deploy -y", { cwd: ROOT, env, stdio: "inherit" });
+    for (const [k, v] of Object.entries(vars)) execFileSync("npx", ["convex", "env", "set", "--", k, v], { cwd: ROOT, env, stdio: "ignore" });
+    if (build) execSync("npx vite build --outDir e2e/.state/dist --emptyOutDir", { cwd: ROOT, env: { ...env, VITE_CONVEX_URL: url }, stdio: "inherit" });
 
-  // The backend compiles each module the first time it runs; warm them so the first test isn't slow.
-  for (const fn of ["testing:reset", "testing:createPlayer"]) {
-    try {
-      execFileSync("npx", ["convex", "run", fn, fn === "testing:createPlayer" ? '{"name":"warmup"}' : "{}"], { cwd: ROOT, env, stdio: "ignore" });
-    } catch {}
+    // The backend compiles each module the first time it runs; warm them so the first test isn't slow.
+    for (const fn of ["testing:reset", "testing:createPlayer"]) {
+      try {
+        execFileSync("npx", ["convex", "run", fn, fn === "testing:createPlayer" ? '{"name":"warmup"}' : "{}"], { cwd: ROOT, env, stdio: "ignore" });
+      } catch {}
+    }
+    execFileSync("npx", ["convex", "run", "testing:reset", "{}"], { cwd: ROOT, env, stdio: "ignore" });
+
+    const state = { name, url, siteUrl, adminKey };
+    mkdirSync(path.dirname(STATE_FILE), { recursive: true });
+    writeFileSync(STATE_FILE, JSON.stringify(state));
+    return state;
+  } catch (err) {
+    stopBackend(name);
+    throw err;
   }
-  execFileSync("npx", ["convex", "run", "testing:reset", "{}"], { cwd: ROOT, env, stdio: "ignore" });
+}
 
-  const state = { name, url, siteUrl, adminKey };
-  mkdirSync(path.dirname(STATE_FILE), { recursive: true });
-  writeFileSync(STATE_FILE, JSON.stringify(state));
-  return state;
+export function stopRunning() {
+  if (running) stopBackend(running);
 }
 
 export function stopBackend(name) {
+  if (running === name) running = null;
   try {
     execFileSync("docker", ["rm", "-f", name], { stdio: "ignore" });
   } catch {}

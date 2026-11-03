@@ -1,9 +1,14 @@
 // npm run test:e2e: start a throwaway backend, build against it, run Playwright, then clean up.
 import { spawnSync } from "node:child_process";
-import { startBackend, stopBackend } from "./backend.mjs";
+import { startBackend, stopBackend, stopRunning } from "./backend.mjs";
 
-// Stopping a run stops Playwright with it; staying alive to reach the finally clears the backend and port 3211.
-for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => {});
+// Stopping a run mustn't leave the backend holding port 3211.
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+  process.on(signal, () => {
+    stopRunning();
+    process.exit(1);
+  });
+}
 
 const state = await startBackend();
 let code = 1;

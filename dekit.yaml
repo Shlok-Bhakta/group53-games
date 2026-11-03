@@ -55,9 +55,10 @@ tasks:
     deps: [setup]
   test/e2e:
     type: job
-    cmd: npm run test:e2e
+    cmd: node e2e/run.mjs
     deps: [test/browser]
-    stop: {timeout: 30s}
+    # Playwright only shuts its preview server down on SIGINT.
+    stop: {signal: SIGINT, timeout: 30s}
   test/sidecar:
     type: job
     cmd: node scripts/dev.mjs test-sidecar
