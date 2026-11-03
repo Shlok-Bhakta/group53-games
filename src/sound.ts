@@ -264,6 +264,9 @@ function noise(c: Ctx) {
 type Env = { at: number; dur: number; gain: number; attack?: number; out: AudioNode };
 function envelope(c: Ctx, { at, dur, gain, attack = 0.003 }: Env) {
   const g = c.createGain();
+  // A gain starts at 1 until its first event, and rounding can start the source a sample before that event:
+  // one sample at full volume, which is a pop louder than the sound itself.
+  g.gain.value = 0.0001;
   g.gain.setValueAtTime(0.0001, at);
   g.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain), at + attack);
   g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
@@ -418,8 +421,10 @@ const VOICES: Record<Exclude<SfxPack, "off">, Voice> = {
   },
 };
 
-export type SfxName = "pick" | "place" | "recall" | "shuffle" | "play" | "bingo" | "invalid" | "turn" | "ghost" | "land" | "tick" | "win" | "lose" | "preview";
-type SfxOpts = { count?: number; score?: number };
+export type SfxName = "pick" | "place" | "recall" | "shuffle" | "play" | "bingo" | "invalid" | "turn" | "ghost" | "land" | "tick" | "win" | "lose" | "preview" | "deal" | "flip" | "chips" | "knock" | "sweep" | "slam" | "payout";
+// `live`: something happening on its own, not a tap's answer. It's dropped while audio is still locked; waiting
+// for the first tap would play every one of them at once.
+type SfxOpts = { count?: number; score?: number; live?: boolean };
 
 // Every sound, from a pack's three voices. `count` is how many tiles (for play and land); `score` makes
 // bigger plays sound bigger.
@@ -464,6 +469,40 @@ function render(c: Ctx, pack: Exclude<SfxPack, "off">, name: SfxName, opts: SfxO
       return v.thump(c, o, t + n * 0.06, 0.4);
     case "tick":
       return v.click(c, o, t, 1.6, 0.3);
+    // Handing something out: a card, a tile. `count` lifts it a little, so a round of them doesn't drone.
+    case "deal":
+      return v.click(c, o, t, 1.15 + n * 0.03, 0.6);
+    // Something turned over. `count` climbs the scale, so a run of them walks up.
+    case "flip":
+      v.click(c, o, t, 1.2, 0.5);
+      return v.note(c, o, t + 0.02, PENTA[n + 2], 0.45, 0.5);
+    // Chips or coins going down: more of them, more clicks.
+    case "chips":
+      for (let i = 0; i < Math.min(n, 4); i++) v.click(c, o, t + i * 0.045, 1.4, 0.45);
+      return v.thump(c, o, t + 0.02, 0.28);
+    // Two knuckles on the table: checking, passing.
+    case "knock":
+      v.thump(c, o, t, 0.42);
+      v.click(c, o, t, 0.6, 0.4);
+      v.thump(c, o, t + 0.13, 0.36);
+      return v.click(c, o, t + 0.13, 0.55, 0.32);
+    // A run of things gathered into a pile.
+    case "sweep":
+      for (let i = 0; i < 6; i++) v.click(c, o, t + i * 0.035, 1.1 + i * 0.1, 0.32);
+      return v.thump(c, o, t + 0.22, 0.35);
+    // The big hit: all in, or an attack landing in another game. Low rather than loud.
+    case "slam":
+      v.thump(c, o, t, 0.6);
+      v.thump(c, o, t + 0.05, 0.4);
+      v.note(c, o, t + 0.03, 55, 0.45, 0.9);
+      return v.note(c, o, t + 0.03, 62, 0.3, 0.9);
+    // Winnings coming in: a bigger win, more notes.
+    case "payout":
+      for (let i = 0; i < Math.min(3 + n, 8); i++) {
+        v.note(c, o, t + i * 0.075, PENTA[i], 0.5, 0.5);
+        v.click(c, o, t + i * 0.075, 1.5, 0.2);
+      }
+      return;
     case "win":
       [72, 76, 79, 84, 88].forEach((m, i) => v.note(c, o, t + i * 0.09, m, 0.6, 0.8));
       [79, 84, 88].forEach((m) => v.note(c, o, t + 0.55, m, 0.4, 1.6));
@@ -494,6 +533,7 @@ export function sfx(name: SfxName, opts: SfxOpts = {}) {
   if (!c) return;
   // Asked for in the same tap that unlocks audio: play it the moment the context is up.
   if (c.state !== "running") {
+    if (opts.live) return;
     void c.resume().then(() => c.state === "running" && sfx(name, opts)).catch(() => {});
     return;
   }

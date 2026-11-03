@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { bestHand, deckOf, rank5 } from "./cards";
+import { bestHand, deckOf, madeCards, rank5 } from "./cards";
 import { act, alive, blindsFor, deal, leave, newGame, potOf, raiseBounds, sidePots, standings, streetOf, toCall, type Card, type Table } from "./engine";
 
 const r = (s: string) => rank5(s.split(" "));
@@ -12,6 +12,18 @@ function stacked(top: string, isShort = false): Card[] {
   const first = cards(top);
   return [...first, ...deckOf(isShort).filter((c) => !first.includes(c))];
 }
+
+describe("the cards that make a hand", () => {
+  const made = (h: string) => madeCards(rank5(h.split(" "))).sort();
+  test("a high card makes nothing", () => expect(made("As Kd 9h 7c 3s")).toEqual([]));
+  test("a pair is just the pair", () => expect(made("2s 2d 9h 7c 3s")).toEqual(["2d", "2s"]));
+  test("two pair leaves out the kicker", () => expect(made("2s 2d 3h 3c 9s")).toEqual(["2d", "2s", "3c", "3h"]));
+  test("a straight and a flush need all five", () => {
+    expect(made("5s 6d 7h 8c 9s")).toHaveLength(5);
+    expect(made("2s 7s 9s Js Ks")).toHaveLength(5);
+  });
+  test("nothing made yet", () => expect(madeCards(null)).toEqual([]));
+});
 
 describe("hand rankings", () => {
   test("every category beats the one below it", () => {

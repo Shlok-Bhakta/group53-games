@@ -20,6 +20,7 @@ import { admin, createPlayer, phone, type Player } from "./fixtures.ts";
 const GAMES = [
   { mode: "holdem", players: ["Ada", "Linus", "Grace"], hands: "5" },
   { mode: "draw", players: ["Ken", "Barbara"], hands: "5" },
+  { mode: "omaha", players: ["Edsger", "Margaret"], hands: "5" },
 ];
 const PORT = 4600;
 const LIMIT_MS = 40 * 60 * 1000;
@@ -102,6 +103,10 @@ const server = http.createServer(async (req, res) => {
         if (g.status !== "active" || g.turn === s.player.userId) break;
         await new Promise((r) => setTimeout(r, 1000));
       }
+      // The table plays things out on screen before the phone can act: wait for it to catch up.
+      const g = await getMatch(s.matchId);
+      const ready = g.status !== "active" ? s.page.getByRole("region", { name: "Result" }) : g.turn === s.player.userId ? s.page.getByText(/^(Your move|Pick cards to swap)$/) : null;
+      await ready?.waitFor({ timeout: 25_000 }).catch(() => {});
       return send(200, await screen(name));
     }
     if (m![2] === "tap" && req.method === "POST") {

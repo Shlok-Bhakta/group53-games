@@ -111,3 +111,11 @@ export function bestHand(variant: Variant, hole: Card[], board: Card[]): HandRan
   const all = [...hole, ...board];
   return bestOf(all.length <= 5 ? [all] : combos(all, 5), short);
 }
+
+// The cards that actually make a hand, to point them out: the pair, not its kickers. Nothing for a high card.
+export function madeCards(hand: HandRank | null): Card[] {
+  if (!hand || hand.category === 0) return [];
+  if (hand.category === 4 || hand.category === 5 || hand.category === 8) return hand.cards;
+  const count = (c: Card) => hand.cards.filter((x) => x[0] === c[0]).length;
+  return hand.cards.filter((c) => count(c) >= 2);
+}

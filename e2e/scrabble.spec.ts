@@ -302,7 +302,7 @@ test.describe("Scrabble", () => {
     const report = await page.evaluate(async () => {
       type Lab = { packs: string[]; tracks: string[]; sfx: (p: string, n: string) => Promise<{ peak: number; rms: number }>; music: (t: string, s: number) => Promise<{ peak: number; rms: number }> };
       const lab = (window as unknown as { __soundLab: Lab }).__soundLab;
-      const names = ["pick", "place", "recall", "shuffle", "play", "bingo", "invalid", "turn", "ghost", "land", "tick", "win", "lose", "preview"];
+      const names = ["pick", "place", "recall", "shuffle", "play", "bingo", "invalid", "turn", "ghost", "land", "tick", "win", "lose", "preview", "deal", "flip", "chips", "knock", "sweep", "slam", "payout"];
       const out: Record<string, { peak: number; rms: number }> = {};
       for (const p of lab.packs) for (const n of names) out[`sfx ${p} ${n}`] = await lab.sfx(p, n);
       for (const t of lab.tracks) out[`music ${t}`] = await lab.music(t, 10);

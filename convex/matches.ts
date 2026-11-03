@@ -54,6 +54,7 @@ async function withPeople(ctx: QueryCtx, match: Doc<"matches">) {
         image: user?.image,
         frame: profile?.frame ?? DEFAULT_PROFILE.frame,
         frameColor: profile?.frameColor ?? DEFAULT_PROFILE.frameColor,
+        glow: profile?.glow ?? DEFAULT_PROFILE.glow,
         badge: profile?.badge ?? DEFAULT_PROFILE.badge,
       };
     }),

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
-import { parse, wcagContrast } from "culori";
+import { interpolate, parse, wcagContrast } from "culori";
 import { PALETTES } from "./themes";
 
 const css = readFileSync(new URL("./style.css", import.meta.url), "utf8");
@@ -41,6 +41,13 @@ describe.each(PALETTES.map((p) => p.id))("theme %s", (id) => {
       ["price up line on card", "up", "card", 3],
       ["price down line on card", "down", "card", 3],
     ];
+
+    // The poker felt is mixed from these tokens in style.css, so check what it comes out as.
+    test("text on the poker felt is readable", () => {
+      const felt = interpolate([t["card"], t["tile-green"]], "oklab")(0.44);
+      const rail = interpolate([felt, mode === "dark" ? "black" : "white"], "rgb")(0.12);
+      expect(wcagContrast(rail, parse(t.foreground)!), "foreground on the felt").toBeGreaterThanOrEqual(3);
+    });
 
     test("text and tiles are readable", () => {
       const failures = checks

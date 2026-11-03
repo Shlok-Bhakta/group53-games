@@ -18,6 +18,7 @@ function PlayingCard({
   width,
   seat,
   slot,
+  best,
   className,
   style,
 }: {
@@ -25,6 +26,7 @@ function PlayingCard({
   width: number
   seat?: string
   slot?: boolean
+  best?: boolean
   className?: string
   style?: CSSProperties
 }) {
@@ -33,7 +35,7 @@ function PlayingCard({
     return <span data-slot="playing-card" className={cn("playing-card", slot ? "playing-card-slot" : "playing-card-back", className)} style={vars} aria-hidden="true" />
   }
   return (
-    <span data-slot="playing-card" className={cn("playing-card", className)} data-suit={card[1]} data-card={card} style={vars} role="img" aria-label={cardName(card)}>
+    <span data-slot="playing-card" className={cn("playing-card", className)} data-suit={card[1]} data-card={card} data-best={best ? "true" : undefined} style={vars} role="img" aria-label={cardName(card)}>
       <span className="playing-card-rank">{card[0] === "T" ? "10" : card[0]}</span>
       {width >= 34 && <span className="playing-card-pip">{PIP[card[1]]}</span>}
       <span className="playing-card-big">{PIP[card[1]]}</span>
