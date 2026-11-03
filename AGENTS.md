@@ -134,6 +134,8 @@ Run both suites before shipping, and add tests with every feature.
 
 Work happens one agent at a time on `main`. When a feature is done: run both test suites, commit, push to `origin main`, then deploy. The user has said to do all of that without asking.
 
+Collaborators (Chrisis147, AIsJump, Boiler31) work on branches and open PRs. `main` is protected and `.github/CODEOWNERS` makes Shlok the only approval that counts; a new push drops it. Shlok's direct pushes still work because admins bypass the rule (`enforce_admins` off), so leave that off. Merging a PR doesn't deploy it: pull `main` and run `npm run deploy`.
+
 ### Before the first deploy
 
 - The repo is at `~/Projects/group53-games` (T3 also sees it as `~/.t3/projects/group53-games`, a symlink). GitHub: `git@github.com:Shlok-Bhakta/group53-games.git`.
