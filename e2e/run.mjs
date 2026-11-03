@@ -2,6 +2,9 @@
 import { spawnSync } from "node:child_process";
 import { startBackend, stopBackend } from "./backend.mjs";
 
+// Stopping a run stops Playwright with it; staying alive to reach the finally clears the backend and port 3211.
+for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => {});
+
 const state = await startBackend();
 let code = 1;
 try {

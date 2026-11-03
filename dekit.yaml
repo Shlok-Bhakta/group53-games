@@ -57,6 +57,7 @@ tasks:
     type: job
     cmd: npm run test:e2e
     deps: [test/browser]
+    stop: {timeout: 30s}
   test/sidecar:
     type: job
     cmd: node scripts/dev.mjs test-sidecar
