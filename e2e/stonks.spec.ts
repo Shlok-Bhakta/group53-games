@@ -188,6 +188,8 @@ test("everyone starts with $10,000: buy on one phone, it fills on the next trade
   const other = await secondPhone(browser, b);
   await intoStonks(page);
   await intoStonks(other);
+  // Being here is what makes the sidecar write every trade instead of one a minute.
+  await expect.poll(() => admin().query(anyApi.stonks.hot, {})).toEqual(["*"]);
   const money = page.getByRole("region", { name: "Your money" });
   await expect(money).toContainText("$10,000.00");
   await expect(money).toContainText("#");

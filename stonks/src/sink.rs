@@ -1,13 +1,48 @@
 //! Everything the sidecar writes to Convex, through the internal mutations in convex/stonks.ts (the
 //! admin key lets it call them; phones can't). Prices go in at most once a second, at once if the
-//! last write was longer ago, so a trade reaches phones in tens of milliseconds.
-use std::collections::{BTreeMap, HashMap};
+//! last write was longer ago, so a trade reaches phones in tens of milliseconds. That's while someone's
+//! looking, or an order's waiting on it (`stonks:hot`). Convex keeps the old version of every write for
+//! days, so everything else goes in once a minute: the last trade of each minute, which is all the
+//! charts and net worth need. When someone arrives, what's held back goes in at once.
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::time::{Duration, Instant};
 
 use convex::{ConvexClient, FunctionResult, Value};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 
-use crate::types::{log, Status, Tick};
+use crate::types::{log, now_ms, Status, Tick};
+
+const MINUTE_MS: i64 = 60_000;
+
+/// `stonks:hot`: symbols written trade by trade, and "*" for all of them.
+fn is_hot(hot: &BTreeSet<String>, symbol: &str) -> bool {
+    hot.contains("*") || hot.contains(symbol)
+}
+
+/// The latest trade of each symbol nobody's looking at, waiting for its minute to end.
+#[derive(Default)]
+struct HeldBack(HashMap<String, Tick>);
+
+impl HeldBack {
+    fn hold(&mut self, t: Tick) {
+        self.0.insert(t.symbol.clone(), t);
+    }
+    fn forget(&mut self, symbol: &str) {
+        self.0.remove(symbol);
+    }
+    /// Whatever was received in a minute that's now over.
+    fn due(&mut self, now: i64) -> Vec<Tick> {
+        self.take(|t| t.recv / MINUTE_MS < now / MINUTE_MS)
+    }
+    /// Whatever someone's just started looking at.
+    fn now_hot(&mut self, hot: &BTreeSet<String>) -> Vec<Tick> {
+        self.take(|t| is_hot(hot, &t.symbol))
+    }
+    fn take(&mut self, want: impl Fn(&Tick) -> bool) -> Vec<Tick> {
+        let symbols: Vec<String> = self.0.values().filter(|t| want(t)).map(|t| t.symbol.clone()).collect();
+        symbols.iter().filter_map(|s| self.0.remove(s)).collect()
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Holding {
@@ -84,8 +119,9 @@ async fn call(client: &mut ConvexClient, name: &str, args: BTreeMap<String, Valu
     }
 }
 
-pub async fn run(mut client: ConvexClient, mut rx: mpsc::Receiver<Write>) {
+pub async fn run(mut client: ConvexClient, mut rx: mpsc::Receiver<Write>, mut hot: watch::Receiver<BTreeSet<String>>) {
     let mut ticks: HashMap<String, Tick> = HashMap::new();
+    let mut held = HeldBack::default();
     let mut feeds: HashMap<&'static str, Status> = HashMap::new();
     let mut flush = tokio::time::interval(Duration::from_secs(1));
     let mut last = Instant::now() - Duration::from_secs(10);
@@ -96,9 +132,14 @@ pub async fn run(mut client: ConvexClient, mut rx: mpsc::Receiver<Write>) {
                 let Some(msg) = msg else { return };
                 match msg {
                     Write::Tick(t) => {
-                        ticks.insert(t.symbol.clone(), t);
                         count += 1;
-                        if last.elapsed() >= Duration::from_secs(1) { flush.reset_immediately(); }
+                        if is_hot(&hot.borrow(), &t.symbol) {
+                            held.forget(&t.symbol);
+                            ticks.insert(t.symbol.clone(), t);
+                            if last.elapsed() >= Duration::from_secs(1) { flush.reset_immediately(); }
+                        } else {
+                            held.hold(t);
+                        }
                     }
                     Write::Status(s) => {
                         feeds.insert(s.source, s);
@@ -139,7 +180,15 @@ pub async fn run(mut client: ConvexClient, mut rx: mpsc::Receiver<Write>) {
                     }
                 }
             }
+            Ok(()) = hot.changed() => {
+                let released = held.now_hot(&hot.borrow_and_update());
+                if !released.is_empty() {
+                    for t in released { ticks.entry(t.symbol.clone()).or_insert(t); }
+                    flush.reset_immediately();
+                }
+            }
             _ = flush.tick() => {
+                for t in held.due(now_ms()) { ticks.entry(t.symbol.clone()).or_insert(t); }
                 if ticks.is_empty() && feeds.is_empty() { continue; }
                 last = Instant::now();
                 let batch: Vec<Value> = ticks.drain().map(|(_, t)| tick_value(&t)).collect();
@@ -158,6 +207,35 @@ pub async fn run(mut client: ConvexClient, mut rx: mpsc::Receiver<Write>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn tick(symbol: &str, price: f64, recv: i64) -> Tick {
+        Tick { symbol: symbol.into(), price, time: recv, recv, source: "yahoo", day_high: None, day_low: None, volume: None, session: "regular" }
+    }
+    #[test]
+    fn nobody_looking_means_the_last_trade_of_each_minute() {
+        let mut held = HeldBack::default();
+        let minute = 29_000_000 * MINUTE_MS;
+        held.hold(tick("AAPL", 1.0, minute + 1_000));
+        held.hold(tick("AAPL", 2.0, minute + 59_000));
+        assert!(held.due(minute + 59_500).is_empty(), "its minute isn't over");
+        let due = held.due(minute + MINUTE_MS);
+        assert_eq!(due.len(), 1);
+        assert_eq!(due[0].price, 2.0);
+        assert!(held.due(minute + 2 * MINUTE_MS).is_empty(), "written once");
+    }
+    #[test]
+    fn someone_arriving_gets_what_was_held_back_at_once() {
+        let mut held = HeldBack::default();
+        let minute = 29_000_000 * MINUTE_MS;
+        held.hold(tick("AAPL", 1.0, minute));
+        held.hold(tick("MSFT", 2.0, minute));
+        let order: BTreeSet<String> = ["MSFT".to_string()].into();
+        assert!(!is_hot(&order, "AAPL"));
+        assert!(is_hot(&order, "MSFT"));
+        let released = held.now_hot(&order);
+        assert_eq!(released.iter().map(|t| t.symbol.as_str()).collect::<Vec<_>>(), ["MSFT"]);
+        let everyone: BTreeSet<String> = ["*".to_string()].into();
+        assert_eq!(held.now_hot(&everyone).len(), 1);
+    }
     #[test]
     fn leaves_missing_fields_out() {
         let t = Tick { symbol: "AAPL".into(), price: 1.5, time: 1793367000000, recv: 1793367000050, source: "yahoo", day_high: None, day_low: Some(1.0), volume: None, session: "regular" };

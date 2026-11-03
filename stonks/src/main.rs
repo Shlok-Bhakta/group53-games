@@ -104,6 +104,7 @@ async fn main() -> Result<()> {
     let want_rx = follow(&mut client, "stonks:watchlist").await?;
     let deep_rx = follow(&mut client, "stonks:deepWatch").await?;
     let lookups_rx = follow(&mut client, "stonks:pendingLookups").await?;
+    let hot_rx = follow(&mut client, "stonks:hot").await?;
     let fresh = freshness(&mut client).await;
 
     let (write_tx, write_rx) = mpsc::channel(4096);
@@ -111,7 +112,7 @@ async fn main() -> Result<()> {
     let (standby_tx, standby_rx) = watch::channel(BTreeSet::<String>::new());
     // When each symbol last ticked: what's ticking needs no polling.
     let ticks: Arc<Mutex<HashMap<String, i64>>> = Arc::default();
-    tokio::spawn(sink::run(client.clone(), write_rx));
+    tokio::spawn(sink::run(client.clone(), write_rx, hot_rx));
     tokio::spawn(universe::run(rest.clone(), write_tx.clone()));
     tokio::spawn(holdings::run(rest.clone(), write_tx.clone()));
     tokio::spawn(lookups::run(rest.clone(), lookups_rx, write_tx.clone()));

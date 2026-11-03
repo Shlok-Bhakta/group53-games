@@ -10,7 +10,7 @@ import { display } from "../../../convex/stonks/market";
 import { NavBar } from "@/components/AppHeader";
 import { Section } from "@/components/parts";
 import { PlayerCard } from "@/components/PlayerCard";
-import { cardColor, Change, gainColor, Pairs, playerColors } from "./bits";
+import { cardColor, Change, gainColor, Pairs, playerColors, useHereNow } from "./bits";
 import { PriceChart } from "./Chart";
 import { ago, price } from "./format";
 import { PlayerSkeleton, S } from "./skeletons";
@@ -34,6 +34,7 @@ export function PlayerPage() {
   const history = useQuery(api.stonks.worthHistory);
   const [now, setNow] = useState(() => Date.now());
   const [scrub, setScrub] = useState<Point | null>(null);
+  useHereNow();
   useEffect(() => {
     warmBoard(convex);
     const i = setInterval(() => setNow(Date.now()), 15_000);

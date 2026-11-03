@@ -5,11 +5,12 @@ import { CaretDownIcon, CaretUpIcon } from "@phosphor-icons/react";
 import { Group } from "@/components/parts";
 import { cn } from "@/lib/utils";
 import { CUSTOM_COLOR_FRAMES } from "../../../convex/profileOptions";
+import { INDEX } from "../../../convex/stonks/market";
 import type { Dir } from "./Chart";
 import { percent, signed } from "./format";
 import { S } from "./skeletons";
 import { Ticker } from "./Ticker";
-import { warmStock } from "./warm";
+import { report, warmStock } from "./warm";
 
 // Pieces the market and the trading screens share.
 
@@ -40,6 +41,21 @@ export function useWarmWhileSeen<T extends Element>(symbol: string) {
     };
   }, [convex, symbol]);
   return ref;
+}
+
+/** Someone's on this screen: prices get written trade by trade while anyone is (`stonks:hot`), and once a minute otherwise. */
+export function useHereNow() {
+  const convex = useConvex();
+  useEffect(() => {
+    const beat = () => report(convex, INDEX, "seen");
+    beat();
+    const timer = setInterval(beat, 45_000);
+    document.addEventListener("visibilitychange", beat);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", beat);
+    };
+  }, [convex]);
 }
 
 // A price that just changed lights up for a moment, green if it went up and red if it went down.

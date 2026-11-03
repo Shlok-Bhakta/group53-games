@@ -37,7 +37,7 @@ import {
   weight,
 } from "./format";
 import { BoardSkeleton, S, StockSkeleton } from "./skeletons";
-import { Change, Flash, ink, Pairs, Stat, useWarmWhileSeen } from "./bits";
+import { Change, Flash, ink, Pairs, Stat, useHereNow, useWarmWhileSeen } from "./bits";
 import { Ticker } from "./Ticker";
 import { CrewBoard, CrewTrades, Money, Positions, TradeDock, useFillNotice, Waiting, WhoHolds, YourPosition } from "./Trade";
 import { StockSearch } from "./Search";
@@ -142,6 +142,7 @@ export function StonksBoard() {
   const crew = useQuery(api.stonks.crew);
   const trades = useQuery(api.stonks.trades, {});
   const history = useQuery(api.stonks.worthHistory);
+  useHereNow();
   useFillNotice(me);
   const [searching, setSearching] = useState(false);
   const [pro] = usePro();

@@ -181,6 +181,11 @@ export default defineSchema({
   stockSeries: defineTable({ symbol: v.string(), range: v.string(), points: v.array(v.array(v.number())), at: v.number() })
     .index("by_symbol_range", ["symbol", "range"])
     .index("by_at", ["at"]),
+  // The day's chart ("1D"), one row per hour of [ms, price] points. Convex keeps every old version of a row for days, so
+  // a new minute rewrites an hour's worth of the day, never all of it.
+  stockDayHours: defineTable({ symbol: v.string(), hour: v.number(), points: v.array(v.array(v.number())), at: v.number() })
+    .index("by_symbol_hour", ["symbol", "hour"])
+    .index("by_at", ["at"]),
   // The index's holdings (from SPY's daily file): weights as of a day's close, and each price that day,
   // so live weights can follow the prices.
   stockIndex: defineTable({

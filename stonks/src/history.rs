@@ -23,9 +23,9 @@ pub struct Range {
 }
 
 pub const RANGES: [Range; 5] = [
-    Range { key: "1D", range: "1d", interval: "1m", pre_post: true, fresh: 5, quiet: 60 },
-    Range { key: "1W", range: "5d", interval: "5m", pre_post: false, fresh: 15, quiet: 360 },
-    Range { key: "1M", range: "1mo", interval: "30m", pre_post: false, fresh: 30, quiet: 360 },
+    Range { key: "1D", range: "1d", interval: "1m", pre_post: true, fresh: 15, quiet: 60 },
+    Range { key: "1W", range: "5d", interval: "5m", pre_post: false, fresh: 60, quiet: 360 },
+    Range { key: "1M", range: "1mo", interval: "30m", pre_post: false, fresh: 120, quiet: 360 },
     Range { key: "1Y", range: "1y", interval: "1d", pre_post: false, fresh: 360, quiet: 360 },
     Range { key: "5Y", range: "5y", interval: "1wk", pre_post: false, fresh: 720, quiet: 720 },
 ];

@@ -12,6 +12,10 @@ services:
       DO_NOT_REQUIRE_SSL: "true"
       REDACT_LOGS_TO_CLIENT: "true"
       DISABLE_BEACON: "true"
+      # Convex keeps the old version of every row it rewrites, 30 days by default, and Stonks rewrites rows all day.
+      # Keep it well past how long kiwi could be off: past the window, Convex's index workers log errors after a restart.
+      DOCUMENT_RETENTION_DELAY: "259200" # seconds: 3 days
+      MAX_SESSION_CLEANUP_DURATION_HOURS: "24"
     volumes:
       - /home/shlok/ssd-data/group53/convex-data:/convex/data
     ports:

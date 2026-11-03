@@ -117,6 +117,6 @@ export function stopRunning() {
 export function stopBackend(name) {
   if (running === name) running = null;
   try {
-    execFileSync("docker", ["rm", "-f", name], { stdio: "ignore" });
+    execFileSync("docker", ["rm", "-f", "-v", name], { stdio: "ignore" });
   } catch {}
 }

@@ -98,6 +98,86 @@ describe("stonks", () => {
     expect(await t.query(api.stonks.quote, { symbol: "NVDA" })).toMatchObject({ rank: 2, baseRank: 1, price: 190 });
   });
 
+  // Convex keeps the old version of every row it rewrites, which is what filled the disk: these tests count rewrites.
+  const hoursOf = (t: ReturnType<typeof setup>) => t.run((ctx) => ctx.db.query("stockDayHours").collect());
+
+  test("a day's chart is a row per hour, so a new minute rewrites one hour and an unchanged refresh rewrites none", async () => {
+    vi.useFakeTimers();
+    const t = setup();
+    const nine = ET("2026-10-30T09:00:00");
+    const points = Array.from({ length: 180 }, (_, i) => [nine + i * 60_000, 100 + i]);
+    vi.setSystemTime(nine + 3 * 3600_000);
+    await t.mutation(internal.stonks.series, { symbol: "AAPL", range: "1D", points });
+    expect(await hoursOf(t)).toHaveLength(3);
+    expect((await t.query(api.stonks.chart, { symbol: "AAPL", range: "1D" })).points).toEqual(points);
+    const before = await hoursOf(t);
+
+    // The same day again: nothing's new, so nothing's written.
+    vi.setSystemTime(nine + 3 * 3600_000 + 60_000);
+    await t.mutation(internal.stonks.series, { symbol: "AAPL", range: "1D", points });
+    expect(await hoursOf(t)).toEqual(before);
+
+    // One point changes in the last hour: only that row is rewritten.
+    const changed = [...points.slice(0, -1), [points[179][0], 999]];
+    await t.mutation(internal.stonks.series, { symbol: "AAPL", range: "1D", points: changed });
+    const after = await hoursOf(t);
+    expect(after.filter((h, i) => h.at !== before[i].at)).toHaveLength(1);
+    expect(after.at(-1)!.points.at(-1)![1]).toBe(999);
+
+    // A minute finishing rewrites its own hour, and starts a new one when the clock turns over.
+    const noon = ET("2026-10-30T12:00:00");
+    const trade = (time: number, price: number) => t.mutation(internal.stonks.ingest, { ticks: [{ symbol: "AAPL", price, time, recv: time, source: "yahoo", session: "regular" }] });
+    await trade(noon + 5_000, 500);
+    await trade(noon + 65_000, 501);
+    const rows = await hoursOf(t);
+    expect(rows).toHaveLength(4);
+    expect(rows.at(-1)!.points).toEqual([[noon, 500]]);
+    expect(rows[0].at).toBe(after[0].at);
+    expect((await t.query(api.stonks.sparks, {}))["^GSPC"]).toEqual([]);
+
+    // The next morning starts the chart over, and what's replaced by this goes too.
+    const tomorrow = ET("2026-10-31T09:30:00");
+    vi.setSystemTime(tomorrow);
+    await trade(tomorrow, 510);
+    expect(await hoursOf(t)).toHaveLength(0);
+    await trade(tomorrow + 60_000, 511);
+    expect((await t.query(api.stonks.chart, { symbol: "AAPL", range: "1D" })).points).toEqual([[tomorrow, 510]]);
+  });
+
+  test("a longer range or a profile that hasn't changed isn't written again", async () => {
+    vi.useFakeTimers();
+    const t = setup();
+    const start = ET("2026-10-30T10:00:00");
+    vi.setSystemTime(start);
+    await t.mutation(internal.stonks.series, { symbol: "AAPL", range: "1W", points: [[start, 1]] });
+    await t.mutation(internal.stonks.setProfile, { symbol: "AAPL", news: [{ title: "Apple", publisher: "Yahoo Finance", link: "https://x.test", time: start }] });
+    vi.setSystemTime(start + 60_000);
+    await t.mutation(internal.stonks.series, { symbol: "AAPL", range: "1W", points: [[start, 1]] });
+    await t.mutation(internal.stonks.setProfile, { symbol: "AAPL", news: [{ title: "Apple", publisher: "Yahoo Finance", link: "https://x.test", time: start }] });
+    expect((await t.query(api.stonks.chart, { symbol: "AAPL", range: "1W" })).at).toBe(start);
+    expect((await t.query(api.stonks.profile, { symbol: "AAPL" })).at).toBe(start);
+    await t.mutation(internal.stonks.series, { symbol: "AAPL", range: "1W", points: [[start, 2]] });
+    await t.mutation(internal.stonks.setProfile, { symbol: "AAPL", news: [] });
+    expect((await t.query(api.stonks.chart, { symbol: "AAPL", range: "1W" })).at).toBeGreaterThan(start);
+    expect((await t.query(api.stonks.profile, { symbol: "AAPL" })).at).toBeGreaterThan(start);
+  });
+
+  test("the sidecar writes every trade only while someone's here or an order's waiting", async () => {
+    const t = setup();
+    expect(await t.query(api.stonks.hot, {})).toEqual([]);
+    const p = (await signedIn(t, "Shlok")).as;
+    await p.mutation(api.stonks.watching, { symbols: ["^GSPC"], level: "seen" });
+    expect(await t.query(api.stonks.hot, {})).toEqual(["*"]);
+    await t.run(async (ctx) => {
+      for (const v of await ctx.db.query("stockViews").collect()) await ctx.db.delete(v._id);
+    });
+    expect(await t.query(api.stonks.hot, {})).toEqual([]);
+    const time = Date.now();
+    await t.mutation(internal.stonks.ingest, { ticks: [{ symbol: "NVDA", price: 200, time, recv: time, source: "yahoo", session: "post" }] });
+    await p.mutation(api.stonks.order, { symbol: "NVDA", side: "buy", dollars: 100 });
+    expect(await t.query(api.stonks.hot, {})).toEqual(["NVDA"]);
+  });
+
   test("profiles and news: either can come alone, and the board knows how busy a stock is", async () => {
     const t = setup();
     await t.mutation(internal.stonks.holdings, { asOf: "2026-10-29", holdings: [{ symbol: "AAPL", name: "APPLE INC", weight: 7.6 }] });

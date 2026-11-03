@@ -79,9 +79,11 @@ export const freshness = query({
   args: {},
   handler: async (ctx) => {
     const series = await ctx.db.query("stockSeries").collect();
+    const hours = await ctx.db.query("stockDayHours").collect();
     const profiles = await ctx.db.query("stockProfiles").collect();
     return [
-      ...series.map((s) => ({ symbol: s.symbol, kind: s.range, at: s.at })),
+      ...series.filter((s) => s.range !== "1D").map((s) => ({ symbol: s.symbol, kind: s.range, at: s.at })),
+      ...hours.map((h) => ({ symbol: h.symbol, kind: "1D", at: h.at })),
       ...profiles.flatMap((p) => [...(p.statsAt ? [{ symbol: p.symbol, kind: "stats", at: p.statsAt }] : []), ...(p.newsAt ? [{ symbol: p.symbol, kind: "news", at: p.newsAt }] : [])]),
     ];
   },
@@ -172,7 +174,7 @@ export const sparks = query({
     const idx = await indexDoc(ctx);
     const symbols = [INDEX, ...(idx?.holdings.map((h) => h.symbol) ?? [])];
     const out: Record<string, Point[]> = {};
-    for (const s of symbols) out[s] = downsample(((await seriesOf(ctx, s, "1D"))?.points ?? []) as Point[], 48);
+    for (const s of symbols) out[s] = downsample(pointsOf(await hoursOf(ctx, s)), 48);
     return out;
   },
 });
@@ -181,6 +183,10 @@ export const sparks = query({
 export const chart = query({
   args: { symbol: v.string(), range: v.string() },
   handler: async (ctx, { symbol, range }) => {
+    if (range === "1D") {
+      const hours = await hoursOf(ctx, symbol);
+      return { points: pointsOf(hours), at: hours.length ? Math.max(...hours.map((h) => h.at)) : null };
+    }
     const s = await seriesOf(ctx, symbol, range);
     return { points: (s?.points ?? []) as Point[], at: s?.at ?? null };
   },
@@ -223,10 +229,52 @@ const tick = v.object({
 });
 const feed = v.object({ source: v.string(), state: v.string(), detail: v.optional(v.string()) });
 
+// Convex keeps the old version of every row it rewrites, so a refresh that brings nothing new writes nothing.
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
 async function setSeries(ctx: MutationCtx, symbol: string, range: string, points: Point[]) {
   const row = await seriesOf(ctx, symbol, range);
+  if (row && same(row.points, points)) return;
   if (row) await ctx.db.patch(row._id, { points, at: Date.now() });
   else await ctx.db.insert("stockSeries", { symbol, range, points, at: Date.now() });
+}
+
+const HOUR = 3600_000;
+const hoursOf = (ctx: QueryCtx, symbol: string) =>
+  ctx.db
+    .query("stockDayHours")
+    .withIndex("by_symbol_hour", (q) => q.eq("symbol", symbol))
+    .collect();
+const pointsOf = (hours: Doc<"stockDayHours">[]) => hours.flatMap((h) => h.points as Point[]);
+
+/** A whole day from the source, writing only the hours that changed. */
+async function setDay(ctx: MutationCtx, symbol: string, points: Point[]) {
+  const next = new Map<number, Point[]>();
+  for (const p of points) {
+    const hour = Math.floor(p[0] / HOUR) * HOUR;
+    next.set(hour, [...(next.get(hour) ?? []), p]);
+  }
+  for (const row of await hoursOf(ctx, symbol)) {
+    const pts = next.get(row.hour);
+    next.delete(row.hour);
+    if (!pts) await ctx.db.delete(row._id);
+    else if (!same(row.points, pts)) await ctx.db.patch(row._id, { points: pts, at: Date.now() });
+  }
+  for (const [hour, pts] of next) await ctx.db.insert("stockDayHours", { symbol, hour, points: pts, at: Date.now() });
+  // What this replaced, from when a day was one row.
+  const old = await seriesOf(ctx, symbol, "1D");
+  if (old) await ctx.db.delete(old._id);
+}
+
+/** A minute finishing onto the day's chart, which rewrites only its hour. */
+async function addMinute(ctx: MutationCtx, symbol: string, minute: number, close: number) {
+  const hour = Math.floor(minute / HOUR) * HOUR;
+  const row = await ctx.db
+    .query("stockDayHours")
+    .withIndex("by_symbol_hour", (q) => q.eq("symbol", symbol).eq("hour", hour))
+    .unique();
+  if (row) await ctx.db.patch(row._id, { points: withMinute(row.points as Point[], minute, close), at: Date.now() });
+  else await ctx.db.insert("stockDayHours", { symbol, hour, points: [[minute, close]], at: Date.now() });
 }
 
 /** The latest trade per symbol, plus how each source is doing. Trades in every session (4am to 8pm New
@@ -242,12 +290,16 @@ export const ingest = internalMutation({
       const regular = t.session === undefined || t.session === "regular";
       let prevClose = q?.prevClose;
       if (q && q.minute !== undefined && q.minuteClose !== undefined && minute > q.minute) {
-        const day = ((await seriesOf(ctx, t.symbol, "1D"))?.points ?? []) as Point[];
+        const latest = await ctx.db
+          .query("stockDayHours")
+          .withIndex("by_symbol_hour", (x) => x.eq("symbol", t.symbol))
+          .order("desc")
+          .first();
+        const last = latest?.points.at(-1) as Point | undefined;
         if (minute - q.minute > NEW_DAY) {
-          await setSeries(ctx, t.symbol, "1D", []);
+          await setDay(ctx, t.symbol, []);
           if (q.regularPrice !== undefined) prevClose = q.regularPrice;
-        } else if (day.length && q.minute - day.at(-1)![0] < NEW_DAY) await setSeries(ctx, t.symbol, "1D", withMinute(day, q.minute, q.minuteClose));
-        else if (!day.length) await setSeries(ctx, t.symbol, "1D", [[q.minute, q.minuteClose]]);
+        } else if (!last || (q.minute >= last[0] && q.minute - last[0] < NEW_DAY)) await addMinute(ctx, t.symbol, q.minute, q.minuteClose);
       }
       const row = { ...t, minute, minuteClose: t.price, prevClose, ...(regular ? { regularPrice: t.price } : {}) };
       if (q) await ctx.db.patch(q._id, row);
@@ -291,7 +343,8 @@ export const series = internalMutation({
   },
   handler: async (ctx, { symbol, range, points, ...stats }) => {
     if (!(RANGES as readonly string[]).includes(range)) throw new Error(`unknown range ${range}`);
-    await setSeries(ctx, symbol, range, points as Point[]);
+    if (range === "1D") await setDay(ctx, symbol, points as Point[]);
+    else await setSeries(ctx, symbol, range, points as Point[]);
     const patch: Partial<Doc<"stockQuotes">> = Object.fromEntries(Object.entries(stats).filter(([, v]) => v !== undefined));
     const q = await quoteOf(ctx, symbol);
     const last = points.at(-1);
@@ -450,6 +503,11 @@ export const sweepSeries = internalMutation({
       .withIndex("by_at", (q) => q.lt("at", Date.now() - KEEP_SERIES_MS))
       .take(200);
     for (const s of old) await ctx.db.delete(s._id);
+    const oldHours = await ctx.db
+      .query("stockDayHours")
+      .withIndex("by_at", (q) => q.lt("at", Date.now() - KEEP_SERIES_MS))
+      .take(500);
+    for (const h of oldHours) await ctx.db.delete(h._id);
   },
 });
 
@@ -469,6 +527,20 @@ export const watching = mutation({
       if (!row) await ctx.db.insert("stockViews", { symbol, level, until });
       else await ctx.db.patch(row._id, { until, level: row.level === "open" && row.until > Date.now() ? "open" : level });
     }
+  },
+});
+
+/** What the sidecar writes every trade of, which it does for everything ("*") while anyone's on a Stonks screen. With
+ *  nobody here it's only what an order is waiting on; the rest goes in once a minute, enough for the charts and net worth. */
+export const hot = query({
+  args: {},
+  handler: async (ctx) => {
+    if (await ctx.db.query("stockViews").first()) return ["*"];
+    const waiting = await ctx.db
+      .query("stockOrders")
+      .withIndex("by_status_filled", (q) => q.eq("status", "waiting"))
+      .collect();
+    return [...new Set(waiting.map((o) => o.symbol))];
   },
 });
 
@@ -865,6 +937,8 @@ export const setProfile = internalMutation({
   handler: async (ctx, { symbol, stats, news }) => {
     const row = await profileOf(ctx, symbol);
     const now = Date.now();
+    const fresh = (stats && !same(row?.stats, stats)) || (news && !same(row?.news, news));
+    if (row && !fresh) return;
     const patch = { ...(stats && { stats, statsAt: now }), ...(news && { news, newsAt: now }), at: now };
     if (row) await ctx.db.patch(row._id, patch);
     else await ctx.db.insert("stockProfiles", { symbol, ...patch });

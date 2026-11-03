@@ -50,6 +50,8 @@ let flushing: ReturnType<typeof setTimeout> | null = null;
 type Level = "seen" | "open";
 
 export function report(convex: ConvexReactClient, symbol: string, level: Level) {
+  // A phone in a pocket isn't looking, and while nobody's looking the sidecar writes far less.
+  if (typeof document !== "undefined" && document.hidden) return;
   const key = `${level}:${symbol}`;
   const now = Date.now();
   if ((reported.get(key) ?? 0) > now - 40_000) return;
