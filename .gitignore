@@ -5,6 +5,7 @@ dist
 .env.production
 .DS_Store
 .convex
+.dev/
 tsconfig.tsbuildinfo
 .playtest-*
 secrets/

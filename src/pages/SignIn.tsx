@@ -1,7 +1,9 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { Tiles } from "@/Tiles";
 import { Button } from "@/components/ui/button";
+import { AsyncButton } from "@/components/AsyncButton";
 import { DiscordLogo } from "@/components/DiscordLogo";
+import { DEV_CREW } from "../../convex/devCrew";
 
 export function SignIn() {
   const { signIn } = useAuthActions();
@@ -13,17 +15,29 @@ export function SignIn() {
       </div>
       <div>
         <h1 className="font-display text-title-lg">Group 53 Games</h1>
-        <p className="mt-3 max-w-[34ch] text-body text-muted-foreground">
-          Little games for the group, built so you can mess with each other.
-        </p>
+        {!import.meta.env.VITE_DEV_AUTH && (
+          <p className="mt-3 max-w-[34ch] text-body text-muted-foreground">
+            Little games for the group, built so you can mess with each other.
+          </p>
+        )}
       </div>
-      <Button
-        size="xl"
-        className="w-full bg-[var(--discord)] text-white hover:bg-[var(--discord)]/85"
-        onClick={() => void signIn("discord", { redirectTo: window.location.href })}
-      >
-        <DiscordLogo size={22} /> Sign in with Discord
-      </Button>
+      {import.meta.env.VITE_DEV_AUTH ? (
+        <div className="grid grid-cols-2 gap-3">
+          {DEV_CREW.map((name) => (
+            <AsyncButton key={name} size="lg" variant="secondary" onClick={() => signIn("dev", { name })}>
+              {name}
+            </AsyncButton>
+          ))}
+        </div>
+      ) : (
+        <Button
+          size="xl"
+          className="w-full bg-[var(--discord)] text-white hover:bg-[var(--discord)]/85"
+          onClick={() => void signIn("discord", { redirectTo: window.location.href })}
+        >
+          <DiscordLogo size={22} /> Sign in with Discord
+        </Button>
+      )}
     </div>
   );
 }

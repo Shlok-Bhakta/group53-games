@@ -1,5 +1,6 @@
 import Discord from "@auth/core/providers/discord";
 import { convexAuth } from "@convex-dev/auth/server";
+import { devProvider } from "./devAuth";
 
 // Discord sends iss=https://discord.com on the callback, and oauth4webapi rejects it unless the provider's issuer matches.
 const discord = Discord({ issuer: "https://discord.com" });
@@ -15,5 +16,6 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         return { ...base, id: profile.id, image, discordUsername: profile.username };
       },
     },
+    devProvider,
   ],
 });

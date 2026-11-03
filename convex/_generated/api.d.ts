@@ -14,6 +14,8 @@ import type * as chess_four_board from "../chess/four/board.js";
 import type * as chess_four_classic from "../chess/four/classic.js";
 import type * as chess_realtime from "../chess/realtime.js";
 import type * as crons from "../crons.js";
+import type * as devAuth from "../devAuth.js";
+import type * as devCrew from "../devCrew.js";
 import type * as games from "../games.js";
 import type * as golf from "../golf.js";
 import type * as golf_battle from "../golf/battle.js";
@@ -70,6 +72,8 @@ declare const fullApi: ApiFromModules<{
   "chess/four/classic": typeof chess_four_classic;
   "chess/realtime": typeof chess_realtime;
   crons: typeof crons;
+  devAuth: typeof devAuth;
+  devCrew: typeof devCrew;
   games: typeof games;
   golf: typeof golf;
   "golf/battle": typeof golf_battle;

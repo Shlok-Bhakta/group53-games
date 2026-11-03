@@ -1,0 +1,67 @@
+# The whole app on your machine, with no Discord app or access to kiwi: run `dekit`, then open
+# http://127.0.0.1:5173. Node and Docker are all it needs. See "Local development" in README.md.
+tasks:
+  web:
+    cmd: npx vite --host 127.0.0.1 --port 5173 --strictPort
+    deps: [functions]
+    env:
+      VITE_CONVEX_URL: http://127.0.0.1:3210
+      # Pick a player instead of signing in with Discord, each tab its own player, and skip the install and push gates.
+      VITE_DEV_AUTH: "1"
+    ready: {http: http://127.0.0.1:5173}
+    autostart: true
+  functions:
+    cmd: node scripts/dev.mjs functions
+    deps: [convex]
+    ready: {log: Convex functions ready}
+    autostart: true
+  convex:
+    cmd: node scripts/dev.mjs convex
+    deps: [setup]
+    ready: {http: http://127.0.0.1:3210/version}
+    stop: {cmd: docker stop -t 10 group53-dev-convex}
+  stonks:
+    cmd: node scripts/dev.mjs stonks
+    deps: [functions]
+    ready: {log: "stonks: connected"}
+    stop: {cmd: docker rm -f group53-dev-stonks}
+    autostart: true
+  og:
+    cmd: node server.mjs
+    cwd: og
+    deps: [functions]
+    env:
+      PORT: "8788"
+      CONVEX_URL: http://127.0.0.1:3210
+      ADMIN_KEY_FILE: ../.dev/admin_key
+      SITE_URL: http://127.0.0.1:5173
+      PIECES_URL: http://127.0.0.1:5173/pieces
+    ready: {http: http://127.0.0.1:8788/og/health}
+    autostart: true
+  setup:
+    type: job
+    cmd: node scripts/dev.mjs setup
+
+  # Start one by selecting it and pressing s, or with `dekit start test/smoke`.
+  test/:
+  test/smoke:
+    type: job
+    cmd: node scripts/dev-smoke.mjs
+    deps: [web, og, test/browser]
+    env: {PLAYWRIGHT_BROWSERS_PATH: "0"}
+  test/unit:
+    type: job
+    cmd: npm test
+    deps: [setup]
+  test/e2e:
+    type: job
+    cmd: npm run test:e2e
+    deps: [test/browser]
+  test/sidecar:
+    type: job
+    cmd: node scripts/dev.mjs test-sidecar
+    deps: [setup]
+  test/browser:
+    type: job
+    cmd: npm run test:e2e:install
+    deps: [setup]

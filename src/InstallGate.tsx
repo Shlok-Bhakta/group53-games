@@ -9,7 +9,7 @@ import { inAppBrowser, platform, useInstallPrompt, useStandalone } from "./insta
 // Phones only get in from the installed app, because web push on iOS only works there.
 export function InstallGate({ children }: { children: ReactNode }) {
   const standalone = useStandalone();
-  if (standalone || platform === "desktop") return <>{children}</>;
+  if (standalone || platform === "desktop" || import.meta.env.VITE_DEV_AUTH) return <>{children}</>;
   // A game link: let people who already have the app send it there. Everyone else gets the install steps.
   const gameLink = Object.values(GAMES).some((g) => new RegExp(`^${g.path}/[a-z0-9]+$`).test(location.pathname)) ? location.pathname + location.search : null;
   return (

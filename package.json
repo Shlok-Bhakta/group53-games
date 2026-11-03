@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "dev:reset": "node scripts/dev.mjs reset",
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "preview": "vite preview --host 0.0.0.0",

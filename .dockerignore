@@ -6,6 +6,7 @@ dist
 .playtest-*
 .env.production
 .convex
+.dev
 tsconfig.tsbuildinfo
 secrets
 og

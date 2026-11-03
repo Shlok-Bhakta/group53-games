@@ -103,6 +103,15 @@ The whole app follows one small system, defined at the top of `src/style.css`. U
 - Presence: `convex/presence.ts` stores a heartbeat, the screen each player is on, and their latest tap. `src/presence.tsx` shows online dots and other players' taps on the main tabs; game screens use the path to say who has that game open right now ("here now", "is on it").
 - Player cosmetics (frame, frame color, glow, effect, badge, tagline) are in the `profiles` table, with options in `convex/profileOptions.ts`. Name and avatar come from Discord on every sign-in and are not editable.
 
+## Running it locally
+
+`dekit` on a fresh clone runs the whole app, with only Node and Docker installed (`dekit.yaml`, `scripts/dev.mjs`, how to use it in `README.md`): the Convex backend in Docker, `convex dev`, Vite on 5173, `og` on 8788, the sidecar, and `test/*` tasks. It doesn't touch kiwi, even in a checkout whose `.env.local` has kiwi's keys: `scripts/dev.mjs` names the local backend to the CLI outright, and environment variables beat that file.
+
+- **Sign-in without Discord.** `VITE_DEV_AUTH=1` (set on `web`) shows `DEV_CREW` instead of the Discord button, keeps each tab's session in `sessionStorage` so each tab is its own player, and skips `InstallGate` and `NotificationsRequired`. It's absent from every real build. `DEV_AUTH=1` on the deployment turns on the `dev` Convex Auth provider (`convex/devAuth.ts`), which also requires `CONVEX_SITE_URL` to be on this machine, so it stays off on kiwi even if the variable gets set there. Never set either on kiwi. These players aren't `isTest`, so they behave like real ones.
+- **Ports.** The dev backend doesn't publish its site port: tokens are checked from inside the container, and it leaves host port 3211 for `npm run test:e2e`, which can run while dekit's up.
+- **The sidecar** runs with `cargo run` in `rust:1-alpine` inside the backend's network (`--network container:`), so it needs no Rust installed and no port tricks. Its build lives in the `group53-dev-target` volume, shared with `test/sidecar`.
+- `dekit start test/smoke` (`scripts/dev-smoke.mjs`) checks the running stack in a real browser. After changing the boot steps, try them on a real fresh clone.
+
 ## Testing
 
 Run both suites before shipping, and add tests with every feature.
@@ -134,7 +143,7 @@ Run both suites before shipping, and add tests with every feature.
 
 Work happens one agent at a time on `main`. When a feature is done: run both test suites, commit, push to `origin main`, then deploy. The user has said to do all of that without asking.
 
-Collaborators (Chrisis147, AIsJump, Boiler31) work on branches and open PRs. `main` is protected and `.github/CODEOWNERS` makes Shlok the only approval that counts; a new push drops it. Shlok's direct pushes still work because admins bypass the rule (`enforce_admins` off), so leave that off. Merging a PR doesn't deploy it: pull `main` and run `npm run deploy`.
+Collaborators (Chrisis147, AIsJump, Boiler31) run it with `dekit`, work on branches and open PRs. `main` is protected and `.github/CODEOWNERS` makes Shlok the only approval that counts; a new push drops it. Shlok's direct pushes still work because admins bypass the rule (`enforce_admins` off), so leave that off. Merging a PR doesn't deploy it: pull `main` and run `npm run deploy`.
 
 ### Before the first deploy
 

@@ -12,7 +12,7 @@ import webpush from "web-push";
 const IMAGE_DIGEST = "ghcr.io/get-convex/convex-backend@sha256:01aaebb72d7e9a32c82d183b3a25ffe15278f4dc656ecf30b21777691929d1ab";
 const IMAGE_ID = "6549447f0490";
 
-function resolveImage() {
+export function resolveImage() {
   if (process.env.E2E_CONVEX_IMAGE) return process.env.E2E_CONVEX_IMAGE;
   for (const ref of [IMAGE_DIGEST, IMAGE_ID]) {
     try {
@@ -46,6 +46,21 @@ async function waitFor(url, timeoutMs = 60_000) {
   throw new Error(`Timed out waiting for ${url}`);
 }
 
+// A throwaway deployment's session keys and push keys, plus a Discord app that doesn't exist.
+export function generateVars() {
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const vapid = webpush.generateVAPIDKeys();
+  return {
+    JWT_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString().trim().replace(/\n/g, " "),
+    JWKS: JSON.stringify({ keys: [{ use: "sig", alg: "RS256", ...publicKey.export({ format: "jwk" }) }] }),
+    AUTH_DISCORD_ID: "1234567890",
+    AUTH_DISCORD_SECRET: "not-a-secret",
+    VAPID_SUBJECT: "https://example.com",
+    VAPID_PUBLIC_KEY: vapid.publicKey,
+    VAPID_PRIVATE_KEY: vapid.privateKey,
+  };
+}
+
 export async function startBackend({ build = true } = {}) {
   const apiPort = await freePort();
   // The backend verifies session tokens by fetching its own site origin from inside the container,
@@ -66,20 +81,7 @@ export async function startBackend({ build = true } = {}) {
   const adminKey = execFileSync("docker", ["exec", name, "./generate_admin_key.sh"]).toString().trim().split("\n").pop();
 
   const env = { ...process.env, CONVEX_SELF_HOSTED_URL: url, CONVEX_SELF_HOSTED_ADMIN_KEY: adminKey, CONVEX_DEPLOYMENT: "" };
-  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-  const jwks = JSON.stringify({ keys: [{ use: "sig", alg: "RS256", ...publicKey.export({ format: "jwk" }) }] });
-  const vapid = webpush.generateVAPIDKeys();
-  const vars = {
-    JWT_PRIVATE_KEY: privateKey.export({ type: "pkcs8", format: "pem" }).toString().trim().replace(/\n/g, " "),
-    JWKS: jwks,
-    SITE_URL: "http://127.0.0.1:4573",
-    AUTH_DISCORD_ID: "1234567890",
-    AUTH_DISCORD_SECRET: "e2e-not-a-secret",
-    VAPID_SUBJECT: "https://example.com",
-    VAPID_PUBLIC_KEY: vapid.publicKey,
-    VAPID_PRIVATE_KEY: vapid.privateKey,
-    ALLOW_TEST_HELPERS: "1",
-  };
+  const vars = { ...generateVars(), SITE_URL: "http://127.0.0.1:4573", ALLOW_TEST_HELPERS: "1" };
   // The CLI reads the self-hosted target from the environment; deploy first so env vars apply to a live deployment.
   execSync("npx convex deploy -y", { cwd: ROOT, env, stdio: "inherit" });
   for (const [k, v] of Object.entries(vars)) execFileSync("npx", ["convex", "env", "set", "--", k, v], { cwd: ROOT, env, stdio: "ignore" });

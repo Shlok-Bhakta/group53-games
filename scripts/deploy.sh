@@ -29,7 +29,7 @@ step "Copying the repo to $HOST:$DIR"
 # --delete keeps kiwi's copy identical to this one; excluded paths (secrets, env files) are left alone.
 rsync -az --delete \
   --exclude node_modules --exclude dist --exclude .git --exclude secrets --exclude '.env*' \
-  --exclude .convex --exclude target --exclude e2e/.state --exclude test-results --exclude playwright-report \
+  --exclude .convex --exclude .dev --exclude target --exclude e2e/.state --exclude test-results --exclude playwright-report \
   ./ "$HOST:$DIR/"
 
 step "Rebuilding web, og and stonks on $HOST"

@@ -52,6 +52,7 @@ test.describe("signed out", () => {
     await expect(button).toBeVisible();
     const [request] = await Promise.all([page.waitForRequest((r) => r.url().includes("/api/auth/signin/discord")), button.click()]);
     expect(request.url()).toContain("redirectTo=");
+    await expect(page.getByRole("button", { name: "Ada", exact: true })).toHaveCount(0);
   });
 });
 

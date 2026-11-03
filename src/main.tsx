@@ -17,7 +17,8 @@ if ("serviceWorker" in navigator) {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider>
-      <ConvexAuthProvider client={convex}>
+      {/* With dekit each tab is its own player, so one browser can play every seat. */}
+      <ConvexAuthProvider client={convex} storage={import.meta.env.VITE_DEV_AUTH ? sessionStorage : undefined}>
         <BrowserRouter>
           <App />
         </BrowserRouter>
