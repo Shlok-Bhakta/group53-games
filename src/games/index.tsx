@@ -11,6 +11,7 @@ import { ScrabbleBanner, ScrabbleModeArt } from "./scrabble/art";
 import { ScrabbleGame } from "./scrabble/ScrabbleGame";
 import { scrabbleRules } from "./scrabble/rules";
 import { GolfBanner } from "./golf/GolfBanner";
+import { MereddiaBanner } from "./mereddia/art";
 import { StonksBanner } from "./stonks/StonksBanner";
 import { prefetchStonks } from "./stonks/load";
 import type { ConvexReactClient } from "convex/react";
@@ -86,6 +87,13 @@ const GOLF: GameCard = {
   blurb: "Eighteen holes on grass and ice, with whoever's on them. Grab items, blow up bumpers, knock each other in the water.",
   banner: () => <GolfBanner />,
 };
+// Journey Across Mereddia: a small single-player RPG with no lobby; Play opens it (src/games/mereddia).
+const MEREDDIA: GameCard = {
+  path: "/mereddia",
+  name: "Journey Across Mereddia",
+  blurb: "A small RPG. Meet Vastios, buy a sword, find the key, and take down Mallakoth. It saves on your phone.",
+  banner: () => <MereddiaBanner />,
+};
 // Stonks: the S&P 500's biggest companies, live, ranked by their share of the index. No lobby yet either;
 // Play opens the board (src/games/stonks/Stonks.tsx).
 const STONKS: GameCard = {
@@ -104,4 +112,4 @@ const SOON: GameCard[] = [
     wip: true,
   },
 ];
-export const games: GameCard[] = [...Object.values(GAME_UI), GOLF, STONKS, ...SOON];
+export const games: GameCard[] = [...Object.values(GAME_UI), GOLF, STONKS, MEREDDIA, ...SOON];

@@ -31,6 +31,7 @@ import { BoardSkeleton, PlayerRoute, PlayerSkeleton, StockRoute, StockSkeleton, 
 const GolfHub = lazy(() => import("./games/golf/GolfHub").then((m) => ({ default: m.GolfHub })));
 const GolfOpenWorld = lazy(() => import("./games/golf/GolfHub").then((m) => ({ default: m.GolfOpenWorld })));
 const GolfHole = lazy(() => import("./games/golf/GolfHub").then((m) => ({ default: m.GolfHole })));
+const Mereddia = lazy(() => import("./games/mereddia/MereddiaGame").then((m) => ({ default: m.MereddiaGame })));
 const golfRoute = (path: string, element: ReactNode) => (
   <Route
     path={path}
@@ -101,6 +102,7 @@ function SignedIn() {
                 <Route path="/you" element={<You />} />
                 <Route path="/settings" element={<Navigate to="/you" replace />} />
                 <Route path="/wordle" element={<Wordle />} />
+                {golfRoute("/mereddia", <Mereddia />)}
                 {golfRoute("/golf", <GolfHub />)}
                 {golfRoute("/golf/world", <GolfOpenWorld />)}
                 {golfRoute("/golf/:course/:hole", <GolfHole />)}
