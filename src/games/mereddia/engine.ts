@@ -427,6 +427,9 @@ function runFx(s: State, fx: string, ref?: string) {
       }
       break;
     }
+    case "metStefan":
+      s.flags.metStefan = true;
+      break;
     case "metMaster":
       s.flags.metMaster = true;
       break;
@@ -460,11 +463,7 @@ function runFx(s: State, fx: string, ref?: string) {
     case "pigeonPoke":
       s.flags.pigeonPoked = true;
       s.hp = Math.max(1, s.hp - 1);
-      // One time in three, the pigeon decides this head is home.
-      if (roll(s) < 0.34) {
-        s.flags.pigeonHead = true;
-        show(s, "pigeon_head");
-      } else show(s, "pigeon_back");
+      show(s, "pigeon_back");
       break;
     case "treeDown": {
       const tree = s.entities.find((e) => e.area === s.area && e.kind === "prop" && e.what === "tree");
@@ -473,13 +472,8 @@ function runFx(s: State, fx: string, ref?: string) {
       s.gold += 12;
       s.potions = Math.min(potionCap(s), s.potions + 1);
       quest(s, "woodcutter");
-      // The pigeon gets a second chance at your head when its tree comes down.
-      if (!s.flags.pigeonHead && roll(s) < 0.25) {
-        s.flags.pigeonHead = true;
-        show(s, "pigeon_head");
-      }
-      // Otherwise it has lost its perch and flies off.
-      if (!s.flags.pigeonHead) cue(s, "flyaway");
+      // It has lost its perch and flies off.
+      cue(s, "flyaway");
       break;
     }
     case "drawfJoins": {
@@ -590,6 +584,7 @@ export function quest(s: State, id: string) {
 // ---------------------------------------------------------------------------------------- moving between areas
 
 function go(s: State, to: Spot) {
+  const sameArea = s.area === to.area;
   const fromSpikes = s.area === "spikes" && to.area !== "spikes" && !!s.spike;
   s.area = to.area;
   delete s.spike;
@@ -600,9 +595,6 @@ function go(s: State, to: Spot) {
   s.stamina = Math.min(STAMINA_MAX, s.stamina + 2);
   s.zone = zoneAt(to.area, to.x, to.y)?.id;
   if (s.companion) s.ricky = isIndoor(to.area, to.x, to.y) ? undefined : { ...s.pos };
-  const { ck: _ck, ...rest } = s;
-  s.ck = JSON.stringify(rest);
-  say(s, zoneAt(to.area, to.x, to.y)?.name ?? AREAS[to.area].name);
   if (fromSpikes && !s.flags.spikesDone) {
     s.flags.spikesDone = true;
     s.gold += 15;
@@ -610,6 +602,15 @@ function go(s: State, to: Spot) {
     quest(s, "spikes");
     show(s, "spikes_out");
   }
+  // (What the spikes paid out is already in the pack before the checkpoint is taken, or dying later would take it back.)
+  // The checkpoint is where you came into the area, except the spiked floor: dying there sends you back to the start of the
+  // cave you came from, not straight back onto the spikes to die again.
+  if (to.area !== "spikes" && !sameArea) {
+    const { ck: _ck, ...rest } = s;
+    s.ck = JSON.stringify(rest);
+  }
+  say(s, zoneAt(to.area, to.x, to.y)?.name ?? AREAS[to.area].name);
+  if (groundAt(s, s.pos.x, s.pos.y) === "s") spring(s);
   onEnter(s);
 }
 
@@ -629,7 +630,7 @@ function onEnter(s: State) {
       quest(s, "run");
       break;
     case "spikes":
-      s.spike = { left: 4, total: 4 };
+      s.spike = { left: 9, total: 9 };
       s.stamina = STAMINA_MAX;
       show(s, "spikes_in");
       break;
@@ -693,15 +694,37 @@ function move(s: State, dir: Dir, sprint: boolean, keep = false): State {
   return s;
 }
 
+// Wading into the magical spring mends everything: wounds, magic, breath, and any poison.
+function spring(s: State) {
+  const hurt = s.hp < maxHp(s.level) || s.mana < maxMana(s) || s.poisoned || s.stamina < STAMINA_MAX;
+  s.hp = maxHp(s.level);
+  s.mana = maxMana(s);
+  s.stamina = STAMINA_MAX;
+  s.poisoned = false;
+  say(s, hurt ? "You wade into the spring. Its water is warm and humming with magic, and every hurt, every ache is gone." : "The spring's water is warm and humming with magic.");
+}
+
+const riddleSign = (e: Entity) => e.area === "caves" && e.x >= 33 && e.x <= 40 && e.y >= 8 && e.y <= 11;
+
 function stepOn(s: State) {
+  if (groundAt(s, s.pos.x, s.pos.y) === "s") spring(s);
   for (const e of at(s, s.pos.x, s.pos.y)) {
     if (e.kind === "plate") plate(s, e);
-    else if (e.kind === "prop" && e.what === "sign") show(s, "sign_text", e.id, e.text);
+    else if (e.kind === "prop" && e.what === "sign") {
+      // The riddle and its answers lie on the plate room's floor; once the door is open they have nothing more to say.
+      if (s.quiz.done && riddleSign(e)) continue;
+      show(s, "sign_text", e.id, e.text);
+    }
     else if (e.kind === "pickup") {
       s.items[e.what] = true;
       remove(s, e);
       say(s, e.what === "pickaxe" ? "You pick up a rusty pickaxe. It's heavier than it looks." : `You pick up the ${e.what}.`);
     } else if (e.kind === "exit") {
+      // The loose floorboard is Stefan's secret: you only find it once you have talked to him.
+      if (e.ask === "spike_hatch" && !s.flags.metStefan) {
+        show(s, "hatch_hidden");
+        return;
+      }
       if (e.ask) show(s, e.ask === "edge_east" && s.flags.epilogue ? "go_dresden" : e.ask, e.id);
       else if (e.to) go(s, e.to);
     }
@@ -777,7 +800,7 @@ function startBoulder(s: State) {
   s.flags.boulderStarted = true;
   cue(s, "boulder");
   seal(s, "boulder");
-  say(s, "Slabs crash down behind you. Far down the hall, something enormous starts to roll. Run! (Sprint!)");
+  say(s, "Slabs crash down behind you. Far down the hall, something enormous starts to roll. Run! Keep moving, and you can outrun it. (Sprinting is faster still.)");
 }
 
 function trapGolem(s: State) {
@@ -910,6 +933,11 @@ function touchCrystal(s: State, e: Entity): boolean {
 function chopTree(s: State, e: Entity): boolean {
   if (!s.flags.pigeonPoked) {
     show(s, "tree_poke");
+    return false;
+  }
+  // Now and then it dives again before the axe comes down, so a swing is not always a chop.
+  if (roll(s) < 0.3) {
+    show(s, "tree_repeck");
     return false;
   }
   gesture(s, "swing_axe");
@@ -1087,10 +1115,6 @@ function tick(s: State) {
   s.ticks++;
   if (!s.poisoned && s.hp < maxHp(s.level) && s.ticks % 6 === 0) s.hp++;
   if (s.mana < maxMana(s) && s.ticks % 3 === 0) s.mana++;
-  if (s.flags.pigeonHead && s.ticks % 40 === 0) {
-    s.gold++;
-    say(s, "The pigeon coos and drops something shiny on your shoulder. +1 gold.");
-  }
   for (const t of s.trails) if (t.area === s.area) t.ttl--;
   s.trails = s.trails.filter((t) => t.ttl > 0);
   tickTimers(s);
@@ -1131,7 +1155,7 @@ function rocks(s: State) {
   say(s, "The golem hurls rocks! Watch the shadows.");
 }
 
-// The boulder rolls up the long hall at a steady pace, faster than walking and slower than a sprint. Anyone in
+// The boulder rolls up the long hall at a steady pace, slower than walking, so you can outrun it on foot (and faster still by sprinting). Anyone in
 // the hall that it catches is crushed; the way out at the far end is the only safe place.
 // The spiked floor rises a few ticks after you step in, and anyone still standing on it is lost.
 function spikes(s: State) {

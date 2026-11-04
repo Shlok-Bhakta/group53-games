@@ -5,7 +5,7 @@ import { TILE, type Desired } from "./stage";
 
 type Ref = { kind: "characters" | "objects"; name: string };
 
-const NPC: Record<string, string> = { vastios: "Vastios", wilfred: "Wilfred", drawf: "Drawf_Dialogue", master: "Secret Master", stefan: "Steven", alexis: "Alex", clavicus: "Clavicus", joshua: "Joshua" };
+const NPC: Record<string, string> = { vastios: "Vastios", wilfred: "Wilfred", drawf: "Drawf_Dialogue", master: "Secret Master", stefan: "Steven", clavicus: "Clavicus", joshua: "Joshua" };
 
 // Only things that move or change on their own are drawn by the game rules: people and enemies. Fixed
 // props (trees, doors, statues) are the map's own scenery and are hidden only when the rules remove them.

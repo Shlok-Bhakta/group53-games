@@ -64,7 +64,6 @@ export function cuesFor(prev: State, next: State): Cue[] {
 
   // Things that happen once.
   if (flagged(prev, next, "letterBurned")) add("Letter_Burn");
-  if (flagged(prev, next, "pigeonHead")) add("pigeon_flap");
   if (flagged(prev, next, "pigeonPoked")) add("pigeon_flap");
   if (flagged(prev, next, "golemAwake")) {
     add("AwakenGolem");

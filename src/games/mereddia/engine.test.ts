@@ -91,6 +91,12 @@ describe("the map", () => {
             if (x < 0 || y < 0 || x >= width || y >= height || seen.has(`${x},${y}`)) continue;
             if (!WALKABLE.includes(ground[y][x]) && !panels.has(`${x},${y}`)) continue;
             seen.add(`${x},${y}`);
+            // A prompt that carries you somewhere else in the same area (into the spring) is a way across too.
+            const hop = entities.find((o) => o.x === x && o.y === y && o.kind === "exit" && o.to?.area === id);
+            if (hop && !seen.has(`${hop.to!.x},${hop.to!.y}`)) {
+              seen.add(`${hop.to!.x},${hop.to!.y}`);
+              queue.push({ x: hop.to!.x, y: hop.to!.y });
+            }
             // Anything solid is walked up to, not through (open panels, gates, signs and plates aside).
             const e = entities.find((o) => o.x === x && o.y === y);
             if (!e || ["plate", "pickup", "exit", "panel", "gate", "enemy"].includes(e.kind) || e.what === "sign") queue.push({ x, y });
@@ -238,47 +244,61 @@ describe("the old tree", () => {
     expect(after.hp).toBeLessThan(maxHp(1));
   });
 
-  it("sometimes settles on your head for good, and sometimes just flutters back", () => {
-    const outcomes = new Set<string>();
+  it("the pigeon always just flutters back up to its branch after the peck", () => {
+    for (let seed = 1; seed < 20; seed++) {
+      const after = act({ ...swingAt(nextTo(tree(), { items: { axe: true } })), rng: seed }, next);
+      expect(after.dlg?.node).toBe("pigeon_back");
+    }
+  });
+
+  it("the pigeon now and then pecks again instead of letting the axe fall", () => {
+    const seen = new Set<string>();
     for (let seed = 1; seed < 40; seed++) {
-      const s = swingAt({ ...nextTo(tree(), { items: { axe: true } }), rng: seed });
-      const after = act(s, next);
-      outcomes.add(after.dlg?.node ?? "none");
+      const s = act(at("field", tree().x + 1, tree().y + 2, { facing: "up", items: { axe: true }, flags: { pigeonPoked: true }, cut: undefined, rng: seed, hp: 10 }), { type: "swing" });
+      seen.add(s.dlg?.node ?? "chop");
     }
-    expect(outcomes).toEqual(new Set(["pigeon_head", "pigeon_back"]));
+    expect(seen.has("tree_repeck")).toBe(true);
+    expect(seen.size).toBeGreaterThan(1);
   });
 
-  it("falls after three chops, with a nest of coins and a potion, and pays the quest", () => {
-    let s = nextTo(tree(), { items: { axe: true }, flags: { pigeonPoked: true } });
-    s = swingAt(swingAt(s));
-    expect(entityAt(s, tree().x, tree().y)).toBeDefined();
-    s = talkThrough(swingAt(s));
-    expect(entityAt(s, tree().x, tree().y)).toBeUndefined();
-    expect(s.gold).toBeGreaterThanOrEqual(12);
-    expect(s.potions).toBe(1);
-    expect(s.quests.woodcutter).toBe(true);
-  });
-
-  it("sends the pigeon flying off when the tree falls, unless it has made a home of your head", () => {
-    const fell = (flags: Record<string, boolean>) => {
-      let s = at("field", tree().x + 1, tree().y + 2, { facing: "up", items: { axe: true }, flags: { pigeonPoked: true, ...flags }, cut: undefined });
-      for (let i = 0; i < 3; i++) s = talkThrough(act(s, { type: "swing" }));
-      return s;
-    };
-    expect(fell({ pigeonHead: true }).cut).toBeUndefined();
-    const outcomes = new Set<string | undefined>();
-    for (let seed = 1; seed < 30; seed++) {
+  it("sends the pigeon flying off every time the tree falls", () => {
+    for (let seed = 1; seed < 10; seed++) {
       let s = at("field", tree().x + 1, tree().y + 2, { facing: "up", items: { axe: true }, flags: { pigeonPoked: true }, cut: undefined, rng: seed });
-      for (let i = 0; i < 3; i++) s = talkThrough(act(s, { type: "swing" }));
-      outcomes.add(s.flags.pigeonHead ? "head" : s.cut?.id);
+      for (let i = 0; i < 12 && !s.flags.treeFelled; i++) s = talkThrough(act(s, { type: "swing" }));
+      expect(s.cut?.id).toBe("flyaway");
     }
-    expect(outcomes).toEqual(new Set(["head", "flyaway"]));
   });
 
-  it("a pigeon on your head drops a coin now and then", () => {
-    let s = at("field", 5, 5, { flags: { pigeonHead: true }, ticks: 36 });
-    for (let i = 0; i < 6; i++) s = act(s, mv(i % 2 ? "left" : "right"));
-    expect(s.gold).toBe(1);
+  it("carries you into the magical spring by a prompt, and out again by another", () => {
+    const hurt = at("caves", 27, 4, { hp: 2, mana: 0, poisoned: true });
+    const asked = act(hurt, mv("left"));
+    expect(asked.dlg?.node).toBe("spring_in");
+    const checkpoint = asked.ck;
+    const inside = act(asked, choose(0));
+    expect(inside.pos).toEqual({ x: 22, y: 4 });
+    expect(inside.hp).toBe(maxHp(inside.level));
+    expect(inside.mana).toBe(maxMana(inside));
+    expect(inside.poisoned).toBe(false);
+    // Going in does not move the checkpoint.
+    expect(inside.ck).toBe(checkpoint);
+    // The man bathing there can be talked to from the next cell along.
+    const beside = act(act(inside, mv("left")), mv("left"));
+    expect(beside.dlg?.node).toBe("alexis1");
+    const leaving = act(act(talkThrough(beside), mv("right")), mv("right"));
+    const out = act(act(leaving, mv("right")), mv("right"));
+    expect(out.dlg?.node).toBe("spring_out");
+    expect(act(out, choose(0)).pos).toEqual({ x: 27, y: 4 });
+  });
+
+  it("the riddle signs go quiet once the plates have been solved", () => {
+    const sign = get(at("caves", 0, 0), "caves", "prop", "sign");
+    const near = (done: boolean) => {
+      const base = at("caves", sign.x, sign.y + 1);
+      return act({ ...base, quiz: { ...base.quiz, done } }, mv("up"));
+    };
+    expect(sign).toBeDefined();
+    expect(near(false).dlg?.node).toBe("sign_text");
+    expect(near(true).dlg).toBeUndefined();
   });
 
   it("the trail sign reads differently from every side", () => {
@@ -514,11 +534,19 @@ describe("the boulder", () => {
     expect(boulderTile(s)).toMatchObject({ x: 4 });
   });
 
-  it("catches anyone who only walks", () => {
+  it("catches anyone who stands about", () => {
     let s = rolling();
-    for (let i = 0; i < 60 && s.mode === "explore" && s.area === "caves"; i++) s = act(s, mv(stepToward(s, exit())!));
+    for (let i = 0; i < 80 && s.mode === "explore" && s.area === "caves"; i++) s = act(s, { type: "wait" });
     expect(s.mode).toBe("lost");
     expect(s.log.at(-1)).toMatch(/boulder/);
+  });
+
+  it("lets anyone who just walks get out ahead of it", () => {
+    let s = rolling();
+    for (let i = 0; i < 80 && s.area === "caves" && s.mode === "explore"; i++) s = act(s, mv(stepToward(s, exit())!));
+    expect(s.mode).toBe("explore");
+    expect(s.area).toBe("temple");
+    expect(s.quests.run).toBe(true);
   });
 
   it("lets anyone who sprints get out, into the Valley of Time", () => {
@@ -1260,24 +1288,40 @@ describe("the game as data", () => {
 
 describe("the spiked floor and the road to Dresden", () => {
   const hatch = () => get(at("caves", 0, 0), "caves", "exit", "spikes");
-  const inside = () => act(act(beside("caves", hatch(), "left"), mv("left")), choose(0));
+  const inside = () => act(act({ ...beside("caves", hatch(), "left"), flags: { metStefan: true as const } }, mv("left")), choose(0));
   const exit = () => get(at("spikes", 0, 0), "spikes", "exit", "caves");
 
   it("is reached through a loose floorboard in Stefan's dead end, if you choose to", () => {
-    const asked = act(beside("caves", hatch(), "left"), mv("left"));
+    const unmet = act(beside("caves", hatch(), "left"), mv("left"));
+    expect(unmet.dlg?.node).toBe("hatch_hidden");
+    const asked = act({ ...beside("caves", hatch(), "left"), flags: { metStefan: true as const } }, mv("left"));
     expect(asked.dlg?.node).toBe("spike_hatch");
     expect(act(asked, choose(1)).area).toBe("caves");
     const s = inside();
     expect(s.area).toBe("spikes");
-    expect(s.spike).toEqual({ left: 4, total: 4 });
+    expect(s.spike).toEqual({ left: 9, total: 9 });
     expect(s.dlg?.node).toBe("spikes_in");
   });
 
-  it("raises its spikes within a few ticks, and anyone who only walks is caught", () => {
+  it("raises its spikes within a few ticks, and anyone who hesitates is caught", () => {
     let s = talkThrough(inside());
+    for (let i = 0; i < 6; i++) s = act(s, { type: "wait" });
     for (let i = 0; i < 12 && s.mode === "explore" && s.area === "spikes"; i++) s = act(s, mv(stepToward(s, exit())!));
     expect(s.mode).toBe("lost");
     expect(s.log.at(-1)).toMatch(/spikes/);
+  });
+
+  it("walks you back to the start of the cave, not onto the spikes again, after you die on them", () => {
+    // The checkpoint is where you came into the caves; stepping down the hatch does not replace it.
+    const start = { ...beside("caves", hatch(), "left"), flags: { metStefan: true as const } };
+    const entered = { ...start, ck: JSON.stringify(start) };
+    let s = talkThrough(act(act(entered, mv("left")), choose(0)));
+    for (let i = 0; i < 6; i++) s = act(s, { type: "wait" });
+    for (let i = 0; i < 12 && s.mode === "explore" && s.area === "spikes"; i++) s = act(s, mv(stepToward(s, exit())!));
+    expect(s.mode).toBe("lost");
+    const back = act(s, { type: "retry" });
+    expect(back.area).toBe("caves");
+    expect(back.mode).toBe("explore");
   });
 
   it("lets anyone who sprints out the far end, with a purse and a potion for the trouble", () => {
@@ -1292,6 +1336,17 @@ describe("the spiked floor and the road to Dresden", () => {
     expect(s.spike).toBeUndefined();
   });
 
+  it("keeps what the spikes paid out even if you die in the caves afterwards and start from the checkpoint", () => {
+    let s = talkThrough(inside());
+    for (let i = 0; i < 12 && s.mode === "explore" && s.area === "spikes"; i++) s = act(s, mv(stepToward(s, exit())!, true));
+    s = talkThrough(s);
+    expect(s.potions).toBeGreaterThanOrEqual(1);
+    const back = act({ ...s, hp: 0, mode: "lost" }, { type: "retry" });
+    expect(back.potions).toBeGreaterThanOrEqual(1);
+    expect(back.gold).toBeGreaterThanOrEqual(15);
+    expect(back.flags.spikesDone).toBe(true);
+  });
+
   it("only pays out once", () => {
     const first = talkThrough(act(act(inside(), { type: "next" }), { type: "wait" }));
     expect(first).toBeDefined();
@@ -1302,6 +1357,12 @@ describe("the spiked floor and the road to Dresden", () => {
   it("has no dash while the floor is about to rise", () => {
     const s = act({ ...talkThrough(inside()), facing: "up" }, { type: "dash" });
     expect(s.pos).toEqual(AREAS.spikes.arrive);
+  });
+
+  it("makes each of the field's ways out the whole edge, not just where the path crosses it", () => {
+    expect(act(at("field", 2, 10), mv("left")).dlg?.node).toBe("go_caves");
+    expect(act(at("field", 58, 60), mv("right")).dlg?.node).toBe("edge_east");
+    expect(act(at("field", 10, 2), mv("up")).dlg?.node).toBe("edge_north");
   });
 
   it("keeps Dresden closed until the story brings you back", () => {

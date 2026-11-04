@@ -86,7 +86,7 @@ export function drawfAdvice(s: State): string {
 
 export const NODES: Record<string, Node> = {
   // ------------------------------------------------------------------ the field
-  intro1: say("narrator", "Mallakoth wakes in a quiet field south of the Unyielding Mountains. A carrier pigeon drops out of the sky and lets a letter fall into his hands.", "intro2"),
+  intro1: say("narrator", "Mallakoth wakes in a quiet field, west of the Unyielding Mountains. A carrier pigeon drops out of the sky and lets a letter fall into his hands.", "intro2"),
   intro2: say(
     "note",
     "Mallakoth,\n\nI hope this letter reaches you in time. It has been too long since we last spoke, but there is no time for pleasantries. The break is over, and the Lightbringers need all the help they can get. The demonic forces grow bolder with each passing day, their attacks relentless. We cannot afford hesitation.\n\nMeet me in the Valley of Time, deep within the Unyielding Mountains. The path will be treacherous, but you knew this when you became an apprentice Lightbringer. You swore your allegiance, and now the time has come to prove it.\n\nI will be waiting, but do not delay, every moment counts.\n\n— Vastios",
@@ -100,13 +100,13 @@ export const NODES: Record<string, Node> = {
       { label: "Read it once more", to: "intro2" },
     ],
   },
-  intro4: say("narrator", "You burn the letter, as instructed. The pigeon coos once and flies off. The Temple of the Sacred Flame lies somewhere in the Unyielding Mountains, north of here."),
+  intro4: say("narrator", "You burn the letter, as instructed. The pigeon coos once and flies off. The Temple of the Sacred Flame lies somewhere in the Unyielding Mountains, to the east of here."),
   // ------------------------------------------------------------------ the field: the axe, the tree, the pigeon
   axe_get: say("narrator", "An axe is buried in the old stump, its handle worn smooth. You pull it free. Axe added to inventory.", undefined, { fx: "takeAxe" }),
   axe_stump: say("narrator", "There is nothing special about this stump."),
   tree_nope: say("narrator", "A tall, crooked tree. A pigeon watches you from a high branch, looking quietly smug. You'd need an axe to do anything about it."),
   tree_poke: say("narrator", "You lift the axe. Before you can swing, the pigeon dives off the branch and pecks you right on the head. Ow!", undefined, { fx: "pigeonPoke" }),
-  pigeon_head: say("narrator", "The pigeon looks you over, decides your hair is a very fine nest, and settles on your head. It doesn't look like it's leaving. Pidgey is with you now."),
+  tree_repeck: say("narrator", "Just as the axe comes down, the pigeon dives again and pecks you on the head. Again!", undefined, { fx: "pigeonPoke" }),
   pigeon_back: say("narrator", "The pigeon flutters back up to its branch and glares at you. Fine. You can swing now."),
   tree_down: say("narrator", "With a last crack the old tree topples. A nest tumbles out of the branches: coins and a potion, hidden for who knows how long.", undefined, { fx: "treeDown" }),
   tree_chop: say("narrator", "Chop! Bark flies. The tree shudders."),
@@ -117,6 +117,8 @@ export const NODES: Record<string, Node> = {
   spikes_in: say("narrator", "The floor ticks and clicks beneath your boots. Something is about to rise out of those holes. Run for the far end!"),
   spikes_out: say("narrator", "You tumble out the far side as the spikes slam up behind you. In a crack by the wall: a forgotten purse, and a potion."),
   edge_north: say("narrator", "(draft) The road north leads to the Slime Fields. You'll be taken there when the time comes."),
+  spring_in: { who: "narrator", text: "Warm, pale light shimmers on a sunken pool, and a man sits in it with his eyes shut, humming. The water is magical. Step into the spring?", choices: [{ label: "Step in.", fx: "travel" }, { label: "Not now." }] },
+  spring_out: { who: "narrator", text: "Climb out of the spring?", choices: [{ label: "Climb out.", fx: "travel" }, { label: "Stay a while." }] },
   go_caves: {
     who: "narrator",
     text: "Do you want to go towards the Unyielding Mountains?",
@@ -137,7 +139,9 @@ export const NODES: Record<string, Node> = {
   sm_first_end: say("master", "Neat indeed. We will meet again, I think."),
   sm_first_hint: say("master", (s) => `Not this time, but I will give you a hint: ${s.quiz.ans.join("")}. And dodge. Remember to dodge.`),
   sm_again: say("master", (s) => `Seek out the hidden places, adventurer. Remember: ${s.quiz.ans.join("")}. And dodge.`),
-  stefan1: say("stefan", "Another dead end, dammit."),
+  stefan1: say("stefan", "Another dead end, dammit.", "stefan2"),
+  stefan2: say("stefan", "...Although. That floorboard by the wall is awfully loose. Don't tell anyone I said so.", undefined, { fx: "metStefan" }),
+  hatch_hidden: say("narrator", "A dead end, and a man muttering to himself nearby. Nothing else here. Perhaps have a word with him."),
   joshua1: say("joshua", "Bold choice. Questionable execution."),
   alexis1: say("alexis", "*contented sigh*"),
   clavicus1: say("clavicus", "I've never seen crystals like these, they feel magical."),

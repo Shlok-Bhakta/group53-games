@@ -19,8 +19,9 @@ export type AreaId = "field" | "caves" | "temple" | "slimes" | "treehouse" | "fi
 export type Theme = "field" | "cave" | "valley" | "temple" | "wood";
 
 // '#' wall, '~' water, '.' floor, '=' bridge, 'w' a waterfall you can walk through.
-export type Ground = "#" | "~" | "." | "=" | "w";
-export const WALKABLE: Ground[] = [".", "=", "w"];
+export type Ground = "#" | "~" | "." | "=" | "w" | "s";
+// 's' is a magical spring: water you can wade into, and it heals.
+export const WALKABLE: Ground[] = [".", "=", "w", "s"];
 
 export type EntityKind = "npc" | "enemy" | "chest" | "pot" | "gate" | "panel" | "button" | "lever" | "plate" | "pickup" | "crystal" | "exit" | "prop";
 export type Spot = { area: AreaId; x: number; y: number };
@@ -175,7 +176,7 @@ export type AreaDef = {
   arrive?: { x: number; y: number };
   // Areas built from the project's own 3D maps: the converted map's name, and the grid's offset in it.
   // `mountains` lists wall tiles the 3D view draws as real mountains.
-  map3d?: { name: string; x0: number; y0: number; mountains?: string[]; pitch?: number; distance?: number; cutZ?: number };
+  map3d?: { name: string; x0: number; y0: number; mountains?: string[]; pitch?: number; distance?: number; cutZ?: number; summer?: boolean };
   // Things standing in the area that the map data places rather than the rows.
   extra?: (Spec & { x: number; y: number })[];
   // Parts of a big map with a name of their own, and whether they are buildings (Ricky waits outside those).
@@ -339,6 +340,27 @@ function footprint<T extends { x: number; y: number; kind?: string; what?: strin
   return specs.flatMap((e) => (e.kind === "prop" && (e.what === "tree" || e.what === "stump") ? [e, ...[[1, 0], [0, 1], [1, 1]].map(([dx, dy]) => ({ x: e.x + dx, y: e.y + dy, kind: "prop" as const, what: `${e.what}block` }))] : [e]));
 }
 
+// Every open cell along one side of an area, two deep, as the same exit: the way out is the whole edge, not one cell of it. Corners
+// go to whichever side claims them first.
+const taken = new Set<string>();
+function edgeBand(rows: string[], side: "west" | "east" | "north", make: (y: number) => Spec): (Spec & { x: number; y: number })[] {
+  const h = rows.length;
+  const w = rows[0].length;
+  const out: (Spec & { x: number; y: number })[] = [];
+  const cells: [number, number][] = [];
+  for (let d = 0; d < 2; d++) {
+    if (side === "north") for (let x = 0; x < w; x++) cells.push([x, d]);
+    else for (let y = 0; y < h; y++) cells.push([side === "west" ? d : w - 1 - d, y]);
+  }
+  for (const [x, y] of cells) {
+    const k = `${rows.length}:${x},${y}`;
+    if (rows[y][x] === "#" || taken.has(k)) continue;
+    taken.add(k);
+    out.push({ ...make(y), x, y });
+  }
+  return out;
+}
+
 export const AREAS: Record<AreaId, AreaDef> = {
   field: {
     id: "field",
@@ -347,31 +369,43 @@ export const AREAS: Record<AreaId, AreaDef> = {
     rows: fieldGrid.rows,
     sym: {},
     start: { x: 27, y: 24 },
-    map3d: { name: "start_area", x0: fieldGrid.x0, y0: fieldGrid.y0 },
+    // The first field is a bright summer's day, the world as it ought to be, before it starts to come apart.
+    map3d: { name: "start_area", x0: fieldGrid.x0, y0: fieldGrid.y0, summer: true },
     extra: [
       ...footprint(bind(fieldGrid, (e) => (e.m === "tree_me" ? prop("tree") : e.m === "stump" ? prop("stump") : e.m === "Sign_other" ? prop("trailsign") : null))),
-      // The path leads west to the mountains, east to Dresden and north to the slime fields.
-      { x: 0, y: 33, ...exit("caves", 40, 40, "go_caves") },
+      // The path leads west to the mountains, east to Dresden and north to the slime fields. Each way out is the whole edge of the
+      // field on that side (two cells deep, so a dash cannot jump it), not just the one cell where the path crosses it.
+      ...edgeBand(fieldGrid.rows, "west", (y) => ({ ...exit("caves", 40, 40, "go_caves"), y })),
       // Dresden: "no reason to go there at this time", until the story brings you back.
-      { x: 60, y: 32, kind: "exit", what: "edge_east", ask: "edge_east", to: { area: "dresden", x: 1, y: 19 } },
-      { x: 27, y: 0, kind: "exit", what: "edge_north", ask: "edge_north" },
+      ...edgeBand(fieldGrid.rows, "east", () => ({ kind: "exit", what: "edge_east", ask: "edge_east", to: { area: "dresden", x: 1, y: 19 } })),
+      ...edgeBand(fieldGrid.rows, "north", () => ({ kind: "exit", what: "edge_north", ask: "edge_north" })),
     ],
   },
   caves: {
     id: "caves",
     name: "The Unyielding Caves",
     theme: "cave",
-    rows: cavesGrid.rows,
+    // The sunken pool in the caves is the magical spring: its water is walkable ("s") but only reached by the prompt at its rim.
+    rows: cavesGrid.rows.map((r, y) => (y === 4 ? `${r.slice(0, 20)}sssss${r.slice(25)}` : y >= 2 && y <= 6 ? `${r.slice(0, 21)}ssss${r.slice(25)}` : r)),
     sym: {},
     arrive: { x: 40, y: 40 },
     map3d: { name: "Caves", x0: cavesGrid.x0, y0: cavesGrid.y0, cutZ: 48 },
-    boulder: { start: { x: 4, y: 36 }, end: { x: 4, y: 2 }, x0: 1, x1: 7, speed: 1.75 },
+    boulder: { start: { x: 4, y: 30 }, end: { x: 4, y: 2 }, x0: 1, x1: 7, speed: 0.8 },
     seals: {
       boulder: [{ x: 8, y: 24 }, { x: 8, y: 25 }],
       golem: [{ x: 14, y: 44 }, { x: 15, y: 44 }],
     },
     // The dead end where Stefan stands has a loose floorboard.
-    extra: [...bind(cavesGrid, cavesRule), { x: 42, y: 40, ...exit("field", 2, 33) }, { x: 41, y: 4, ...exit("spikes", 2, 6, "spike_hatch") }],
+    extra: [
+      ...bind(cavesGrid, cavesRule),
+      { x: 42, y: 40, ...exit("field", 2, 33) },
+      { x: 41, y: 4, ...exit("spikes", 2, 6, "spike_hatch") },
+      // The man bathing in the spring, and the two prompts that carry you in beside him and out again.
+      // (He is drawn by the map itself, where the project sat him, so the rules only give him something to bump into.)
+      { x: 20, y: 4, kind: "npc", what: "alexis" },
+      { x: 26, y: 4, ...exit("caves", 22, 4, "spring_in") },
+      { x: 24, y: 4, ...exit("caves", 27, 4, "spring_out") },
+    ],
   },
   temple: {
     id: "temple",
@@ -432,7 +466,7 @@ export const AREAS: Record<AreaId, AreaDef> = {
     sym: {},
     arrive: { x: 18, y: 19 },
     map3d: { name: "Village I forgor", x0: dresdenGrid.x0, y0: dresdenGrid.y0 },
-    extra: [{ x: 0, y: 19, ...exit("field", 59, 32) }],
+    extra: [{ x: 0, y: 19, ...exit("field", 57, 32) }],
   },
   // A chamber whose floor is full of spikes. They rise a moment after you step in.
   spikes: {
@@ -472,7 +506,7 @@ export const bound = (area: AreaId) =>
 
 // ---------------------------------------------------------------------------------------- parsing
 
-const GROUND_CHARS = new Set(["#", "~", ".", "=", "w"]);
+const GROUND_CHARS = new Set(["#", "~", ".", "=", "w", "s"]);
 
 export type Parsed = { ground: Ground[][]; entities: Entity[]; width: number; height: number };
 const cache = new Map<AreaId, Parsed>();

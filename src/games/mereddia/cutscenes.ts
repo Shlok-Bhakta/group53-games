@@ -28,7 +28,7 @@ export type Step =
       wait?: boolean;
       hide?: boolean;
     }
-  | { do: "fx"; name: string; at: Aim; y?: number; tint?: [number, number, number]; size?: number }
+  | { do: "fx"; name: string; at: Aim; y?: number; toward?: number; hand?: boolean; secs?: number; tint?: [number, number, number]; size?: number }
   | { do: "sfx"; name: string }
   | { do: "fade"; to: 0 | 1; ms: number }
   | { do: "title"; text: string; ms: number }
@@ -105,9 +105,14 @@ export const CUTSCENES: Record<string, Step[]> = {
   // right hand and burning with the model's own burning frames.
   burn: [
     { do: "bars", on: true },
-    { do: "cam", at: "hero", dist: 4.2, pitch: 0.4, ms: 700 },
+    { do: "cam", at: "hero", dist: 4.2, pitch: 0.62, ms: 700 },
     { do: "sfx", name: "Letter_Burn" },
-    { do: "actor", who: "hero", shot: "fire", ms: 1700 },
+    // Flames in his hands (on the paper in his lower hand): lit as the paper reaches the middle, and again as it burns down.
+    { do: "actor", who: "hero", shot: "fire", ms: 550 },
+    { do: "fx", name: "fire", at: "hero", hand: true, y: 0.15, size: 0.5, secs: 1.1 },
+    { do: "wait", ms: 550 },
+    { do: "fx", name: "fire", at: "hero", hand: true, y: 0.15, size: 0.65, secs: 1.3 },
+    { do: "wait", ms: 600 },
     { do: "wait", ms: 400 },
     BACK,
     { do: "bars", on: false },

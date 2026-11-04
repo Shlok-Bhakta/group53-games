@@ -22,7 +22,11 @@ export function stepToward(s: State, target: { x: number; y: number }): Dir | un
   const here = s.entities.filter((e) => e.area === s.area);
   const bad = new Set(here.filter((e) => blocks(e) || avoid(e, s)).map((e) => `${e.x},${e.y}`));
   const open = new Set(here.filter((e) => e.kind === "panel" && e.open).map((e) => `${e.x},${e.y}`));
-  const free = (x: number, y: number) => (WALKABLE.includes(groundAt(s, x, y)) || open.has(`${x},${y}`)) && !danger.has(`${x},${y}`) && !(bad.has(`${x},${y}`) && !(x === target.x && y === target.y));
+  // A way out that is a whole edge (the field's roads) is any cell of it: the nearest will do.
+  const goal = new Set([`${target.x},${target.y}`]);
+  const aimed = here.find((e) => e.x === target.x && e.y === target.y && e.kind === "exit");
+  if (aimed) for (const e of here) if (e.kind === "exit" && e.what === aimed.what && e.ask === aimed.ask) goal.add(`${e.x},${e.y}`);
+  const free = (x: number, y: number) => (WALKABLE.includes(groundAt(s, x, y)) || open.has(`${x},${y}`)) && !danger.has(`${x},${y}`) && !(bad.has(`${x},${y}`) && !goal.has(`${x},${y}`));
   const first = new Map<string, Dir | undefined>([[`${s.pos.x},${s.pos.y}`, undefined]]);
   const queue = [s.pos];
   while (queue.length) {
@@ -32,7 +36,7 @@ export function stepToward(s: State, target: { x: number; y: number }): Dir | un
       const y = p.y + DELTA[d][1];
       const f = first.get(`${p.x},${p.y}`) ?? d;
       // Things in a wall (a button) can be pressed from beside them without being able to stand there.
-      if (x === target.x && y === target.y) return f;
+      if (goal.has(`${x},${y}`)) return f;
       if (!free(x, y) || first.has(`${x},${y}`)) continue;
       first.set(`${x},${y}`, f);
       queue.push({ x, y });

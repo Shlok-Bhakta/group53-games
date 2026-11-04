@@ -87,6 +87,122 @@ function frameOf(res, meshObj) {
   return { pos, uv, idx, image: img?.props.data ?? null };
 }
 
+// Joshua, the man who stares at the mural. The project's own Joshua is Clavicus again in a red coat, so he is made over from that body:
+// one standing frame, the crown of his head bare, grey hair left round the sides and back, white brows and beard, a Lightbringer's purple robe (red, blue, purple, white; older is nearer purple) in place of
+// the red coat. Everything is done by colour: which palette entry a face points at.
+function balding(m) {
+  const f = m.frames[0];
+  const im = f.image;
+  const px = (u, v) => [Math.min(127, Math.floor(u * im.width)), Math.min(127, Math.floor(v * im.height))];
+  const at = (x, y) => (y * im.width + x) * 4;
+  const colourOf = (x, y) => [im.data[at(x, y)], im.data[at(x, y) + 1], im.data[at(x, y) + 2]].join(",");
+  const HAIR = "140,95,77", SKIN = "227,197,193", COAT = "179,32,42";
+  const find = (c) => { for (let y = 0; y < 16; y++) for (let x = 0; x < im.width; x++) if (colourOf(x, y) === c) return [x, y]; return null; };
+  const skin = find(SKIN), hair = find(HAIR), coat = find(COAT);
+  if (!skin || !hair || !coat) throw new Error("Joshua's palette is not what it was");
+  // A colour appears on many palette pixels; change them all.
+  const recolour = (from, rgb) => { for (let y = 0; y < im.height; y++) for (let x = 0; x < im.width; x++) if (colourOf(x, y) === from) for (let k = 0; k < 3; k++) im.data[at(x, y) + k] = rgb[k]; };
+  // A Lightbringer's colours are red, blue, purple, white, and the older they are the nearer the purple: so a purple robe over white, with blue
+  // trim and trousers, and white hair.
+  // The hair colour is also the ground of the flame picture on his back, so leave it alone near the purples: hair goes white, the ground stays brown.
+  const nearPurple = (x0, y0) => {
+    for (let y = Math.max(0, y0 - 3); y <= Math.min(im.height - 1, y0 + 3); y++)
+      for (let x = Math.max(0, x0 - 3); x <= Math.min(im.width - 1, x0 + 3); x++) {
+        const o = at(x, y);
+        if (im.data[o + 2] > im.data[o + 1] + 35 && im.data[o] > im.data[o + 1] + 18) return true;
+      }
+    return false;
+  };
+  for (let y = 0; y < im.height; y++)
+    for (let x = 0; x < im.width; x++)
+      if (colourOf(x, y) === HAIR && !nearPurple(x, y)) for (let k = 0; k < 3; k++) im.data[at(x, y) + k] = [228, 228, 236][k];
+  recolour(COAT, [112, 52, 160]);
+  recolour("137,166,80", [235, 235, 242]);
+  recolour("205,127,50", [60, 95, 205]);
+  // Corners are shared with the faces around them, so a face that changes colour gets corners of its own.
+  const pos = [...f.pos], uv = [...f.uv];
+  const idx = Array.from(f.idx);
+  const dot = (i, xy) => {
+    pos.push(f.pos[i * 3], f.pos[i * 3 + 1], f.pos[i * 3 + 2]);
+    uv.push((xy[0] + 0.5) / im.width, (xy[1] + 0.5) / im.height);
+    return pos.length / 3 - 1;
+  };
+  const hairy = (i) => { const [x, y] = px(f.uv[i * 2], f.uv[i * 2 + 1]); return colourOf(x, y) === "228,228,236"; };
+  for (let t = 0; t < f.idx.length; t += 3) {
+    const v = [f.idx[t], f.idx[t + 1], f.idx[t + 2]];
+    if (!v.every(hairy)) continue;
+    const P = (i, k) => f.pos[v[i] * 3 + k];
+    const e1 = [0, 1, 2].map((k) => P(1, k) - P(0, k)), e2 = [0, 1, 2].map((k) => P(2, k) - P(0, k));
+    const ny = e1[2] * e2[0] - e1[0] * e2[2];
+    const len = Math.hypot(e1[1] * e2[2] - e1[2] * e2[1], ny, e1[0] * e2[1] - e1[1] * e2[0]) || 1;
+    const cy = (P(0, 1) + P(1, 1) + P(2, 1)) / 3;
+    // The crown (the faces on top of the head) is bare skin.
+    if (cy > 1.1 && ny / len > 0.5) for (let k = 0; k < 3; k++) idx[t + k] = dot(v[k], skin);
+  }
+  f.pos = Float32Array.from(pos);
+  f.uv = Float32Array.from(uv);
+  f.idx = Uint16Array.from(idx);
+  m.frames = [f];
+  m.meta.animations = {};
+}
+
+// The flame on a robe's back is a small picture in the palette (purples on a pale mauve ground); the ground is made brown, like the trim around it.
+function brownFlameGround(m) {
+  for (const fr of m.frames) {
+    const d = fr.image?.data;
+    if (!d) continue;
+    let purple = false;
+    for (let i = 0; i < d.length; i += 4) if (d[i] === 120 && d[i + 1] === 51 && d[i + 2] === 166) { purple = true; break; }
+    if (!purple) continue;
+    for (let i = 0; i < d.length; i += 4) if (d[i] === 181 && d[i + 1] === 142 && d[i + 2] === 134) { d[i] = 112; d[i + 1] = 72; d[i + 2] = 46; }
+  }
+}
+
+// Glass: a model drawn with see-through colours (the air crystals) is marked, and its faintest colours are made a little more solid so it can be seen.
+function glassy(m) {
+  for (const fr of m.frames) {
+    const d = fr.image?.data;
+    if (!d) continue;
+    for (let i = 3; i < d.length; i += 4) {
+      if (d[i] > 0 && d[i] < 255) {
+        m.translucent = true;
+        d[i] = Math.max(d[i], 150);
+      }
+    }
+  }
+}
+
+// Clavicus, made younger: the project's own is Joshua's body in a red coat. A Keeper's colours are black, light green, purple, white, and the
+// younger, the nearer the black and green: a black robe with light-green trim, a white undershirt, near-black trousers and his own dark hair. One
+// standing frame, like the others who stand about.
+function youngKeeper(m) {
+  const f = m.frames[0];
+  const im = f.image;
+  const at = (x, y) => (y * im.width + x) * 4;
+  const recolour = (from, rgb) => {
+    for (let y = 0; y < im.height; y++)
+      for (let x = 0; x < im.width; x++) {
+        const o = at(x, y);
+        if (`${im.data[o]},${im.data[o + 1]},${im.data[o + 2]}` === from) for (let k = 0; k < 3; k++) im.data[o + k] = rgb[k];
+      }
+  };
+  recolour("179,32,42", [26, 26, 34]);
+  recolour("205,127,50", [140, 214, 120]);
+  recolour("230,120,41", [235, 235, 242]);
+  recolour("121,228,232", [36, 34, 46]);
+  m.frames = [f];
+  m.meta.animations = {};
+}
+
+// Stone doors: the project numbers a door's frames from 1 where the converter counts from 0, so the tiles' animations are moved down one (the last
+// frame of "close" is the closed wall, our frame 0), and every door gets a "shut" that is simply the closed wall, for a slab that drops into place.
+function stoneDoor(m, numberedFromOne) {
+  const anims = m.meta.animations ?? {};
+  if (numberedFromOne) for (const a of Object.values(anims)) { a.start = Math.max(0, a.start - 1); a.end = Math.max(0, a.end - 1); }
+  anims.shut = { start: 0, end: 0, speed: 1, type: 3, sound_effect: null };
+  m.meta.animations = anims;
+}
+
 // ---- textures: every frame has its own palette image, so a model's images are packed into one atlas (a grid of
 // 128x128 cells) and each frame's UVs are moved into its cell. The renderer then needs one texture per model.
 const crcTable = Uint32Array.from({ length: 256 }, (_, n) => {
@@ -217,7 +333,7 @@ function writeModel(kind, name, m) {
     grid: [m.root.grid_width, m.root.grid_depth, m.root.grid_height],
   };
   if (m.atlas) fs.writeFileSync(path.join(dir, `${slug}.png`), m.atlas);
-  fs.writeFileSync(path.join(dir, `${slug}.json`), JSON.stringify({ name, kind, meta, frames, texture: !!m.atlas }));
+  fs.writeFileSync(path.join(dir, `${slug}.json`), JSON.stringify({ name, kind, meta, frames, texture: !!m.atlas, ...(m.translucent ? { translucent: true } : {}) }));
   return { slug, frames: frames.length, bytes: off };
 }
 
@@ -450,6 +566,12 @@ for (const kind of KINDS) {
       const m = convertModel(file);
       if (name === "Pigeon") m.frames = m.frames.map(withoutLegs);
       if (name === "Mallakoth_red_2") faceHeroTheSameWay(m);
+      brownFlameGround(m);
+      glassy(m);
+      if (kind === "tiles" && /door/.test(name)) stoneDoor(m, true);
+      if (kind === "objects" && /^knowledge_exit_\d$/.test(name)) stoneDoor(m, false);
+      if (name === "Joshua") balding(m);
+      if (name === "Clavicus") youngKeeper(m);
       // --borrow "characters/Mallakoth_red=catch+axe_grab>characters/Mallakoth_red_2": animations another model has.
       for (const spec of arg("--borrow") ?? []) {
         const [from, rest2] = spec.split("=");

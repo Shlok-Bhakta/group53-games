@@ -37,9 +37,9 @@ export const TILE = 0.8;
 // Tiles the game steps through, instead of letting them play.
 const STILL = new Set(["wooden_floor_with_trap"]);
 // An effect that should be playing: where, in what tint and size, and for how long if it's a one-off.
-export type EffectWant = { key: string; name: string; x: number; z: number; y?: number; tint?: [number, number, number]; size?: number; duration?: number; stand?: boolean };
-export type Desired = { key: string; kind: "characters" | "objects"; name: string; x: number; z: number; y?: number; rotY: number; scale: number; anim?: string; shot?: { name: string; n: number }; glide?: number; moveAnim?: string; bob?: number; rideOn?: string };
-type Live = { want: Desired; pos: THREE.Vector3; rot: number; loading: boolean; actor?: Actor; shotN?: number; speed?: number; moving?: number; long?: boolean };
+export type EffectWant = { key: string; name: string; x: number; z: number; y?: number; tint?: [number, number, number]; size?: number; duration?: number; stand?: boolean; hand?: string };
+export type Desired = { key: string; drop?: number; opacity?: number; xray?: boolean; kind: "characters" | "objects" | "tiles"; name: string; x: number; z: number; y?: number; rotY: number; scale: number; anim?: string; shot?: { name: string; n: number }; glide?: number; moveAnim?: string; bob?: number; rideOn?: string };
+type Live = { fall?: { from: number; t: number }; want: Desired; pos: THREE.Vector3; rot: number; loading: boolean; actor?: Actor; shotN?: number; speed?: number; moving?: number; long?: boolean };
 const rgb = (c: number[]) => `rgb(${c.slice(0, 3).map((v) => Math.round(v * 255)).join(",")})`;
 // Godot stores a transform as a 3x3 basis in rows, then the origin.
 export const matrixOf = (t: number[]) => new THREE.Matrix4().set(t[0], t[1], t[2], t[9], t[3], t[4], t[5], t[10], t[6], t[7], t[8], t[11], 0, 0, 0, 1);
@@ -174,6 +174,8 @@ export class Actor {
     }
   }
   update(dt: number) {
+    // The flame on a back flickers while its wearer does anything but stand.
+    this.model.flame?.advance(dt, !!this.once || (this.anim !== "idle" && this.anim !== ""));
     if (this.once) {
       const g = this.model.animations[this.once];
       this.onceClock += dt * g.speed;
@@ -248,6 +250,10 @@ export class Stage {
   private shakes = new Map<Actor, number>();
   private scrub = new Map<string, { actors: Actor[]; now: number; want: number }>();
   private scenery = new Map<string, Actor>();
+  // The floor's pressure plates, by "model@x,y".
+  private plates = new Map<string, Actor>();
+  // Where the window in the boulder goes: the hero's place on the screen, in pixels, and how wide.
+  private hole = { value: new THREE.Vector3(-1e5, -1e5, 0) };
   private live = new Map<string, Live>();
   private markers = new THREE.Group();
   private fxGroup = new THREE.Group();
@@ -256,6 +262,8 @@ export class Stage {
   private mapFx: EffectWant[] = [];
   private lastFx: EffectWant[] = [];
   private bursts: ParticleEffect[] = [];
+  // Effects that stay on somebody's held paper (a flame at the lower hand), by the key of whoever holds it.
+  private onHand = new Map<ParticleEffect, { key: string; lift: number }>();
   private burstSeen = new Set<string>();
   private follow?: Live;
   // A cutscene's camera: it goes to a place (or follows somebody) over a few seconds, and may shake.
@@ -301,6 +309,7 @@ export class Stage {
     this.root.clear();
     this.actors.length = 0;
     this.scenery.clear();
+    this.plates.clear();
     this.live.clear();
     this.high = [];
     this.scrub.clear();
@@ -310,6 +319,8 @@ export class Stage {
     void loadModel("objects", "axe");
     void loadModel("objects", "note2");
     this.lighting(map);
+    this.keepIn = undefined;
+    if (this.summer) this.edgeFog(map);
 
     // Tiles with one frame are drawn instanced, a model at a time; the few animated ones get their own mesh.
     const byModel = new Map<string, Placed[]>();
@@ -344,7 +355,11 @@ export class Stage {
           for (const p of list) {
             const a = new Actor(model, model.material);
             a.mesh.applyMatrix4(matrixOf(p.t!));
-            if (STILL.has(m)) (this.scrub.get(m) ?? this.scrub.set(m, { actors: [], now: 0, want: 0 }).get(m)!).actors.push(a);
+            if (m.startsWith("Pressure_plate")) {
+              // A plate stands up, in the project's own stone, until somebody stands on it.
+              a.play("plate_up");
+              this.plates.set(`${p.m}@${p.x},${p.y}`, a);
+            } else if (STILL.has(m)) (this.scrub.get(m) ?? this.scrub.set(m, { actors: [], now: 0, want: 0 }).get(m)!).actors.push(a);
             else a.play(Object.keys(model.animations)[0] ?? "");
             this.root.add(a.mesh);
             this.actors.push(a);
@@ -377,6 +392,7 @@ export class Stage {
     this.root.clear();
     this.actors.length = 0;
     this.scenery.clear();
+    this.plates.clear();
     this.live.clear();
     this.high = [];
     const sky = cave
@@ -396,28 +412,99 @@ export class Stage {
     return a;
   }
 
+  // Set before loading a map: a bright summer's day instead of the map's own sky.
+  summer = false;
+  private skyCss = "";
+  private cinema = false;
+  // In a cutscene whatever lies beyond the edge of the world is black, like the bars, never a band of sky.
+  setCinema(on: boolean) {
+    this.cinema = on;
+    (this.canvas.parentElement ?? this.canvas).style.background = on || !this.skyCss ? "#000" : this.skyCss;
+  }
+
+  // Layered haze round the map's edge: a few thin curtains one tile apart, each a little thicker than the one before it, so the
+  // air thickens over the last few tiles until it is a soft wall rather than an edge. Only the outermost few tiles of it.
+  private keepIn?: { l: number; r: number; t: number; b: number };
+  private edgeFog(map: MapData) {
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (const t of map.tiles) {
+      if (t.z > 3) continue;
+      x0 = Math.min(x0, t.x); x1 = Math.max(x1, t.x); z0 = Math.min(z0, t.y); z1 = Math.max(z1, t.y);
+    }
+    if (!Number.isFinite(x0)) return;
+    const hz = map.sky ? map.sky.horizon : [0.55, 0.82, 0.9];
+    const css = `rgb(${hz.slice(0, 3).map((v) => Math.round(v * 255)).join(",")}`;
+    const cv = document.createElement("canvas");
+    cv.width = 4;
+    cv.height = 64;
+    const g = cv.getContext("2d");
+    if (!g) return;
+    const grad = g.createLinearGradient(0, 64, 0, 0);
+    grad.addColorStop(0, `${css},1)`);
+    grad.addColorStop(0.7, `${css},0.9)`);
+    grad.addColorStop(1, `${css},0)`);
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 4, 64);
+    const tex = new THREE.CanvasTexture(cv);
+    // Many thin curtains, each barely denser than the last, so there is no visible step between them.
+    // Many thin curtains over about six tiles, each barely denser than the last (a smooth curve, so no visible steps).
+    const N = 24;
+    const LAYERS_SPAN = TILE * 5.6;
+    const GAP = LAYERS_SPAN / (N - 1);
+    const LAYERS = Array.from({ length: N }, (_, i) => 0.02 + 0.5 * Math.pow(i / (N - 1), 3.2));
+    const H = 7;
+    const left = x0 * TILE, right = (x1 + 1) * TILE, top = z0 * TILE, bottom = (z1 + 1) * TILE;
+    const w = right - left + 12, d = bottom - top + 12;
+    const room = LAYERS_SPAN + 0.3;
+    this.keepIn = { l: left + room, r: right - room, t: top + room, b: bottom - room };
+    LAYERS.forEach((opacity, i) => {
+      // The first layer stands three tiles in from the edge, the last right on it.
+      const inset = (LAYERS.length - 1 - i) * GAP;
+      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity, depthWrite: false, fog: false, side: THREE.DoubleSide });
+      const sides: [number, number, number, number][] = [
+        [(left + right) / 2, top + inset, w, 0],
+        [(left + right) / 2, bottom - inset, w, 0],
+        [left + inset, (top + bottom) / 2, d, Math.PI / 2],
+        [right - inset, (top + bottom) / 2, d, Math.PI / 2],
+      ];
+      for (const [x, z, len, rot] of sides) {
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(len, H), mat);
+        m.position.set(x, H / 2 - 0.2, z);
+        m.rotation.y = rot;
+        m.renderOrder = 5 + i;
+        this.root.add(m);
+      }
+    });
+  }
+
   private lighting(map: MapData) {
+    // The map's own sky and haze: its horizon colour is what the distance fades into, with the sky's blue above it.
     const horizon = map.sky ? rgb(map.sky.horizon) : "#8ccfe8";
     const top = map.sky ? rgb(map.sky.top) : "#3b86e8";
-    (this.canvas.parentElement ?? this.canvas).style.background = `linear-gradient(to bottom, ${top} 0%, ${horizon} 70%)`;
-    const fog = new THREE.Color(map.sky ? map.sky.horizon[0] : 0.55, map.sky ? map.sky.horizon[1] : 0.82, map.sky ? map.sky.horizon[2] : 0.9);
-    this.scene.fog = new THREE.Fog(fog, 14, 34);
+    this.skyCss = `linear-gradient(to bottom, ${top} 0%, ${horizon} 70%)`;
+    (this.canvas.parentElement ?? this.canvas).style.background = this.cinema ? "#000" : this.skyCss;
+    this.scene.fog = new THREE.Fog(new THREE.Color(map.sky ? map.sky.horizon[0] : 0.55, map.sky ? map.sky.horizon[1] : 0.82, map.sky ? map.sky.horizon[2] : 0.9), 14, 34);
     const gcol = map.sky ? map.sky.ground : [0.1, 0.19, 0.16];
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshBasicMaterial({ color: new THREE.Color(gcol[0] * 1.6, gcol[1] * 1.8, gcol[2] * 1.6) }));
+    // The summer field's ground is the grass's own green, so the hairline gaps between rows of tiles don't show as dark seams.
+    const far = this.summer ? new THREE.Color("#1c6d25") : new THREE.Color(gcol[0] * 1.6, gcol[1] * 1.8, gcol[2] * 1.6);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshBasicMaterial({ color: far }));
     ground.rotation.x = -Math.PI / 2;
     // Under the lowest tile, so a treehouse's forest floor isn't buried.
     ground.position.y = Math.min(-0.02, Math.min(0, ...map.tiles.map((p) => (p.t ? p.t[10] : 0))) - 0.03);
     this.root.add(ground);
     const amb = map.ambient ?? [0.75, 0.75, 0.75];
-    this.root.add(new THREE.AmbientLight(new THREE.Color(amb[0], amb[1], amb[2]), 1.15));
+    this.root.add(new THREE.AmbientLight(new THREE.Color(amb[0], amb[1], amb[2]), this.summer ? 1.9 : 1.15));
     // The project's sun shines straight down; tilt it a little so the sides of the blocks catch the light.
-    const sun = new THREE.DirectionalLight(map.sky ? new THREE.Color(map.sky.sun[0], map.sky.sun[1], map.sky.sun[2]) : 0xfff0d0, 1.7);
+    const sun = new THREE.DirectionalLight(map.sky ? new THREE.Color(map.sky.sun[0], map.sky.sun[1], map.sky.sun[2]) : 0xfff0d0, this.summer ? 2.4 : 1.7);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     const sc = sun.shadow.camera;
     sc.left = sc.bottom = -14;
     sc.right = sc.top = 14;
     sc.far = 60;
+    // Without a little bias the far ground, seen at a slant, shadows itself in thin dark streaks.
+    sun.shadow.bias = -0.0008;
+    sun.shadow.normalBias = 0.04;
     sun.target = this.focusTarget;
     this.root.add(sun, this.focusTarget);
     this.sun = sun;
@@ -481,6 +568,16 @@ export class Stage {
   // an NPC that the game rules draw themselves.
   setHidden(keys: Set<string>) {
     for (const [k, a] of this.scenery) a.mesh.visible = !keys.has(k);
+  }
+
+  // The plate somebody is standing on (by "model@x,y") sinks; the rest stand up.
+  setPressed(key?: string) {
+    for (const [k, a] of this.plates) a.play(k === key ? "plate_down" : "plate_up");
+  }
+
+  // A door built of map objects (by "model@x,y") swings open, the project's own animation.
+  openScenery(keys: string[]) {
+    for (const k of keys) this.scenery.get(k)?.play("open");
   }
 
   // The sheet of paper he burns, held in his right hand.
@@ -551,7 +648,7 @@ export class Stage {
     for (const d of list) {
       let l = this.live.get(d.key);
       if (!l) {
-        l = { want: d, pos: new THREE.Vector3(d.x, d.y ?? 0.05, d.z), rot: d.rotY, loading: true };
+        l = { want: d, pos: new THREE.Vector3(d.x, (d.y ?? 0.05) + (d.drop ?? 0), d.z), rot: d.rotY, loading: true, ...(d.drop ? { fall: { from: d.drop, t: 0 } } : {}) };
         this.live.set(d.key, l);
         const made = l;
         loadModel(d.kind, d.name).then((model) => {
@@ -559,6 +656,24 @@ export class Stage {
           if (!model || this.live.get(d.key) !== made) return;
           made.actor = this.spawn(model);
           made.actor.mesh.scale.setScalar(made.want.scale);
+          // Something solid with a round window cut in it where the hero is, so he can be seen through it (the boulder at his back).
+          if (made.want.xray) {
+            const m = (made.actor.mesh.material as THREE.MeshLambertMaterial).clone();
+            m.onBeforeCompile = (shader) => {
+              shader.uniforms.uHole = this.hole;
+              shader.fragmentShader = ["uniform vec3 uHole;", shader.fragmentShader].join("\n").replace("void main() {", ["void main() {", "  if (distance(gl_FragCoord.xy, uHole.xy) < uHole.z) discard;"].join("\n"));
+            };
+            m.customProgramCacheKey = () => "hole";
+            made.actor.mesh.material = m;
+          }
+          // Something seen through (the boulder at your back) gets a material of its own, so it can be let show what is behind it.
+          if (made.want.opacity !== undefined) {
+            const m = (made.actor.mesh.material as THREE.MeshLambertMaterial).clone();
+            m.transparent = true;
+            m.opacity = made.want.opacity;
+            m.depthWrite = false;
+            made.actor.mesh.material = m;
+          }
           made.actor.play(model.animations.idle ? "idle" : (Object.keys(model.animations)[0] ?? ""));
         });
       }
@@ -625,14 +740,22 @@ export class Stage {
       eff.object.position.set(w.x, w.y ?? 0.1, w.z);
       this.fxGroup.add(eff.object);
       this.bursts.push(eff);
+      if (w.hand) this.onHand.set(eff, { key: w.hand, lift: w.y ?? 0 });
     });
   }
 
   private runEffects(dt: number) {
     for (const e of this.steady.values()) e.eff?.update(dt, this.camera);
+    for (const [eff, h] of this.onHand) {
+      const grip = this.live.get(h.key)?.actor?.letter?.grip;
+      if (!grip) continue;
+      grip.getWorldPosition(eff.object.position);
+      eff.object.position.y += h.lift;
+    }
     for (const b of this.bursts) b.update(dt, this.camera);
     if (this.bursts.some((b) => b.done)) {
       for (const b of this.bursts.filter((x) => x.done)) {
+        this.onHand.delete(b);
         this.fxGroup.remove(b.object);
         b.dispose();
       }
@@ -687,6 +810,13 @@ export class Stage {
         l.rot = carrier.rot;
         l.speed = 0;
       }
+      // Something let fall (a slab) drops from where it was let go, faster and faster, and lands.
+      if (l.fall) {
+        l.fall.t += dt;
+        const k = Math.min(1, l.fall.t / 0.5);
+        l.pos.y = (d.y ?? 0.05) + l.fall.from * (1 - k * k);
+        if (k >= 1) l.fall = undefined;
+      }
       if (l.actor) {
         l.actor.mesh.position.copy(l.pos);
         // At rest, an idle that settles down and rises again (a perched bird's breathing): its own single frame has no motion,
@@ -723,8 +853,19 @@ export class Stage {
         this.shakes.set(a, t);
       }
     }
-    if (this.cam) this.stepCamera(dt);
-    else if (!this.scripted && this.follow && this.live.has(this.follow.want.key)) {
+    if (this.cam) {
+      this.settle = undefined;
+      this.stepCamera(dt);
+    } else if (this.settle) {
+      const k = 1 - Math.exp(-dt * 4);
+      this.pitch += (this.settle.pitch - this.pitch) * k;
+      this.distance += (this.settle.dist - this.distance) * k;
+      if (Math.abs(this.settle.pitch - this.pitch) < 0.002 && Math.abs(this.settle.dist - this.distance) < 0.01) {
+        this.pitch = this.settle.pitch;
+        this.distance = this.settle.dist;
+        this.settle = undefined;
+      }
+    } else if (!this.scripted && this.follow && this.live.has(this.follow.want.key)) {
       this.leadNow.lerp(this.lead, 1 - Math.exp(-dt * 2.5));
       this.focus.lerp(this.follow.pos.clone().add(this.leadNow), 1 - Math.exp(-dt * 6));
     }
@@ -756,10 +897,11 @@ export class Stage {
   releaseCamera(dist: number, pitch: number) {
     this.cam = undefined;
     this.scripted = false;
-    this.distance = dist;
-    this.pitch = pitch;
+    // Settle into the usual angle over a moment instead of snapping to it (a sudden drop of the camera shows the horizon).
+    this.settle = { dist, pitch };
     this.shakeBy.set(0, 0, 0);
   }
+  private settle?: { dist: number; pitch: number };
 
   private shakeBy = new THREE.Vector3();
   private stepCamera(dt: number) {
@@ -773,6 +915,20 @@ export class Stage {
     this.pitch = c.fromPitch + (c.pitch - c.fromPitch) * e;
     const amp = c.shake * (k < 1 ? 1 : 0);
     this.shakeBy.set((Math.random() - 0.5) * amp, (Math.random() - 0.5) * amp, (Math.random() - 0.5) * amp);
+  }
+
+  // The window in a solid thing at the hero's back, centred on where he shows on the screen, about as wide as he is tall.
+  private aimHole() {
+    const hero = this.live.get("hero");
+    if (!hero) return;
+    this.camera.updateMatrixWorld();
+    const at = hero.pos.clone();
+    at.y += 0.7;
+    const ndc = at.clone().project(this.camera);
+    const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    const dist = this.camera.position.distanceTo(at);
+    const perUnit = size.y / 2 / (dist * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2));
+    this.hole.value.set((ndc.x * 0.5 + 0.5) * size.x, (ndc.y * 0.5 + 0.5) * size.y, 1.0 * perUnit);
   }
 
   start() {
@@ -791,7 +947,14 @@ export class Stage {
       this.onFrame?.(dt);
       const flat = Math.cos(this.pitch) * this.distance;
       this.camera.position.set(this.focus.x + Math.cos(this.yaw) * this.shoulderNow + Math.sin(this.yaw) * flat + this.shakeBy.x, this.focus.y + Math.sin(this.pitch) * this.distance + this.shakeBy.y, this.focus.z - Math.sin(this.yaw) * this.shoulderNow + Math.cos(this.yaw) * flat + this.shakeBy.z);
+      if (this.keepIn) {
+        // Never out past the haze at the map's edge, or the view would be through it.
+        const k = this.keepIn;
+        this.camera.position.x = Math.min(k.r, Math.max(k.l, this.camera.position.x));
+        this.camera.position.z = Math.min(k.b, Math.max(k.t, this.camera.position.z));
+      }
       this.camera.lookAt(this.focus.x + Math.cos(this.yaw) * this.shoulderNow, this.focus.y + 0.55, this.focus.z - Math.sin(this.yaw) * this.shoulderNow);
+      this.aimHole();
       this.focusTarget.position.copy(this.focus);
       this.sun?.position.set(this.focus.x - 6, this.focus.y + 12, this.focus.z + 7);
       this.renderer.render(this.scene, this.camera);

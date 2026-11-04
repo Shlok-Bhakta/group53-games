@@ -163,7 +163,7 @@ function MapView({ s }: { s: State }) {
           const y = Math.floor(i / W);
           const g = groundAt(s, x, y);
           const alt = (x + y) % 2 === 1;
-          const bg = g === "#" ? (alt ? pal.wall : pal.wallAlt) : g === "~" ? (alt ? pal.water : pal.waterAlt) : g === "=" ? "#a9825a" : g === "w" ? "#bfe3f5" : alt ? pal.floor : pal.floorAlt;
+          const bg = g === "#" ? (alt ? pal.wall : pal.wallAlt) : g === "~" ? (alt ? pal.water : pal.waterAlt) : g === "=" ? "#a9825a" : g === "w" ? "#bfe3f5" : g === "s" ? "#7fd0e8" : alt ? pal.floor : pal.floorAlt;
           return <div key={i} style={{ background: bg }} />;
         })}
       </div>
@@ -216,7 +216,7 @@ const FINALE_CAST: { who: string; name: string; x: number; y: number; rotY: numb
 
 // The usual view, unless the area says otherwise.
 // Over the shoulder: close, low, and off to the right of Mallakoth.
-const DEF_PITCH = 0.5;
+const DEF_PITCH = 0.6;
 const DEF_DIST = 5.6;
 
 function MapView3D({ s, scene, onDone }: { s: State; scene?: { id: string; n: number }; onDone?: () => void }) {
@@ -231,6 +231,10 @@ function MapView3D({ s, scene, onDone }: { s: State; scene?: { id: string; n: nu
   const m3 = def.map3d!;
 
   const cast = useRef<Record<string, Cast>>({});
+  const doorsOpen = useRef<Set<string> | undefined>(undefined);
+  const doorsArea = useRef<string | undefined>(undefined);
+  const slabSeen = useRef(new Map<string, number>());
+  const opening = useRef(new Set<string>());
   const [over, setOver] = useState<Over>(CLEAR);
   const skip = useRef<() => void>(() => {});
 
@@ -249,6 +253,8 @@ function MapView3D({ s, scene, onDone }: { s: State; scene?: { id: string; n: nu
       // Mallakoth's model faces north at rest, the other way round from everyone else's.
       rotY: ROT[cur.facing] + Math.PI,
       scale: CHARACTER_SCALE,
+      // Wading in the spring: down in the water to the knees, not standing on top of it.
+      ...(groundAt(cur, cur.pos.x, cur.pos.y) === "s" ? { y: -0.5 } : {}),
       ...(cur.sprinting ? { moveAnim: "sprint" } : {}),
       ...(cur.area === "finale" ? { anim: "kneel", rotY: 0 } : {}),
       ...(cur.act ? { shot: cur.act } : {}),
@@ -258,12 +264,40 @@ function MapView3D({ s, scene, onDone }: { s: State; scene?: { id: string; n: nu
     // The pigeon: on the old tree's branch until it's felled, then on Mallakoth's head if it chose to stay.
     const tree = cur.entities.find((e) => e.area === cur.area && e.kind === "prop" && e.what === "tree");
     const boulder = boulderTile(cur);
-    if (boulder) list.push({ key: "boulder", kind: "characters", name: "Boulder", ...world(boulder.x, boulder.y, d.x0, d.y0), rotY: 0, scale: 1, anim: cur.boulder ? "walk" : "idle" });
-    for (const e of cur.entities) if (e.area === cur.area && e.kind === "panel" && e.what.startsWith("slab") && !e.open) list.push({ key: e.id, kind: "objects", name: "stone_wall_5", ...world(e.x, e.y, d.x0, d.y0), rotY: 0, scale: 1 });
+    if (boulder) list.push({ key: "boulder", kind: "characters", name: "Boulder", ...world(boulder.x, boulder.y, d.x0, d.y0), rotY: 0, scale: 3.2, xray: true, anim: cur.boulder ? "walk" : "idle" });
+    // The slabs that close behind you or around you are cave stone, the project's own wall pieces, three high and two cells wide, and they
+    // crash down into place. (Only a temple's own seals are temple stone.)
+    for (const id of [...slabSeen.current.keys()]) if (!cur.entities.some((e) => e.id === id && !e.open)) slabSeen.current.delete(id);
+    for (const e of cur.entities) {
+      if (e.area !== cur.area || e.kind !== "panel" || !e.what.startsWith("slab") || e.open) continue;
+      const wall = cur.area === "caves";
+      // A slab only drops once you are past its tile, so it never looks as if it came down on you (or, if you linger, after a moment).
+      if (wall) {
+        const first = slabSeen.current.get(e.id) ?? Date.now();
+        if (!slabSeen.current.has(e.id)) {
+          slabSeen.current.set(e.id, first);
+          setTimeout(() => void apply(), 1600);
+        }
+        const past = Math.abs(cur.pos.x - e.x) >= 2 || Math.abs(cur.pos.y - e.y) >= 2;
+        if (!past && Date.now() - first < 1500) continue;
+      }
+      const second = wall && AREAS.caves.seals?.[e.what.slice(5)]?.findIndex((c) => c.x === e.x && c.y === e.y) === 1;
+      const pieces = wall
+        ? e.what === "slab:boulder"
+          ? second
+            ? ["cave_walls_door_2", "cave_wall_door_4", "cave_walls_door_6"]
+            : ["calls_walls_door1", "cave_wall_door_3", "cave_wall_door_5"]
+          : second
+            ? ["knowledge_exit_2", "knowledge_exit_4", "knowledge_exit_6"]
+            : ["knowledge_exit_1", "knowledge_exit_3", "knowledge_exit_5"]
+        : ["stone_wall_5"];
+      pieces.forEach((name, i) =>
+        list.push({ key: `${e.id}:${i}`, kind: wall && e.what === "slab:boulder" ? "tiles" : "objects", name, ...world(e.x, e.y, d.x0, d.y0), y: wall ? 0.05 + i * 0.8 : 0, rotY: 0, scale: 1, ...(wall ? { anim: "shut", drop: 4 } : {}) }),
+      );
+    }
     // It is in its tree from the moment it has delivered the letter (the intro scene flies it there first).
     if (cur.flags.intro && cur.area === "field" && !(cur.cut?.id === "intro" && !cast.current.pigeon)) {
-      if (cur.flags.pigeonHead) list.push({ key: "pigeon", kind: "characters", name: "Pigeon", ...world(cur.pos.x, cur.pos.y, d.x0, d.y0), y: -0.99, rotY: ROT[cur.facing], scale: 0.45, rideOn: "hero" });
-      else if (tree) {
+      if (tree) {
         // On the right-hand branch as you come up to the tree from the north (east of the trunk), in close to the trunk. The tree
         // is placed on a cell but its middle is half a tile (0.4) south-east of it, and it is drawn 1.5 times life size, so that
         // branch at model x 0.4 comes out 0.6 east of the middle with its top at 1.3. The pigeon has its feet gone and its body
@@ -293,8 +327,30 @@ function MapView3D({ s, scene, onDone }: { s: State; scene?: { id: string; n: nu
     st.sync(list, "hero");
     // Scenery the rules have taken over or removed: people, enemies, a felled tree, a sword in a statue's hands.
     const hide = new Set<string>();
-    const present = new Set(cur.entities.map((e) => e.id));
-    for (const b of bound(cur.area)) if (b.dynamic || !present.has(b.id)) hide.add(b.src);
+    // A door that has opened (a panel the rules mark open) is gone from the scene too, with all the pieces it is built from.
+    const present = new Set(cur.entities.filter((e) => !(e.kind === "panel" && e.open)).map((e) => e.id));
+    // A door that opens as you watch swings open first (the project's own animation) and is taken away a moment later.
+    const open = new Set(cur.entities.filter((e) => e.kind === "panel" && e.open).map((e) => e.id));
+    // (Coming into an area whose door is already open just finds it open.)
+    const before = doorsArea.current === cur.area ? doorsOpen.current : undefined;
+    doorsArea.current = cur.area;
+    doorsOpen.current = open;
+    if (before) {
+      for (const b of bound(cur.area)) {
+        if (!open.has(b.id) || before.has(b.id)) continue;
+        const keys = b.src.split("|");
+        st.openScenery(keys);
+        for (const k of keys) opening.current.add(k);
+        setTimeout(() => {
+          for (const k of keys) opening.current.delete(k);
+          void apply();
+        }, 1500);
+      }
+    }
+    // A bound cell can be several pieces of scenery, "a|b|c".
+    for (const b of bound(cur.area)) if (b.dynamic || !present.has(b.id)) for (const k of b.src.split("|")) if (!opening.current.has(k)) hide.add(k);
+    // The plate he stands on sinks.
+    st.setPressed(`Pressure_plate@${cur.pos.x + d.x0},${cur.pos.y + d.y0}`);
     if (cur.area === "finale") for (const k of ["Wilfred_tuah@-3,-18", "Vastios_Threea@-2,-18", "Secret Master@-22,-13", "rikycharcter2@-3,-26", "rikycharacter1@-19,-9"]) hide.add(k);
     // The pigeon the map hovers over the start is the intro scene's; the rules draw it after that, on its branch.
     if (cur.area === "field") hide.add("Pigeon@7,-13");
@@ -336,7 +392,10 @@ function MapView3D({ s, scene, onDone }: { s: State; scene?: { id: string; n: nu
     primed.current = true;
     st.setIndoors(isIndoor(cur.area, cur.pos.x, cur.pos.y));
     const treeTile = cur.area === "slimes" && cur.flags.treeHint ? cur.entities.find((e) => e.area === "slimes" && e.kind === "exit" && e.what === "treehouse") : undefined;
+    // On the spiked floor the tile to run for is lit green, the way out.
+    const spikeExit = cur.area === "spikes" ? cur.entities.find((e) => e.area === "spikes" && e.kind === "exit") : undefined;
     st.setMarkers([
+      ...(spikeExit ? [{ ...world(spikeExit.x, spikeExit.y, d.x0, d.y0), color: "#5dff8a", opacity: 0.75 }] : []),
       ...(treeTile ? [{ ...world(treeTile.x, treeTile.y, d.x0, d.y0), color: "#c78cff", opacity: 0.7 }] : []),
       ...cur.trails.filter((t) => t.area === cur.area).map((t) => ({ ...world(t.x, t.y, d.x0, d.y0), color: ELEMENT_COLOR[t.el], opacity: 0.55 })),
       ...cur.hazards.map((h) => ({ ...world(h.x, h.y, d.x0, d.y0), color: "#d9334a", opacity: h.fuse <= 1 ? 0.8 : 0.45 })),
@@ -361,6 +420,7 @@ function MapView3D({ s, scene, onDone }: { s: State; scene?: { id: string; n: nu
         made.followYaw = true;
       }
       made.distance = m3.distance ?? DEF_DIST;
+      made.summer = !!m3.summer;
       await made.loadMap(m3.name, m3.mountains, m3.cutZ);
       if (!alive) return;
       await apply();
@@ -408,6 +468,7 @@ function MapView3D({ s, scene, onDone }: { s: State; scene?: { id: string; n: nu
       wake?.();
     };
     cast.current = {};
+    stage.current?.setCinema(true);
     void (async () => {
       const st = stage.current;
       const { world } = await import("./three/bind");
@@ -449,7 +510,7 @@ function MapView3D({ s, scene, onDone }: { s: State; scene?: { id: string; n: nu
           case "fx":
             if (!skipping) {
               const p = aim(step.at);
-              st?.burst({ key: `sc${scene.n}-${k}`, name: step.name, x: p.x, z: p.z, y: step.y ?? 0.1, tint: step.tint, size: step.size ?? 1.3, duration: 1.8 });
+              st?.burst({ key: `sc${scene.n}-${k}`, name: step.name, x: p.x, z: p.z + (step.toward ?? 0), y: step.y ?? 0.1, ...(step.hand ? { hand: "hero" } : {}), tint: step.tint, size: step.size ?? 1.3, duration: step.secs ?? 1.8 });
             }
             break;
           case "cam": {
@@ -489,6 +550,7 @@ function MapView3D({ s, scene, onDone }: { s: State; scene?: { id: string; n: nu
     return () => {
       live = false;
       skip.current = () => {};
+      stage.current?.setCinema(false);
       cast.current = {};
       stage.current?.releaseCamera(m3.distance ?? DEF_DIST, m3.pitch ?? DEF_PITCH);
     };
@@ -616,7 +678,7 @@ function objective(s: State): string {
   if (s.flags.armed) return "Press the red button at the bottom of the hall's right wall.";
   if (s.flags.drawfJoins) return "In the hall: the blue button at the bottom of the left wall, then the gold one, then the red one on the right.";
   if (s.quests.run) return "Meet Drawf and enter the Temple of the Sacred Flame.";
-  if (s.boulder) return "RUN! Sprint for the exit at the north end of the hall.";
+  if (s.boulder) return "RUN! The exit is at the north end of the hall. You can outrun it.";
   if (s.quiz.done) return "Reach the long hall on the west side of the caves and get through to the Valley of Time.";
   if (s.quests.caves) return "Answer the plate room's questions. The Secret Master's hint is the answer.";
   return "Find the Temple of the Sacred Flame in the Unyielding Mountains.";

@@ -59,3 +59,16 @@ node tools/mereddia/convert.mjs "<project folder>" public/mereddia/3d --models c
 
 Every frame of Mallakoth_red_2 faces the opposite way from how the game turns him, so they are all turned round. The
 converter also records where his right hand is in each frame (`hand`), so the axe can follow it.
+
+## Joshua
+
+The project's `characters/Joshua` is Clavicus's body again, in a red coat, with the same palette in every frame but the first. The converter makes him over
+(`balding()` in `convert.mjs`): a single standing frame, the crown of the head bare, white hair, brows and beard, and a purple robe in place of the red coat. A Lightbringer's colours are red, blue, purple, white (a Keeper's are black,
+light green, purple, white), and the older, the nearer the purple: he is a Lightbringer, in purple over white with blue trim. It is done by colour (which palette entry a face points at), so the other models are untouched.
+
+## The flame on a robe's back
+
+It is a little picture in each frame's palette: purples on a pale mauve ground, in a gold frame. The converter makes the ground brown (`brownFlameGround()`),
+like the trim. In the game (`flameOf()` in `three/models.ts`) the purples slide along their rows a few pixels and back while the wearer is doing something,
+so the light, middle and dark purples keep the proportions they were drawn in. Slimes, the boulder and the golem are left out.
+

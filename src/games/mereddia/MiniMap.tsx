@@ -84,7 +84,7 @@ export function MiniMap({ s }: { s: State }) {
       for (let x = 0; x < w; x++) {
         if (mask[y * w + x] !== "1") continue;
         const t = groundAt(s, x, y);
-        g.fillStyle = t === "#" ? COLOR.wall : t === "~" ? COLOR.water : t === "=" ? COLOR.bridge : t === "w" ? COLOR.fall : COLOR.floor;
+        g.fillStyle = t === "#" ? COLOR.wall : t === "~" ? COLOR.water : t === "=" ? COLOR.bridge : t === "w" ? COLOR.fall : t === "s" ? COLOR.water : COLOR.floor;
         g.fillRect(x * cell, y * cell, cell, cell);
       }
     const dot = (x: number, y: number, color: string, r: number) => {
@@ -94,9 +94,18 @@ export function MiniMap({ s }: { s: State }) {
       g.arc((x + 0.5) * cell, (y + 0.5) * cell, Math.max(r, cell * 0.45), 0, Math.PI * 2);
       g.fill();
     };
+    // A way out that is the whole edge of the area (the field's three roads) is one dot, at the middle of it.
+    const exits = new Map<string, typeof s.entities>();
+    for (const e of s.entities) if (e.area === s.area && e.kind === "exit" && !SECRET_EXIT.has(e.ask ?? "")) exits.set(`${e.what}|${e.ask}`, [...(exits.get(`${e.what}|${e.ask}`) ?? []), e]);
+    for (const group of exits.values()) {
+      // The seen cell nearest the middle of it, so the dot shows as soon as any of that edge has been seen.
+      const mid = group[Math.floor(group.length / 2)];
+      const near = group.filter((e) => mask[e.y * w + e.x] === "1").sort((a, b) => Math.abs(a.x - mid.x) + Math.abs(a.y - mid.y) - (Math.abs(b.x - mid.x) + Math.abs(b.y - mid.y)))[0];
+      if (near) dot(near.x, near.y, "#ffffff", 2.4);
+    }
     for (const e of s.entities) {
       if (e.area !== s.area) continue;
-      if (e.kind === "exit" && !SECRET_EXIT.has(e.ask ?? "")) dot(e.x, e.y, "#ffffff", 2.4);
+      if (e.kind === "exit") continue;
       else if (e.kind === "npc" && !HIDDEN_NPC.has(e.what)) dot(e.x, e.y, "#2aa6c9", 2.2);
       else if (e.kind === "prop" && e.what === "sign") dot(e.x, e.y, "#8a5a2b", 1.8);
       else if (e.kind === "enemy") dot(e.x, e.y, "#d9334a", 2);
