@@ -154,7 +154,9 @@ async function proceed(ctx: MutationCtx, match: Doc<"matches">, before: Table, a
       if (left.length < 2) ended = why && t.state.out.some((o) => o.reason === "resign" && o.hand === t.state.hand) && match.players.length === 2 ? why : "last_player";
       else if (s.hands > 0 && t.state.hand >= s.hands) ended = "hands";
       if (ended) break;
-      t = deal(t.state, blindsFor(s.stack, t.state.hand + 1, s.blinds, s.blindsBy), shuffle(deckOf(VARIANTS[variant].short)));
+      // Blinds never come down: a game from when they scaled with the stacks stays where it's got to.
+      const next = blindsFor(t.state.hand + 1, s.blinds, s.blindsBy);
+      t = deal(t.state, next.sb < t.state.sb ? { sb: t.state.sb, bb: t.state.bb } : next, shuffle(deckOf(VARIANTS[variant].short)));
       continue;
     }
     const seat = t.state.turn;

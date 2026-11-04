@@ -108,14 +108,15 @@ export const streetOf = (s: PokerState) => {
 export const potOf = (s: PokerState) => sum(s.paid) - sum(s.bets);
 const canAct = (s: PokerState, seat: number) => inHand(s, seat) && s.stacks[seat] > 0;
 
-// Blinds start at 1% and 2% of a starting stack and multiply by `by` every `every` hands (0: never). Rounded
-// to chips worth using, and every level goes up by at least one step, however small the multiplier.
-export function blindsFor(stack: number, hand: number, every: number, by = 2) {
+// Blinds start at 10/20 whatever the stacks, so more chips means a longer, deeper game, and multiply by `by`
+// every `every` hands (0: never). Rounded to chips worth using, and every level goes up by at least one step,
+// however small the multiplier.
+const FIRST_SB = 10;
+const BLIND_STEP = 5;
+export function blindsFor(hand: number, every: number, by = 2) {
   const level = every > 0 ? Math.floor((hand - 1) / every) : 0;
-  const first = Math.max(1, Math.round(stack / 100));
-  const step = first >= 10 ? first / 2 : first;
-  let sb = first;
-  for (let i = 1; i <= level; i++) sb = Math.max(sb + step, Math.round((first * by ** i) / step) * step);
+  let sb = FIRST_SB;
+  for (let i = 1; i <= level; i++) sb = Math.max(sb + BLIND_STEP, Math.round((FIRST_SB * by ** i) / BLIND_STEP) * BLIND_STEP);
   return { sb, bb: sb * 2 };
 }
 

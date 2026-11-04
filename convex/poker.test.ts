@@ -97,8 +97,28 @@ describe("starting", () => {
     const t = setup();
     const { id, seats } = await game(t, 2, "poker:omaha", { stack: 2000 });
     const s = await stateOf(t, id);
-    expect(s).toMatchObject({ variant: "omaha", limit: "pl", sb: 20, bb: 40 });
+    expect(s).toMatchObject({ variant: "omaha", limit: "pl", sb: 10, bb: 20 });
+    expect(s.start).toEqual([2000, 2000]);
     expect((await seats[0].as.query(api.poker.cards, { id }))!.cards).toHaveLength(4);
+  });
+
+  test("blinds start at 10/20 whatever the stacks", async () => {
+    for (const stack of [500, 1000, 2000]) {
+      const t = setup();
+      const { id } = await game(t, 2, "poker:holdem", { stack });
+      expect(await stateOf(t, id)).toMatchObject({ sb: 10, bb: 20 });
+    }
+  });
+
+  test("a game whose blinds scaled with its stacks doesn't see them drop", async () => {
+    const t = setup();
+    const { id, seats } = await game(t, 2, "poker:holdem", { stack: 2000 });
+    await t.run(async (ctx) => {
+      const m = (await ctx.db.get(id))!;
+      await ctx.db.patch(id, { state: { ...(m.state as PokerState), sb: 20, bb: 40 } });
+    });
+    await (await up(t, id, seats)).move("fold");
+    expect(await stateOf(t, id)).toMatchObject({ hand: 2, sb: 20, bb: 40 });
   });
 });
 

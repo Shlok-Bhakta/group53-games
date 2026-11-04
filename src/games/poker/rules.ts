@@ -1,11 +1,12 @@
 import type { ModeKey, Settings } from "../../../convex/modes";
+import { blindsFor } from "../../../convex/poker/engine";
 
 const days = (hours: number) => (hours === 24 ? "a day" : `${hours / 24} days`);
 
 // How to play, with the game's settings filled in.
 export function pokerRules(mode: ModeKey, s: Settings): string[] {
   const stack = s.stack ?? 1000;
-  const sb = Math.max(1, Math.round(stack / 100));
+  const { sb } = blindsFor(1, 0);
   const pot = s.betting === 1;
   const lines: string[] = [];
   if (mode === "poker:draw") {

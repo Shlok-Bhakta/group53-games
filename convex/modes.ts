@@ -38,7 +38,7 @@ const SCRABBLE: Setting[] = [
   { key: "rounds", label: "Rounds", short: "{} rounds", options: [{ value: 0, label: "No limit" }, { value: 5, label: "5" }, { value: 10, label: "10" }, { value: 15, label: "15" }], default: 0 },
 ];
 // Poker: a run of hands with rising blinds, until one player has every chip (or the last hand, if there's a
-// limit). Blinds start at 1% and 2% of the stack (convex/poker/engine.ts). Betting: 0 no limit, 1 pot limit.
+// limit). Blinds start at 10/20 whatever the stack (convex/poker/engine.ts). Betting: 0 no limit, 1 pot limit.
 const poker = (betting: number): Setting[] => [
   { key: "stack", label: "Chips", short: "{} chips", options: [{ value: 500, label: "500" }, { value: 1000, label: "1,000" }, { value: 2000, label: "2,000" }], default: 1000 },
   { key: "hands", label: "Hands", short: "{} hands", options: [{ value: 0, label: "No limit" }, { value: 5, label: "5" }, { value: 10, label: "10" }, { value: 20, label: "20" }], default: 0 },

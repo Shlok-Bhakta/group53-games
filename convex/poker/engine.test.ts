@@ -65,20 +65,18 @@ describe("hand rankings", () => {
 
 describe("a hand of Hold'em", () => {
   test("blinds double on schedule", () => {
-    expect(blindsFor(1000, 1, 3)).toEqual({ sb: 10, bb: 20 });
-    expect(blindsFor(1000, 4, 3)).toEqual({ sb: 20, bb: 40 });
-    expect(blindsFor(1000, 7, 3)).toEqual({ sb: 40, bb: 80 });
-    expect(blindsFor(500, 9, 0)).toEqual({ sb: 5, bb: 10 });
+    expect(blindsFor(1, 3)).toEqual({ sb: 10, bb: 20 });
+    expect(blindsFor(4, 3)).toEqual({ sb: 20, bb: 40 });
+    expect(blindsFor(7, 3)).toEqual({ sb: 40, bb: 80 });
+    expect(blindsFor(9, 0)).toEqual({ sb: 10, bb: 20 });
   });
 
   test("blinds multiply by the setting, in round chips, and always go up", () => {
-    const levels = (stack: number, by: number) => [1, 2, 3, 4, 5, 6].map((level) => blindsFor(stack, level, 1, by).sb);
-    expect(levels(1000, 1.25)).toEqual([10, 15, 20, 25, 30, 35]);
-    expect(levels(1000, 1.5)).toEqual([10, 15, 25, 35, 50, 75]);
-    expect(levels(1000, 2)).toEqual([10, 20, 40, 80, 160, 320]);
-    expect(levels(1000, 3)).toEqual([10, 30, 90, 270, 810, 2430]);
-    expect(levels(500, 1.25)).toEqual([5, 10, 15, 20, 25, 30]);
-    expect(levels(2000, 1.5)).toEqual([20, 30, 50, 70, 100, 150]);
+    const levels = (by: number) => [1, 2, 3, 4, 5, 6].map((level) => blindsFor(level, 1, by).sb);
+    expect(levels(1.25)).toEqual([10, 15, 20, 25, 30, 35]);
+    expect(levels(1.5)).toEqual([10, 15, 25, 35, 50, 75]);
+    expect(levels(2)).toEqual([10, 20, 40, 80, 160, 320]);
+    expect(levels(3)).toEqual([10, 30, 90, 270, 810, 2430]);
   });
 
   test("heads-up: the button posts the small blind and acts first, then last after the flop", () => {
