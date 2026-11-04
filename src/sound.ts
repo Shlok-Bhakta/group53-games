@@ -494,8 +494,8 @@ function render(c: Ctx, pack: Exclude<SfxPack, "off">, name: SfxName, opts: SfxO
     case "slam":
       v.thump(c, o, t, 0.6);
       v.thump(c, o, t + 0.05, 0.4);
-      v.note(c, o, t + 0.03, 55, 0.45, 0.9);
-      return v.note(c, o, t + 0.03, 62, 0.3, 0.9);
+      v.note(c, o, t + 0.03, 55, 0.34, 0.9);
+      return v.note(c, o, t + 0.03, 62, 0.22, 0.9);
     // Winnings coming in: a bigger win, more notes.
     case "payout":
       for (let i = 0; i < Math.min(3 + n, 8); i++) {
