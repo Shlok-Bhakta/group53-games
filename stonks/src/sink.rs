@@ -24,8 +24,11 @@ fn is_hot(hot: &BTreeSet<String>, symbol: &str) -> bool {
 struct HeldBack(HashMap<String, Tick>);
 
 impl HeldBack {
-    fn hold(&mut self, t: Tick) {
-        self.0.insert(t.symbol.clone(), t);
+    /// Keeps the latest trade. The first trade of a new minute hands back the last one of the minute before, to be
+    /// written: a busy stock trades every second, so its next trade usually gets here before `due` looks.
+    fn hold(&mut self, t: Tick) -> Option<Tick> {
+        let minute = t.recv / MINUTE_MS;
+        self.0.insert(t.symbol.clone(), t).filter(|old| old.recv / MINUTE_MS < minute)
     }
     fn forget(&mut self, symbol: &str) {
         self.0.remove(symbol);
@@ -137,8 +140,8 @@ pub async fn run(mut client: ConvexClient, mut rx: mpsc::Receiver<Write>, mut ho
                             held.forget(&t.symbol);
                             ticks.insert(t.symbol.clone(), t);
                             if last.elapsed() >= Duration::from_secs(1) { flush.reset_immediately(); }
-                        } else {
-                            held.hold(t);
+                        } else if let Some(finished) = held.hold(t) {
+                            ticks.entry(finished.symbol.clone()).or_insert(finished);
                         }
                     }
                     Write::Status(s) => {
@@ -221,6 +224,20 @@ mod tests {
         assert_eq!(due.len(), 1);
         assert_eq!(due[0].price, 2.0);
         assert!(held.due(minute + 2 * MINUTE_MS).is_empty(), "written once");
+    }
+    #[test]
+    fn a_busy_stock_keeps_its_minute_when_the_next_trade_comes_first() {
+        let mut held = HeldBack::default();
+        let minute = 29_000_000 * MINUTE_MS;
+        assert!(held.hold(tick("NVDA", 1.0, minute + 58_000)).is_none());
+        assert!(held.hold(tick("NVDA", 2.0, minute + 59_500)).is_none(), "the same minute just replaces it");
+        // The next trade lands before the once-a-second flush has looked, and three minutes in a row get written.
+        let mut written = vec![];
+        for i in 1..=3 {
+            written.push(held.hold(tick("NVDA", 2.0 + i as f64, minute + i * MINUTE_MS + 100)).expect("the minute before").price);
+            assert!(held.due(minute + i * MINUTE_MS + 500).is_empty(), "its own minute isn't over");
+        }
+        assert_eq!(written, [2.0, 3.0, 4.0]);
     }
     #[test]
     fn someone_arriving_gets_what_was_held_back_at_once() {
