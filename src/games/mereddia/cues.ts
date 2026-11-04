@@ -14,7 +14,7 @@ const things = (s: State) => Object.keys(s.items).length + s.weapons.length + Nu
 const flagged = (prev: State, next: State, f: string) => !!next.flags[f] && !prev.flags[f];
 
 // What each gesture sounds like: the lever, the button, the book, the swing of the axe.
-const GESTURE: Record<string, string> = { Lever_Grab: "lever_pull", push_button: "button_press", grab_book: "Book_Open", swing_axe: "axe", pick_attack1: "pick_attack", touch_flame: "Sacred_Flame" };
+const GESTURE: Record<string, string> = { Lever_Grab: "lever_pull", push_button: "button_press", grab_book: "Book_Open", swing_axe: "axe", pick_attack1: "pick_attack", pot_break: "hyah", touch_flame: "Sacred_Flame" };
 
 export function cuesFor(prev: State, next: State): Cue[] {
   const cues: Cue[] = [];
@@ -49,7 +49,7 @@ export function cuesFor(prev: State, next: State): Cue[] {
   if (panelsOpen(next) < panelsOpen(prev) && prev.area === next.area) add("Stone_Wall_Close");
   if (slabs(next) > slabs(prev)) add("Stone_Wall_Close", 80);
   if (count(next, (e) => e.kind === "gate") < count(prev, (e) => e.kind === "gate")) add("Open_Key");
-  if (count(next, (e) => e.kind === "pot") < count(prev, (e) => e.kind === "pot")) add("clay_pottery_break");
+  if (count(next, (e) => e.kind === "pot") < count(prev, (e) => e.kind === "pot")) add("clay_pottery_break", 380);
   if (count(next, (e) => e.kind === "crystal") < count(prev, (e) => e.kind === "crystal")) add("Crystal_Grab");
   if (count(next, (e) => e.kind === "chest" && !!e.done) > count(prev, (e) => e.kind === "chest" && !!e.done)) add("chest");
   if (next.quiz.step > prev.quiz.step) {
@@ -63,6 +63,7 @@ export function cuesFor(prev: State, next: State): Cue[] {
   if (next.act && next.act.n !== prev.act?.n && GESTURE[next.act.name]) add(GESTURE[next.act.name]);
 
   // Things that happen once.
+  if (!prev.items.pickaxe && next.items.pickaxe) add("item_pickup", 900);
   if (flagged(prev, next, "letterBurned")) add("Letter_Burn");
   if (flagged(prev, next, "pigeonPoked")) add("pigeon_flap");
   if (flagged(prev, next, "golemAwake")) {

@@ -19,6 +19,8 @@ import {
   WarningIcon,
   ScrollIcon,
   SparkleIcon,
+  TreeIcon,
+  CubeIcon,
 } from "@phosphor-icons/react";
 import { useGoBack } from "@/components/AppHeader";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle, DrawerTrigger } from "@/components/ui/drawer";
@@ -118,6 +120,8 @@ function Hud({ s, dispatch }: { s: State; dispatch: (a: Action) => void }) {
         <Stat icon={<Sprite name={ITEM.coin} className="size-5" />} value={s.gold} label="Gold" />
         <Stat icon={<Sprite name={ITEM.potion} className="size-5" />} value={`${s.potions}/${potionCap(s)}`} label="Potions" />
         <Stat icon={<Sprite name={ITEM.key} className="size-5" />} value={s.keys} label="Keys" />
+        {(s.wood ?? 0) > 0 && <Stat icon={<TreeIcon size={20} weight="fill" />} value={s.wood ?? 0} label="Wood" />}
+        {(s.stone ?? 0) > 0 && <Stat icon={<CubeIcon size={20} weight="fill" />} value={s.stone ?? 0} label="Stone" />}
         {s.items.pickaxe && <Stat icon={<Pickaxe className="size-5" />} value="Pickaxe" label="Item" />}
         {s.shield && <Stat icon={<Sprite name={ITEM.shield} className="size-5" />} value="Shield" label="Shield" />}
         {s.items.prismGel && <Stat icon={<Crystal el="universal" className="size-5" />} value="Prism Gel" label="Item" />}
@@ -245,6 +249,13 @@ function MapView3D({ s, scene, onDone }: { s: State; scene?: { id: string; n: nu
     const cur = latest.current;
     const d = AREAS[cur.area].map3d!;
     const list = desired(cur.entities.filter((e) => e.area === cur.area && !(e.kind === "panel" && e.open)), d.x0, d.y0);
+    // The golem turns to face whoever it is fighting.
+    if (cur.flags.golemAwake && !cur.flags.golemDown) for (const l of list) if (l.name === "Golem") {
+      const at = cur.entities.find((e) => e.id === l.key);
+      if (at) l.rotY = Math.atan2(cur.pos.x - at.x, cur.pos.y - at.y);
+    }
+    // Once the golem has woken it stands and walks with its eyes open: the project's second idle and walk (the first pair are the sleeper's, eyes shut).
+    if (cur.flags.golemAwake && !cur.flags.golemDown) for (const l of list) if (l.name === "Golem") Object.assign(l, { restAnim: "idle2", moveAnim: "walk2" });
     list.push({
       key: "hero",
       kind: "characters",
@@ -263,6 +274,11 @@ function MapView3D({ s, scene, onDone }: { s: State; scene?: { id: string; n: nu
     if (cur.ricky && cur.companion && !AREAS[cur.area].indoor) list.push({ key: "ricky", kind: "characters", name: "rikycharacter1", ...world(cur.ricky.x, cur.ricky.y, d.x0, d.y0), rotY: 0, scale: CHARACTER_SCALE });
     // The pigeon: on the old tree's branch until it's felled, then on Mallakoth's head if it chose to stay.
     const tree = cur.entities.find((e) => e.area === cur.area && e.kind === "prop" && e.what === "tree");
+    // The four flame pillars the golem's waking lights (the project puts them on the tiles named torch1 to torch4) stay for the whole fight, and
+    // once the golem is down the project switches them to their second animation, the sacred flame.
+    if (cur.area === "caves" && cur.flags.golemAwake) for (const [x, y] of [[18, 53], [10, 53], [18, 47], [10, 47]]) list.push({ key: `pillar${x},${y}`, kind: "objects", name: "torch_lamp", ...world(x, y, d.x0, d.y0), y: 0.05, rotY: 0, scale: 1.4, anim: cur.flags.golemDown ? "default2" : "default" });
+    // The golem's rocks, seen coming: each red square has a rock above it that comes down as its fuse runs out.
+    for (const h of cur.hazards) list.push({ key: `fall:${h.x},${h.y}`, kind: "objects", name: "boulder", ...world(h.x, h.y, d.x0, d.y0), y: 0.3 + h.fuse * 1.5, rotY: (h.x * 1.7 + h.y) % 6, scale: 0.7, anim: "idle" });
     const boulder = boulderTile(cur);
     if (boulder) list.push({ key: "boulder", kind: "characters", name: "Boulder", ...world(boulder.x, boulder.y, d.x0, d.y0), rotY: 0, scale: 3.2, xray: true, anim: cur.boulder ? "walk" : "idle" });
     // The slabs that close behind you or around you are cave stone, the project's own wall pieces, three high and two cells wide, and they
@@ -329,26 +345,31 @@ function MapView3D({ s, scene, onDone }: { s: State; scene?: { id: string; n: nu
     const hide = new Set<string>();
     // A door that has opened (a panel the rules mark open) is gone from the scene too, with all the pieces it is built from.
     const present = new Set(cur.entities.filter((e) => !(e.kind === "panel" && e.open)).map((e) => e.id));
-    // A door that opens as you watch swings open first (the project's own animation) and is taken away a moment later.
-    const open = new Set(cur.entities.filter((e) => e.kind === "panel" && e.open).map((e) => e.id));
-    // (Coming into an area whose door is already open just finds it open.)
+    // Something taken away as you watch (a door that opens, a pot smashed, the gate unlocked) plays its own animation first, and goes a moment
+    // later. (Coming into an area to find it already gone just finds it gone.)
     const before = doorsArea.current === cur.area ? doorsOpen.current : undefined;
     doorsArea.current = cur.area;
-    doorsOpen.current = open;
+    doorsOpen.current = present;
     if (before) {
       for (const b of bound(cur.area)) {
-        if (!open.has(b.id) || before.has(b.id)) continue;
+        if (b.dynamic || present.has(b.id) || !before.has(b.id)) continue;
+        const how = b.src.includes("pickaxe@") ? { anim: "", ms: 500 } : b.src.includes("pot@") ? { anim: "break", ms: 650, wait: 380 } : b.src.includes("Locked_door@") ? { anim: "open_door", ms: 1300 } : b.src.includes("knowledge_exit") ? { anim: "open", ms: 1500, ...(cur.cut?.id === "golemdoor" ? { wait: 3900 } : {}) } : undefined;
+        if (!how) continue;
         const keys = b.src.split("|");
-        st.openScenery(keys);
+        // (A pot goes to pieces as the foot lands, a moment into the kick.)
+        if (how.wait) setTimeout(() => st.playScenery(keys, how.anim), how.wait);
+        else st.playScenery(keys, how.anim);
         for (const k of keys) opening.current.add(k);
         setTimeout(() => {
           for (const k of keys) opening.current.delete(k);
           void apply();
-        }, 1500);
+        }, how.ms + (how.wait ?? 0));
       }
     }
     // A bound cell can be several pieces of scenery, "a|b|c".
     for (const b of bound(cur.area)) if (b.dynamic || !present.has(b.id)) for (const k of b.src.split("|")) if (!opening.current.has(k)) hide.add(k);
+    // The rock the pickaxe was in crumbles to rubble once it has been struck down.
+    if (cur.area === "caves" && cur.items.pickaxe && !cur.entities.some((e) => e.what === "rock" || e.what === "pickrock")) st.playScenery(["boulder@-3,8"], "break");
     // The plate he stands on sinks.
     st.setPressed(`Pressure_plate@${cur.pos.x + d.x0},${cur.pos.y + d.y0}`);
     if (cur.area === "finale") for (const k of ["Wilfred_tuah@-3,-18", "Vastios_Threea@-2,-18", "Secret Master@-22,-13", "rikycharcter2@-3,-26", "rikycharacter1@-19,-9"]) hide.add(k);
@@ -378,9 +399,6 @@ function MapView3D({ s, scene, onDone }: { s: State; scene?: { id: string; n: nu
     // Effects: poison smoke in the plate room, torches around the waking golem, the sacred flame, rain.
     const fx: EffectWant[] = [];
     if (cur.area === "caves" && cur.poisoned) for (const x of [33, 35, 37, 39]) for (const y of [8.6, 10.6]) fx.push({ key: `poison${x},${y}`, name: "poison_smoke", ...world(x, y, d.x0, d.y0), y: 0.7, size: 2.4 });
-    if (cur.area === "caves" && cur.flags.golemAwake && !cur.flags.golemDown) {
-      for (const [x, y] of [[9.5, 46.5], [20.5, 46.5], [9.5, 54.5], [20.5, 54.5]]) fx.push({ key: `torch${x},${y}`, name: "fire", ...world(x, y, d.x0, d.y0), y: 1.0, size: 1.4, stand: true });
-    }
     if (cur.area === "temple" || cur.area === "finale") fx.push({ key: "sacredflame", name: "fire", ...world(21, 6.7, d.x0, d.y0), y: 1.05, tint: [0.7, 0.35, 1], size: 1.8 });
     if (cur.flags.rainy && cur.area === "field") fx.push({ key: "rain", name: "Rain", ...world(cur.pos.x, cur.pos.y, d.x0, d.y0), y: 5, size: 2.2 });
     st.setEffects(fx);
@@ -832,6 +850,30 @@ function Portrait({ who, className }: { who: Who; className?: string }) {
   return <NpcArt who={who} className={className} />;
 }
 
+// Whether there is a keyboard to press: a fine pointer that can hover (a computer), not a finger on a phone.
+function useKeyboard(): boolean {
+  const query = "(hover: hover) and (pointer: fine)";
+  const [yes, setYes] = useState(() => typeof window !== "undefined" && !!window.matchMedia?.(query).matches);
+  useEffect(() => {
+    const m = window.matchMedia?.(query);
+    if (!m) return;
+    const on = () => setYes(m.matches);
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, []);
+  return yes;
+}
+
+// A small key cap on a button that a key also presses (shown only where there is a keyboard).
+function KeyCap({ keys }: { keys: string }) {
+  if (!useKeyboard()) return null;
+  return (
+    <kbd aria-hidden className="ml-2 rounded border border-current/40 px-1.5 py-0.5 font-sans text-caption leading-none opacity-80">
+      {keys}
+    </kbd>
+  );
+}
+
 function DialogueView({ s, dispatch }: { s: State; dispatch: (a: Action) => void }) {
   const d = s.dlg!;
   const node = NODES[d.node];
@@ -853,12 +895,14 @@ function DialogueView({ s, dispatch }: { s: State; dispatch: (a: Action) => void
           {choices.map((c, i) => (
             <Button key={i} size="lg" variant={i === 0 ? "default" : "secondary"} className="h-auto min-h-12 whitespace-normal py-2" onClick={() => dispatch({ type: "choose", i })}>
               {c.label}
+              {i === 0 && <KeyCap keys="Enter" />}
             </Button>
           ))}
         </div>
       ) : (
         <Button size="lg" onClick={() => dispatch({ type: "next" })}>
           {node.next ? "Next" : "Done"}
+          <KeyCap keys="Enter" />
         </Button>
       )}
     </div>
@@ -882,11 +926,13 @@ function Ending({ s, onRestart, dispatch }: { s: State; onRestart: () => void; d
       {won && (
         <Button size="xl" onClick={() => dispatch({ type: "continue" })}>
           <PersonSimpleRunIcon weight="bold" /> Walk to Dresden
+          <KeyCap keys="Enter" />
         </Button>
       )}
       {!won && (
         <Button size="xl" onClick={() => dispatch({ type: "retry" })}>
           <ArrowCounterClockwiseIcon weight="bold" /> Try again from the start of this area
+          <KeyCap keys="Enter" />
         </Button>
       )}
       <Button size="xl" variant="secondary" onClick={onRestart}>
@@ -1053,8 +1099,19 @@ export function MereddiaGame() {
         const k = BATTLE_KEYS[e.key as "1"];
         action = k ? ({ type: k } as Action) : undefined;
       } else if (cur.mode === "dialogue") {
+        // Enter or E takes the highlighted (green) answer: the first choice, or Next/Done when there is nothing to choose.
+        const node = cur.dlg ? NODES[cur.dlg.node] : undefined;
+        const choices = node ? (typeof node.choices === "function" ? node.choices(cur) : (node.choices ?? [])) : [];
         if (/^[1-9]$/.test(e.key)) action = { type: "choose", i: Number(e.key) - 1 };
+        else if (e.key === "Enter" || e.key === "e" || e.key === "E") {
+          // (Holding the key down does not race through everything.)
+          if (e.repeat) return;
+          action = choices.length ? { type: "choose", i: 0 } : { type: "next" };
+        }
         else action = KEYS[e.key];
+      } else if (cur.mode === "won" || cur.mode === "lost") {
+        // The end screens: the green button, "Walk to Dresden" or "Try again from the start of this area".
+        if ((e.key === "Enter" || e.key === "e" || e.key === "E") && !e.repeat) action = cur.mode === "won" ? { type: "continue" } : { type: "retry" };
       } else if (e.key === "r" || e.key === "R") {
         action = { type: "element", el: ELEMENTS[(ELEMENTS.indexOf(cur.element) + 1) % ELEMENTS.length] };
       } else {
@@ -1145,11 +1202,28 @@ export function MereddiaGame() {
                 <HourglassIcon weight="bold" /> Wait
               </Button>
             </div>
-            {s.items.axe && (
-              <Button variant="secondary" onClick={() => dispatch({ type: "swing" })} aria-label="Swing the axe (E)">
-                <WeaponIcon id="axe" className="size-5" /> Swing (E)
-              </Button>
-            )}
+            {(() => {
+              // The swing button says what it would do: what stands in front of you, and the tool for it. It is there whenever there is
+              // something to swing at, or a tool to swing, so a phone has the same prompt the E key gives.
+              const step = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[s.facing];
+              const ahead = s.entities.filter((e) => e.area === s.area && e.x === s.pos.x + step[0] && e.y === s.pos.y + step[1]);
+              const has = (f: (e: (typeof ahead)[number]) => boolean) => ahead.some(f);
+              const what = has((e) => e.kind === "pot")
+                ? { text: "Kick the pot", pick: false }
+                : has((e) => e.kind === "prop" && e.what === "rock") && s.items.pickaxe
+                  ? { text: "Strike the rock", pick: true }
+                  : has((e) => e.kind === "prop" && (e.what === "tree" || e.what === "treeblock")) && s.items.axe
+                    ? { text: "Chop the tree", pick: false }
+                    : has((e) => e.kind === "enemy" && e.what === "golem")
+                      ? { text: s.items.pickaxe ? "Strike the golem" : "Hit the golem", pick: true }
+                      : undefined;
+              if (!what && !s.items.axe && !s.items.pickaxe) return null;
+              return (
+                <Button variant={what ? "default" : "secondary"} onClick={() => dispatch({ type: "swing" })} aria-label={`${what?.text ?? "Swing"} (E)`}>
+                  {what?.pick || (!what && !s.items.axe) ? <Pickaxe className="size-5" /> : <WeaponIcon id="axe" className="size-5" />} {what?.text ?? "Swing"} (E)
+                </Button>
+              );
+            })()}
             <Bar value={s.stamina} max={STAMINA_MAX} label="Stamina" tone="stamina" />
           </div>
           <Pad relative={def.map3d?.pitch === undefined} onPress={(dir) => startWalking(dir)} onRelease={stopDir} />

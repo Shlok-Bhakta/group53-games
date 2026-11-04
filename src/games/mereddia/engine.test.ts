@@ -210,7 +210,7 @@ describe("the old tree", () => {
     expect(walked.dlg).toBeUndefined();
     expect(walked.log.at(-1)).toMatch(/Press E/);
     expect(swingAt(at("field", 3, 3, { items: { axe: true } })).log.at(-1)).toMatch(/through the air/);
-    expect(swingAt(at("field", 3, 3)).log.at(-1)).toMatch(/no axe/);
+    expect(swingAt(at("field", 3, 3)).log.at(-1)).toMatch(/nothing to swing|no axe/);
   });
 
   it("gives the axe from the stump, once", () => {
@@ -259,6 +259,12 @@ describe("the old tree", () => {
     }
     expect(seen.has("tree_repeck")).toBe(true);
     expect(seen.size).toBeGreaterThan(1);
+  });
+
+  it("brings wood from a felled tree", () => {
+    let s = at("field", tree().x + 1, tree().y + 2, { facing: "up", items: { axe: true }, flags: { pigeonPoked: true }, cut: undefined });
+    for (let i = 0; i < 12 && !s.flags.treeFelled; i++) s = talkThrough(act(s, { type: "swing" }));
+    expect(s.wood).toBe(3);
   });
 
   it("sends the pigeon flying off every time the tree falls", () => {
@@ -443,7 +449,12 @@ describe("the golem", () => {
     let s = { ...woken(), ticks: 2, pos: { x: golem().x, y: golem().y - 5 }, facing: "down" as Dir };
     s = act(s, mv("down")); // tick 3: a volley
     expect(s.hazards.length).toBeGreaterThan(0);
-    expect(s.hazards[0]).toMatchObject({ x: s.pos.x, y: s.pos.y, fuse: 2 });
+    // Rocks come down at random on the floor near you, each shown two ticks ahead.
+    for (const h of s.hazards) {
+      expect(h.fuse).toBe(2);
+      expect(Math.abs(h.x - s.pos.x)).toBeLessThanOrEqual(3);
+      expect(Math.abs(h.y - s.pos.y)).toBeLessThanOrEqual(3);
+    }
     const hit = play({ ...s, hazards: [{ x: s.pos.x, y: s.pos.y, fuse: 1 }] }, { type: "wait" });
     expect(hit.hp).toBeLessThanOrEqual(maxHp(1) - ROCK_DAMAGE);
   });
@@ -470,16 +481,35 @@ describe("the golem", () => {
     expect(s.quests.golem).toBe(true);
   });
 
-  it("leaves a pickaxe lying in a rock, to be picked up by walking over it", () => {
-    const p = get(at("caves", 0, 0), "caves", "pickup", "pickaxe");
-    const s = act(beside("caves", p, "right"), mv("right"));
-    expect(s.items.pickaxe).toBe(true);
+  it("keeps a pickaxe in a rock: a prompt takes it, and the rock stays until it is struck down for stone", () => {
+    const rock = get(at("caves", 0, 0), "caves", "prop", "pickrock");
+    const asked = bump("caves", rock, "left");
+    expect(asked.dlg?.node).toBe("pick_take");
+    expect(asked.items.pickaxe).toBeUndefined();
+    const taken = act(asked, choose(0));
+    expect(taken.items.pickaxe).toBe(true);
+    expect(taken.act?.name).toBe("pick_grab");
+    // The rock is still there, to be swung at.
+    const stone = get(taken, "caves", "prop", "rock");
+    expect(stone).toMatchObject({ x: rock.x, y: rock.y });
+    let s: State = { ...taken, act: undefined };
+    for (let i = 0; i < 3; i++) s = act(s, { type: "swing" });
+    expect(s.act?.name).toBe("pick_attack1");
+    expect(s.stone).toBe(3);
+    expect(s.entities.some((e) => e.what === "rock")).toBe(false);
+    // Rubble can be walked over.
+    expect(act({ ...s, act: undefined }, mv("left")).pos).toEqual({ x: rock.x, y: rock.y });
   });
 
   it("is why the key door is locked", () => {
     const g = get(at("caves", 0, 0), "caves", "gate", "gate");
     expect(bump("caves", g, "down").entities.some((e) => e.kind === "gate")).toBe(true);
-    const open = bump("caves", g, "down", { keys: 1 });
+    // With a key it asks first; the gate opens when you say so.
+    const asked = bump("caves", g, "down", { keys: 1 });
+    expect(asked.dlg?.node).toBe("gate_open");
+    expect(asked.entities.some((e) => e.kind === "gate")).toBe(true);
+    expect(act(asked, choose(1)).entities.some((e) => e.kind === "gate")).toBe(true);
+    const open = act(asked, choose(0));
     expect(open.entities.some((e) => e.kind === "gate")).toBe(false);
     expect(open.keys).toBe(0);
   });
@@ -490,18 +520,25 @@ describe("pots and crystals", () => {
     const outcomes = new Set<string>();
     const pot = get(at("caves", 0, 0), "caves", "pot", "pot");
     for (let seed = 1; seed < 60; seed++) {
-      const smashed = bump("caves", pot, "down", { rng: seed });
+      const smashed = act(beside("caves", pot, "down", { rng: seed }), { type: "swing" });
       expect(smashed.entities.some((e) => e.id === pot.id)).toBe(false);
       outcomes.add(`${smashed.gold}/${smashed.potions}`);
     }
     expect(outcomes.size).toBeGreaterThan(3);
   });
 
+  it("are not broken by walking into them, only by E", () => {
+    const pot = get(at("caves", 0, 0), "caves", "pot", "pot");
+    const bumped = bump("caves", pot, "down");
+    expect(bumped.entities.some((e) => e.id === pot.id)).toBe(true);
+    expect(bumped.log.at(-1)).toMatch(/Press E/);
+  });
+
   it("never give more potions than the pack holds", () => {
     expect(potionCap({})).toBe(4);
     expect(potionCap({ companion: "ricky" })).toBe(10);
     const pot = get(at("caves", 0, 0), "caves", "pot", "pot");
-    for (let seed = 1; seed < 40; seed++) expect(bump("caves", pot, "down", { rng: seed, potions: 4 }).potions).toBeLessThanOrEqual(4);
+    for (let seed = 1; seed < 40; seed++) expect(act(beside("caves", pot, "down", { rng: seed, potions: 4 }), { type: "swing" }).potions).toBeLessThanOrEqual(4);
   });
 
   it("a crystal makes its magic stronger and your mana bigger", () => {

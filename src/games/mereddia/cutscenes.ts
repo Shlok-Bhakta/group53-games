@@ -159,6 +159,21 @@ export const CUTSCENES: Record<string, Step[]> = {
     { do: "bars", on: false },
   ],
 
+  // The golem is down: the slabs round its chamber draw back, and far off down the cave the stone door at the end of the hallway that leads to the
+  // boulder opens too. (The door's own opening starts as the camera gets there; see the view.)
+  golemdoor: [
+    { do: "bars", on: true },
+    { do: "cam", at: { x: 14.5, y: 46 }, dist: 9, pitch: 0.75, ms: 900 },
+    { do: "wait", ms: 600 },
+    { do: "sfx", name: "Stone_Wall_Open" },
+    { do: "wait", ms: 900 },
+    { do: "cam", at: { x: 13.5, y: 29 }, dist: 9, pitch: 0.75, ms: 1500 },
+    { do: "sfx", name: "Stone_Wall_Open" },
+    { do: "wait", ms: 1800 },
+    BACK,
+    { do: "bars", on: false },
+  ],
+
   // The golem opens its eyes.
   golem: [
     { do: "bars", on: true },

@@ -107,6 +107,9 @@ export type State = {
   gold: number;
   potions: number;
   keys: number;
+  // What the axe and the pickaxe bring home, for crafting.
+  wood?: number;
+  stone?: number;
   element: Element;
   magic: Record<Element, number>;
   weapon: WeaponId;
@@ -447,7 +450,14 @@ function runFx(s: State, fx: string, ref?: string) {
         remove(s, g);
       }
       s.entities = s.entities.filter((e) => e.what !== "slab:golem");
+      // The fight's dust is over with it.
+      s.fx = (s.fx ?? []).filter((f) => f.name !== "Ground");
+      // The hallway beyond the golem's chamber, the one that leads to the boulder, opens (the project's own scene: the slabs round the chamber, then
+      // the stone door at the end of the hall, open).
+      s.entities = s.entities.filter((e) => !(e.area === "caves" && e.kind === "prop" && e.what === "scenery" && (e.x === 13 || e.x === 14) && e.y === 28));
+      cue(s, "golemdoor");
       s.keys++;
+      s.stone = (s.stone ?? 0) + 2;
       s.hazards = [];
       s.flags.golemDown = true;
       quest(s, "golem");
@@ -465,12 +475,34 @@ function runFx(s: State, fx: string, ref?: string) {
       s.hp = Math.max(1, s.hp - 1);
       show(s, "pigeon_back");
       break;
+    case "openGate": {
+      const gate = s.entities.find((o) => o.id === ref);
+      if (gate && s.keys > 0) {
+        s.keys--;
+        remove(s, gate);
+        say(s, "The key turns and the gate grinds open.");
+      }
+      break;
+    }
+    case "takePick": {
+      const rock = s.entities.find((o) => o.id === ref);
+      gesture(s, "pick_grab");
+      s.items.pickaxe = true;
+      if (rock) {
+        remove(s, rock);
+        spawn(s, { area: rock.area, kind: "prop", what: "rock", x: rock.x, y: rock.y });
+      }
+      say(s, "Pickaxe added to inventory. Press E to strike the rock with it.");
+      break;
+    }
     case "treeDown": {
       const tree = s.entities.find((e) => e.area === s.area && e.kind === "prop" && e.what === "tree");
       if (tree) remove(s, tree);
       s.flags.treeFelled = true;
       s.gold += 12;
       s.potions = Math.min(potionCap(s), s.potions + 1);
+      s.wood = (s.wood ?? 0) + 3;
+      say(s, "You gather 3 pieces of wood.");
       quest(s, "woodcutter");
       // It has lost its perch and flies off.
       cue(s, "flyaway");
@@ -828,13 +860,14 @@ function touch(s: State, e: Entity): boolean {
     case "chest":
       return openChest(s, e);
     case "pot":
-      return smash(s, e);
+      // A pot is smashed with E, not by walking into it.
+      say(s, "A clay pot. Press E to smash it.");
+      return false;
     case "gate":
+      // With a key it asks first (the project's own script does it when you interact), then the gate swings open on its animation.
       if (s.keys > 0) {
-        s.keys--;
-        remove(s, e);
-        say(s, "The key turns and the gate grinds open.");
-        return true;
+        show(s, "gate_open", e.id);
+        return false;
       }
       say(s, "The gate is locked. There must be a key somewhere.");
       return false;
@@ -952,22 +985,70 @@ function chopTree(s: State, e: Entity): boolean {
 
 // E: swing the axe at whatever is in front. Only the old tree cares; everything else just feels the breeze.
 function swing(s: State): State {
-  if (!s.items.axe) {
-    say(s, "You have no axe to swing.");
+  const [dx, dy] = STEP[s.facing];
+  const front = at(s, s.pos.x + dx, s.pos.y + dy);
+  // The golem is not to be smacked bare-handed: say so; with the pickaxe, the blow is the same one walking into it makes.
+  const golem = front.find((e) => e.kind === "enemy" && e.what === "golem");
+  if (golem) {
+    if (!s.items.pickaxe) {
+      say(s, "The golem's hide is solid rock; your fists would break long before it does. One of those skeletons might have left a tool at its feet.");
+      return s;
+    }
+    gesture(s, "pick_attack1");
+    show(s, "golem_down");
     return s;
   }
-  const [dx, dy] = STEP[s.facing];
-  const hit = at(s, s.pos.x + dx, s.pos.y + dy).find((e) => e.kind === "prop" && (e.what === "tree" || e.what === "treeblock"));
+  // A pot is kicked to pieces (the project's own animation), tool or no tool.
+  const pot = front.find((e) => e.kind === "pot");
+  if (pot) {
+    gesture(s, "pot_break");
+    smash(s, pot);
+    tick(s);
+    return s;
+  }
+  if (!s.items.axe && !s.items.pickaxe) {
+    say(s, "You have nothing to swing.");
+    return s;
+  }
+  const hit = front.find((e) => e.kind === "prop" && (e.what === "tree" || e.what === "treeblock"));
   // Any of the tree's four cells is the tree.
   const target = hit && (hit.what === "tree" ? hit : find(s, s.area, "prop", "tree"));
   if (target) {
+    if (!s.items.axe) {
+      say(s, "You have no axe to swing at the tree.");
+      return s;
+    }
     if (chopTree(s, target) && s.mode === "explore") tick(s);
     return s;
   }
-  gesture(s, "swing_axe");
-  say(s, "You swing the axe through the air.");
+  const rock = front.find((e) => e.kind === "prop" && e.what === "rock");
+  if (rock) {
+    if (!s.items.pickaxe) {
+      say(s, "You have no pickaxe to swing at the rock.");
+      return s;
+    }
+    chopRock(s, rock);
+    tick(s);
+    return s;
+  }
+  // Nothing in front: swing whichever you carry (the axe, if you carry both).
+  gesture(s, s.items.axe ? "swing_axe" : "pick_attack1");
+  say(s, s.items.axe ? "You swing the axe through the air." : "You swing the pickaxe through the air.");
   tick(s);
   return s;
+}
+
+// The rock the pickaxe was in: three good blows with the pickaxe, and it crumbles into stone.
+function chopRock(s: State, e: Entity) {
+  gesture(s, "pick_attack1");
+  e.hp = (e.hp ?? 3) - 1;
+  if (e.hp > 0) {
+    say(s, "Clang! Chips of stone fly.");
+    return;
+  }
+  remove(s, e);
+  s.stone = (s.stone ?? 0) + 3;
+  say(s, "The rock crumbles to rubble. You gather 3 stone.");
 }
 
 function touchProp(s: State, e: Entity): boolean {
@@ -988,6 +1069,13 @@ function touchProp(s: State, e: Entity): boolean {
       else show(s, "note_q", undefined, NOTE_QUIPS[Math.floor(roll(s) * NOTE_QUIPS.length)]);
       break;
     case "scenery":
+      break;
+    case "pickrock":
+      // A pickaxe wedged in a rock: take it, if you want it.
+      show(s, "pick_take", e.id);
+      break;
+    case "rock":
+      say(s, s.items.pickaxe ? "A solid rock. Press E to strike it with your pickaxe." : "A solid rock. You will need a tool for it.");
       break;
     case "deadkeeper":
       show(s, "keeper_dead");
@@ -1131,7 +1219,11 @@ function tick(s: State) {
 // shows a shadow for two ticks before it lands, so they can always be dodged.
 function rocks(s: State) {
   const golem = s.entities.find((e) => e.area === s.area && e.kind === "enemy" && e.what === "golem");
-  if (!golem || !s.flags.golemAwake || Math.abs(golem.x - s.pos.x) + Math.abs(golem.y - s.pos.y) > 18) return;
+  if (!golem || !s.flags.golemAwake || Math.abs(golem.x - s.pos.x) + Math.abs(golem.y - s.pos.y) > 18) {
+    // No fight on: no rocks in the air, no red squares left on the floor.
+    if (s.hazards.length) s.hazards = [];
+    return;
+  }
   for (const h of s.hazards) h.fuse--;
   const landing = s.hazards.filter((h) => h.fuse <= 0);
   s.hazards = s.hazards.filter((h) => h.fuse > 0);
@@ -1146,11 +1238,14 @@ function rocks(s: State) {
     }
   }
   if (s.ticks % 3 !== 0) return;
-  const [dx, dy] = STEP[s.facing];
-  const targets = [
-    { x: s.pos.x, y: s.pos.y },
-    { x: s.pos.x + 2 * dx, y: s.pos.y + 2 * dy },
-  ];
+  // Rocks come down at random on the floor around you, each one shown by a red square a moment before; now and then one has your own square.
+  const targets: { x: number; y: number }[] = [];
+  if (roll(s) < 0.4) targets.push({ x: s.pos.x, y: s.pos.y });
+  for (let i = 0; i < 4; i++) {
+    const x = s.pos.x + Math.floor(roll(s) * 7) - 3;
+    const y = s.pos.y + Math.floor(roll(s) * 7) - 3;
+    if (!targets.some((t) => t.x === x && t.y === y)) targets.push({ x, y });
+  }
   for (const t of targets) if (walkable(s, t.x, t.y) && !s.hazards.some((h) => h.x === t.x && h.y === t.y)) s.hazards.push({ ...t, fuse: 2 });
   say(s, "The golem hurls rocks! Watch the shadows.");
 }

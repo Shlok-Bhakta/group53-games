@@ -117,6 +117,12 @@ class Driver {
         this.do({ type: "wait" });
         continue;
       }
+      // A pot is smashed with E: walk up to it, face it, and swing.
+      if (t.kind === "pot" && Math.abs(this.s.pos.x - t.x) + Math.abs(this.s.pos.y - t.y) === 1) {
+        this.do({ type: "move", dir: d });
+        this.do({ type: "swing" });
+        continue;
+      }
       this.trace.push(`->${t.kind}:${t.what}@${t.x},${t.y}`);
       this.do({ type: "move", dir: d, sprint: opts.sprint && this.s.stamina >= 2 });
       if (this.s.area !== before) return true;
@@ -147,11 +153,12 @@ export function playThrough(seed: number, route: Route = "direct", opts: { treeh
   if (d.dead) return d.s;
 
   if (route === "full") {
-    d.walk(has("caves", "pickup", "pickaxe"), (s) => !!s.items.pickaxe);
+    d.walk(has("caves", "prop", "pickrock"), (s) => !!s.items.pickaxe);
     // Into the golem's hollow: step on the trap, then cross under the rocks.
     d.walk(has("caves", "plate", "t:golemTrap"), (s) => !!s.flags.golemAwake);
     d.walk(has("caves", "enemy", "golem"), (s) => !!s.flags.golemDown, { limit: 400 });
-    d.walk(has("caves", "gate"), (s) => !s.entities.some((e) => e.kind === "gate"));
+    d.walk(has("caves", "gate"), (s) => s.mode === "dialogue" || !s.entities.some((e) => e.kind === "gate"));
+    if (d.s.mode === "dialogue" && d.s.dlg?.node === "gate_open") d.do({ type: "choose", i: 0 });
     for (let k = 0; k < 4 && !d.dead; k++) {
       const n = d.s.entities.filter((e) => e.kind === "pot").length;
       d.walk(has("caves", "pot"), (s) => s.entities.filter((e) => e.kind === "pot").length < n);

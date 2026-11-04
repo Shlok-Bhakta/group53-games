@@ -196,6 +196,12 @@ function youngKeeper(m) {
 
 // Stone doors: the project numbers a door's frames from 1 where the converter counts from 0, so the tiles' animations are moved down one (the last
 // frame of "close" is the closed wall, our frame 0), and every door gets a "shut" that is simply the closed wall, for a slab that drops into place.
+// The rock that holds the pickaxe, the clay pots and the locked gate each have one animation (break, break, open) that runs from whole to broken or
+// open; standing in the scene they rest on their first frame, whole and shut, and are only played when something is done to them.
+function wholeRock(m) {
+  m.meta.animations = { ...(m.meta.animations ?? {}), idle: { start: 0, end: 0, speed: 1, type: 3, sound_effect: null } };
+}
+
 function stoneDoor(m, numberedFromOne) {
   const anims = m.meta.animations ?? {};
   if (numberedFromOne) for (const a of Object.values(anims)) { a.start = Math.max(0, a.start - 1); a.end = Math.max(0, a.end - 1); }
@@ -273,7 +279,7 @@ function atlasOf(frames) {
 }
 
 // Every MeshInstance in a scene's node list, with its properties, in order.
-function sceneNodes(file) {
+export function sceneNodes(file) {
   const { names, variants, nodes, node_count } = file.resources.at(-1).obj.props._bundled;
   const out = [];
   let i = 0;
@@ -570,6 +576,7 @@ for (const kind of KINDS) {
       glassy(m);
       if (kind === "tiles" && /door/.test(name)) stoneDoor(m, true);
       if (kind === "objects" && /^knowledge_exit_\d$/.test(name)) stoneDoor(m, false);
+      if (kind === "objects" && /^(boulder|pot|Locked_door)$/.test(name)) wholeRock(m);
       if (name === "Joshua") balding(m);
       if (name === "Clavicus") youngKeeper(m);
       // --borrow "characters/Mallakoth_red=catch+axe_grab>characters/Mallakoth_red_2": animations another model has.

@@ -65,22 +65,24 @@ describe("sound cues", () => {
     expect(names(hurt, act(hurt, { type: "potion" }))).toEqual(["heal"]);
     const p = first("caves", (e) => e.kind === "pot");
     const pot = at("caves", p.x, p.y + 1);
-    expect(names(pot, act(pot, mv("up")))).toContain("clay_pottery_break");
+    expect(names({ ...pot, facing: "up" }, act({ ...pot, facing: "up" }, { type: "swing" }))).toContain("clay_pottery_break");
   });
 
   it("unlock the gate with a key, and slide a panel with stone", () => {
     const g = first("caves", (e) => e.kind === "gate");
     const gate = at("caves", g.x, g.y + 1, { keys: 1 });
-    expect(names(gate, act(gate, mv("up")))).toContain("Open_Key");
+    const asked = act(gate, mv("up"));
+    expect(names(asked, act(asked, { type: "choose", i: 0 }))).toContain("Open_Key");
     const b = first("temple", (e) => e.what === "L1");
     const button = at("temple", b.x + 1, b.y);
     expect(names(button, act(button, mv("left")))).toEqual(expect.arrayContaining(["button_press", "Stone_Wall_Open"]));
   });
 
   it("pick up the pickaxe with its own sound", () => {
-    const p = first("caves", (e) => e.kind === "pickup");
+    const p = first("caves", (e) => e.what === "pickrock");
     const s = at("caves", p.x - 1, p.y);
-    expect(names(s, act(s, mv("right")))).toContain("pickaxe_fixed");
+    const asked = act(s, mv("right"));
+    expect(names(asked, act(asked, { type: "choose", i: 0 }))).toContain("pickaxe_fixed");
   });
 
   it("click and poison for a wrong plate, and a success chime for a right one", () => {

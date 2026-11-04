@@ -105,6 +105,8 @@ export const NODES: Record<string, Node> = {
   axe_get: say("narrator", "An axe is buried in the old stump, its handle worn smooth. You pull it free. Axe added to inventory.", undefined, { fx: "takeAxe" }),
   axe_stump: say("narrator", "There is nothing special about this stump."),
   tree_nope: say("narrator", "A tall, crooked tree. A pigeon watches you from a high branch, looking quietly smug. You'd need an axe to do anything about it."),
+  gate_open: { who: "narrator", text: "The iron gate is locked, and the golem's key fits the lock. Open the gate?", choices: [{ label: "Use the key.", fx: "openGate" }, { label: "Not yet." }] },
+  pick_take: { who: "narrator", text: "A rusty pickaxe is wedged in the rock. It looks like it could be pulled free. Take it?", choices: [{ label: "Take the pickaxe.", fx: "takePick" }, { label: "Leave it." }] },
   tree_poke: say("narrator", "You lift the axe. Before you can swing, the pigeon dives off the branch and pecks you right on the head. Ow!", undefined, { fx: "pigeonPoke" }),
   tree_repeck: say("narrator", "Just as the axe comes down, the pigeon dives again and pecks you on the head. Again!", undefined, { fx: "pigeonPoke" }),
   pigeon_back: say("narrator", "The pigeon flutters back up to its branch and glares at you. Fine. You can swing now."),

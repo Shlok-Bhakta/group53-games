@@ -38,7 +38,7 @@ export const TILE = 0.8;
 const STILL = new Set(["wooden_floor_with_trap"]);
 // An effect that should be playing: where, in what tint and size, and for how long if it's a one-off.
 export type EffectWant = { key: string; name: string; x: number; z: number; y?: number; tint?: [number, number, number]; size?: number; duration?: number; stand?: boolean; hand?: string };
-export type Desired = { key: string; drop?: number; opacity?: number; xray?: boolean; kind: "characters" | "objects" | "tiles"; name: string; x: number; z: number; y?: number; rotY: number; scale: number; anim?: string; shot?: { name: string; n: number }; glide?: number; moveAnim?: string; bob?: number; rideOn?: string };
+export type Desired = { key: string; restAnim?: string; drop?: number; opacity?: number; xray?: boolean; kind: "characters" | "objects" | "tiles"; name: string; x: number; z: number; y?: number; rotY: number; scale: number; anim?: string; shot?: { name: string; n: number }; glide?: number; moveAnim?: string; bob?: number; rideOn?: string };
 type Live = { fall?: { from: number; t: number }; want: Desired; pos: THREE.Vector3; rot: number; loading: boolean; actor?: Actor; shotN?: number; speed?: number; moving?: number; long?: boolean };
 const rgb = (c: number[]) => `rgb(${c.slice(0, 3).map((v) => Math.round(v * 255)).join(",")})`;
 // Godot stores a transform as a 3x3 basis in rows, then the origin.
@@ -149,6 +149,8 @@ export class Actor {
   // The axe in Mallakoth's hand during a swing: the project attaches an "axe2" object to his right hand, and the model
   // has no hand to follow, so the axe is carried on an arc that matches the swing's wind-up, strike and follow-through.
   held?: THREE.Object3D;
+  // The pickaxe in his hand while he swings it.
+  heldPick?: THREE.Object3D;
   // The letter in his hand while he burns it: the project's lined sheet of paper (note2), which has its own burning animation.
   letter?: { grip: THREE.Object3D; paper: Actor };
   constructor(readonly model: Model, material: THREE.Material) {
@@ -170,6 +172,7 @@ export class Actor {
       this.once = name;
       this.onceClock = 0;
       if (this.held) this.held.visible = name === "swing_axe";
+      if (this.heldPick) this.heldPick.visible = name === "pick_attack1";
       if (this.letter && name === "fire") this.letter.paper.playOnce("fire");
     }
   }
@@ -192,6 +195,33 @@ export class Actor {
         // A sideways swing: out to his right, then a flat sweep across the front to his left, and a settle.
         this.held.rotation.y = p < 0.3 ? THREE.MathUtils.lerp(-0.9, -1.4, p / 0.3) : p < 0.65 ? THREE.MathUtils.lerp(-1.4, 1.0, (p - 0.3) / 0.35) : THREE.MathUtils.lerp(1.0, 0.7, (p - 0.65) / 0.35);
       }
+      if ((this.once === "pick_attack1" || this.once === "pick_grab") && this.heldPick) {
+        const p = Math.min(1, this.onceClock / span);
+        const swing = this.once === "pick_attack1";
+        // Taking it from the rock: the pick comes out of the rock into his hand once he has reached it (the hands of those frames are not known, so
+        // it is carried across rather than tracked). Swinging it: always.
+        this.heldPick.visible = p < 1 && (swing || p > 0.35);
+        if (swing) {
+          // The grip follows the right hand through the animation's own frames.
+          const f = Math.min(g.start + Math.floor(this.onceClock), this.model.frames.length - 1);
+          let hand: [number, number, number] | null | undefined = this.model.hands?.[f];
+          for (let k = f; !hand && k >= g.start; k--) hand = this.model.hands?.[k];
+          if (hand) this.heldPick.position.set(hand[0], hand[1], hand[2]);
+          // How far it tips, frame by frame, chosen so it clears his head and body: it rests pointing forward and down, comes up and back over his
+          // shoulder, then down in front of him. (He faces -z, so forward is the negative direction.)
+          const key = [-0.7, 0.2, 0.7, 0.6, 0, -1.2, -1.3, -1.2, -1.0];
+          const at = Math.min(key.length - 1, Math.max(0, p * key.length - 0.5));
+          const i = Math.floor(at);
+          this.heldPick.rotation.x = THREE.MathUtils.lerp(key[i], key[Math.min(key.length - 1, i + 1)], at - i);
+        } else {
+          // It comes out of the rock (the cell in front of him, a tile ahead, the pick standing in it at about waist height) and up to his side, so
+          // it is not suddenly in his hand: carried over the middle of the animation, easing out.
+          const k = Math.min(1, Math.max(0, (p - 0.35) / 0.5));
+          const e = k * k * (3 - 2 * k);
+          this.heldPick.position.set(THREE.MathUtils.lerp(0, 0.32, e), THREE.MathUtils.lerp(0.75, 0.7, e), THREE.MathUtils.lerp(-0.8, -0.05, e));
+          this.heldPick.rotation.x = THREE.MathUtils.lerp(-1.1, -0.3, e);
+        }
+      }
       if (this.letter) {
         const on = this.once === "fire" && this.onceClock < span;
         this.letter.grip.visible = on;
@@ -205,6 +235,7 @@ export class Actor {
       if (this.onceClock >= span) {
         this.once = "";
         if (this.held) this.held.visible = false;
+        if (this.heldPick) this.heldPick.visible = false;
         if (this.letter) this.letter.grip.visible = false;
       } else {
         const i = Math.floor(this.onceClock);
@@ -254,6 +285,7 @@ export class Stage {
   private plates = new Map<string, Actor>();
   // Where the window in the boulder goes: the hero's place on the screen, in pixels, and how wide.
   private hole = { value: new THREE.Vector3(-1e5, -1e5, 0) };
+  private holeDepth = { value: 0 };
   private live = new Map<string, Live>();
   private markers = new THREE.Group();
   private fxGroup = new THREE.Group();
@@ -326,7 +358,7 @@ export class Stage {
     const byModel = new Map<string, Placed[]>();
     // Tiles above the first storey are kept apart, so they can be hidden when the hero goes indoors.
     const upper = (t: Placed) => t.z >= 17;
-    for (const t of map.tiles) if (!mountains.includes(t.m) && t.z < cutZ) (byModel.get(`${t.m}|${upper(t) ? 1 : 0}`) ?? byModel.set(`${t.m}|${upper(t) ? 1 : 0}`, []).get(`${t.m}|${upper(t) ? 1 : 0}`)!).push(t);
+    for (const t of map.tiles) if (!mountains.includes(t.m) && t.z < cutZ && !(name === "Caves" && t.m === "carpet")) (byModel.get(`${t.m}|${upper(t) ? 1 : 0}`) ?? byModel.set(`${t.m}|${upper(t) ? 1 : 0}`, []).get(`${t.m}|${upper(t) ? 1 : 0}`)!).push(t);
     if (mountains.length) this.root.add(buildMountains(map, mountains, this.material));
     await Promise.all(
       [...byModel].map(async ([key, list]) => {
@@ -335,7 +367,7 @@ export class Stage {
         const model = await loadModel("tiles", m);
         if (!model) return;
         if (model.frames.length === 1) {
-          const inst = new THREE.InstancedMesh(model.frames[0], model.material, list.length);
+          const inst = new THREE.InstancedMesh(model.frames[0], this.see(model.material, 0.45), list.length);
           const c = new THREE.Color();
           list.forEach((p, i) => {
             inst.setMatrixAt(i, matrixOf(p.t!));
@@ -353,7 +385,7 @@ export class Stage {
           if (high) this.high.push(inst);
         } else {
           for (const p of list) {
-            const a = new Actor(model, model.material);
+            const a = new Actor(model, this.see(model.material, 0.45));
             a.mesh.applyMatrix4(matrixOf(p.t!));
             if (m.startsWith("Pressure_plate")) {
               // A plate stands up, in the project's own stone, until somebody stands on it.
@@ -377,6 +409,7 @@ export class Stage {
         a.mesh.applyMatrix4(matrixOf(p.t!));
         a.play(model.animations.idle ? "idle" : (Object.keys(model.animations)[0] ?? ""));
         this.scenery.set(`${p.m}@${p.x},${p.y}`, a);
+        if (p.m === "skeleton" && p.t) void this.dress(p.t);
         // A lit sconce burns.
         if (p.m === "sconce" && p.t) this.mapFx.push({ key: `sconce${p.x},${p.y},${p.z}`, name: "fire", x: p.t[9], z: p.t[11], y: p.t[10] + 0.3, size: 1.2 });
         // The irori hearth burns too, low and warm.
@@ -570,6 +603,29 @@ export class Stage {
     for (const [k, a] of this.scenery) a.mesh.visible = !keys.has(k);
   }
 
+  // A skeleton lies in the cave as the project left it, headless: give it its skull (modelled to sit on it), and a pickaxe lying at its feet, as a hint.
+  private async dress(t: number[]) {
+    const [skull, pick] = await Promise.all([loadModel("objects", "skull"), loadModel("objects", "pickaxe")]);
+    const base = matrixOf(t);
+    if (skull) {
+      // The skull was modelled in a place of its own (centre 0.17, 0.8, -0.37); it goes on the neck (about -0.10, 0.75, -0.72), nodding a little
+      // forward and over to one side.
+      const centre = new THREE.Vector3(0.17, 0.8, -0.37);
+      const on = new THREE.Matrix4()
+        .makeTranslation(-0.1, 0.75, -0.72)
+        .multiply(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(0.3, 0, 0.12)))
+        .multiply(new THREE.Matrix4().makeTranslation(-centre.x, -centre.y, -centre.z));
+      const a = this.spawn(skull);
+      a.mesh.applyMatrix4(base.clone().multiply(on));
+    }
+    if (pick) {
+      // Across its lap: the handle along the thighs, the head across them, a little shorter than life so it does not stick out past the knees, and slimmed (its thin side is what stands up from the lap).
+      const a = this.spawn(pick);
+      const local = new THREE.Matrix4().compose(new THREE.Vector3(-0.19, 0.2, -0.68), new THREE.Quaternion(0.5, 0.5, 0.5, 0.5), new THREE.Vector3(0.4, 0.7, 0.7));
+      a.mesh.applyMatrix4(base.clone().multiply(local));
+    }
+  }
+
   // The plate somebody is standing on (by "model@x,y") sinks; the rest stand up.
   setPressed(key?: string) {
     for (const [k, a] of this.plates) a.play(k === key ? "plate_down" : "plate_up");
@@ -577,7 +633,12 @@ export class Stage {
 
   // A door built of map objects (by "model@x,y") swings open, the project's own animation.
   openScenery(keys: string[]) {
-    for (const k of keys) this.scenery.get(k)?.play("open");
+    this.playScenery(keys, "open");
+  }
+
+  // Any of the map's own animated scenery (by "model@x,y"): the rock that holds the pickaxe breaking up, say.
+  playScenery(keys: string[], anim: string) {
+    for (const k of keys) this.scenery.get(k)?.play(anim);
   }
 
   // The sheet of paper he burns, held in his right hand.
@@ -604,6 +665,32 @@ export class Stage {
     a.mesh.add(holder);
     this.actors.push(paper);
     a.letter = { grip: holder, paper };
+  }
+
+  // The pickaxe, gripped low on its handle with the head up, and swung over his shoulder and down.
+  private async givePick(a: Actor) {
+    if (a.heldPick) return;
+    const pick = await loadModel("objects", "pickaxe");
+    if (!pick || a.heldPick) return;
+    const mesh = new THREE.Mesh(pick.frames[0], pick.material);
+    mesh.castShadow = true;
+    // The model's handle runs along z, from the head at z -0.2 to its free end at z 0.4 (centre y 0.33, x 0), and the curved head spans y.
+    // He holds it by the free end of the handle (moved to the origin), turned a quarter so the handle stands up, head on top, and the
+    // head's sweep points forward, where the swing goes.
+    mesh.position.set(0, -0.33, -0.3);
+    const stand = new THREE.Group();
+    stand.rotation.x = Math.PI / 2;
+    stand.add(mesh);
+    // Slim and not long: x is its thin side.
+    const size = new THREE.Group();
+    size.scale.set(0.45, 0.75, 0.75);
+    size.add(stand);
+    const grip = new THREE.Group();
+    grip.add(size);
+    grip.position.set(0.32, 0.55, -0.05);
+    grip.visible = false;
+    a.mesh.add(grip);
+    a.heldPick = grip;
   }
 
   private async giveAxe(a: Actor) {
@@ -657,15 +744,7 @@ export class Stage {
           made.actor = this.spawn(model);
           made.actor.mesh.scale.setScalar(made.want.scale);
           // Something solid with a round window cut in it where the hero is, so he can be seen through it (the boulder at his back).
-          if (made.want.xray) {
-            const m = (made.actor.mesh.material as THREE.MeshLambertMaterial).clone();
-            m.onBeforeCompile = (shader) => {
-              shader.uniforms.uHole = this.hole;
-              shader.fragmentShader = ["uniform vec3 uHole;", shader.fragmentShader].join("\n").replace("void main() {", ["void main() {", "  if (distance(gl_FragCoord.xy, uHole.xy) < uHole.z) discard;"].join("\n"));
-            };
-            m.customProgramCacheKey = () => "hole";
-            made.actor.mesh.material = m;
-          }
+          if (made.want.xray) made.actor.mesh.material = this.see(made.actor.mesh.material as THREE.Material, -100);
           // Something seen through (the boulder at your back) gets a material of its own, so it can be let show what is behind it.
           if (made.want.opacity !== undefined) {
             const m = (made.actor.mesh.material as THREE.MeshLambertMaterial).clone();
@@ -830,12 +909,13 @@ export class Stage {
         // Walking carries on for a moment after the last step, so holding a key is one smooth walk, not a stutter.
         l.moving = dist > 0.04 ? 0.18 : Math.max(0, (l.moving ?? 0) - dt);
         const walk = d.moveAnim && l.actor.model.animations[d.moveAnim] ? d.moveAnim : "walk";
-        const want = d.anim ?? (l.moving > 0 && l.actor.model.animations[walk] ? walk : "idle");
+        const want = d.anim ?? (l.moving > 0 && l.actor.model.animations[walk] ? walk : (d.restAnim ?? "idle"));
         l.actor.play(want);
         if (d.shot && d.shot.n !== l.shotN) {
           // The first time we see a gesture count, remember it without playing: it's old news.
           if (l.shotN !== undefined) {
             if (d.shot.name === "swing_axe") void this.giveAxe(l.actor);
+            if (d.shot.name === "pick_attack1" || d.shot.name === "pick_grab") void this.givePick(l.actor);
             if (d.shot.name === "fire") void this.giveLetter(l.actor).then(() => l.actor?.playOnce("fire"));
             else l.actor.playOnce(d.shot.name);
           }
@@ -917,6 +997,29 @@ export class Stage {
     this.shakeBy.set((Math.random() - 0.5) * amp, (Math.random() - 0.5) * amp, (Math.random() - 0.5) * amp);
   }
 
+  // A copy of a material with the round window in it: the faces that are nearer the camera than the hero and higher than `above` (the walls,
+  // not the floor) are cut away inside a circle round where he shows on the screen, so he is never lost behind a wall or a boulder.
+  private seen = new Map<THREE.Material, THREE.Material>();
+  private see(base: THREE.Material, above: number): THREE.Material {
+    const key = base;
+    const hit = this.seen.get(key);
+    if (hit && above === 0.45) return hit;
+    const m = (base as THREE.MeshLambertMaterial).clone();
+    // The faces seen through the window are the insides of the blocks beyond it, not the empty dark behind them.
+    if (above > 0) m.side = THREE.DoubleSide;
+    m.onBeforeCompile = (shader) => {
+      shader.uniforms.uHole = this.hole;
+      shader.uniforms.uHoleDepth = this.holeDepth;
+      shader.uniforms.uHoleAbove = { value: above };
+      const NL = String.fromCharCode(10);
+      shader.vertexShader = ["varying float vHoleY;", shader.vertexShader].join(NL).replace("#include <begin_vertex>", ["#include <begin_vertex>", "vec4 holeAt = vec4(transformed, 1.0);", "#ifdef USE_INSTANCING", "holeAt = instanceMatrix * holeAt;", "#endif", "vHoleY = (modelMatrix * holeAt).y;"].join(NL));
+      shader.fragmentShader = ["uniform vec3 uHole;", "uniform float uHoleDepth;", "uniform float uHoleAbove;", "varying float vHoleY;", shader.fragmentShader].join(NL).replace("void main() {", ["void main() {", "  if (vHoleY > uHoleAbove && distance(gl_FragCoord.xy, uHole.xy) < uHole.z && length(vViewPosition) < uHoleDepth) discard;"].join(NL));
+    };
+    m.customProgramCacheKey = () => `hole${above}`;
+    if (above === 0.45) this.seen.set(key, m);
+    return m;
+  }
+
   // The window in a solid thing at the hero's back, centred on where he shows on the screen, about as wide as he is tall.
   private aimHole() {
     const hero = this.live.get("hero");
@@ -929,6 +1032,8 @@ export class Stage {
     const dist = this.camera.position.distanceTo(at);
     const perUnit = size.y / 2 / (dist * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2));
     this.hole.value.set((ndc.x * 0.5 + 0.5) * size.x, (ndc.y * 0.5 + 0.5) * size.y, 1.0 * perUnit);
+    // Only what is clearly nearer the camera than he is gets cut.
+    this.holeDepth.value = dist - 0.7;
   }
 
   start() {

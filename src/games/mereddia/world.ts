@@ -221,7 +221,8 @@ function bind(grid: Grid, rule: (e: GridEntity, grid: Grid) => Spec | null): (Sp
     }
     if (!spec && list.some((e) => e.kind === "objects" && e.passable === false)) spec = prop("scenery");
     if (!spec) continue;
-    const src = list.filter((e) => e.kind !== "tiles").map((e) => `${e.m}@${e.x + grid.x0},${e.y + grid.y0}`).join("|");
+    // (Only the pickaxe is taken from its rock: the rock stays, so only the pickaxe is what the rules stand in for.)
+    const src = list.filter((e) => e.kind !== "tiles" && (spec!.what !== "pickrock" || e.m === "pickaxe")).map((e) => `${e.m}@${e.x + grid.x0},${e.y + grid.y0}`).join("|");
     out.push({ ...spec, x, y, ...(src ? { src } : {}) });
   }
   return out;
@@ -250,7 +251,8 @@ const cavesRule = (e: GridEntity): Spec | null => {
     case "pot":
       return { kind: "pot", what: "pot" };
     case "pickaxe":
-      return { kind: "pickup", what: "pickaxe" };
+      // The pickaxe stands in a rock (the boulder next to it in the same cell): you take it from the rock, and the rock stays.
+      return { kind: "prop", what: "pickrock" };
     case "Locked_door":
       return { kind: "gate", what: "gate" };
     case "knowledge_exit_1":

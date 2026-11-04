@@ -63,10 +63,55 @@ export function setEnabled(next: { sfx: boolean; music: boolean }) {
 }
 
 // A one-shot effect. `delay` is in milliseconds; `volume` and `rate` shape it.
+// A short effort shout, "hyah!", made on the spot: a voiced buzz whose pitch drops through two vowel-like filters, with a breath of noise at the front.
+// (There is no recording of one in the project, so it is built from a few oscillators rather than taken from anywhere.)
+function hyah(g: Ctx, delay: number, volume: number) {
+  const { ctx } = g;
+  const t = ctx.currentTime + delay / 1000;
+  const pitch = 0.92 + Math.random() * 0.2;
+  const voice = ctx.createOscillator();
+  voice.type = "sawtooth";
+  voice.frequency.setValueAtTime(330 * pitch, t);
+  voice.frequency.exponentialRampToValueAtTime(190 * pitch, t + 0.26);
+  const low = ctx.createBiquadFilter();
+  low.type = "bandpass";
+  low.Q.value = 5;
+  low.frequency.setValueAtTime(650, t);
+  low.frequency.linearRampToValueAtTime(900, t + 0.12);
+  const high = ctx.createBiquadFilter();
+  high.type = "bandpass";
+  high.Q.value = 7;
+  high.frequency.setValueAtTime(1500, t);
+  high.frequency.linearRampToValueAtTime(1150, t + 0.2);
+  const out = ctx.createGain();
+  out.gain.setValueAtTime(0.0001, t);
+  out.gain.exponentialRampToValueAtTime(0.5 * volume, t + 0.03);
+  out.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+  voice.connect(low).connect(out);
+  voice.connect(high).connect(out);
+  out.connect(g.sfx);
+  voice.start(t);
+  voice.stop(t + 0.32);
+  // The breath that starts it.
+  const noise = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.08), ctx.sampleRate);
+  const data = noise.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+  const breath = ctx.createBufferSource();
+  breath.buffer = noise;
+  const hp = ctx.createBiquadFilter();
+  hp.type = "highpass";
+  hp.frequency.value = 1800;
+  const bg = ctx.createGain();
+  bg.gain.value = 0.25 * volume;
+  breath.connect(hp).connect(bg).connect(g.sfx);
+  breath.start(t);
+}
+
 export function play(name: string, opts: { volume?: number; rate?: number; delay?: number } = {}) {
   if (!on.sfx) return;
   const g = ensure();
   if (!g || g.ctx.state !== "running") return;
+  if (name === "hyah") return hyah(g, opts.delay ?? 0, opts.volume ?? 1);
   void load("sfx", name).then((buf) => {
     if (!buf) return;
     const src = g.ctx.createBufferSource();
