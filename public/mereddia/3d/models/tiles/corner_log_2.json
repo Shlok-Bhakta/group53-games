@@ -1,0 +1,1 @@
+{"name":"corner_log_2","kind":"tiles","meta":{"animations":{},"passable":false,"type":"tile","grid":[16,16,24]},"frames":[{"n":1296,"pos":[0,3888],"uv":[15552,2592],"idx":[25920,1296],"t":null}],"texture":true}

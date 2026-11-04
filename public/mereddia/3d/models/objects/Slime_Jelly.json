@@ -1,0 +1,1 @@
+{"name":"Slime_Jelly","kind":"objects","meta":{"animations":{},"passable":false,"type":"object","grid":[16,16,24]},"frames":[{"n":288,"pos":[0,864],"uv":[3456,576],"idx":[5760,288],"t":null}],"texture":true}

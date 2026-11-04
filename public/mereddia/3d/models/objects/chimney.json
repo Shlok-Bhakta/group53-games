@@ -1,0 +1,1 @@
+{"name":"chimney","kind":"objects","meta":{"animations":{"default":{"start":0,"end":0,"speed":7,"type":0}},"passable":false,"type":"object","grid":[16,16,48]},"frames":[{"n":132,"pos":[0,396],"uv":[1584,264],"idx":[2640,132],"t":null}],"texture":true}

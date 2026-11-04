@@ -1,0 +1,1 @@
+{"name":"roof3","kind":"tiles","meta":{"animations":{},"passable":false,"type":"tile","grid":[16,16,24]},"frames":[{"n":252,"pos":[0,756],"uv":[3024,504],"idx":[5040,252],"t":null}],"texture":true}

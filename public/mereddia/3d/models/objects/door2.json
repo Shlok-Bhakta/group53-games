@@ -1,0 +1,1 @@
+{"name":"door2","kind":"objects","meta":{"animations":{"close":{"start":0,"end":0,"speed":12,"type":3},"open":{"start":0,"end":4,"speed":12,"type":3}},"passable":true,"type":"object","grid":[16,32,16]},"frames":[{"n":192,"pos":[0,576],"uv":[2304,384],"idx":[3840,192],"t":null}],"texture":true}

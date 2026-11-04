@@ -1,0 +1,1 @@
+{"name":"ptrn_thatch_roof_corner","kind":"tiles","meta":{"animations":{},"passable":false,"type":"tile","grid":[16,16,16]},"frames":[{"n":876,"pos":[0,2628],"uv":[10512,1752],"idx":[17520,876],"t":null}],"texture":true}

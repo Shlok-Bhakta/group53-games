@@ -1,0 +1,1 @@
+{"name":"stone_wall_door_2","kind":"tiles","meta":{"animations":{},"passable":false,"type":"tile","grid":[16,16,16]},"frames":[{"n":36,"pos":[0,108],"uv":[432,72],"idx":[720,36],"t":null}],"texture":true}

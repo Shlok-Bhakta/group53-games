@@ -1,0 +1,1 @@
+{"name":"ladder","kind":"tiles","meta":{"animations":{},"passable":false,"type":"tile","grid":[16,16,15]},"frames":[{"n":180,"pos":[0,540],"uv":[2160,360],"idx":[3600,180],"t":null}],"texture":true}

@@ -1,0 +1,1 @@
+{"name":"wood_wall_2","kind":"tiles","meta":{"animations":{},"passable":true,"type":"tile","grid":[16,16,16]},"frames":[{"n":96,"pos":[0,288],"uv":[1152,192],"idx":[1920,96],"t":null}],"texture":true}

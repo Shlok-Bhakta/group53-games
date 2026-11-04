@@ -1,0 +1,1 @@
+{"name":"door_01","kind":"objects","meta":{"animations":{"close":{"start":0,"end":0,"speed":8,"type":3},"open":{"start":1,"end":1,"speed":8,"type":3}},"type":"object","grid":[16,16,16]},"frames":[{"n":108,"pos":[0,324],"uv":[1296,216],"idx":[2160,108],"t":null},{"n":168,"pos":[2376,504],"uv":[4392,336],"idx":[5736,168],"t":null}],"texture":true}

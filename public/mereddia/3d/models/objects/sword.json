@@ -1,0 +1,1 @@
+{"name":"sword","kind":"objects","meta":{"animations":{},"passable":false,"type":"object","grid":[32,32,48]},"frames":[{"n":1584,"pos":[0,4752],"uv":[19008,3168],"idx":[31680,1584],"t":null}],"texture":true}

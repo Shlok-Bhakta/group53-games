@@ -1,0 +1,1 @@
+{"name":"Wall5","kind":"tiles","meta":{"animations":{},"passable":false,"type":"tile","grid":[16,16,24]},"frames":[{"n":60,"pos":[0,180],"uv":[720,120],"idx":[1200,60],"t":null}],"texture":true}

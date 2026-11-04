@@ -1,0 +1,1 @@
+{"name":"roof_edge","kind":"tiles","meta":{"animations":{},"passable":false,"type":"tile","grid":[16,16,24]},"frames":[{"n":888,"pos":[0,2664],"uv":[10656,1776],"idx":[17760,888],"t":null}],"texture":true}

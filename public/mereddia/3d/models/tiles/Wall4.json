@@ -1,0 +1,1 @@
+{"name":"Wall4","kind":"tiles","meta":{"animations":{},"passable":false,"type":"tile","grid":[16,16,24]},"frames":[{"n":72,"pos":[0,216],"uv":[864,144],"idx":[1440,72],"t":null}],"texture":true}

@@ -1,0 +1,1 @@
+{"name":"cave_wall_art_1","kind":"tiles","meta":{"animations":{},"passable":false,"type":"tile","grid":[16,16,16]},"frames":[{"n":1626,"pos":[0,4878],"uv":[19512,3252],"idx":[32520,1626],"t":null},{"n":2760,"pos":[35772,8280],"uv":[68892,5520],"idx":[90972,2760],"t":null}],"texture":true}

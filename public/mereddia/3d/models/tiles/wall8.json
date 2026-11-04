@@ -1,0 +1,1 @@
+{"name":"wall8","kind":"tiles","meta":{"animations":{},"passable":false,"type":"tile","grid":[16,16,24]},"frames":[{"n":84,"pos":[0,252],"uv":[1008,168],"idx":[1680,84],"t":null}],"texture":true}

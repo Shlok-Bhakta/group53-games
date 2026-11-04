@@ -1,0 +1,1 @@
+{"name":"tile_top_3","kind":"tiles","meta":{"animations":{},"passable":false,"type":"tile","grid":[16,16,24]},"frames":[{"n":36,"pos":[0,108],"uv":[432,72],"idx":[720,36],"t":null}],"texture":true}

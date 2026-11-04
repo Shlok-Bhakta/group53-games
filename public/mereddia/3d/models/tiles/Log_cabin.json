@@ -1,0 +1,1 @@
+{"name":"Log_cabin","kind":"tiles","meta":{"animations":{},"passable":false,"type":"tile","grid":[16,16,24]},"frames":[{"n":540,"pos":[0,1620],"uv":[6480,1080],"idx":[10800,540],"t":null}],"texture":true}

@@ -1,0 +1,1 @@
+{"name":"sconce_off","kind":"tiles","meta":{"animations":{},"passable":false,"type":"tile","grid":[16,16,24]},"frames":[{"n":222,"pos":[0,666],"uv":[2664,444],"idx":[4440,222],"t":null}],"texture":true}

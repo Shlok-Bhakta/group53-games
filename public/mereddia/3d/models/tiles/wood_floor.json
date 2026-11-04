@@ -1,0 +1,1 @@
+{"name":"wood_floor","kind":"tiles","meta":{"animations":{},"passable":true,"type":"tile","grid":[16,16,16]},"frames":[{"n":60,"pos":[0,180],"uv":[720,120],"idx":[1200,60],"t":null}],"texture":true}

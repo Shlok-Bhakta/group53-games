@@ -1,0 +1,1 @@
+{"name":"Ricky the Object","kind":"objects","meta":{"animations":{"Open":{"start":0,"end":1,"type":3,"speed":4,"sound_effect":null}},"passable":true,"type":"object","grid":[32,32,48]},"frames":[{"n":36,"pos":[0,108],"uv":[432,72],"idx":[720,36],"t":null},{"n":36,"pos":[792,108],"uv":[1224,72],"idx":[1512,36],"t":null}],"texture":true}

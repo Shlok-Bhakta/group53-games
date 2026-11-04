@@ -1,0 +1,1 @@
+{"name":"spring_corner","kind":"tiles","meta":{"animations":{"default":{"start":0,"end":0,"speed":1,"type":0,"sound_effect":"water_noises.wav","positional_sound":true}},"passable":false,"type":"tile","grid":[16,16,16]},"frames":[{"n":144,"pos":[0,432],"uv":[1728,288],"idx":[2880,144],"t":null}],"texture":true}

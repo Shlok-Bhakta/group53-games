@@ -1,0 +1,1 @@
+{"name":"water2","kind":"tiles","meta":{"animations":{"default":{"start":0,"end":1,"speed":1,"type":0}},"passable":false,"type":"tile","grid":[16,16,16]},"frames":[{"n":60,"pos":[0,180],"uv":[720,120],"idx":[1200,60],"t":null},{"n":60,"pos":[1320,180],"uv":[2040,120],"idx":[2520,60],"t":null}],"texture":true}

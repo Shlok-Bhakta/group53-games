@@ -1,0 +1,1 @@
+{"name":"CaveWalls10","kind":"tiles","meta":{"animations":{},"passable":false,"type":"tile","grid":[16,16,16]},"frames":[{"n":3030,"pos":[0,9090],"uv":[36360,6060],"idx":[60600,3030],"t":null}],"texture":true}

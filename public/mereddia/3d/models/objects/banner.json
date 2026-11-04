@@ -1,0 +1,1 @@
+{"name":"banner","kind":"objects","meta":{"animations":{"roll":{"start":0,"end":0,"type":3,"speed":7,"sound_effect":null}},"passable":false,"type":"object","grid":[16,16,24]},"frames":[{"n":618,"pos":[0,1854],"uv":[7416,1236],"idx":[12360,618],"t":null}],"texture":true}

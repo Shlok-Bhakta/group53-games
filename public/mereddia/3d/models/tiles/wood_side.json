@@ -1,0 +1,1 @@
+{"name":"wood_side","kind":"tiles","meta":{"animations":{},"passable":false,"type":"tile","grid":[16,16,24]},"frames":[{"n":300,"pos":[0,900],"uv":[3600,600],"idx":[6000,300],"t":null}],"texture":true}

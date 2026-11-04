@@ -1,0 +1,1 @@
+{"name":"ptrn_thatch_roof_side","kind":"tiles","meta":{"animations":{},"passable":false,"type":"tile","grid":[16,16,16]},"frames":[{"n":504,"pos":[0,1512],"uv":[6048,1008],"idx":[10080,504],"t":null}],"texture":true}

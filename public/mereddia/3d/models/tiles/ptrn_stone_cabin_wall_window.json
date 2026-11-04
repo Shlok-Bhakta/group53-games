@@ -1,0 +1,1 @@
+{"name":"ptrn_stone_cabin_wall_window","kind":"tiles","meta":{"animations":{},"passable":false,"type":"tile","grid":[16,16,16]},"frames":[{"n":234,"pos":[0,702],"uv":[2808,468],"idx":[4680,234],"t":null},{"n":1074,"pos":[5148,3222],"uv":[18036,2148],"idx":[26628,1074],"t":null}],"texture":true}

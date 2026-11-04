@@ -1,0 +1,1 @@
+{"name":"spike_ceiling_corner","kind":"tiles","meta":{"animations":{},"passable":false,"type":"tile","grid":[16,16,24]},"frames":[{"n":216,"pos":[0,648],"uv":[2592,432],"idx":[4320,216],"t":null}],"texture":true}

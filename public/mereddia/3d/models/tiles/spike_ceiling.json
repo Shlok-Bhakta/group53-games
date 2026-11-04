@@ -1,0 +1,1 @@
+{"name":"spike_ceiling","kind":"tiles","meta":{"animations":{},"passable":false,"type":"tile","grid":[16,16,24]},"frames":[{"n":144,"pos":[0,432],"uv":[1728,288],"idx":[2880,144],"t":null}],"texture":true}

@@ -1,0 +1,1 @@
+{"name":"water_corner","kind":"tiles","meta":{"animations":{"default":{"start":0,"end":1,"speed":1,"type":0}},"passable":false,"type":"tile","grid":[16,16,16]},"frames":[{"n":234,"pos":[0,702],"uv":[2808,468],"idx":[4680,234],"t":null},{"n":234,"pos":[5148,702],"uv":[7956,468],"idx":[9828,234],"t":null}],"texture":true}

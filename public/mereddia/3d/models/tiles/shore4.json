@@ -1,0 +1,1 @@
+{"name":"shore4","kind":"tiles","meta":{"animations":{"default":{"start":0,"end":1,"speed":1,"type":0}},"passable":false,"type":"tile","grid":[16,16,16]},"frames":[{"n":84,"pos":[0,252],"uv":[1008,168],"idx":[1680,84],"t":null},{"n":84,"pos":[1848,252],"uv":[2856,168],"idx":[3528,84],"t":null}],"texture":true}

@@ -1,0 +1,1 @@
+{"name":"corner","kind":"tiles","meta":{"animations":{},"passable":false,"type":"tile","grid":[16,16,16]},"frames":[{"n":276,"pos":[0,828],"uv":[3312,552],"idx":[5520,276],"t":null}],"texture":true}
