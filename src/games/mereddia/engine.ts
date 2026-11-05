@@ -485,8 +485,8 @@ function runFx(s: State, fx: string, ref?: string) {
       break;
     }
     case "takePick": {
+      // Like the axe: it just comes away from the rock into your pack, with no animation.
       const rock = s.entities.find((o) => o.id === ref);
-      gesture(s, "pick_grab");
       s.items.pickaxe = true;
       if (rock) {
         remove(s, rock);

@@ -488,7 +488,7 @@ describe("the golem", () => {
     expect(asked.items.pickaxe).toBeUndefined();
     const taken = act(asked, choose(0));
     expect(taken.items.pickaxe).toBe(true);
-    expect(taken.act?.name).toBe("pick_grab");
+    expect(taken.act).toBeUndefined();
     // The rock is still there, to be swung at.
     const stone = get(taken, "caves", "prop", "rock");
     expect(stone).toMatchObject({ x: rock.x, y: rock.y });

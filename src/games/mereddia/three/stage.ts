@@ -218,7 +218,9 @@ export class Actor {
           // it is not suddenly in his hand: carried over the middle of the animation, easing out.
           const k = Math.min(1, Math.max(0, (p - 0.35) / 0.5));
           const e = k * k * (3 - 2 * k);
-          this.heldPick.position.set(THREE.MathUtils.lerp(0, 0.32, e), THREE.MathUtils.lerp(0.75, 0.7, e), THREE.MathUtils.lerp(-0.8, -0.05, e));
+          // It ends exactly in his right hand, where the animation's frames have it (0.34, 0.35, 0.03).
+          const hand = this.model.hands?.[Math.min(g.start + Math.floor(this.onceClock), this.model.frames.length - 1)] ?? [0.34, 0.35, 0.03];
+          this.heldPick.position.set(THREE.MathUtils.lerp(0, hand[0], e), THREE.MathUtils.lerp(0.75, hand[1], e), THREE.MathUtils.lerp(-0.8, hand[2], e));
           this.heldPick.rotation.x = THREE.MathUtils.lerp(-1.1, -0.3, e);
         }
       }

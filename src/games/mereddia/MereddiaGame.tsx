@@ -353,7 +353,7 @@ function MapView3D({ s, scene, onDone }: { s: State; scene?: { id: string; n: nu
     if (before) {
       for (const b of bound(cur.area)) {
         if (b.dynamic || present.has(b.id) || !before.has(b.id)) continue;
-        const how = b.src.includes("pickaxe@") ? { anim: "", ms: 500 } : b.src.includes("pot@") ? { anim: "break", ms: 650, wait: 380 } : b.src.includes("Locked_door@") ? { anim: "open_door", ms: 1300 } : b.src.includes("knowledge_exit") ? { anim: "open", ms: 1500, ...(cur.cut?.id === "golemdoor" ? { wait: 3900 } : {}) } : undefined;
+        const how = b.src.includes("pot@") ? { anim: "break", ms: 650, wait: 380 } : b.src.includes("Locked_door@") ? { anim: "open_door", ms: 1300 } : b.src.includes("knowledge_exit") ? { anim: "open", ms: 1500, ...(cur.cut?.id === "golemdoor" ? { wait: 3900 } : {}) } : undefined;
         if (!how) continue;
         const keys = b.src.split("|");
         // (A pot goes to pieces as the foot lands, a moment into the kick.)
@@ -698,7 +698,7 @@ function objective(s: State): string {
   if (s.quests.run) return "Meet Drawf and enter the Temple of the Sacred Flame.";
   if (s.boulder) return "RUN! The exit is at the north end of the hall. You can outrun it.";
   if (s.quiz.done) return "Reach the long hall on the west side of the caves and get through to the Valley of Time.";
-  if (s.quests.caves) return "Answer the plate room's questions. The Secret Master's hint is the answer.";
+  if (s.quests.caves) return "Find a way through the caves to the Temple of the Sacred Flame.";
   return "Find the Temple of the Sacred Flame in the Unyielding Mountains.";
 }
 
