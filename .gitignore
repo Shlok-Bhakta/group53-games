@@ -16,3 +16,4 @@ prototypes/*/dist
 
 # The stonks sidecar build
 stonks/target
+dist-mereddia

@@ -6,7 +6,7 @@ import type { Element, Entity, Theme, WeaponId } from "./world";
 // Journey Across Mereddia's pictures. The heads and items are the project's own pixel art, drawn
 // crisp; everything it has no picture for (slimes, golem, doors, crystals, rocks) is a small flat shape.
 
-const SRC = "/mereddia/sprites";
+const SRC = `${import.meta.env.BASE_URL}mereddia/sprites`;
 
 export const HEAD: Record<Who, string | undefined> = {
   mallakoth: "mallakoth_red",

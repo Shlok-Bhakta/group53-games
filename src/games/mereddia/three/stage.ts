@@ -339,7 +339,7 @@ export class Stage {
   // `mountains` names the wall tiles to draw as real mountains instead of blocks.
   // `cutZ` drops every tile from that height up (the caves' ceilings), so the rooms can be seen into.
   async loadMap(name: string, mountains: string[] = [], cutZ = Infinity): Promise<MapData> {
-    const map = (await (await fetch(`/mereddia/3d/maps/${slug(name)}.json`)).json()) as MapData;
+    const map = (await (await fetch(`${import.meta.env.BASE_URL}mereddia/3d/maps/${slug(name)}.json`)).json()) as MapData;
     this.root.clear();
     this.actors.length = 0;
     this.scenery.clear();
@@ -1073,6 +1073,8 @@ export class Stage {
   dispose() {
     cancelAnimationFrame(this.raf);
     this.ro.disconnect();
+    // Dispose alone leaves the WebGL context open, and a phone only gets a handful: every fight and cutscene opens a new view.
     this.renderer.dispose();
+    this.renderer.forceContextLoss();
   }
 }

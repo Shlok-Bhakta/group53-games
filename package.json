@@ -10,6 +10,7 @@
     "test": "vitest run",
     "preview": "vite preview --host 0.0.0.0",
     "test:e2e": "node e2e/run.mjs",
+    "mereddia:build": "vite build -c vite.mereddia.config.ts && node -e \"const fs=require('fs');fs.renameSync('dist-mereddia/mereddia.html','dist-mereddia/index.html');fs.cpSync('public/mereddia','dist-mereddia/mereddia',{recursive:true})\"",
     "test:all": "vitest run && node e2e/run.mjs",
     "deploy": "scripts/deploy.sh",
     "golf:build": "vite build --config prototypes/golf/vite.config.ts",

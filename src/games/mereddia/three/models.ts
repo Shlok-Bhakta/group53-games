@@ -86,7 +86,7 @@ type Raw = {
   frames: { n: number; pos: [number, number]; uv: [number, number]; idx: [number, number]; t: number[] | null; hand?: [number, number, number]; handL?: [number, number, number]; top?: number }[];
 };
 
-const BASE = "/mereddia/3d";
+const BASE = `${import.meta.env.BASE_URL}mereddia/3d`;
 const cache = new Map<string, Promise<Model | null>>();
 
 export const slug = (name: string) => name.replace(/[^A-Za-z0-9_-]+/g, "_");

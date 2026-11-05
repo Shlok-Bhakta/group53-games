@@ -3,7 +3,7 @@
 // looping sounds that fade with distance (the waterfall, the rolling boulder), and one-shot effects. The page
 // stays silent until the first tap, which browsers insist on.
 
-const BASE = "/mereddia/audio";
+const BASE = `${import.meta.env.BASE_URL}mereddia/audio`;
 
 export type Track = "Forest_with_leaves_woodpecker_LONG" | "cave_ambiance" | "GolemTheme";
 

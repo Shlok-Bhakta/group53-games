@@ -37,7 +37,7 @@ const cache = new Map<string, Promise<EffectDef | null>>();
 export const loadEffect = (name: string) => {
   let hit = cache.get(name);
   if (!hit) {
-    hit = fetch(`/mereddia/3d/effects/${name}.json`).then((r) => (r.ok ? (r.json() as Promise<EffectDef>) : null)).catch(() => null);
+    hit = fetch(`${import.meta.env.BASE_URL}mereddia/3d/effects/${name}.json`).then((r) => (r.ok ? (r.json() as Promise<EffectDef>) : null)).catch(() => null);
     cache.set(name, hit);
   }
   return hit;
