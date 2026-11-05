@@ -11,6 +11,7 @@ import { ScrabbleBanner, ScrabbleModeArt } from "./scrabble/art";
 import { ScrabbleGame } from "./scrabble/ScrabbleGame";
 import { scrabbleRules } from "./scrabble/rules";
 import { GolfBanner } from "./golf/GolfBanner";
+import { MereddiaBanner } from "./mereddia/card";
 import { StonksBanner } from "./stonks/StonksBanner";
 import { prefetchStonks } from "./stonks/load";
 import type { ConvexReactClient } from "convex/react";
@@ -95,6 +96,14 @@ const STONKS: GameCard = {
   banner: () => <StonksBanner />,
   prefetch: prefetchStonks,
 };
+// Journey Across Mereddia: Chris's single-player RPG. It isn't in this bundle: Play opens a separate build in an
+// iframe (HostedGame.tsx), which downloads only then.
+const MEREDDIA: GameCard = {
+  path: "/mereddia",
+  name: "Journey Across Mereddia",
+  blurb: "Chris's RPG. Wake up as Mallakoth with a sword to find and slimes in the way. It saves on your phone.",
+  banner: () => <MereddiaBanner />,
+};
 const SOON: GameCard[] = [
   {
     path: "/wordle",
@@ -104,4 +113,4 @@ const SOON: GameCard[] = [
     wip: true,
   },
 ];
-export const games: GameCard[] = [...Object.values(GAME_UI), GOLF, STONKS, ...SOON];
+export const games: GameCard[] = [...Object.values(GAME_UI), GOLF, STONKS, MEREDDIA, ...SOON];

@@ -5,6 +5,7 @@ import { AnimatePresence, MotionConfig } from "motion/react";
 import { api } from "../convex/_generated/api";
 import { Wordle } from "./games/wordle/Wordle";
 import { GAME_UI } from "./games";
+import { HostedGame } from "./games/HostedGame";
 import { InstallGate } from "./InstallGate";
 import { TAB_BAR_SPACE, TabBar } from "@/components/TabBar";
 import { TopEdge } from "@/components/TopEdge";
@@ -101,6 +102,7 @@ function SignedIn() {
                 <Route path="/you" element={<You />} />
                 <Route path="/settings" element={<Navigate to="/you" replace />} />
                 <Route path="/wordle" element={<Wordle />} />
+                {golfRoute("/mereddia", <HostedGame game="mereddia" title="Journey Across Mereddia" />)}
                 {golfRoute("/golf", <GolfHub />)}
                 {golfRoute("/golf/world", <GolfOpenWorld />)}
                 {golfRoute("/golf/:course/:hole", <GolfHole />)}

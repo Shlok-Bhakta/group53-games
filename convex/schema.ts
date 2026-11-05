@@ -255,4 +255,15 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_endpoint", ["endpoint"]),
+
+  // Games built and hosted apart from the app (convex/hosted.ts): which build is live, and its files.
+  hostedGames: defineTable({ game: v.string(), build: v.string(), previous: v.optional(v.string()) }).index("by_game", ["game"]),
+  hostedFiles: defineTable({
+    game: v.string(),
+    build: v.string(),
+    path: v.string(),
+    storageId: v.id("_storage"),
+    type: v.string(),
+    gzip: v.boolean(),
+  }).index("by_path", ["game", "build", "path"]),
 });

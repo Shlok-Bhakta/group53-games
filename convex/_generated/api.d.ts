@@ -29,6 +29,7 @@ import type * as golf_scenarios from "../golf/scenarios.js";
 import type * as golf_shapes from "../golf/shapes.js";
 import type * as golf_solutions from "../golf/solutions.js";
 import type * as golf_world from "../golf/world.js";
+import type * as hosted from "../hosted.js";
 import type * as http from "../http.js";
 import type * as links from "../links.js";
 import type * as matches from "../matches.js";
@@ -87,6 +88,7 @@ declare const fullApi: ApiFromModules<{
   "golf/shapes": typeof golf_shapes;
   "golf/solutions": typeof golf_solutions;
   "golf/world": typeof golf_world;
+  hosted: typeof hosted;
   http: typeof http;
   links: typeof links;
   matches: typeof matches;

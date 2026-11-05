@@ -10,6 +10,7 @@
     "test": "vitest run",
     "preview": "vite preview --host 0.0.0.0",
     "test:e2e": "node e2e/run.mjs",
+    "game:publish": "node scripts/publish-hosted.mjs",
     "test:all": "vitest run && node e2e/run.mjs",
     "deploy": "scripts/deploy.sh",
     "golf:build": "vite build --config prototypes/golf/vite.config.ts",
