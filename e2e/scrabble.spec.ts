@@ -227,6 +227,7 @@ test.describe("Scrabble", () => {
     await expect(menu.getByRole("list", { name: "Scores" }).getByRole("listitem")).toHaveCount(2);
     await expect(menu.getByRole("list", { name: "Scores" }).locator('[aria-current="true"]')).toContainText("Your turn");
     await expect(menu.getByRole("region", { name: "Words played" }).getByRole("button", { name: "CAT" })).toBeVisible();
+    await expect(menu.getByRole("region", { name: "Game settings" })).toContainText("Tiles in hand");
     await expect(menu.getByRole("button", { name: "Resign" })).toBeVisible();
     await close();
   });

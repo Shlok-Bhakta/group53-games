@@ -383,20 +383,26 @@ test.describe("chess", () => {
     await b.context.close();
   });
 
-  test("the game header scrolls with the page and the share button lines up with the title", async ({ context, browser }) => {
+  test("the game header scrolls with the page and the menu button lines up with the title", async ({ context, browser }) => {
     const g = await startClassic(browser, context);
     // The game's own header (the page we came from may still be fading out).
     const header = g.white.locator("header", { has: g.white.getByRole("heading", { name: "Classic", exact: true, level: 1 }) }).last();
     // iOS blurs things pinned to the top edge, so nothing with text there may be sticky or fixed.
     expect(await header.evaluate((el) => getComputedStyle(el).position)).toBe("static");
-    // The title centers on the share button.
+    // The title centers on the menu button.
     const heading = g.white.getByRole("heading", { name: "Classic", exact: true, level: 1 }).last();
     const title = (await heading.boundingBox())!;
     const block = (await heading.locator("..").boundingBox())!;
-    const share = (await g.white.getByRole("button", { name: "Share this game" }).boundingBox())!;
-    expect(Math.abs(block.y + block.height / 2 - (share.y + share.height / 2))).toBeLessThan(4);
+    const menu = (await g.white.getByRole("button", { name: "Menu" }).boundingBox())!;
+    expect(Math.abs(block.y + block.height / 2 - (menu.y + menu.height / 2))).toBeLessThan(4);
     // And it starts below the strip that covers the band iOS blurs under the status bar.
     expect(title.y).toBeGreaterThanOrEqual(32);
+    // The menu has the game's settings, how to play, and sharing.
+    await g.white.getByRole("button", { name: "Menu" }).click();
+    const settings = g.white.getByRole("dialog").getByRole("region", { name: "Game settings" });
+    await expect(settings).toContainText("Time to move");
+    await expect(g.white.getByRole("dialog").getByRole("button", { name: "How to play" })).toBeVisible();
+    await expect(g.white.getByRole("dialog").getByRole("button", { name: "Share this game" })).toBeVisible();
     await g.close();
   });
 

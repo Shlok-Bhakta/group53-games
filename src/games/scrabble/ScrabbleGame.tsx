@@ -29,7 +29,7 @@ import { SEAT_COLORS } from "@/games/seats";
 import { errorText } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 import { ScrabbleBoard, type BoardHandle, type DraftTile } from "./Board";
-import { BagSheet, DockActions, GameMenu, TopBar } from "./Chrome";
+import { BagSheet, DockActions, ScrabbleMenu, TopBar } from "./Chrome";
 import { LetterTile } from "./Tile";
 import { Tiles } from "@/Tiles";
 import { sfx } from "@/sound";
@@ -448,7 +448,7 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
         )}
       </div>
 
-      <GameMenu open={menu} onOpenChange={setMenu} match={match} state={state} meId={meId} planning={planning} playing={playing} />
+      <ScrabbleMenu open={menu} onOpenChange={setMenu} match={match} state={state} meId={meId} planning={planning} playing={playing} />
       <BagSheet open={bagOpen} onOpenChange={setBagOpen} match={match} state={state} rack={rack ?? undefined} />
 
       {drag &&

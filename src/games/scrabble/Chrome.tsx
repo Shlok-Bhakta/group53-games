@@ -20,7 +20,7 @@ import { bagLetters, evaluate, type Placement, type ScrabbleState, type Tile } f
 import { useGoBack } from "@/components/AppHeader";
 import { AsyncButton } from "@/components/AsyncButton";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
-import { Rules } from "@/components/Rules";
+import { GameMenu } from "@/components/GameMenu";
 import { ResignButton, ThinkingDots, useHere } from "@/components/match";
 import { Button } from "@/components/ui/button";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
@@ -110,9 +110,9 @@ export function Countdown({ deadline, mine }: { deadline: number; mine: boolean 
   );
 }
 
-// The menu: everyone's score and who's up, the words played (tap one for its meaning), how to play, and
-// resigning, well away from the buttons you tap all game.
-export function GameMenu({
+// The menu: everyone's score and who's up, the words played (tap one for its meaning), then what every
+// game's menu has (settings, how to play, sharing), and resigning, well away from the buttons you tap all game.
+export function ScrabbleMenu({
   open,
   onOpenChange,
   match,
@@ -131,51 +131,45 @@ export function GameMenu({
 }) {
   const plays = state.moves.map((m, i) => ({ m, i })).filter(({ m }) => m.kind === "play").reverse();
   return (
-    <Drawer open={open} onOpenChange={onOpenChange} direction="right">
-      <DrawerContent className="w-[86%] max-w-sm overflow-hidden" aria-describedby={undefined}>
-        <div className="flex h-full flex-col overflow-y-auto overscroll-contain px-4 pb-[calc(env(safe-area-inset-bottom)+20px)] pt-[calc(env(safe-area-inset-top)+34px)]">
-          <DrawerHeader className="px-1 pb-3 text-left">
-            <DrawerTitle className="font-display text-title">Players</DrawerTitle>
-          </DrawerHeader>
-          <ol className="flex flex-col gap-1.5" aria-label="Scores">
-            {match.players
-              .map((p, seat) => ({ p, seat }))
-              .sort((a, b) => state.scores[b.seat] - state.scores[a.seat])
-              .map(({ p, seat }) => (
-                <PlayerRow key={p.userId} player={p} seat={seat} state={state} isMe={p.userId === meId} planning={planning?.find((x) => x.userId === p.userId)?.count ?? 0} />
-              ))}
-          </ol>
-          <p className="px-1 pt-3 text-footnote text-muted-foreground">
-            {state.bag} in the bag, round {state.round}
-          </p>
+    <GameMenu
+      open={open}
+      onOpenChange={onOpenChange}
+      match={match}
+      title="Players"
+      rules={scrabbleRules(match.mode as ModeKey, settingsOf(match.mode, match.settings))}
+      footer={
+        playing && (
+          <ResignButton
+            match={match}
+            className="h-14 w-full rounded-lg"
+            detail={match.players.length > 2 ? "Your tiles go back in the bag and the others play on. You place last." : "The other player wins and gets the rating points."}
+          />
+        )
+      }
+    >
+      <ol className="flex flex-col gap-1.5" aria-label="Scores">
+        {match.players
+          .map((p, seat) => ({ p, seat }))
+          .sort((a, b) => state.scores[b.seat] - state.scores[a.seat])
+          .map(({ p, seat }) => (
+            <PlayerRow key={p.userId} player={p} seat={seat} state={state} isMe={p.userId === meId} planning={planning?.find((x) => x.userId === p.userId)?.count ?? 0} />
+          ))}
+      </ol>
+      <p className="px-1 pt-3 text-footnote text-muted-foreground">
+        {state.bag} in the bag, round {state.round}
+      </p>
 
-          {plays.length > 0 && (
-            <section aria-label="Words played" className="pt-6">
-              <h2 className="px-1 pb-2 font-display text-heading">Words played</h2>
-              <ul className="divide-y divide-border overflow-hidden rounded-lg bg-muted/50">
-                {plays.map(({ m, i }) => (
-                  <PlayedWords key={i} words={m.words!} by={match.players[m.seat]} isMe={match.players[m.seat]?.userId === meId} score={m.score} />
-                ))}
-              </ul>
-            </section>
-          )}
-
-          <div className="pt-6">
-            <Rules rules={scrabbleRules(match.mode as ModeKey, settingsOf(match.mode, match.settings))} defaultOpen={false} />
-          </div>
-
-          {playing && (
-            <div className="mt-auto pt-8">
-              <ResignButton
-                match={match}
-                className="h-14 w-full rounded-lg"
-                detail={match.players.length > 2 ? "Your tiles go back in the bag and the others play on. You place last." : "The other player wins and gets the rating points."}
-              />
-            </div>
-          )}
-        </div>
-      </DrawerContent>
-    </Drawer>
+      {plays.length > 0 && (
+        <section aria-label="Words played" className="pt-6">
+          <h2 className="px-1 pb-2 font-display text-heading">Words played</h2>
+          <ul className="divide-y divide-border overflow-hidden rounded-lg bg-muted/50">
+            {plays.map(({ m, i }) => (
+              <PlayedWords key={i} words={m.words!} by={match.players[m.seat]} isMe={match.players[m.seat]?.userId === meId} score={m.score} />
+            ))}
+          </ul>
+        </section>
+      )}
+    </GameMenu>
   );
 }
 

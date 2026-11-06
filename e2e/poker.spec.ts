@@ -364,6 +364,15 @@ test.describe("Poker", () => {
       expect(box!.x + box!.width).toBeLessThanOrEqual(393);
     }
     if (process.env.SCREENS) await first.page.screenshot({ path: "e2e/.state/screens/dark-poker-omaha.png" });
+    // The menu shows what the table's playing with, Omaha's pot limit included.
+    await first.page.getByRole("button", { name: "Menu" }).click();
+    const settings = first.page.getByRole("dialog").getByRole("region", { name: "Game settings" });
+    await expect(settings).toContainText("Chips");
+    await expect(settings).toContainText("Pot limit");
+    if (process.env.SCREENS) {
+      await first.page.waitForTimeout(800); // let the menu finish sliding in
+      await first.page.screenshot({ path: "e2e/.state/screens/dark-poker-menu.png" });
+    }
     await close();
   });
 
