@@ -7,9 +7,11 @@ import net from "node:net";
 import path from "node:path";
 import webpush from "web-push";
 
-// Same backend build as compose.yaml. A re-saved copy (for example `ssh kiwi docker save ... | podman load`)
-// keeps the image ID but not the registry digest, so fall back to the ID.
-const IMAGE_DIGEST = "ghcr.io/get-convex/convex-backend@sha256:01aaebb72d7e9a32c82d183b3a25ffe15278f4dc656ecf30b21777691929d1ab";
+// Same backend build as compose.yaml, by digest. Convex moved its images from ghcr.io/get-convex to
+// ghcr.io/convex (the old name no longer pulls); the digest is the same under both. A re-saved copy (for
+// example `ssh kiwi docker save ... | podman load`) keeps the image ID but not the registry digest, so fall
+// back to the ID.
+const IMAGE_DIGEST = "ghcr.io/convex/convex-backend@sha256:01aaebb72d7e9a32c82d183b3a25ffe15278f4dc656ecf30b21777691929d1ab";
 const IMAGE_ID = "6549447f0490";
 
 export function resolveImage() {

@@ -56,7 +56,7 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium chromium-headless-shell
       # The throwaway Convex backend, pinned to kiwi's image (e2e/backend.mjs).
-      - run: docker pull ghcr.io/get-convex/convex-backend@sha256:01aaebb72d7e9a32c82d183b3a25ffe15278f4dc656ecf30b21777691929d1ab
+      - run: docker pull ghcr.io/convex/convex-backend@sha256:01aaebb72d7e9a32c82d183b3a25ffe15278f4dc656ecf30b21777691929d1ab
       - run: npm run test:e2e
       - if: failure()
         uses: actions/upload-artifact@v4
