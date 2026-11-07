@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { gameOf, matchPath, type ModeKey } from "./modes";
+import { gameOf, matchPath, reasonOf, type ModeKey } from "./modes";
 import { setup, signedIn } from "./test.setup";
 import type { PokerState } from "./poker/engine";
 import type { FourState } from "./chess";
@@ -138,4 +138,28 @@ test("an unknown mode has no game", () => {
   expect(() => gameOf("wordle:pvp")).toThrow("Unknown mode");
   expect(() => matchPath({ _id: "x", mode: "nope" })).toThrow("Unknown mode");
   expect(gameOf("poker:draw")).toBe("poker");
+});
+
+// Tables that moved from if-chains to per-game data.
+describe("per-game tables", () => {
+  test("endings read per game, with a mode's own wording first", () => {
+    expect(reasonOf("fifty", "chess:four")).toEqual({ label: "Fifty quiet rounds", push: "fifty quiet rounds" });
+    expect(reasonOf("fifty", "chess:classic")).toEqual({ label: "Fifty-move rule", push: "fifty-move rule" });
+    expect(reasonOf("passes", "scrabble:live")).toEqual({ label: "Everyone passed twice", push: "everyone passed" });
+    expect(reasonOf("resign", "poker:omaha").label).toBe("By resignation");
+    expect(reasonOf("mystery", "poker:omaha")).toEqual({ label: "mystery", push: "mystery" });
+  });
+
+  test("link previews draw each game's board", async () => {
+    const t = setup();
+    const chess = await game(t, "chess:classic", 2);
+    const scrabble = await game(t, "scrabble:classic", 2);
+    const poker = await game(t, "poker:holdem", 2);
+    const preview = (id: string) => t.query(internal.previews.match, { id });
+    expect(await preview(chess.id)).toMatchObject({ mode: "chess:classic", status: "active", seats: 2, toMove: "w", result: null });
+    expect(((await preview(chess.id)) as unknown as { board: string[][] }).board[0][4]).toBe("bK");
+    expect(await preview(scrabble.id)).toMatchObject({ mode: "scrabble:classic", seats: 2, toMove: "red", scrabble: { size: 15, tiles: [], scores: [0, 0] } });
+    expect(await preview(poker.id)).toMatchObject({ mode: "poker:holdem", seats: 2, poker: { hand: 1, pot: 30 } });
+    expect(await preview("nope")).toBeNull();
+  });
 });

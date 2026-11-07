@@ -5,13 +5,48 @@
 // a game has; `minPlayers` is how many it needs to start. When they differ, the host starts it from the lobby
 // once enough people are in (it also starts by itself when every seat fills).
 
+// How a game ended (matches.result.reason): `label` for the result on screen, `push` to end the result push
+// ("Classic chess vs Chris: checkmate."). Each game lists its own; these are any game's.
+export type Reason = { label: string; push: string };
+const ENDINGS: Record<string, Reason> = {
+  resign: { label: "By resignation", push: "resignation" },
+  timeout: { label: "Timed out", push: "timed out" },
+  last_player: { label: "Last one standing", push: "last one standing" },
+  agreement: { label: "Draw agreed", push: "draw agreed" },
+};
+
 export const GAMES = {
-  chess: { name: "Chess", path: "/chess" },
-  scrabble: { name: "Scrabble", path: "/scrabble" },
-  poker: { name: "Poker", path: "/poker" },
-} as const;
+  chess: {
+    name: "Chess",
+    path: "/chess",
+    reasons: {
+      checkmate: { label: "Checkmate", push: "checkmate" },
+      stalemate: { label: "Stalemate", push: "stalemate" },
+      repetition: { label: "Threefold repetition", push: "threefold repetition" },
+      insufficient: { label: "Insufficient material", push: "insufficient material" },
+      fifty: { label: "Fifty-move rule", push: "fifty-move rule" },
+      king: { label: "King captured", push: "king captured" },
+      both_kings: { label: "Both kings fell at once", push: "both kings fell at once" },
+      no_progress: { label: "90 seconds with no captures or pawn moves", push: "90 seconds with no captures or pawn moves" },
+      last_king: { label: "Last king standing", push: "last king standing" },
+    },
+  },
+  scrabble: {
+    name: "Scrabble",
+    path: "/scrabble",
+    reasons: {
+      went_out: { label: "Went out", push: "someone went out" },
+      passes: { label: "Everyone passed twice", push: "everyone passed" },
+      rounds: { label: "Last round played", push: "the last round" },
+    },
+  },
+  poker: {
+    name: "Poker",
+    path: "/poker",
+    reasons: { hands: { label: "Last hand played", push: "the last hand" } },
+  },
+} as const satisfies Record<string, { name: string; path: string; reasons: Record<string, Reason> }>;
 export type GameKey = keyof typeof GAMES;
-export const GAME_KEYS = Object.keys(GAMES) as GameKey[];
 
 // A choice the host makes before the game starts. Values are numbers so they compare and store simply.
 // `short` says a changed value in a few words, "{}" standing for the option's label: "9 tiles".
@@ -48,6 +83,25 @@ const poker = (betting: number): Setting[] => [
   moveTime(24),
 ];
 
+// What every mode has. `draws`: players can offer each other a draw (two-player only). `wants`: how a push
+// asking the crew to join reads, "<name> wants <wants>" (the title by default). `reasons`: endings that read
+// differently in this mode.
+type ModeDef = {
+  game: GameKey;
+  name: string;
+  title: string;
+  kind: "async" | "realtime";
+  players: number;
+  minPlayers: number;
+  board: string;
+  slug: string;
+  blurb: string;
+  settings: readonly Setting[];
+  draws?: boolean;
+  wants?: string;
+  reasons?: Record<string, Reason>;
+};
+
 export const MODES = {
   "chess:classic": {
     game: "chess",
@@ -60,6 +114,7 @@ export const MODES = {
     slug: "classic",
     blurb: "Take turns at your own pace. We ping you when it's your move.",
     draws: true,
+    wants: "a game of chess",
     settings: [moveTime(0)],
   },
   "chess:four": {
@@ -73,6 +128,7 @@ export const MODES = {
     slug: "four",
     blurb: "Free-for-all on a cross-shaped board. Take turns clockwise, score points for captures and checks. Most points wins.",
     settings: [moveTime(48, false)],
+    reasons: { fifty: { label: "Fifty quiet rounds", push: "fifty quiet rounds" } },
   },
   "chess:realtime": {
     game: "chess",
@@ -174,20 +230,25 @@ export const MODES = {
     blurb: "Five cards each and no board. Bet, swap what you don't want, bet again.",
     settings: poker(0),
   },
-} as const satisfies Record<string, { game: GameKey; players: number; minPlayers: number; settings: readonly Setting[]; [k: string]: unknown }>;
+} as const satisfies Record<string, ModeDef>;
 
 export type ModeKey = keyof typeof MODES;
 export const MODE_KEYS = Object.keys(MODES) as ModeKey[];
 export const isMode = (m: string): m is ModeKey => m in MODES;
+// A mode with its optional fields, which `MODES[mode]` only has on the modes that set them.
+export const modeDef = (mode: ModeKey): ModeDef => MODES[mode];
 export function gameOf(mode: string): GameKey {
   if (!isMode(mode)) throw new Error(`Unknown mode: ${mode}`);
   return MODES[mode].game;
 }
-// Two-player modes where players can offer each other a draw (matches.offerDraw).
-export const allowsDraws = (mode: string) => isMode(mode) && "draws" in MODES[mode] && MODES[mode].draws === true;
+export const allowsDraws = (mode: string) => isMode(mode) && modeDef(mode).draws === true;
 export const modesOf = (game: string) => MODE_KEYS.filter((k) => MODES[k].game === game);
 export const modeBySlug = (game: string, slug: string) => modesOf(game).find((k) => MODES[k].slug === slug) ?? null;
-export const isFour = (mode: string) => isMode(mode) && MODES[mode].board === "four";
+export function reasonOf(reason: string, mode: string): Reason {
+  const m = isMode(mode) ? modeDef(mode) : undefined;
+  const game: Record<string, Reason> | undefined = m && GAMES[m.game].reasons;
+  return m?.reasons?.[reason] ?? game?.[reason] ?? ENDINGS[reason] ?? { label: reason, push: reason };
+}
 // Fixed seat count (chess) or a range the host starts from the lobby (Scrabble).
 export const flexibleSeats = (mode: string) => isMode(mode) && MODES[mode].minPlayers < MODES[mode].players;
 

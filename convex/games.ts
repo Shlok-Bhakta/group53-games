@@ -1,6 +1,6 @@
 import type { MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { gameOf, type ModeKey } from "./modes";
+import { gameOf, type GameKey, type ModeKey } from "./modes";
 import { chessHooks } from "./chess";
 import { scrabbleHooks } from "./scrabble";
 import { pokerHooks } from "./poker";
@@ -18,8 +18,14 @@ export type GameHooks = {
   timeout: (ctx: MutationCtx, match: Doc<"matches">, userId: Id<"users">) => Promise<void>;
   // How the last reminder ends: "Move in the next 8 hours or ...".
   timeoutWarning: string;
+  // A real-time game still waiting for everyone to open the board. matches.sweep calls these off after a
+  // few minutes.
+  unstarted?: (match: Doc<"matches">) => boolean;
 };
 
 // Looked up when called, not when this module loads: the game files import matches.ts, which
 // imports this, so the hooks may not exist yet at load time.
-export const hooksFor = (mode: string): GameHooks => ({ chess: chessHooks, scrabble: scrabbleHooks, poker: pokerHooks })[gameOf(mode)];
+export const hooksFor = (mode: string): GameHooks => {
+  const hooks: Record<GameKey, GameHooks> = { chess: chessHooks, scrabble: scrabbleHooks, poker: pokerHooks };
+  return hooks[gameOf(mode)];
+};

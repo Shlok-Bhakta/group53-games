@@ -74,6 +74,7 @@ export const chessHooks: GameHooks = {
     await finish(ctx, match, { winners: opponentsOf(match, userId), draw: false, reason: "timeout" });
   },
   timeoutWarning: "or you time out",
+  unstarted: (match) => isRealtime(match.mode) && (match.state as RealtimeState | null)?.startAt === null,
 };
 
 // Called once every seat is filled.

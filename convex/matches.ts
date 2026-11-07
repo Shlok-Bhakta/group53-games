@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { MODES, REALTIME_LOBBY_MS, REMINDER_MS, acceptPath, allowsDraws, changedSettings, flexibleSeats, isMode, modePath, settingsOf, type ModeKey, type Settings } from "./modes";
+import { MODES, REALTIME_LOBBY_MS, REMINDER_MS, acceptPath, allowsDraws, changedSettings, flexibleSeats, isMode, modeDef, modePath, reasonOf, settingsOf, type ModeKey, type Settings } from "./modes";
 import { isTestUser, notify, notifyMatch } from "./notify";
 import { placesOf, recordResult } from "./ratings";
 import { hooksFor } from "./games";
@@ -98,7 +98,7 @@ export async function finish(ctx: MutationCtx, match: Doc<"matches">, result: No
         ? place === 0 ? (places[0].length > 1 ? "You tied for first" : "You won") : `You placed ${ordinal(place + 1)}`
         : result.draw ? "Draw" : result.winners.includes(p.userId) ? "You won" : "You lost";
     const others = listNames(await namesOf(ctx, opponentsOf(match, p.userId)));
-    await notifyMatch(ctx, p.userId, match, { title: `${title}${swing}`, body: `${capitalize(mode.title)} vs ${others}: ${describeReason(result.reason, match.mode)}.` });
+    await notifyMatch(ctx, p.userId, match, { title: `${title}${swing}`, body: `${capitalize(mode.title)} vs ${others}: ${reasonOf(result.reason, match.mode).push}.` });
   }
 }
 
@@ -112,31 +112,6 @@ export async function finishBySeats(ctx: MutationCtx, match: Doc<"matches">, gro
 
 export const ordinal = (n: number) => `${n}${n === 1 ? "st" : n === 2 ? "nd" : n === 3 ? "rd" : "th"}`;
 export const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1);
-
-export function describeReason(reason: string, mode?: string) {
-  if (reason === "fifty" && mode === "chess:four") return "fifty quiet rounds";
-  return (
-    {
-      last_player: "last one standing",
-      last_king: "last king standing",
-      timeout: "timed out",
-      checkmate: "checkmate",
-      resign: "resignation",
-      stalemate: "stalemate",
-      repetition: "threefold repetition",
-      insufficient: "insufficient material",
-      fifty: "fifty-move rule",
-      agreement: "draw agreed",
-      king: "king captured",
-      both_kings: "both kings fell at once",
-      no_progress: "90 seconds with no captures or pawn moves",
-      went_out: "someone went out",
-      passes: "everyone passed",
-      rounds: "the last round",
-      hands: "the last hand",
-    }[reason] ?? reason
-  );
-}
 
 // How many reminders (8 hours apart) a player gets before their move timer runs out, from the game's
 // "Time to move" setting. 0 means no limit. Four-player chess defaults to 6 (two days): one player
@@ -165,7 +140,7 @@ export const remind = internalMutation({
 });
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-// A real-time game whose board nobody opened within this long after both seats filled is called off.
+// A real-time game whose board not everyone opened within this long after the seats filled is called off.
 const UNSTARTED_MS = 3 * 60 * 1000;
 
 // Tidies up every few minutes (see crons.ts): duplicate and stale challenges, and real-time games that
@@ -185,7 +160,7 @@ export const sweep = internalMutation({
     }
     const active = await ctx.db.query("matches").withIndex("by_status", (q) => q.eq("status", "active")).collect();
     for (const m of active) {
-      if (MODES[m.mode as ModeKey]?.kind !== "realtime" || m.state?.startAt !== null) continue;
+      if (!isMode(m.mode) || !hooksFor(m.mode).unstarted?.(m)) continue;
       if (now - (m.startedAt ?? m._creationTime) > UNSTARTED_MS) await ctx.db.patch(m._id, { status: "cancelled", lastActivityAt: now });
     }
   },
@@ -274,7 +249,7 @@ export const queue = mutation({
     const name = await displayName(ctx, userId);
     const m = MODES[mode];
     const flexible = flexibleSeats(mode);
-    const title = mode === "chess:classic" ? `${name} wants a game of chess` : `${name} wants ${m.title}`;
+    const title = `${name} wants ${modeDef(mode).wants ?? m.title}`;
     const body = flexible
       ? m.kind === "realtime" ? "Jump in now, it starts when they hit Start." : "Tap to take a seat."
       : m.kind === "realtime"

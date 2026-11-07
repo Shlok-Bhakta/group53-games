@@ -284,6 +284,8 @@ function matchText(m) {
   }
   if (m.status === "cancelled") return { title, status: "This game was called off.", mode };
   if (m.status === "finished") {
+    // "X won by checkmate". Every ending is listed per game in convex/modes.ts (`reasons`); add a phrase here
+    // for any new one that reads well after "won".
     const how = { checkmate: "by checkmate", resign: "by resignation", king: "by taking the king", last_king: "as the last king standing", last_player: "as the last one standing" }[m.result.reason] ?? "";
     if (m.scrabble) {
       const top = Math.max(...m.scrabble.scores);
