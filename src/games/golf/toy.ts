@@ -72,7 +72,7 @@ type Palette = Record<keyof typeof PALETTE, string>;
 // Set for each frame from the course's theme; the parts all draw through it.
 let C: Palette = PALETTE;
 const v0: Vec = { x: 0, y: 0 };
-export const CONFETTI = [PALETTE.flag, PALETTE.box, "#8cbf6a", PALETTE.ramp, PALETTE.rail];
+const CONFETTI = [PALETTE.flag, PALETTE.box, "#8cbf6a", PALETTE.ramp, PALETTE.rail];
 
 // The void and its dots come from the app's theme: its background, and its border color for the dots.
 let theme: { bg: string; dot: string } | null = null;
@@ -219,7 +219,7 @@ export function drawWater(ctx: Ctx, poly: Vec[], t: number, view: { x0: number; 
 }
 
 // Surf along a coast with no rail: a soft line of foam just off the grass, lapping in and out.
-export function drawShore(ctx: Ctx, poly: Vec[], t: number) {
+function drawShore(ctx: Ctx, poly: Vec[], t: number) {
   const base = ctx.globalAlpha;
   path(ctx, poly);
   ctx.lineJoin = "round";
@@ -234,7 +234,7 @@ export function drawShore(ctx: Ctx, poly: Vec[], t: number) {
 }
 
 // A wooden bridge: planks across the way you cross it.
-export function drawBridge(ctx: Ctx, poly: Vec[]) {
+function drawBridge(ctx: Ctx, poly: Vec[]) {
   path(ctx, poly);
   ctx.fillStyle = C.wood;
   ctx.fill();

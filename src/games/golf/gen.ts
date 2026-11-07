@@ -5,7 +5,6 @@ import {
   MAX_SPEED,
   compile,
   inPoly,
-  nearSegs,
   newSim,
   rng,
   shoot,
@@ -115,7 +114,7 @@ const union = (a: number, b: number) => Math.max(a, b);
 const cut = (k: number) => (a: number, b: number) => smin(k)(a, -b);
 
 // The outline of a field's positive region, as closed loops (marching squares).
-export function contours(f: Field, level = 0): Vec[][] {
+function contours(f: Field, level = 0): Vec[][] {
   const { nx, ny, a } = f;
   const H = (i: number, j: number) => j * nx + i; // edge from point (i,j) to (i+1,j)
   const V = (i: number, j: number) => nx * ny + j * nx + i; // edge from point (i,j) to (i,j+1)
@@ -502,7 +501,6 @@ export function generate(seed: number, theme: Theme = "hills", debug?: { shape?:
   const zones: Zone[] = [];
   const walls: Wall[] = [];
   const bumpers: Bumper[] = [];
-  const props: Prop[] = [];
   const boxes: Vec[] = [];
   const islands: { a: Vec; b: Vec; r: number }[] = [];
   const bridges: Vec[][] = [];
@@ -1042,12 +1040,3 @@ function botPlay(course: Course, geo: Geo, shift: Vec, clear: (a: Vec, b: Vec) =
   return 99;
 }
 
-// The first `n` holes that make the cut, starting from a seed.
-export function holesFrom(start: number, n: number, theme: Theme = "hills"): GenHole[] {
-  const out: GenHole[] = [];
-  for (let s = start; out.length < n && s < start + n * 40; s++) {
-    const h = generate(s, theme);
-    if (h) out.push(h);
-  }
-  return out;
-}

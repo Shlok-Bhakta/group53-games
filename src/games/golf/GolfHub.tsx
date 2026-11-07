@@ -7,8 +7,8 @@ import type { Course } from "../../../convex/golf/engine";
 import { COURSES, courseById } from "../../../convex/golf/holes";
 import { SANDBOX } from "../../../convex/golf/sandbox";
 import { NavBar } from "@/components/AppHeader";
-import { Group } from "@/components/parts";
-import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { Group, SectionTitle } from "@/components/parts";
+import { AvatarStack } from "@/components/PlayerAvatar";
 import { Button } from "@/components/ui/button";
 import { usePlayingIn } from "@/presence";
 import GolfWorld from "./GolfWorld";
@@ -36,13 +36,7 @@ function HoleRow({ c, to, detail, best, leader }: { c: Course; to: string; detai
         <span className="block truncate font-display text-body">{c.name}</span>
         <span className="block truncate text-footnote text-muted-foreground">{leader ? `${detail}, ${leader}` : detail}</span>
       </span>
-      {here.length > 0 && (
-        <span className="flex shrink-0 -space-x-2">
-          {here.slice(0, 3).map((p) => (
-            <PlayerAvatar key={p._id} name={p.name} image={p.image} size={28} className="rounded-full ring-2 ring-card" />
-          ))}
-        </span>
-      )}
+      <AvatarStack people={here.map((p) => ({ name: p.name, image: p.image }))} />
       {best !== undefined && <span className="shrink-0 font-display text-heading">{best}</span>}
     </Link>
   );
@@ -70,10 +64,9 @@ export function GolfHub() {
         const resume = nextUp < 0 ? 0 : nextUp;
         return (
           <section key={co.id} className="flex flex-col gap-3">
-            <div className="flex items-baseline justify-between gap-3">
-              <h2 className="font-display text-heading">{co.name}</h2>
-              <span className="text-footnote text-muted-foreground">{played.length === co.holes.length ? `You ${total}, par ${par}` : `Par ${par}`}</span>
-            </div>
+            <SectionTitle className="items-baseline px-0 pb-0" action={<span className="text-footnote text-muted-foreground">{played.length === co.holes.length ? `You ${total}, par ${par}` : `Par ${par}`}</span>}>
+              {co.name}
+            </SectionTitle>
             <Group>
               {co.holes.map((h, i) => (
                 <HoleRow key={h.id} c={h} to={holePath(co.id, i + 1)} detail={`Hole ${i + 1}, par ${h.par}`} best={mine(h.id)?.best} leader={leader(h.id)} />
@@ -88,7 +81,7 @@ export function GolfHub() {
         );
       })}
       <section className="flex flex-col gap-3">
-        <h2 className="font-display text-heading">Open world</h2>
+        <SectionTitle className="px-0 pb-0">Open world</SectionTitle>
         <Group>
           <HoleRow c={SANDBOX} to="/golf/world" detail="No par, no rules" />
         </Group>

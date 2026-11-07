@@ -1,101 +1,35 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { useMutation, useQuery } from "convex/react";
-import { toast } from "sonner";
+import { useQuery } from "convex/react";
 import { AnimatePresence, motion } from "motion/react";
-import {
-  CaretLeftIcon,
-  CornersInIcon,
-  CornersOutIcon,
-  FlagPennantIcon,
-  GolfIcon,
-  XIcon,
-} from "@phosphor-icons/react";
 import { api } from "../../../convex/_generated/api";
-import type { Id } from "../../../convex/_generated/dataModel";
-import { BAG_SIZE, INSTANT, TARGETED, canShoot, groundUnder, preview, scoreName, type Course, type Power } from "../../../convex/golf/engine";
+import { INSTANT, TARGETED, canShoot, preview, type Course } from "../../../convex/golf/engine";
 import { worldOf } from "../../../convex/golf/holes";
-import { advance, cmdOrder, newWorld, TPS, unpack, withPending, type Ball, type Cmd, type Packed, type Pending, type WorldState } from "../../../convex/golf/world";
 import { useGoBack } from "@/components/AppHeader";
-import { Button } from "@/components/ui/button";
-import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { FullscreenStage } from "@/components/game/floating";
 import { usePlayingIn } from "@/presence";
-import { SEAT_COLORS } from "@/games/seats";
-import { useServerClock } from "@/lib/serverClock";
-import { cn } from "@/lib/utils";
 import * as sound from "./audio";
-import { ITEMS } from "./items";
-import { allCups, drawFrame, refreshTheme, type Camera, type Fx, type Juice, type Other } from "./toy";
+import type { Camera } from "./toy";
+import { Dock, TargetHint, TopBar, type Hud } from "./Hud";
+import { HoleResult } from "./HoleResult";
+import { useGolfLoop, type Aim, type Box, type Target } from "./useGolfLoop";
+import { useGolfNet } from "./useGolfNet";
 
 // A live golf world: the open one, or a hole with whoever's on it right now. Every phone runs the same
 // physics from the server's settled snapshot plus everyone's commands (convex/golf.ts), so a shot is one
 // tiny insert and the ball flies identically everywhere. Your own shot plays the instant you let go;
 // someone else's arrives a moment late, and their ball eases onto where it really is rather than jumping.
+// The wire is `useGolfNet`, the frame loop `useGolfLoop`, and what floats over the map `Hud`.
 
-// Ball colors, in the order players first joined. Seat colors, minus the ones lost on grass.
-const BALL_COLORS = [SEAT_COLORS.yellow, SEAT_COLORS.blue, SEAT_COLORS.pink, SEAT_COLORS.orange, SEAT_COLORS.purple, SEAT_COLORS.teal, SEAT_COLORS.red, "#f4f1e8"];
-const colorOf = (b: Ball) => BALL_COLORS[b.color % BALL_COLORS.length];
-// How long a correction takes to ease out: quick for a small one, a touch longer for a long way, so a
-// ball glides onto where it really is however late the news came. Only a real teleport (sinking and
-// going back to a tee) jumps.
-const EASE_S = 0.14;
-const EASE_FAR_S = 0.28;
-const FAR = 4;
-// A command the server hasn't confirmed after this long means the connection's struggling.
-const SLOW_MS = 1200;
-
-
-type Hud = { ready: boolean; mode: Ball["mode"] | null; bag: Power[]; armed: Power | null; shot: Power | null; holes: number; strokes: number; status: string | null; canShoot: boolean; slow: boolean };
-// What's happening to my ball, in a word or two for the dock.
-function statusOf(b: Ball) {
-  if (b.t < b.frozenUntil) return "Frozen";
-  if (b.t < b.stunUntil) return "Stunned";
-  if (b.rattled) return "Rattled";
-  if (b.t < b.blindUntil) return "Blinded";
-  if (b.t < b.shieldUntil) return "Shielded";
-  if (b.t < b.coffeeUntil) return "Caffeinated";
-  return null;
-}
 type Vec = { x: number; y: number };
-
-const round = "pointer-events-auto grid size-11 shrink-0 place-items-center rounded-full bg-card/90 shadow-md backdrop-blur-md transition-transform duration-100 active:scale-[0.94]";
 
 // Where a hole sits in its course, and where to go after it. The open world has none of this.
 export type HoleInfo = { number: number; total: number; next: string | null };
 
 export default function GolfWorld({ course: COURSE, hole }: { course: Course; hole?: HoleInfo }) {
   const WORLD = worldOf(COURSE);
-  const key = COURSE.id;
-  const me = useQuery(api.users.me);
-  const meId = me?._id;
-  const view = useQuery(api.golf.world, { key });
-  const join = useMutation(api.golf.join);
-  const leave = useMutation(api.golf.leave);
-  const [worldId, setWorldId] = useState<Id<"golfWorlds"> | null>(null);
-  const worldIdRef = useRef<Id<"golfWorlds"> | null>(null);
-  const joinRef = useRef(() => {});
-  joinRef.current = () => {
-    join({ key })
-      .then((id) => {
-        worldIdRef.current = id;
-        setWorldId(id);
-      })
-      .catch(() => toast.error("Couldn't get onto the course."));
-  };
-  useEffect(() => {
-    joinRef.current();
-    // Off a hole, your ball goes with you. The open world keeps it.
-    return () => {
-      if (!COURSE.open && worldIdRef.current) void leave({ worldId: worldIdRef.current }).catch(() => {});
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
-  const from = view?.snapshot?.tick ?? 0;
-  const fromRef = useRef(from);
-  fromRef.current = from;
-  const cmds = useQuery(api.golf.commands, worldId ? { worldId, from } : "skip");
-  const clock = useServerClock();
-  const act = useMutation(api.golf.act);
+  const golfNet = useGolfNet(COURSE);
+  const { meId, meRef, net, send } = golfNet;
   const goBack = useGoBack("/golf");
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -116,71 +50,28 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
     return { x0, y0, x1, y1 };
   }, [COURSE]);
 
-  // The world as this phone sees it. Rebuilt from the snapshot whenever the commands change; stepped
-  // forward with the clock every frame in between.
-  const net = useRef<{
-    state: WorldState | null;
-    dirty: boolean;
-    base: Packed | null;
-    server: Cmd[]; // the server's commands from the snapshot on
-    pending: Pending[]; // mine it hasn't confirmed yet: they play right away regardless
-    cmds: Cmd[]; // both, in order: what the world runs on
-    startAt: number;
-    collide: boolean;
-    prev: Map<string, Vec>; // each ball a tick ago, to draw between ticks
-    off: Map<string, Vec & { tau: number }>; // corrections still easing out
-    seen: Map<string, number>; // events already played, by when
-    seq: number;
-  }>({ state: null, dirty: false, base: null, server: [], pending: [], cmds: [], startAt: 0, collide: true, prev: new Map(), off: new Map(), seen: new Map(), seq: Date.now() % 1_000_000_000 });
-  useEffect(() => {
-    if (!view || !cmds) return;
-    const n = net.current;
-    n.base = view.snapshot;
-    n.startAt = view.startAt;
-    n.collide = view.collide;
-    n.server = (cmds as Cmd[]).slice().sort(cmdOrder);
-    n.dirty = true;
-  }, [view, cmds]);
-  const names = useMemo(() => new Map((view?.players ?? []).map((p) => [p.id as string, p.name.split(" ")[0]])), [view?.players]);
-  const namesRef = useRef(names);
-  namesRef.current = names;
-  const meRef = useRef(meId);
-  meRef.current = meId;
-
   const wrap = useRef<HTMLDivElement>(null);
   const cv = useRef<HTMLCanvasElement>(null);
   const top = useRef<HTMLDivElement>(null);
   const dock = useRef<HTMLDivElement>(null);
   const cam = useRef<Camera>({ x: COURSE.tee.x, y: COURSE.tee.y, s: 16, ox: 0, oy: 0 });
-  const box = useRef({ w: 0, h: 0, fit: 4, play: 16, top: 90, bottom: 120, panned: 0, big: true });
+  const box = useRef<Box>({ w: 0, h: 0, fit: 4, play: 16, top: 90, bottom: 120, panned: 0, big: true });
   const [big, setBig] = useState(true);
   const [overview, setOverview] = useState(false);
   const overviewRef = useRef(overview);
   overviewRef.current = overview;
-  const aim = useRef<{ angle: number; power: number; line: Vec[]; from?: Vec; to?: Vec } | null>(null);
-  const fx = useRef<Fx[]>([]);
-  const hits = useRef(new Map<number, number>());
-  const juice = useRef<Juice>({ start: 0, spawn: 0.3, impact: null });
-  const shake = useRef({ t: -9, power: 0, a: 0 });
-  const trail = useRef<Vec[]>([]);
-  const flagOut = useRef(new Map<number, number>());
-  const lastDrawn = useRef<Vec | null>(null);
-  const sendRef = useRef<(kind: "shot", extra: { a: number; p: number }) => void>(() => {});
+  const aim = useRef<Aim | null>(null);
   const blind = useRef<HTMLDivElement>(null);
-  const [target, setTarget] = useState<{ i: number; kind: Power } | null>(null);
+  const [target, setTarget] = useState<Target | null>(null);
   const targetRef = useRef(target);
   targetRef.current = target;
   const targetAt = useRef<Vec | null>(null);
   const [hud, setHud] = useState<Hud>({ ready: false, mode: null, bag: [], armed: null, shot: null, holes: 0, strokes: 0, status: null, canShoot: false, slow: false });
 
-  // Full screen: the sea runs up under the status bar.
+  // Golf's own sound, while a world's open. (The stage takes the screen up under the status bar.)
   useEffect(() => {
-    document.documentElement.dataset.fullbleed = "";
     sound.listen();
-    return () => {
-      delete document.documentElement.dataset.fullbleed;
-      sound.stop();
-    };
+    return () => sound.stop();
   }, []);
 
   useEffect(() => {
@@ -222,325 +113,7 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [overview]);
 
-  // The loop: step the world to now, play what happened, draw.
-  useEffect(() => {
-    const ctx = cv.current!.getContext("2d")!;
-    refreshTheme();
-    let raf = 0;
-    let last = performance.now();
-    let t = 0;
-    let lastHud = "";
-    let lastKnock = 0;
-    let stoppedAt = -9;
-    let wasRolling = false;
-    let lastJoin = performance.now();
-    const smoked = new Map<string, number>();
-    const n = net.current;
-
-    const positions = (s: WorldState) => new Map(s.balls.map((b) => [b.id, { x: b.x, y: b.y }]));
-    const myBall = (s: WorldState) => s.balls.find((b) => b.id === meRef.current);
-
-    // "fresh": just happened, play it. "rebuilt": history replayed after a late command; play only what's
-    // recent and not heard yet. "arrived": the first build on opening; nothing plays.
-    const play = (s: WorldState, how: "fresh" | "rebuilt" | "arrived") => {
-      const fresh = how === "fresh";
-      const mine = myBall(s);
-      for (const { tick, id, ev, strokes } of s.events) {
-        const key = `${tick}:${id}:${ev.type}:${Math.round(ev.x * 10)}:${Math.round(ev.y * 10)}`;
-        if (n.seen.has(key)) continue;
-        n.seen.set(key, tick);
-        // Rebuilt history only plays what's recent: a late command's first moments, not old news.
-        const isMe = id === meRef.current;
-        // (Except my own sink, however late the news: that's the whole point of the hole.)
-        if (how === "arrived" || (!fresh && tick < s.tick - TPS / 2 && !(isMe && ev.type === "sink"))) continue;
-        const near = Math.hypot(ev.x - cam.current.x, ev.y - cam.current.y) < 30;
-        const seed = (tick * 31 + ev.x * 7) | 0;
-        const now = performance.now();
-        switch (ev.type) {
-          case "hit": {
-            if (isMe) trail.current = [];
-            // A Rocket Driver goes off with a bang, not a tap.
-            if (s.balls.find((b) => b.id === id)?.shot === "rocket") {
-              if (near) sound.rocket();
-              fx.current.push({ kind: "boom", x: ev.x, y: ev.y, t, seed }, { kind: "ring", x: ev.x, y: ev.y, t, seed, big: 1.4, color: "#f19a35" }, { kind: "spark", x: ev.x, y: ev.y, t, seed, color: "#f19a35" });
-              if (isMe) shake.current = { t, power: 0.22, a: seed };
-            } else if (near) sound.putt(ev.power);
-            fx.current.push({ kind: "puff", x: ev.x, y: ev.y, t, seed });
-            break;
-          }
-          case "bounce":
-          case "clack":
-            if (near && now - lastKnock > 60) sound.knock(ev.type === "clack" ? Math.max(0.5, ev.power) : ev.power);
-            lastKnock = now;
-            if (isMe && mine) juice.current.impact = { t, n: Math.atan2(mine.vy, mine.vx), power: ev.power };
-            if (ev.power > 0.15 || ev.type === "clack") fx.current.push({ kind: "ring", x: ev.x, y: ev.y, t, seed });
-            break;
-          case "bump": {
-            if (near && now - lastKnock > 50) sound.bump();
-            lastKnock = now;
-            const i = COURSE.bumpers.findIndex((b) => Math.hypot(b.at.x - ev.x, b.at.y - ev.y) < 0.01);
-            if (i >= 0) hits.current.set(i, t);
-            if (isMe && mine) {
-              juice.current.impact = { t, n: Math.atan2(mine.vy, mine.vx), power: 0.5 };
-              shake.current = { t, power: 0.12, a: Math.atan2(mine.vy, mine.vx) };
-            }
-            break;
-          }
-          case "splash":
-            if (near) sound.drop();
-            if (isMe && mine) juice.current.outV = { x: mine.vx, y: mine.vy };
-            fx.current.push({ kind: "ring", x: ev.x, y: ev.y, t, seed, color: "#dfe9e3" });
-            break;
-          case "sink": {
-            if (near) sound.plunk();
-            fx.current.push({ kind: "ring", x: ev.x, y: ev.y, t, seed }, { kind: "ring", x: ev.x, y: ev.y, t: t + 0.12, seed }, { kind: "confetti", x: ev.x, y: ev.y - 1, t: t + 0.15, seed });
-            const ci = allCups(COURSE).findIndex((k) => Math.hypot(k.x - ev.x, k.y - ev.y) < 0.01);
-            if (ci >= 0 && !isMe) flagOut.current.set(ci, t);
-            if (!isMe) toast(`${namesRef.current.get(id) ?? "Someone"} sank one`);
-            // Long enough to watch it drop.
-            else if (hole && strokes !== undefined) setTimeout(() => setResult({ strokes }), 1100);
-            break;
-          }
-          case "spawn":
-            if (isMe) {
-              juice.current.spawn = t;
-              juice.current.flag = undefined;
-              juice.current.flags = undefined;
-            }
-            break;
-          case "box":
-            if (isMe) sound.pickup();
-            fx.current.push({ kind: "boxpop", x: ev.x, y: ev.y, t, seed }, { kind: "spark", x: ev.x, y: ev.y, t, seed });
-            if (isMe) fx.current.push({ kind: "label", x: ev.x, y: ev.y, t, seed, text: ITEMS[ev.item].name });
-            break;
-          case "launch":
-            if (near) sound.whoosh();
-            break;
-          case "land":
-            if (near) sound.land(ev.power);
-            break;
-          case "lip":
-            if (near) sound.lip();
-            break;
-          case "boom":
-            if (near) sound.blast(1);
-            fx.current.push({ kind: "boom", x: ev.x, y: ev.y, t, seed, color: "big" }, { kind: "ring", x: ev.x, y: ev.y, t, seed, big: 2.2 }, { kind: "spark", x: ev.x, y: ev.y, t, seed });
-            if (near) shake.current = { t, power: 0.55, a: seed };
-            break;
-          case "mine":
-          case "smash":
-            if (near) sound.blast(ev.type === "mine" ? 0.8 : 0.5);
-            fx.current.push({ kind: "boom", x: ev.x, y: ev.y, t, seed }, { kind: "ring", x: ev.x, y: ev.y, t, seed, big: 1.3 }, { kind: "spark", x: ev.x, y: ev.y, t: t + 0.02, seed });
-            if (near) shake.current = { t, power: ev.type === "mine" ? 0.4 : 0.2, a: seed };
-            break;
-          case "rail":
-            if (near) sound.whoosh();
-            fx.current.push({ kind: "rail", x: ev.x, y: ev.y, x2: ev.x2, y2: ev.y2, t, seed });
-            break;
-          case "stop":
-            if (isMe) sound.brake();
-            break;
-          case "missile":
-            if (near) sound.whoosh();
-            break;
-          case "horn":
-            if (near) sound.horn();
-            fx.current.push({ kind: "horn", x: ev.x, y: ev.y, t, seed, big: 5 });
-            break;
-          case "flash":
-            if (near) sound.camera();
-            fx.current.push({ kind: "flash", x: ev.x, y: ev.y, t, seed, big: 9 });
-            break;
-          case "freeze":
-            if (near) sound.freeze();
-            fx.current.push({ kind: "frost", x: ev.x, y: ev.y, t, seed, big: 3.6 }, { kind: "spark", x: ev.x, y: ev.y, t, seed, color: "#dff1f7" });
-            break;
-          case "honey":
-            if (near) sound.honey();
-            fx.current.push({ kind: "puff", x: ev.x, y: ev.y, t, seed, color: "#d99a2b" });
-            break;
-          case "shield":
-            if (near) sound.shieldUp();
-            fx.current.push({ kind: "ring", x: ev.x, y: ev.y, t, seed, color: "#8cc4e3" });
-            break;
-          case "coffee":
-            if (isMe) sound.coffee();
-            break;
-          case "bolt":
-            if (near) {
-              sound.thunder();
-              shake.current = { t, power: 0.3, a: seed };
-            }
-            fx.current.push({ kind: "bolt", x: ev.x, y: ev.y, x2: ev.x + 0.6, y2: ev.y - 9, t, seed }, { kind: "ring", x: ev.x, y: ev.y, t, seed, big: 1.2 });
-            break;
-          case "tracer":
-            if (near) sound.gun(ev.power > 0.7);
-            fx.current.push({ kind: "tracer", x: ev.x, y: ev.y, x2: ev.x2, y2: ev.y2, t, seed, big: ev.power > 0.7 ? 1.6 : 1 });
-            if (isMe && mine && ev.power > 0.7) shake.current = { t, power: 0.25, a: Math.atan2(ev.y - ev.y2, ev.x - ev.x2) };
-            break;
-          case "stun":
-            fx.current.push({ kind: "spark", x: ev.x, y: ev.y, t, seed, color: "#f3d35b" });
-            break;
-          case "fizzle":
-            if (near) sound.fizzle();
-            fx.current.push({ kind: "puff", x: ev.x, y: ev.y, t, seed });
-            break;
-        }
-      }
-      s.events.length = 0;
-      // Forget events too old to come round again.
-      for (const [k, tick] of n.seen) if (tick < s.tick - TPS * 3) n.seen.delete(k);
-    };
-
-    const frame = (nowMs: number) => {
-      raf = requestAnimationFrame(frame);
-      const dt = Math.min(0.1, (nowMs - last) / 1000);
-      last = nowMs;
-      t += dt;
-      if (!clock.ready || n.startAt === 0 || (!n.dirty && !n.state)) return;
-      const tf = ((clock.now() - n.startAt) * TPS) / 1000;
-      const target = Math.max(0, Math.floor(tf));
-      const frac = Math.max(0, Math.min(1, tf - target));
-
-      // New commands or a new snapshot: rebuild from the snapshot, and ease every ball from where it
-      // was drawn to where it really is.
-      if (n.dirty) {
-        n.dirty = false;
-        const before = n.state ? positions(n.state) : null;
-        const sunkBefore = new Map(n.state?.balls.map((b) => [b.id, b.holes]));
-        const s = n.base ? unpack(n.base) : newWorld(COURSE, { collide: n.collide });
-        const merged = withPending(n.server, n.pending, s.tick);
-        n.pending = merged.pending;
-        n.cmds = merged.cmds;
-        advance(s, WORLD, Math.max(s.tick, target), n.cmds);
-        if (before)
-          for (const b of s.balls) {
-            const was = before.get(b.id);
-            if (!was) continue;
-            const o = n.off.get(b.id) ?? { x: 0, y: 0, tau: EASE_S };
-            const dx = was.x + o.x - b.x, dy = was.y + o.y - b.y;
-            // Sunk and back on a tee in the meantime: that's a real jump. Anything else glides.
-            if (sunkBefore.get(b.id) !== b.holes) n.off.delete(b.id);
-            else n.off.set(b.id, { x: dx, y: dy, tau: Math.hypot(dx, dy) > FAR ? EASE_FAR_S : EASE_S });
-          }
-        n.state = s;
-        n.prev = positions(s);
-        play(s, before ? "rebuilt" : "arrived");
-      }
-      const s = n.state!;
-      if (target > s.tick) {
-        if (target - 1 > s.tick) advance(s, WORLD, target - 1, n.cmds);
-        n.prev = positions(s);
-        advance(s, WORLD, target, n.cmds);
-        play(s, "fresh");
-      }
-      for (const [id, o] of n.off) {
-        const k = 1 - Math.exp(-dt / o.tau);
-        o.x -= o.x * k;
-        o.y -= o.y * k;
-        if (Math.abs(o.x) + Math.abs(o.y) < 1e-3) n.off.delete(id);
-      }
-      const drawn = (b: Ball): Vec => {
-        const p = n.prev.get(b.id) ?? b;
-        const o = n.off.get(b.id) ?? { x: 0, y: 0 };
-        const jumped = Math.hypot(b.x - p.x, b.y - p.y) > 1.5;
-        return jumped ? { x: b.x + o.x, y: b.y + o.y } : { x: p.x + (b.x - p.x) * frac + o.x, y: p.y + (b.y - p.y) * frac + o.y };
-      };
-
-      const mine = myBall(s);
-      if (!mine) {
-        // Cleared off a hole while the phone was away: straight back on.
-        if (worldIdRef.current && nowMs - lastJoin > 3000) {
-          lastJoin = nowMs;
-          joinRef.current();
-        }
-        return;
-      }
-      const at = drawn(mine);
-      lastDrawn.current = at;
-      if (mine.mode === "roll") {
-        wasRolling = true;
-        const tr = trail.current;
-        const lp = tr[tr.length - 1];
-        if (!lp || Math.hypot(lp.x - at.x, lp.y - at.y) > 0.25) tr.push({ ...at });
-        if (tr.length > 24) tr.shift();
-      } else if (wasRolling) {
-        wasRolling = false;
-        stoppedAt = t;
-      }
-      sound.rolling(mine.mode === "roll" && mine.z <= 0 ? Math.hypot(mine.vx, mine.vy) : 0, mine.mode === "roll" ? groundUnder(WORLD, mine) : null);
-
-      // The camera follows my ball, leaning the way it's going (or toward the nearest flag).
-      const c = cam.current, bx = box.current;
-      if (bx.big && !overviewRef.current && nowMs - bx.panned > 1500) {
-        const cup = allCups(COURSE).reduce((a, q) => (Math.hypot(q.x - at.x, q.y - at.y) < Math.hypot(a.x - at.x, a.y - at.y) ? q : a));
-        const dx = cup.x - at.x, dy = cup.y - at.y, d = Math.hypot(dx, dy) || 1;
-        const lean = mine.mode === "roll" ? { x: mine.vx * 0.35, y: mine.vy * 0.35 } : { x: (dx / d) * Math.min(5, d * 0.3), y: (dy / d) * Math.min(5, d * 0.3) };
-        const kc = 1 - Math.exp(-dt * 3);
-        c.x += (at.x + lean.x - c.x) * kc;
-        c.y += (at.y + lean.y - c.y) * kc;
-      }
-      const sa = t - shake.current.t;
-      const sk = sa < 0.45 ? shake.current.power * Math.exp(-sa * 9) * Math.sin(sa * 52) : 0;
-      const shook = sk !== 0 ? { ...c, x: c.x + Math.cos(shake.current.a) * sk, y: c.y + Math.sin(shake.current.a) * sk } : c;
-
-      fx.current = fx.current.filter((f) => t - f.t < 2);
-      // Rockets trail smoke.
-      for (const b of s.balls)
-        if (b.shot === "rocket" && b.mode === "roll" && Math.hypot(b.vx, b.vy) > 6 && t - (smoked.get(b.id) ?? -9) > 0.06) {
-          smoked.set(b.id, t);
-          fx.current.push({ kind: "puff", x: b.x, y: b.y - b.z * 0.5, t, seed: (t * 977) | 0, color: "#9c9a92" });
-        }
-      const others: Other[] = s.balls.filter((b) => b !== mine).map((b) => ({ sim: b, at: drawn(b), color: colorOf(b), name: namesRef.current.get(b.id) ?? "" }));
-      const tg = targetRef.current;
-      drawFrame(ctx, {
-        c: COURSE,
-        sim: mine,
-        cam: shook,
-        juice: juice.current,
-        dpr: cv.current!.width / Math.max(1, bx.w),
-        t,
-        trail: trail.current,
-        ball: at,
-        trailAlpha: mine.mode === "roll" ? 1 : Math.max(0, 1 - (t - stoppedAt) / 0.4),
-        fx: fx.current,
-        hits: hits.current,
-        // A Flash Camera took the aim line away.
-        aim: aim.current && mine.t < mine.blindUntil ? { ...aim.current, line: [] } : aim.current,
-        air: { missiles: s.missiles, storms: s.storms },
-        target: tg && ITEMS[tg.kind].aim ? { ...ITEMS[tg.kind].aim!, at: targetAt.current } : null,
-        inset: { top: bx.top, bottom: bx.bottom },
-        others,
-        myColor: colorOf(mine),
-        flagOut: flagOut.current,
-      });
-
-      // The flash fading off the screen.
-      if (blind.current) blind.current.style.opacity = String(Math.max(0, Math.min(1, (mine.blindUntil - mine.t) / 1.2)) * 0.92);
-      const status = statusOf(mine), shootable = canShoot(mine);
-      const slow = n.pending.some((p) => !p.acked && nowMs - (p.at ?? nowMs) > SLOW_MS);
-      const h = `${mine.mode}|${mine.bag.join()}|${mine.armed}|${mine.shot}|${mine.holes}|${mine.strokes}|${status}|${shootable}|${slow}`;
-      if (h !== lastHud) {
-        lastHud = h;
-        setHud({ ready: true, mode: mine.mode, bag: [...mine.bag], armed: mine.armed, shot: mine.shot, holes: mine.holes, strokes: mine.strokes, status, canShoot: shootable, slow });
-      }
-    };
-    raf = requestAnimationFrame(frame);
-    // For the e2e suite: every ball as this phone has it.
-    (window as unknown as { __golf?: unknown }).__golf = {
-      balls: () => n.state?.balls.map((b) => ({ id: b.id, x: b.x, y: b.y, mode: b.mode, holes: b.holes, strokes: b.strokes, t: b.t })) ?? [],
-      tick: () => n.state?.tick ?? -1,
-      me: () => meRef.current,
-      // Which snapshot the phone is subscribed from, and where my ball was last drawn.
-      from: () => fromRef.current,
-      drawn: () => lastDrawn.current,
-      shoot: (angle: number, power: number) => sendRef.current("shot", { a: angle, p: power }),
-    };
-    return () => {
-      cancelAnimationFrame(raf);
-      sound.rolling(0, null);
-    };
-  }, [clock]);
+  useGolfLoop({ course: COURSE, world: WORLD, hole, net: golfNet, scene: { cv, cam, box, overview: overviewRef, aim, blind, target: targetRef, targetAt }, setHud, setResult });
 
   // --- Input: drag back to aim and let go to shoot; tap the map to place a targeted item. ---
   const pointers = useRef(new Map<number, Vec>());
@@ -552,28 +125,6 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
   const toWorld = (p: Vec) => ({ x: (p.x - cam.current.ox) / cam.current.s + cam.current.x, y: (p.y - cam.current.oy) / cam.current.s + cam.current.y });
   const maxPull = () => Math.min(190, box.current.w * 0.46);
   const mine = () => net.current.state?.balls.find((b) => b.id === meRef.current);
-  const tickNow = () => Math.max(0, Math.floor(((clock.now() - net.current.startAt) * TPS) / 1000));
-  const send = (kind: "shot" | "use" | "fire" | "hop" | "brake" | "reset", extra: { a?: number; p?: number; i?: number; x?: number; y?: number } = {}) => {
-    const n = net.current;
-    if (!worldId || !meRef.current) return;
-    const tick = tickNow(), seq = ++n.seq;
-    // It plays from here, right now. The server's copy replaces it when that turns up.
-    const mine: Pending = { tick, by: meRef.current, seq, kind, at: performance.now(), ...extra };
-    n.pending.push(mine);
-    n.dirty = true;
-    act({ worldId, kind, clientTick: tick, seq, ...extra })
-      .then(() => {
-        mine.acked = true;
-        n.pending.forEach((p) => p.seq === seq && (p.acked = true));
-      })
-      .catch(() => {
-        n.pending = n.pending.filter((p) => p.seq !== seq);
-        n.dirty = true;
-        toast.error("That didn't go through.");
-      });
-  };
-
-  sendRef.current = send;
 
   const down = (e: RPointerEvent) => {
     sound.unlock();
@@ -680,115 +231,29 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
   const others = playing.filter((p) => p._id !== meId);
 
   return (
-    <div ref={wrap} data-mode={hud.mode ?? ""} className="relative -mx-4 -mb-[calc(env(safe-area-inset-bottom)+16px)] h-[100dvh] touch-none select-none overflow-hidden bg-background">
+    <FullscreenStage ref={wrap} data-mode={hud.mode ?? ""} className="touch-none select-none">
       <canvas ref={cv} className="absolute inset-0 size-full" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} aria-label={hole ? `${COURSE.name}, hole ${hole.number}` : `${COURSE.name}, an open course`} />
 
-      <div ref={top} className="pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top)+34px)] z-20 flex items-center gap-2 px-3">
-        <button type="button" aria-label="Back" onClick={goBack} className={round}>
-          <CaretLeftIcon size={22} weight="bold" />
-        </button>
-        <div className="pointer-events-auto flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-full bg-card/90 py-1 pl-4 pr-1.5 shadow-md backdrop-blur-md">
-          <span className="min-w-0 flex-1">
-            <span className="block truncate font-display text-callout leading-tight">{COURSE.name}</span>
-            <span className="block truncate text-caption text-muted-foreground">
-              {hole ? `Hole ${hole.number}, par ${COURSE.par}` : others.length === 0 ? "Just you" : others.length === 1 ? `${others[0].name} is here` : `${others.length + 1} here`}
-            </span>
-          </span>
-          {others.length > 0 && (
-            <span className="flex shrink-0 -space-x-2">
-              {others.slice(0, 3).map((p) => (
-                <PlayerAvatar key={p._id} name={p.name} image={p.image} size={28} className="rounded-full ring-2 ring-card" />
-              ))}
-            </span>
-          )}
-          {hole ? (
-            <span className="flex h-9 min-w-9 shrink-0 items-center justify-center rounded-full bg-primary px-3 font-display text-callout text-primary-foreground" aria-label={`${hud.strokes} strokes`}>
-              {hud.strokes}
-            </span>
-          ) : (
-            <span className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-primary px-3 font-display text-callout text-primary-foreground" aria-label={`${hud.holes} sunk`}>
-              <FlagPennantIcon weight="fill" size={16} />
-              {hud.holes}
-            </span>
-          )}
-        </div>
-      </div>
+      <TopBar ref={top} course={COURSE} hole={hole} others={others} hud={hud} onBack={goBack} />
+      <TargetHint target={target} onCancel={() => setTarget(null)} />
+      <Dock
+        ref={dock}
+        hud={hud}
+        target={target}
+        hole={!!hole}
+        big={big}
+        overview={overview}
+        onItem={tapItem}
+        onRolling={() => send(hud.shot === "jump" ? "hop" : "brake")}
+        onOverview={() => setOverview((o) => !o)}
+        onReset={() => send("reset")}
+      />
 
-      <AnimatePresence>
-        {target && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ type: "spring", bounce: 0, duration: 0.3 }}
-            className="absolute inset-x-0 top-[calc(env(safe-area-inset-top)+92px)] z-20 flex justify-center"
-          >
-            <span className="flex min-h-11 items-center gap-2 rounded-full bg-card/90 py-1 pl-4 pr-1 font-display text-callout shadow-md backdrop-blur-md">
-              {ITEMS[target.kind].hint}
-              <button type="button" aria-label="Cancel" onClick={() => setTarget(null)} className="grid size-9 place-items-center rounded-full bg-muted active:scale-[0.94]">
-                <XIcon weight="bold" />
-              </button>
-            </span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <div ref={dock} className="absolute inset-x-0 bottom-0 z-10 flex items-center gap-2 px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3">
-        <div className="flex gap-2">
-          {Array.from({ length: BAG_SIZE }, (_, i) => {
-            const p = hud.bag[i];
-            const item = p ? ITEMS[p] : null;
-            const Ico = item?.icon;
-            const on = target?.i === i || (p && hud.armed === p && i === hud.bag.indexOf(p));
-            return (
-              <button
-                key={`${i}-${p ?? "empty"}`}
-                type="button"
-                disabled={!p || hud.mode !== "aim"}
-                onClick={() => tapItem(i)}
-                aria-label={item ? `Use ${item.name}` : "Empty slot"}
-                className={cn(
-                  "grid size-14 place-items-center rounded-lg bg-card/90 shadow-md backdrop-blur-md transition-transform duration-100 active:scale-[0.94] disabled:opacity-60",
-                  !p && "bg-card/50 shadow-none",
-                  on && "bg-primary text-primary-foreground",
-                )}
-              >
-                {Ico && (
-                  <motion.span initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", bounce: 0.4, duration: 0.4 }}>
-                    <Ico size={26} weight={on ? "fill" : "bold"} />
-                  </motion.span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-        <span className="min-w-0 flex-1 text-center font-display text-footnote text-foreground [text-shadow:0_1px_3px_var(--background)]" aria-live="polite">
-          {hud.slow && <span className="block truncate">Slow connection</span>}
-          {hud.status && <span className="block truncate">{hud.status}</span>}
-          {hud.armed && <span className="block truncate">{ITEMS[hud.armed].name} next shot</span>}
-        </span>
-        {hud.mode === "roll" && (hud.shot === "brake" || hud.shot === "jump") ? (
-          <button type="button" onPointerDown={() => send(hud.shot === "jump" ? "hop" : "brake")} className="flex h-14 items-center rounded-lg bg-primary px-5 font-display text-callout text-primary-foreground shadow-md active:scale-[0.97]">
-            {hud.shot === "jump" ? "Jump" : "Brake"}
-          </button>
-        ) : (
-          <>
-            {big && (
-              <button type="button" aria-label={overview ? "Follow my ball" : "See the whole map"} onClick={() => setOverview((o) => !o)} className={cn(round, "size-14")}>
-                {overview ? <CornersInIcon size={24} weight="bold" /> : <CornersOutIcon size={24} weight="bold" />}
-              </button>
-            )}
-            <button type="button" aria-label={hole ? "Start the hole again" : "Back to a tee"} disabled={hud.mode !== "aim"} onClick={() => send("reset")} className={cn(round, "size-14 disabled:opacity-60")}>
-              <GolfIcon size={24} weight="bold" />
-            </button>
-          </>
-        )}
-      </div>
-
+      {/* A Flash Camera going off: white light over the map, whatever the theme. */}
       <div ref={blind} aria-hidden className="pointer-events-none absolute inset-0 z-20 bg-white opacity-0" />
 
       {hole && (
-        // The hole's name as it comes up.
+        // The hole's name as it comes up, white over the course's own fixed colors.
         <motion.div
           initial={{ opacity: 1 }}
           animate={{ opacity: 0 }}
@@ -821,55 +286,6 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
           <span className="rounded-full bg-card/90 px-4 py-2 font-display text-callout shadow-md">Teeing up</span>
         </div>
       )}
-    </div>
-  );
-}
-
-// A sunk hole: what that was called, how the crew's done on it, and on to the next. The ball's already
-// back on the tee behind it, for another go.
-function HoleResult({ strokes, par, scores, next, onAgain, onNext }: { strokes: number; par: number; scores: { userId: string; name: string; image: string | null; best: number }[]; next: string | null; onAgain: () => void; onNext: () => void }) {
-  const tone = strokes < par ? "text-primary" : "";
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-30 flex items-end bg-black/40 p-3 pb-[calc(env(safe-area-inset-bottom)+12px)]">
-      <motion.div
-        initial={{ y: 40 }}
-        animate={{ y: 0 }}
-        exit={{ y: 40 }}
-        transition={{ type: "spring", bounce: 0, duration: 0.35 }}
-        className="flex w-full flex-col gap-4 rounded-3xl bg-card p-5"
-        role="dialog"
-        aria-label="Hole finished"
-      >
-        <div className="text-center">
-          <h2 className={cn("font-display text-title", tone)}>{scoreName(strokes, par)}</h2>
-          <p className="text-callout text-muted-foreground">
-            {strokes} {strokes === 1 ? "stroke" : "strokes"} on a par {par}
-          </p>
-        </div>
-        {scores.length > 0 && (
-          <ul className="flex flex-col gap-2">
-            {scores
-              .slice()
-              .sort((a, b) => a.best - b.best)
-              .slice(0, 4)
-              .map((r) => (
-                <li key={r.userId} className="flex items-center gap-2 text-callout">
-                  <PlayerAvatar name={r.name} image={r.image ?? undefined} size={28} className="rounded-full" />
-                  <span className="min-w-0 flex-1 truncate">{r.name}</span>
-                  <span className="font-display">{r.best}</span>
-                </li>
-              ))}
-          </ul>
-        )}
-        <div className="flex gap-2.5">
-          <Button size="xl" variant="secondary" className="flex-1" onClick={onAgain}>
-            Again
-          </Button>
-          <Button size="xl" className="flex-1" onClick={onNext}>
-            {next ? "Next hole" : "Done"}
-          </Button>
-        </div>
-      </motion.div>
-    </motion.div>
+    </FullscreenStage>
   );
 }

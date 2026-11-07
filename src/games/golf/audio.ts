@@ -96,7 +96,6 @@ export function setMuted(m: boolean) {
   muted = m;
   if (ctx && g && !offline) g.out.gain.setTargetAtTime(m ? 0 : 0.9, ctx.currentTime, 0.05);
 }
-export const isMuted = () => muted;
 // Leaving the game: the ball's not rolling any more.
 export function stop() {
   rolling(0, null);
