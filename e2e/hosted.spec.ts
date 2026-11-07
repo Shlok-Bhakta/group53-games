@@ -1,17 +1,10 @@
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { Page } from "@playwright/test";
-import { createPlayer, expect, phone, test } from "./fixtures";
+import { createPlayer, expect, test } from "./fixtures";
 import { publish } from "../scripts/publish-hosted.mjs";
 
 const backend = () => JSON.parse(readFileSync(path.resolve("e2e/.state/backend.json"), "utf8")) as { url: string; adminKey: string };
-
-async function enablePush(page: Page) {
-  await page.goto("/");
-  await page.getByRole("button", { name: "Turn on notifications" }).click();
-  await expect(page.getByText("Turn on notifications to play")).toHaveCount(0);
-}
 
 // A little stand-in for a real build: it reads a gzipped file by a relative path, keeps something in its own
 // storage, shows what the app told it, and goes back through the app.
@@ -35,10 +28,9 @@ function fixture(version: string) {
   return dir;
 }
 
-test("a hosted game: its card, the iframe, its files and its saves, and back again", async ({ context }) => {
+test("a hosted game: its card, the iframe, its files and its saves, and back again", async ({ phones }) => {
   test.setTimeout(120_000);
-  const page = await phone(context, { player: await createPlayer("Shlok"), notifications: "granted" });
-  await enablePush(page);
+  const page = await phones.open({ player: await createPlayer("Shlok"), push: "on" });
 
   // Nothing published yet: the page says so and can still go back.
   await page.goto("/mereddia");
@@ -93,14 +85,14 @@ test("a hosted game: its card, the iframe, its files and its saves, and back aga
 });
 
 // The real game through the real page: MEREDDIA_DIST=<its dist-mereddia> npm run test:e2e -- e2e/hosted -g "real build".
-test("the real build plays in the iframe", async ({ context }) => {
+test("the real build plays in the iframe", async ({ phones }) => {
   test.skip(!process.env.MEREDDIA_DIST, "Set MEREDDIA_DIST to a built dist-mereddia");
   test.setTimeout(300_000);
   const { url, adminKey } = backend();
   const started = Date.now();
   const done = await publish({ url, adminKey, game: "mereddia", dir: process.env.MEREDDIA_DIST! });
   console.log(`published ${done.files} files, ${(done.bytes / 1e6).toFixed(1)} MB stored, in ${((Date.now() - started) / 1000).toFixed(0)}s`);
-  const page = await phone(context, { player: await createPlayer("Shlok"), notifications: "granted" });
+  const page = await phones.open({ player: await createPlayer("Shlok"), push: "on" });
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => void (m.type() === "error" && errors.push(m.text().slice(0, 200))));
@@ -116,7 +108,6 @@ test("the real build plays in the iframe", async ({ context }) => {
     bytes += Number(r.headers()["content-length"] ?? 0);
     if (r.status() >= 400) errors.push(`${r.status()} ${r.url()}`);
   });
-  await enablePush(page);
   await page.goto("/games");
   const tapped = Date.now();
   await page.getByRole("link", { name: "Play Journey Across Mereddia" }).click();

@@ -111,7 +111,7 @@ export function StockChart({ symbol, quote, title, stats }: { symbol: string; qu
           <span className="truncate text-callout font-semibold text-muted-foreground">{title ?? quote?.name ?? display(symbol)}</span>
           <MarketState market={market} earnings={stats?.earnings} now={now} />
         </div>
-        <div className={`flex ${S.heroPrice} items-center font-display text-title-lg`}>
+        <div data-hero-price className={`flex ${S.heroPrice} items-center font-display text-title-lg`}>
           {last !== undefined && <Ticker value={last} text={price(last, unit)} instant={!!scrub} />}
         </div>
         <div className={`flex ${S.heroLine} items-center`}>

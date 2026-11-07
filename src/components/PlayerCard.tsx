@@ -16,6 +16,7 @@ export function PlayerCard({ player, online, size = "grid", className }: Props) 
   return (
     <div
       className={cn("frame pcard", hero ? "aspect-[5/6]" : "aspect-[3/4]", className)}
+      data-player-card
       data-frame={player.frame}
       data-glow={player.glow}
       style={{ "--frame-color": player.frameColor } as CSSProperties}

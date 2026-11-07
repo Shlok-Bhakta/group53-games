@@ -1,7 +1,7 @@
-import type { Browser, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { anyApi } from "convex/server";
 import { marketClock } from "../convex/stonks/market";
-import { admin, createPlayer, expect, phone, test, type Player } from "./fixtures";
+import { admin, convexIdle, createPlayer, expect, test, type Phones, type Player } from "./fixtures";
 
 // Stonks on a phone: the card on Games, the board ranked by share of the index, a trade arriving from
 // the sidecar (here, straight through its internal mutation) and moving the board live, and a stock's
@@ -39,16 +39,21 @@ async function seed() {
   return a;
 }
 
-async function enablePush(page: Page) {
-  await page.goto("/");
-  await page.getByRole("button", { name: "Turn on notifications" }).click();
-  await expect(page.getByText("Turn on notifications to play")).toHaveCount(0);
-}
-
-async function intoStonks(page: Page) {
-  await enablePush(page);
+// A phone on the board.
+async function intoStonks(phones: Phones, player: Player) {
+  const page = await phones.open({ player, push: "on" });
   await page.goto("/stonks");
   await expect(page.getByRole("heading", { name: "Stonks" })).toBeVisible();
+  return page;
+}
+
+// Everything whose key starts with one of these has been warmed (src/games/stonks/warm.ts), and the
+// backend has answered it, so it's in the client's cache for the next tap.
+async function warmed(page: Page, ...prefixes: string[]) {
+  await expect
+    .poll(() => page.evaluate((prefixes) => prefixes.filter((p) => !((window as unknown as { __stonksWarmed?: string[] }).__stonksWarmed ?? []).some((k) => k.startsWith(p))), prefixes))
+    .toEqual([]);
+  await convexIdle(page);
 }
 
 // Records whether a loading skeleton ever shows from now on (they all carry aria-busy).
@@ -67,10 +72,9 @@ const sawSkeleton = (page: Page) => page.evaluate(() => (window as unknown as { 
 
 const rowOrder = (page: Page) => page.getByRole("link", { name: /^(NVDA|AAPL|MSFT),/ }).evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")!.split(",")[0]));
 
-test("Stonks has a card on Games, and Play opens the board", async ({ context }) => {
+test("Stonks has a card on Games, and Play opens the board", async ({ phones }) => {
   await seed();
-  const page = await phone(context, { player: await createPlayer("Shlok"), notifications: "granted" });
-  await enablePush(page);
+  const page = await phones.open({ player: await createPlayer("Shlok"), push: "on" });
   await page.goto("/games");
   await page.getByRole("heading", { name: "Stonks" }).scrollIntoViewIfNeeded();
   await expect(page.getByRole("img", { name: "A stock chart going to the moon" })).toBeVisible();
@@ -82,10 +86,9 @@ test("Stonks has a card on Games, and Play opens the board", async ({ context })
   await expect(page.getByText(/weights from SPY, Oct 29/)).toBeVisible();
 });
 
-test("a trade from the sidecar moves the board live, and the ranking follows the price", async ({ context }) => {
+test("a trade from the sidecar moves the board live, and the ranking follows the price", async ({ phones }) => {
   const a = await seed();
-  const page = await phone(context, { player: await createPlayer("Shlok"), notifications: "granted" });
-  await intoStonks(page);
+  const page = await intoStonks(phones, await createPlayer("Shlok"));
   await expect.poll(() => rowOrder(page)).toEqual(["NVDA", "AAPL", "MSFT"]);
   const now = Date.now();
   // Apple jumps 10%: its share of the index passes NVIDIA's.
@@ -95,10 +98,9 @@ test("a trade from the sidecar moves the board live, and the ranking follows the
   await expect.poll(() => rowOrder(page)).toEqual(["AAPL", "NVDA", "MSFT"]);
 });
 
-test("a stock's page: price, stats, ranges, and a chart you can scrub", async ({ context }) => {
+test("a stock's page: price, stats, ranges, and a chart you can scrub", async ({ phones }) => {
   await seed();
-  const page = await phone(context, { player: await createPlayer("Shlok"), notifications: "granted" });
-  await intoStonks(page);
+  const page = await intoStonks(phones, await createPlayer("Shlok"));
   await page.getByRole("link", { name: /^MSFT,/ }).click();
   await expect(page).toHaveURL(/\/stonks\/MSFT$/);
   await expect(page.getByRole("heading", { name: "MSFT" })).toBeVisible();
@@ -107,7 +109,7 @@ test("a stock's page: price, stats, ranges, and a chart you can scrub", async ({
   await expect(stats.getByText("Share of the S&P 500")).toBeVisible();
   await expect(stats.getByText("$521.00")).toBeVisible(); // previous close
   const section = page.getByRole("region", { name: "Microsoft Corporation chart" });
-  const hero = section.locator(".font-display.text-title-lg");
+  const hero = section.locator("[data-hero-price]");
   const live = await hero.textContent();
   // A finger on the chart shows that moment's price and time; letting go goes back to the live price.
   const chart = section.getByRole("img", { name: /^Microsoft Corporation, (today|\w+day),/ });
@@ -125,35 +127,34 @@ test("a stock's page: price, stats, ranges, and a chart you can scrub", async ({
   await expect(page.getByRole("radio", { name: "1W" })).toBeChecked();
 });
 
-test("everything you can tap is already loaded: no skeleton from the Games card, the board or a stock", async ({ context }) => {
+test("everything you can tap is already loaded: no skeleton from the Games card, the board or a stock", async ({ phones }) => {
   await seed();
-  const page = await phone(context, { player: await createPlayer("Shlok"), notifications: "granted" });
-  await enablePush(page);
+  const page = await phones.open({ player: await createPlayer("Shlok"), push: "on" });
   await page.goto("/games");
   await page.getByRole("heading", { name: "Stonks" }).scrollIntoViewIfNeeded();
   // The card on screen starts loading the board: its code and its data.
-  await page.waitForTimeout(1500);
+  await expect.poll(() => page.evaluate(() => performance.getEntriesByType("resource").some((e) => /\/Stonks-[\w-]+\.js$/.test(e.name)))).toBe(true);
+  await warmed(page, "stonks:board:", "stonks:chart:");
   await watchForSkeletons(page);
   await page.getByRole("link", { name: "Play Stonks" }).click();
   await expect(page.getByRole("heading", { name: "Top 3" })).toBeVisible();
   // Rows on screen (or nearly) are warm, so a stock opens straight into its page.
   await page.getByRole("link", { name: /^MSFT,/ }).scrollIntoViewIfNeeded();
-  await page.waitForTimeout(800);
+  await warmed(page, 'stonks:quote:{"symbol":"MSFT"}', 'stonks:profile:{"symbol":"MSFT"}', 'stonks:chart:{"symbol":"MSFT"');
   await page.getByRole("link", { name: /^MSFT,/ }).click();
   await expect(page.getByRole("region", { name: "Stats" })).toBeVisible();
   await expect(page.getByText("Microsoft Corporation does a thing")).toBeVisible();
   expect(await sawSkeleton(page)).toBe(false);
 });
 
-test("pro mode: key stats, analysts and about, one tap away and remembered", async ({ context }) => {
+test("pro mode: key stats, analysts and about, one tap away and remembered", async ({ phones }) => {
   await seed();
-  const page = await phone(context, { player: await createPlayer("Shlok"), notifications: "granted" });
-  await intoStonks(page);
+  const page = await intoStonks(phones, await createPlayer("Shlok"));
   await expect(page.getByRole("heading", { name: "Market news" })).toBeVisible();
   await page.getByRole("link", { name: /^NVDA,/ }).click();
+  await expect(page.getByRole("heading", { name: "NVDA", level: 1 })).toBeVisible();
   await expect(page.getByRole("region", { name: "Key stats" })).toHaveCount(0);
-  // The board slides away; then there's one Pro button, the stock's.
-  await expect(page.getByRole("button", { name: "Pro mode" })).toHaveCount(1);
+  // One Pro button, the stock's (the board sliding away underneath is out of reach).
   const pro = page.getByRole("button", { name: "Pro mode" });
   await expect(pro).toHaveAttribute("aria-pressed", "false");
   await pro.click();
@@ -176,24 +177,16 @@ const trade = (symbol: string, price: number) => {
   return admin().mutation(anyApi.stonks.ingest, { ticks: [{ symbol, price, time: now, recv: now, source: "yahoo", session: "regular" }] });
 };
 
-async function secondPhone(browser: Browser, player: Player) {
-  const context = await browser.newContext({ viewport: { width: 393, height: 852 }, isMobile: true, hasTouch: true });
-  return phone(context, { player, notifications: "granted" });
-}
-
-test("everyone starts with $10,000: buy on one phone, it fills on the next trade, the crew sees it live", async ({ context, browser }) => {
+test("everyone starts with $10,000: buy on one phone, it fills on the next trade, the crew sees it live", async ({ phones }) => {
   await seed();
   const [a, b] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
-  const page = await phone(context, { player: a, notifications: "granted" });
-  const other = await secondPhone(browser, b);
-  await intoStonks(page);
-  await intoStonks(other);
+  const [page, other] = await Promise.all([intoStonks(phones, a), intoStonks(phones, b)]);
   // Being here is what makes the sidecar write every trade instead of one a minute.
   await expect.poll(() => admin().query(anyApi.stonks.hot, {})).toEqual(["*"]);
   const money = page.getByRole("region", { name: "Your money" });
   await expect(money).toContainText("$10,000.00");
   await expect(money).toContainText("#");
-  const crew = other.getByRole("region", { name: "Crew" });
+  const crew = other.getByRole("region", { name: "Crew", exact: true });
   await expect(crew.getByText("Shlok")).toBeVisible();
   await expect(crew.getByText("All cash").first()).toBeVisible();
 
@@ -227,18 +220,15 @@ test("everyone starts with $10,000: buy on one phone, it fills on the next trade
   await expect(other.getByRole("region", { name: "Crew trades" })).toContainText("Shlok bought NVDA");
   await expect(crew.getByText("1 position")).toBeVisible();
   await trade("NVDA", 300);
-  await expect(crew.locator("div", { hasText: "Shlok" }).first()).toContainText("$10,200.00");
-  await expect(crew.locator("[class*=h-14]").first()).toContainText("Shlok");
-  await other.context().close();
+  // Shlok's row, and it's moved to the top.
+  await expect(crew.getByRole("link", { name: "Shlok's profile" })).toContainText("$10,200.00");
+  await expect(crew.getByRole("link", { name: /'s profile$/ }).first()).toHaveAccessibleName("Shlok's profile");
 });
 
-test("a friend's profile: everyone on one chart, then what they hold, what's waiting and what they've done, and Buy one tap away", async ({ context, browser }) => {
+test("a friend's profile: everyone on one chart, then what they hold, what's waiting and what they've done, and Buy one tap away", async ({ phones }) => {
   await seed();
   const [a, b] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
-  const page = await phone(context, { player: a, notifications: "granted" });
-  const other = await secondPhone(browser, b);
-  await intoStonks(page);
-  await intoStonks(other);
+  const [page, other] = await Promise.all([intoStonks(phones, a), intoStonks(phones, b)]);
 
   // Chris buys NVDA, and lines up Apple with nothing trading it yet.
   const order = async (symbol: string) => {
@@ -262,10 +252,12 @@ test("a friend's profile: everyone on one chart, then what they hold, what's wai
   await expect(crew.getByRole("img", { name: /^Everyone's net worth over the game\./ })).toBeVisible();
   await expect(crew.getByRole("link", { name: "Chris's profile" })).toContainText("$10,250.00");
 
-  // Their profile is already there when you tap it.
-  await page.waitForTimeout(500);
+  // Their profile is already there when you tap it: a finger landing on the row warms it.
+  const chrisRow = crew.getByRole("link", { name: "Chris's profile" });
+  await chrisRow.dispatchEvent("pointerdown");
+  await warmed(page, "stonks:player:");
   await watchForSkeletons(page);
-  await crew.getByRole("link", { name: "Chris's profile" }).click();
+  await chrisRow.click();
   await expect(page.getByRole("heading", { name: "Chris", level: 1 })).toBeVisible();
   expect(await sawSkeleton(page)).toBe(false);
   await expect(page.getByRole("region", { name: "Chris's money" })).toContainText("$10,250.00");
@@ -290,7 +282,6 @@ test("a friend's profile: everyone on one chart, then what they hold, what's wai
   await page.goto("/stonks");
   await page.getByRole("link", { name: "Your profile" }).click();
   await expect(page.getByRole("heading", { name: "You", level: 1 })).toBeVisible();
-  // One, once the board has finished sliding away: it lists the same order.
   await expect(page.getByRole("button", { name: "Cancel Buy NVDA" })).toHaveCount(1);
 
   // It's a tap away from the Crew tab too.
@@ -298,13 +289,11 @@ test("a friend's profile: everyone on one chart, then what they hold, what's wai
   await page.getByRole("button", { name: /Chris/ }).first().click();
   await page.getByRole("link", { name: "Stonks profile" }).click();
   await expect(page.getByRole("heading", { name: "Chris", level: 1 })).toBeVisible();
-  await other.context().close();
 });
 
-test("short, cover at a profit; and a waiting order can be cancelled", async ({ context }) => {
+test("short, cover at a profit; and a waiting order can be cancelled", async ({ phones }) => {
   await seed();
-  const page = await phone(context, { player: await createPlayer("Shlok"), notifications: "granted" });
-  await intoStonks(page);
+  const page = await intoStonks(phones, await createPlayer("Shlok"));
   await page.goto("/stonks/MSFT");
   await page.getByRole("button", { name: "Short", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "25%" }).click();
@@ -333,10 +322,9 @@ test("short, cover at a profit; and a waiting order can be cancelled", async ({ 
   await expect(page.getByRole("region", { name: "Your money" })).toContainText("$10,500.00");
 });
 
-test("search finds anything, even what Yahoo has to be asked about, and it trades in its own currency", async ({ context }) => {
+test("search finds anything, even what Yahoo has to be asked about, and it trades in its own currency", async ({ phones }) => {
   const a = await seed();
-  const page = await phone(context, { player: await createPlayer("Shlok"), notifications: "granted" });
-  await intoStonks(page);
+  const page = await intoStonks(phones, await createPlayer("Shlok"));
   await a.mutation(anyApi.stonks.addSymbols, { rows: [{ symbol: "TM", name: "Toyota Motor Corporation", type: "EQUITY", exchange: "NYSE" }] });
   const box = page.getByRole("searchbox", { name: "Search anything" });
   // Tapping in shows there's more than stocks, and the board steps aside.
@@ -387,10 +375,9 @@ test("search finds anything, even what Yahoo has to be asked about, and it trade
   await expect(page.getByText("Bought $1,000.00 of 7203.T at ¥3,200.00")).toBeVisible();
 });
 
-test("crypto never shuts, and a feed that runs late says so", async ({ context }) => {
+test("crypto never shuts, and a feed that runs late says so", async ({ phones }) => {
   const a = await seed();
-  const page = await phone(context, { player: await createPlayer("Shlok"), notifications: "granted" });
-  await intoStonks(page);
+  const page = await intoStonks(phones, await createPlayer("Shlok"));
   const now = Date.now();
   await a.mutation(anyApi.stonks.snapshot, { rows: [{ symbol: "BTC-USD", price: 78000, time: now - 2000, prevClose: 77000, currency: "USD", type: "CRYPTOCURRENCY", exchange: "CCC", state: "REGULAR", name: "Bitcoin USD" }] });
   await page.goto("/stonks/BTC-USD");

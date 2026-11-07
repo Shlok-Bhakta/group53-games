@@ -109,6 +109,7 @@ export function Board({ pieces, view, canSelect, selectable, selected, targets, 
       ref={ref}
       role="grid"
       aria-label={label ?? "Chess board"}
+      data-disabled={disabled || undefined}
       className={cn("board relative aspect-square w-full touch-none select-none overflow-hidden rounded-sm", !small && "shadow-lg shadow-black/20")}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -133,9 +134,9 @@ export function Board({ pieces, view, canSelect, selectable, selected, targets, 
               {check.some((k) => same(k, sq)) && <span className="absolute inset-0 bg-[radial-gradient(circle,oklch(0.65_0.25_25/0.85)_15%,transparent_70%)]" />}
               {isTarget &&
                 (occupied ? (
-                  <span className={cn("absolute inset-0 rounded-full border-black/25", small ? "border-[3px]" : "border-[5px]")} />
+                  <span data-target className={cn("absolute inset-0 rounded-full border-black/25", small ? "border-[3px]" : "border-[5px]")} />
                 ) : (
-                  <span className={cn("absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/25", small ? "size-[38%]" : "size-[30%]")} />
+                  <span data-target className={cn("absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/25", small ? "size-[38%]" : "size-[30%]")} />
                 ))}
               {!small && c === 0 && (
                 <span className={cn("pointer-events-none absolute left-[5%] top-[4%] text-caption font-bold leading-none", dark ? "text-[var(--board-light)]" : "text-[var(--board-dark)]")}>

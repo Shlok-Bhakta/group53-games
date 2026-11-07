@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode, type Ref } from "react";
 import { useLocation, useNavigationType } from "react-router";
 import { useQuery } from "convex/react";
-import { animate, motion, useMotionValue, type MotionValue } from "motion/react";
+import { animate, motion, useIsPresent, useMotionValue, type MotionValue } from "motion/react";
 import { api } from "../convex/_generated/api";
 
 // Screens come in like a native navigation stack: tabs switch instantly, a screen pushed on top of a tab
@@ -34,13 +34,19 @@ const variants = {
     d === 0 ? { opacity: 0, transition: { duration: 0 } } : { x: d > 0 ? -window.innerWidth * 0.3 : window.innerWidth, zIndex: d > 0 ? 0 : 2, transition: SLIDE },
 };
 
-// One screen in the stack. Pushed screens can be swiped back from the left edge.
+// One screen in the stack. Pushed screens can be swiped back from the left edge. A screen on its way out
+// stays drawn while it slides, but takes no taps and leaves the accessibility tree at once, so screen
+// readers (and tests) only ever find one screen's buttons.
 export function Page({ children, direction, onBack, ref }: { children: ReactNode; direction: number; onBack: (() => void) | null; ref?: Ref<HTMLDivElement> }) {
   const x = useMotionValue(0);
-  useEdgeSwipe(x, onBack);
+  const present = useIsPresent();
+  useEdgeSwipe(x, present ? onBack : null);
   return (
     <motion.div
       ref={ref}
+      data-screen
+      inert={!present}
+      aria-hidden={present ? undefined : true}
       custom={direction}
       variants={variants}
       initial="enter"

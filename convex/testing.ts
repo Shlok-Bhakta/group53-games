@@ -7,7 +7,8 @@ import { SignJWT, importPKCS8 } from "jose";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { DEFAULT_PROFILE } from "./profileOptions";
-import type { Id } from "./_generated/dataModel";
+import schema from "./schema";
+import type { Id, TableNames } from "./_generated/dataModel";
 
 function assertTestDeployment() {
   if (process.env.ALLOW_TEST_HELPERS !== "1") throw new Error("Test helpers are disabled on this deployment.");
@@ -61,6 +62,36 @@ export const getMatch = internalQuery({
   },
 });
 
+export const profileOf = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, { userId }) => {
+    assertTestDeployment();
+    return await ctx.db.query("profiles").withIndex("by_user", (q) => q.eq("userId", userId)).unique();
+  },
+});
+
+// Push already on for a player's phone, without the tap: the subscription the fake push service in
+// e2e/fixtures.ts hands out, saved the way notifications:subscribe saves it.
+export const seedPush = internalMutation({
+  args: { userId: v.id("users"), endpoint: v.string() },
+  handler: async (ctx, { userId, endpoint }) => {
+    assertTestDeployment();
+    await ctx.db.insert("pushSubscriptions", { userId, endpoint, p256dh: "AQID", auth: "AQID" });
+  },
+});
+
+// A golf world as the server has it: whether it's still ticking, and the snapshot phones start from.
+export const golfWorld = internalQuery({
+  args: { key: v.string() },
+  handler: async (ctx, { key }) => {
+    assertTestDeployment();
+    const w = await ctx.db.query("golfWorlds").withIndex("by_key", (q) => q.eq("key", key)).unique();
+    if (!w) return null;
+    const snap = await ctx.db.query("golfSnapshots").withIndex("by_world", (q) => q.eq("worldId", w._id)).unique();
+    return { awake: w.awake, snapshotTick: snap?.tick ?? null };
+  },
+});
+
 export const rtCommands = internalQuery({
   args: { id: v.id("matches") },
   handler: async (ctx, { id }) => {
@@ -77,19 +108,22 @@ export const allMatches = internalQuery({
   },
 });
 
+// The mode's settings a test game is played with (only what differs from the defaults, like a lobby's).
+const settingsArg = v.optional(v.record(v.string(), v.number()));
+
 // Seats two players straight into an active game, the same way a joined lobby would.
 export const startMatch = internalAction({
-  args: { mode: v.string(), a: v.id("users"), b: v.id("users") },
-  handler: async (ctx, { mode, a, b }): Promise<string> => ctx.runMutation(internal.testing.insertActive, { mode, a, b }),
+  args: { mode: v.string(), a: v.id("users"), b: v.id("users"), settings: settingsArg },
+  handler: async (ctx, args): Promise<string> => ctx.runMutation(internal.testing.insertActive, args),
 });
 export const insertActive = internalMutation({
-  args: { mode: v.string(), a: v.id("users"), b: v.id("users") },
-  handler: async (ctx, { mode, a, b }) => {
+  args: { mode: v.string(), a: v.id("users"), b: v.id("users"), settings: settingsArg },
+  handler: async (ctx, { mode, a, b, settings }) => {
     assertTestDeployment();
     const now = Date.now();
     const state = mode === "chess:realtime" ? { kind: "realtime", ready: [], startAt: null } : { kind: "classic", fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", moves: [] };
     return await ctx.db.insert("matches", {
-      mode, status: "active", createdBy: a, players: [{ userId: a, color: "w" }, { userId: b, color: "b" }], invited: [], state,
+      mode, status: "active", createdBy: a, players: [{ userId: a, color: "w" }, { userId: b, color: "b" }], invited: [], state, ...(settings ? { settings } : {}),
       turn: mode === "chess:classic" ? a : undefined, moveCount: 0, startedAt: now, lastActivityAt: now,
     });
   },
@@ -97,18 +131,18 @@ export const insertActive = internalMutation({
 
 // A four-player game already under way, seats in color order (red, blue, yellow, green).
 export const startFour = internalAction({
-  args: { mode: v.string(), players: v.array(v.id("users")) },
+  args: { mode: v.string(), players: v.array(v.id("users")), settings: settingsArg },
   handler: async (ctx, args): Promise<string> => ctx.runMutation(internal.testing.insertFour, args),
 });
 export const insertFour = internalMutation({
-  args: { mode: v.string(), players: v.array(v.id("users")) },
-  handler: async (ctx, { mode, players }) => {
+  args: { mode: v.string(), players: v.array(v.id("users")), settings: settingsArg },
+  handler: async (ctx, { mode, players, settings }) => {
     assertTestDeployment();
     const now = Date.now();
     const colors = ["red", "blue", "yellow", "green"];
     const state = mode === "chess:realtime4" ? { kind: "realtime", ready: [], startAt: null } : initialFour();
     return await ctx.db.insert("matches", {
-      mode, status: "active", createdBy: players[0], players: players.map((userId, i) => ({ userId, color: colors[i] })), invited: [], state,
+      mode, status: "active", createdBy: players[0], players: players.map((userId, i) => ({ userId, color: colors[i] })), invited: [], state, ...(settings ? { settings } : {}),
       turn: mode === "chess:four" ? players[0] : undefined, moveCount: 0, startedAt: now, lastActivityAt: now,
     });
   },
@@ -145,17 +179,31 @@ export const playAs = internalMutation({
   },
 });
 
-// Not stockSymbols: thousands of rows of plain reference data, and more than one function may read.
-const TABLES = ["stockDayHours", "stockWorth", "stockLookups", "stockViews", "stockAccounts", "stockPositions", "stockOrders", "stockProfiles", "stockQuotes", "stockSeries", "stockIndex", "stockFeeds", "golfBags", "golfScores", "golfCommands", "golfSnapshots", "golfPlayers", "golfWorlds", "handoffs", "taps", "rtCommands", "rtSnapshots", "secrets", "drafts", "matches", "ratings", "presence", "pushSubscriptions", "profiles", "authRefreshTokens", "authSessions", "authAccounts", "users"] as const;
+// Every table in the schema, so a new one is never left holding the last test's rows.
+const TABLES = Object.keys(schema.tables) as TableNames[];
+// Rows deleted per call. A big table (stockSymbols, seeded with thousands of listings) takes a few calls,
+// so one transaction never runs into Convex's write limits; call it until it says it's done.
+const BUDGET = 4000;
 
 // Wipes everything. Refuses if any real (non-test) player exists, so it can't touch prod data.
 export const reset = internalMutation({
   args: {},
-  handler: async (ctx) => {
+  handler: async (ctx): Promise<{ done: boolean }> => {
     assertTestDeployment();
     const users = await ctx.db.query("users").collect();
     if (users.some((u) => !u.isTest)) throw new Error("Refusing to reset: real players exist. Use removeTestData.");
-    for (const table of TABLES) for (const doc of await ctx.db.query(table).collect()) await ctx.db.delete(doc._id);
+    // Whatever the last test left scheduled (real-time and golf ticks, turn timers, reminders, pushes)
+    // would otherwise run against the next test's data.
+    for (const job of await ctx.db.system.query("_scheduled_functions").collect()) if (job.state.kind === "pending") await ctx.scheduler.cancel(job._id);
+    for (const f of await ctx.db.query("hostedFiles").collect()) await ctx.storage.delete(f.storageId);
+    let left = BUDGET;
+    for (const table of TABLES) {
+      const docs = await ctx.db.query(table).take(left);
+      for (const doc of docs) await ctx.db.delete(doc._id);
+      left -= docs.length;
+      if (left <= 0) return { done: false };
+    }
+    return { done: true };
   },
 });
 

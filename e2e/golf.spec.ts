@@ -1,6 +1,7 @@
-import type { Browser, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { anyApi } from "convex/server";
 import { SOLUTIONS } from "../convex/golf/solutions";
-import { createPlayer, expect, phone, test, type Player } from "./fixtures";
+import { admin, createPlayer, expect, test, type Phones } from "./fixtures";
 
 // Golf's open world on two phones: both in, a shot on one, and the ball ending up in exactly the same
 // place on both (every phone runs the same physics from the same commands).
@@ -10,15 +11,19 @@ const balls = (page: Page) => page.evaluate(() => (window as unknown as { __golf
 const shoot = (page: Page, a: number, p: number) => page.evaluate(([x, y]) => (window as unknown as { __golf: { shoot(a: number, p: number): void } }).__golf.shoot(x, y), [a, p]);
 const meOn = (page: Page) => page.evaluate(() => (window as unknown as { __golf?: { me(): string } }).__golf?.me());
 
-async function otherPhone(browser: Browser, player: Player) {
-  const context = await browser.newContext({ viewport: { width: 393, height: 852 }, isMobile: true, hasTouch: true });
-  return { context, page: await phone(context, { player, notifications: "granted" }) };
+// Two phones with push on.
+async function twoPhones(phones: Phones) {
+  const [a, b] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
+  return await Promise.all([phones.open({ player: a, push: "on" }), phones.open({ player: b, push: "on" })]);
 }
 
-async function enablePush(page: Page) {
-  await page.goto("/");
-  await page.getByRole("button", { name: "Turn on notifications" }).click();
-  await expect(page.getByText("Turn on notifications to play")).toHaveCount(0);
+// The open world as the server has it, and the snapshot this phone is running from.
+const world = () => admin().query(anyApi.testing.golfWorld, { key: "sandbox" });
+const fromOn = (page: Page) => page.evaluate(() => (window as unknown as { __golf: { from(): number } }).__golf.from());
+// The server has settled everything and gone to sleep, and this phone has the snapshot it wrote.
+async function worldAsleep(page: Page) {
+  await expect.poll(async () => (await world())?.awake, { timeout: 20_000 }).toBe(false);
+  await expect.poll(async () => (await fromOn(page)) === (await world())?.snapshotTick, { timeout: 10_000 }).toBe(true);
 }
 
 async function intoGolf(page: Page) {
@@ -37,10 +42,9 @@ async function putt(page: Page, dx: number, dy: number) {
   await page.mouse.up();
 }
 
-test("Golf has a card on Games, and Play opens the courses and the open world", async ({ context }) => {
+test("Golf has a card on Games, and Play opens the courses and the open world", async ({ phones }) => {
   const player = await createPlayer("Shlok");
-  const page = await phone(context, { player, notifications: "granted" });
-  await enablePush(page);
+  const page = await phones.open({ player, push: "on" });
   await page.goto("/games");
   await expect(page.getByRole("heading", { name: "Golf" })).toBeVisible();
   // Card art plays once it's scrolled to.
@@ -63,13 +67,8 @@ test("Golf has a card on Games, and Play opens the courses and the open world", 
   await expect(page.getByRole("button", { name: "See the whole map" })).toBeVisible();
 });
 
-test("a shot on one phone lands in exactly the same spot on the other", async ({ context, browser }) => {
-  const [a, b] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
-  const pa = await phone(context, { player: a, notifications: "granted" });
-  const other = await otherPhone(browser, b);
-  const pb = other.page;
-  await enablePush(pa);
-  await enablePush(pb);
+test("a shot on one phone lands in exactly the same spot on the other", async ({ phones }) => {
+  const [pa, pb] = await twoPhones(phones);
   await intoGolf(pa);
   await intoGolf(pb);
   const idA = (await meOn(pa))!;
@@ -94,36 +93,25 @@ test("a shot on one phone lands in exactly the same spot on the other", async ({
   const onA = await settled(pa);
   const onB = await settled(pb);
   expect(onB).toEqual(onA);
-  await other.context.close();
 });
 
-test("players see each other's names over their balls and who's here", async ({ context, browser }) => {
-  const [a, b] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
-  const pa = await phone(context, { player: a, notifications: "granted" });
-  const other = await otherPhone(browser, b);
-  await enablePush(pa);
-  await enablePush(other.page);
+test("players see each other's names over their balls and who's here", async ({ phones }) => {
+  const [pa, pb] = await twoPhones(phones);
   await intoGolf(pa);
-  await intoGolf(other.page);
+  await intoGolf(pb);
   await expect(pa.getByText("Chris is here")).toBeVisible({ timeout: 15_000 });
-  await expect(other.page.getByText("Shlok is here")).toBeVisible({ timeout: 15_000 });
-  await other.context.close();
+  await expect(pb.getByText("Shlok is here")).toBeVisible({ timeout: 15_000 });
 });
 
-test("a shot costs the other phone a few kilobytes, not a stream of positions", async ({ context, browser }) => {
-  const [a, b] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
-  const pa = await phone(context, { player: a, notifications: "granted" });
-  const other = await otherPhone(browser, b);
-  const pb = other.page;
-  await enablePush(pa);
-  await enablePush(pb);
+test("a shot costs the other phone a few kilobytes, not a stream of positions", async ({ phones }) => {
+  const [pa, pb] = await twoPhones(phones);
   await intoGolf(pa);
   await intoGolf(pb);
   const idA = (await meOn(pa))!;
   await expect.poll(async () => (await balls(pb)).length).toBe(2);
   // Let joining settle, then count everything the other phone receives from the first touch of the
   // shot until the server has settled it and gone to sleep.
-  await pb.waitForTimeout(4000);
+  await worldAsleep(pb);
   let bytes = 0, frames = 0;
   const cdp = await pb.context().newCDPSession(pb);
   await cdp.send("Network.enable");
@@ -131,22 +119,24 @@ test("a shot costs the other phone a few kilobytes, not a stream of positions", 
     bytes += e.response.payloadData.length;
     frames++;
   });
+  const start = (await balls(pb)).find((x) => x.id === idA)!;
   await putt(pa, -70, 0);
-  await expect.poll(async () => (await balls(pb)).find((x) => x.id === idA)?.mode, { timeout: 15_000 }).toBe("aim");
-  await pb.waitForTimeout(6000);
+  // The shot reaches this phone, the ball stops, and the server settles it and sleeps.
+  await expect.poll(async () => {
+    const seen = (await balls(pb)).find((x) => x.id === idA)!;
+    return Math.hypot(seen.x - start.x, seen.y - start.y) > 2 && seen.mode === "aim";
+  }, { timeout: 15_000 }).toBe(true);
+  await worldAsleep(pb);
+  expect(frames).toBeGreaterThan(0);
   console.log(`A shot cost the other phone ${bytes} bytes in ${frames} messages`);
-  // About 8 KB when this was written (the command, the settled snapshot once, presence).
-  expect(bytes).toBeLessThan(20_000);
-  await other.context.close();
+  // About 8.6 KB when this was written (the command, the settled snapshot once, presence). The budget
+  // leaves room for a slow machine (a longer wait is more presence and more snapshot rewrites while it
+  // rolls); streaming positions would cost tens of kilobytes a second.
+  expect(bytes).toBeLessThan(30_000);
 });
 
-test("a hole: sink it, see the score on both phones, go on to the next, and it's on the course page", async ({ context, browser }) => {
-  const [a, b] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
-  const pa = await phone(context, { player: a, notifications: "granted" });
-  const other = await otherPhone(browser, b);
-  const pb = other.page;
-  await enablePush(pa);
-  await enablePush(pb);
+test("a hole: sink it, see the score on both phones, go on to the next, and it's on the course page", async ({ phones }) => {
+  const [pa, pb] = await twoPhones(phones);
   await pa.goto("/golf");
   await pa.getByRole("link", { name: "Hello, Hole 1, par 2" }).click();
   // (Exactly: the row on the course page has this in its label too.)
@@ -180,15 +170,13 @@ test("a hole: sink it, see the score on both phones, go on to the next, and it's
   await pa.getByRole("button", { name: "Back" }).click();
   await expect(pa).toHaveURL(/\/golf$/);
   await expect(pa.getByRole("link", { name: "Play Bumper Plains" })).toContainText("Play from hole 2");
-  await other.context.close();
 });
 
-test("an ice hole plays, and the putt goes further than you'd think", async ({ context }) => {
+test("an ice hole plays, and the putt goes further than you'd think", async ({ phones }) => {
   const player = await createPlayer("Shlok");
-  const page = await phone(context, { player, notifications: "granted" });
+  const page = await phones.open({ player, push: "on" });
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(String(e)));
-  await enablePush(page);
   await page.goto("/golf/cold/1");
   await expect(page.getByLabel("Thin Ice, hole 1", { exact: true })).toBeVisible();
   await expect(page.getByText("Teeing up")).toHaveCount(0, { timeout: 15_000 });
@@ -227,11 +215,10 @@ async function slowConnection(page: Page, ms: number) {
   }, ms);
 }
 
-test("on a slow connection a putt plays at once and the ball never jumps, even as the snapshot changes", async ({ context }) => {
+test("on a slow connection a putt plays at once and the ball never jumps, even as the snapshot changes", async ({ phones }) => {
   test.setTimeout(120_000);
   const player = await createPlayer("Shlok");
-  const page = await phone(context, { player, notifications: "granted" });
-  await enablePush(page);
+  const page = await phones.open({ player, push: "on" });
   await slowConnection(page, 600);
   await page.goto("/golf/plains/3");
   await expect(page.getByLabel("Tilt, hole 3", { exact: true })).toBeVisible({ timeout: 30_000 });
@@ -251,11 +238,14 @@ test("on a slow connection a putt plays at once and the ball never jumps, even a
           const start = g.drawn();
           g.shoot(angle, 0.14);
           const t0 = performance.now();
-          let movedAfter: number | null = null, biggest = 0, last = start;
+          let movedAfter: number | null = null, biggest = 0, last = start, lastAt = t0;
           const frame = () => {
             const at = g.drawn();
-            biggest = Math.max(biggest, Math.hypot(at.x - last.x, at.y - last.y));
+            // Per 60fps frame, so a frame a busy machine drew late doesn't count as a jump.
+            const now = performance.now();
+            biggest = Math.max(biggest, (Math.hypot(at.x - last.x, at.y - last.y) * (1000 / 60)) / Math.max(1000 / 60, now - lastAt));
             last = at;
+            lastAt = now;
             if (movedAfter === null && Math.hypot(at.x - start.x, at.y - start.y) > 0.05) movedAfter = performance.now() - t0;
             if (performance.now() - t0 > 1500) done({ movedAfter, biggest });
             else requestAnimationFrame(frame);
@@ -265,19 +255,19 @@ test("on a slow connection a putt plays at once and the ball never jumps, even a
       [i % 2 ? 0 : Math.PI],
     );
     console.log(`putt ${i + 1}: moved after ${result.movedAfter}ms, biggest step ${result.biggest.toFixed(2)}`);
-    // Moving within a few frames, not a round trip later.
+    // Moving within a few frames, not a round trip later: about 30ms when this was written, and a round
+    // trip on this connection is over 1200ms, so this leaves room for a busy machine and still catches it.
     expect(result.movedAfter).not.toBeNull();
-    expect(result.movedAfter!).toBeLessThan(250);
-    // Gliding: never more than a step of a fast ball in one frame.
+    expect(result.movedAfter!).toBeLessThan(600);
+    // Gliding: never more than a step of a fast ball in one frame (about 0.09 when this was written).
     expect(result.biggest).toBeLessThan(1.5);
   }
 });
 
-test("on a slow connection, sinking one still shows the score", async ({ context }) => {
+test("on a slow connection, sinking one still shows the score", async ({ phones }) => {
   test.setTimeout(90_000);
   const player = await createPlayer("Shlok");
-  const page = await phone(context, { player, notifications: "granted" });
-  await enablePush(page);
+  const page = await phones.open({ player, push: "on" });
   await slowConnection(page, 600);
   await page.goto("/golf/plains/1");
   await expect(page.getByLabel("Hello, hole 1", { exact: true })).toBeVisible({ timeout: 30_000 });
@@ -289,18 +279,15 @@ test("on a slow connection, sinking one still shows the score", async ({ context
   await expect.poll(async () => (await balls(page))[0].holes, { timeout: 15_000 }).toBe(1);
 });
 
-test("moving obstacles keep moving while your ball sits still", async ({ context }) => {
+test("moving obstacles keep moving while your ball sits still", async ({ phones }) => {
   const player = await createPlayer("Shlok");
-  const page = await phone(context, { player, notifications: "granted" });
-  await enablePush(page);
+  const page = await phones.open({ player, push: "on" });
   await page.goto("/golf/cold/7");
   await expect(page.getByLabel("Avalanche, hole 7", { exact: true })).toBeVisible();
   await expect(page.getByText("Teeing up")).toHaveCount(0, { timeout: 15_000 });
   // What they're drawn from: a ball that's still, on a clock that isn't.
   const first = (await balls(page))[0];
   expect(first.mode).toBe("aim");
-  await page.waitForTimeout(1500);
-  const later = (await balls(page))[0];
-  expect(later.mode).toBe("aim");
-  expect(later.t - first.t).toBeGreaterThan(1);
+  await expect.poll(async () => (await balls(page))[0].t - first.t).toBeGreaterThan(1);
+  expect((await balls(page))[0].mode).toBe("aim");
 });

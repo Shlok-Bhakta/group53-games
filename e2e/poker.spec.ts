@@ -1,23 +1,17 @@
-import type { Browser, Page } from "@playwright/test";
-import { anyApi } from "convex/server";
-import { admin, createPlayer, expect as plain, phone, test, type Player } from "./fixtures";
+import type { Page } from "@playwright/test";
+import { createPlayer, expect as plain, fillLobby, getMatch, openLobby, test, type Phones } from "./fixtures";
 
 // The table plays things out in order (a showdown runs about ten seconds), and everything waits its turn.
+// Tests that aren't about that show run with reduced motion, where the table jumps straight to its end.
 const expect = plain.configure({ timeout: 25_000 });
 test.describe.configure({ timeout: 180_000 });
 
-async function otherPhone(browser: Browser, player: Player) {
-  const context = await browser.newContext({ viewport: { width: 393, height: 852 }, isMobile: true, hasTouch: true });
-  return { context, page: await phone(context, { player, notifications: "granted" }) };
+// Players at a table, each on their own phone with push on.
+async function table(phones: Phones, names: string[], opts: { reducedMotion?: boolean; profiles?: Record<string, unknown>[] } = {}) {
+  const players = await Promise.all(names.map((n, i) => createPlayer(n, opts.profiles?.[i])));
+  const pages = await Promise.all(players.map((player) => phones.open({ player, push: "on", reducedMotion: opts.reducedMotion })));
+  return { players, pages, pageOf: (userId: string) => pages[players.findIndex((p) => p.userId === userId)] };
 }
-
-async function enablePush(page: Page) {
-  await page.goto("/");
-  await page.getByRole("button", { name: "Turn on notifications" }).click();
-  await expect(page.getByText("Turn on notifications to play")).toHaveCount(0);
-}
-
-const getMatch = (id: string) => admin().query(anyApi.testing.getMatch, { id });
 // Collects errors a page logs or throws. React reports render crashes with console.error, not as a page
 // error, so both are caught.
 function watchErrors(pages: Page[]) {
@@ -31,34 +25,25 @@ function watchErrors(pages: Page[]) {
 const boardCards = (page: Page) => page.getByRole("group", { name: "Poker table" }).getByRole("group", { name: "Board" }).locator("[data-card]");
 
 // Two phones at a started table. Returns them with whoever acts first (the button, heads-up) first.
-async function twoPlayerGame(browser: Browser, context: Parameters<typeof phone>[0], mode = "holdem") {
-  const [a, b] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
-  const pa = await phone(context, { player: a, notifications: "granted" });
-  const other = await otherPhone(browser, b);
-  const pb = other.page;
-  await enablePush(pa);
-  await enablePush(pb);
-  await pa.goto(`/poker/mode/${mode}`);
-  await pa.getByRole("button", { name: "Open a game" }).click();
-  await expect(pa.getByRole("heading", { name: "Waiting for players" })).toBeVisible();
-  const id = pa.url().split("/poker/")[1].split("?")[0];
-  await pb.goto(`/poker/${id}?accept=1`);
-  await expect(pa.getByRole("heading", { name: "2 in" })).toBeVisible();
-  await pa.getByRole("button", { name: "Start with 2" }).click();
+async function twoPlayerGame(phones: Phones, mode = "holdem", opts: { reducedMotion?: boolean } = {}) {
+  const t = await table(phones, ["Shlok", "Chris"], opts);
+  const [pa, pb] = t.pages;
+  const id = await openLobby(pa, "poker", mode);
+  await fillLobby(pa, [pb]);
   await expect(pa.getByRole("group", { name: "Poker table" })).toBeVisible();
   await expect(pb.getByRole("group", { name: "Poker table" })).toBeVisible();
   const m = await getMatch(id);
+  const [a, b] = t.players;
   const firstIsA = m.players[m.state.turn].userId === a.userId;
   const first = firstIsA ? { player: a, page: pa } : { player: b, page: pb };
   const second = firstIsA ? { player: b, page: pb } : { player: a, page: pa };
-  return { id, first, second, close: () => other.context.close() };
+  return { id, first, second };
 }
 
 test.describe("Poker", () => {
-  test("the game card opens the Poker page with its four games", async ({ context }) => {
+  test("the game card opens the Poker page with its four games", async ({ phones }) => {
     const me = await createPlayer("Shlok");
-    const page = await phone(context, { player: me, notifications: "granted" });
-    await enablePush(page);
+    const page = await phones.open({ player: me, push: "on" });
     await page.goto("/games");
     await page.getByRole("link", { name: "Play Poker" }).click();
     await expect(page).toHaveURL(/\/poker$/);
@@ -69,19 +54,12 @@ test.describe("Poker", () => {
     await expect(page.getByText(/Pot limit/).first()).toBeVisible();
   });
 
-  test("the table shows everyone's card, who's online, and plays its sounds", async ({ browser, context }) => {
-    const [a, b] = await Promise.all([createPlayer("Shlok", { frame: "gold", badge: "🦀" }), createPlayer("Chris", { frame: "comet", frameColor: "#f38ba8", glow: true, badge: "🃏" })]);
-    const pa = await phone(context, { player: a, notifications: "granted" });
-    const other = await otherPhone(browser, b);
-    const pb = other.page;
-    await enablePush(pa);
-    await enablePush(pb);
-    await pa.goto("/poker/mode/holdem");
-    await pa.getByRole("button", { name: "Open a game" }).click();
-    await expect(pa.getByRole("heading", { name: "Waiting for players" })).toBeVisible();
-    const id = pa.url().split("/poker/")[1].split("?")[0];
-    await pb.goto(`/poker/${id}?accept=1`);
-    await pa.getByRole("button", { name: "Start with 2" }).click();
+  test("the table shows everyone's card, who's online, and plays its sounds", async ({ phones }) => {
+    const t = await table(phones, ["Shlok", "Chris"], { profiles: [{ frame: "gold", badge: "🦀" }, { frame: "comet", frameColor: "#f38ba8", glow: true, badge: "🃏" }] });
+    const [pa, pb] = t.pages;
+    const a = t.players[0];
+    const id = await openLobby(pa, "poker", "holdem");
+    await fillLobby(pa, [pb]);
     const seat = (p: Page, name: RegExp) => p.getByRole("group", { name: "Poker table" }).getByRole("group", { name });
     // Each phone sees the other's frame, glow and badge, and their own on their tile.
     const chris = seat(pa, /^Chris, /);
@@ -101,11 +79,10 @@ test.describe("Poker", () => {
     await expect(boardCards(first)).toHaveCount(3);
     const sounds = await first.evaluate(() => (window as unknown as { __sfx: string[] }).__sfx);
     for (const name of ["deal", "flip", "chips", "knock"]) expect(sounds).toContain(name);
-    await other.context.close();
   });
 
-  test("poker's sounds sit at the level of every other sound in their pack", async ({ context }) => {
-    const page = await phone(context, { player: await createPlayer("Shlok"), notifications: "granted" });
+  test("poker's sounds sit at the level of every other sound in their pack", async ({ phones }) => {
+    const page = await phones.open({ player: await createPlayer("Shlok"), notifications: "granted" });
     await page.goto("/you");
     const levels = await page.evaluate(async () => {
       type Lab = { packs: string[]; sfx: (p: string, n: string) => Promise<{ peak: number; rms: number }> };
@@ -116,11 +93,16 @@ test.describe("Poker", () => {
         return { peak: runs.reduce((a, r) => a + r.peak, 0) / runs.length, rms: runs.reduce((a, r) => a + r.rms, 0) / runs.length };
       };
       const out: { pack: string; name: string; peak: number; rms: number; loudest: number; loudestRms: number }[] = [];
+      const poker = ["deal", "flip", "chips", "knock", "sweep", "slam", "payout"];
+      // A pack at a time, every sound in it rendered at once.
       for (const pack of lab.packs) {
-        const rest = await Promise.all(["pick", "place", "recall", "shuffle", "play", "land", "turn", "win"].map((n) => level(pack, n)));
+        const [rest, ours] = await Promise.all([
+          Promise.all(["pick", "place", "recall", "shuffle", "play", "land", "turn", "win"].map((n) => level(pack, n))),
+          Promise.all(poker.map((n) => level(pack, n))),
+        ]);
         const loudest = Math.max(...rest.map((r) => r.peak));
         const loudestRms = Math.max(...rest.map((r) => r.rms));
-        for (const name of ["deal", "flip", "chips", "knock", "sweep", "slam", "payout"]) out.push({ pack, name, ...(await level(pack, name)), loudest, loudestRms });
+        poker.forEach((name, i) => out.push({ pack, name, ...ours[i], loudest, loudestRms }));
       }
       return out;
     });
@@ -128,8 +110,8 @@ test.describe("Poker", () => {
     expect(tooLoud).toEqual([]);
   });
 
-  test("a hand on two phones: calls, a raise, a lined-up check, a shove and a fold", async ({ browser, context }) => {
-    const { id, first, second, close } = await twoPlayerGame(browser, context);
+  test("a hand on two phones: calls, a raise, a lined-up check, a shove and a fold", async ({ phones }) => {
+    const { id, first, second } = await twoPlayerGame(phones, "holdem", { reducedMotion: true });
     // Both see their own two cards and the blinds.
     await expect(first.page.getByRole("group", { name: "Your cards" }).locator("[data-card]")).toHaveCount(2);
     await expect(second.page.getByRole("group", { name: "Your cards" }).locator("[data-card]")).toHaveCount(2);
@@ -172,29 +154,16 @@ test.describe("Poker", () => {
     await second.page.getByRole("button", { name: "Last hand" }).click();
     await expect(second.page.getByRole("heading", { name: "Hand 1" })).toBeVisible();
     await expect(second.page.getByRole("dialog").getByText(/took the pot of 80/)).toBeVisible();
-    await close();
   });
 
-  test("the last hand ends the game with the result on both phones", async ({ browser, context }) => {
-    const [a, b] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
-    const pa = await phone(context, { player: a, notifications: "granted" });
-    const other = await otherPhone(browser, b);
-    const pb = other.page;
-    const errors = watchErrors([pa, pb]);
-    await enablePush(pa);
-    await enablePush(pb);
-    await pa.goto("/poker/mode/holdem");
-    // Five hands instead of ten.
-    await pa.getByRole("button", { name: "Settings" }).click();
-    await pa.getByRole("radiogroup", { name: "Hands" }).getByRole("radio", { name: "5", exact: true }).click();
-    await pa.getByRole("button", { name: "Open a game" }).click();
-    await expect(pa.getByRole("heading", { name: "Waiting for players" })).toBeVisible();
-    const id = pa.url().split("/poker/")[1].split("?")[0];
-    await pb.goto(`/poker/${id}?accept=1`);
-    await expect(pa.getByRole("heading", { name: "2 in" })).toBeVisible();
-    await pa.getByRole("button", { name: "Start with 2" }).click();
+  test("the last hand ends the game with the result on both phones", async ({ phones }) => {
+    const { pages, pageOf } = await table(phones, ["Shlok", "Chris"], { reducedMotion: true });
+    const [pa, pb] = pages;
+    const errors = watchErrors(pages);
+    // Five hands instead of no limit.
+    const id = await openLobby(pa, "poker", "holdem", { Hands: "5" });
+    await fillLobby(pa, [pb]);
     await expect(pa.getByRole("group", { name: "Poker table" })).toBeVisible();
-    const pageOf = (userId: string) => (userId === a.userId ? pa : pb);
     for (let hand = 1; hand <= 5; hand++) {
       await expect.poll(async () => (await getMatch(id)).state.hand).toBe(hand);
       const m = await getMatch(id);
@@ -209,12 +178,11 @@ test.describe("Poker", () => {
       await expect(p.getByRole("group", { name: "Poker table" })).toBeVisible();
     }
     expect(errors).toEqual([]);
-    await other.context.close();
   });
 
   // A game that ends at a showdown once blanked the app: the street had run one past the river.
-  test("an all-in that knocks someone out ends the game with the result on both phones", async ({ browser, context }) => {
-    const { id, first, second, close } = await twoPlayerGame(browser, context);
+  test("an all-in that knocks someone out ends the game with the result on both phones", async ({ phones }) => {
+    const { id, first, second } = await twoPlayerGame(phones);
     const errors = watchErrors([first.page, second.page]);
     const pageOf = (userId: string) => (userId === first.player.userId ? first.page : second.page);
     // Shove and call until someone's out (a split pot just deals again).
@@ -243,34 +211,22 @@ test.describe("Poker", () => {
       expect(Math.max(sounds.lastIndexOf("win"), sounds.lastIndexOf("lose"))).toBeGreaterThan(sounds.lastIndexOf("payout"));
     }
     expect(errors).toEqual([]);
-    await close();
   });
 
   // Backs a seat still shows, ignoring any that have flown off and faded out.
   const visibleBacks = (page: Page) =>
-    page.locator("[data-seat] .playing-card-back").evaluateAll((els) =>
+    page.locator("[data-seat] [data-back]").evaluateAll((els) =>
       els.filter((el) => {
         for (let e: Element | null = el; e; e = e.parentElement) if (getComputedStyle(e).opacity === "0") return false;
         return true;
       }).length,
     );
 
-  test("cards leave the table: a fold mid-hand, and everyone's when the game ends", async ({ browser, context }) => {
-    const players = await Promise.all(["Shlok", "Chris", "Wes"].map((n) => createPlayer(n)));
-    const pa = await phone(context, { player: players[0], notifications: "granted" });
-    const others = await Promise.all(players.slice(1).map((p) => otherPhone(browser, p)));
-    const pages = [pa, ...others.map((o) => o.page)];
-    for (const p of pages) await enablePush(p);
-    await pa.goto("/poker/mode/holdem");
-    await pa.getByRole("button", { name: "Settings" }).click();
-    await pa.getByRole("radiogroup", { name: "Hands" }).getByRole("radio", { name: "5", exact: true }).click();
-    await pa.getByRole("button", { name: "Open a game" }).click();
-    await expect(pa.getByRole("heading", { name: "Waiting for players" })).toBeVisible();
-    const id = pa.url().split("/poker/")[1].split("?")[0];
-    for (const p of pages.slice(1)) await p.goto(`/poker/${id}?accept=1`);
-    await expect(pa.getByRole("heading", { name: "3 in" })).toBeVisible();
-    await pa.getByRole("button", { name: "Start with 3" }).click();
-    const pageOf = (userId: string) => pages[players.findIndex((p) => p.userId === userId)];
+  test("cards leave the table: a fold mid-hand, and everyone's when the game ends", async ({ phones }) => {
+    const { pages, pageOf } = await table(phones, ["Shlok", "Chris", "Wes"]);
+    const [pa] = pages;
+    const id = await openLobby(pa, "poker", "holdem", { Hands: "5" });
+    await fillLobby(pa, pages.slice(1));
     for (let hand = 1; hand <= 5; hand++) {
       await expect.poll(async () => (await getMatch(id)).state?.hand).toBe(hand);
       // Two folds end the hand; after the first, the folder's backs have gone back to the deck on every phone.
@@ -284,16 +240,14 @@ test.describe("Poker", () => {
     await expect.poll(async () => (await getMatch(id)).status).toBe("finished");
     for (const p of pages) {
       await expect(p.getByRole("region", { name: "Result" })).toBeVisible();
-      await p.waitForTimeout(800);
-      expect(await visibleBacks(p)).toBe(0);
+      await expect.poll(() => visibleBacks(p)).toBe(0);
     }
     if (process.env.SCREENS) await pa.screenshot({ path: "e2e/.state/screens/dark-poker-finished.png", fullPage: true });
-    for (const o of others) await o.context.close();
   });
 
   // The dealer's button and their cards once shared a React key, so the dealer kept last hand's cards on top of this one's.
-  test("the dealer holds only this hand's cards in the next hand", async ({ browser, context }) => {
-    const { id, first, second, close } = await twoPlayerGame(browser, context);
+  test("the dealer holds only this hand's cards in the next hand", async ({ phones }) => {
+    const { id, first, second } = await twoPlayerGame(phones);
     await first.page.getByRole("button", { name: /^Raise$/ }).click();
     await first.page.getByRole("button", { name: "Min" }).click();
     await first.page.getByRole("button", { name: /^Raise to/ }).click();
@@ -302,25 +256,15 @@ test.describe("Poker", () => {
     await expect(second.page.getByRole("group", { name: "Your cards" }).locator("[data-card]")).toHaveCount(2);
     const name = first.player.name;
     const seat = second.page.getByRole("group", { name: "Poker table" }).getByRole("group", { name: new RegExp(`^${name}, `) });
-    await expect(seat.locator(".playing-card-back")).toHaveCount(2);
+    await expect(seat.locator("[data-back]")).toHaveCount(2);
     expect((await getMatch(id)).state.hand).toBe(2);
-    await close();
   });
 
-  test("someone knocked out sits at the table with no cards", async ({ browser, context }) => {
-    const players = await Promise.all(["Shlok", "Chris", "Wes"].map((n) => createPlayer(n)));
-    const pa = await phone(context, { player: players[0], notifications: "granted" });
-    const others = await Promise.all(players.slice(1).map((p) => otherPhone(browser, p)));
-    const pages = [pa, ...others.map((o) => o.page)];
-    for (const p of pages) await enablePush(p);
-    await pa.goto("/poker/mode/holdem");
-    await pa.getByRole("button", { name: "Open a game" }).click();
-    await expect(pa.getByRole("heading", { name: "Waiting for players" })).toBeVisible();
-    const id = pa.url().split("/poker/")[1].split("?")[0];
-    for (const p of pages.slice(1)) await p.goto(`/poker/${id}?accept=1`);
-    await expect(pa.getByRole("heading", { name: "3 in" })).toBeVisible();
-    await pa.getByRole("button", { name: "Start with 3" }).click();
-    const pageOf = (userId: string) => pages[players.findIndex((p) => p.userId === userId)];
+  test("someone knocked out sits at the table with no cards", async ({ phones }) => {
+    const { players, pages, pageOf } = await table(phones, ["Shlok", "Chris", "Wes"]);
+    const [pa] = pages;
+    const id = await openLobby(pa, "poker", "holdem");
+    await fillLobby(pa, pages.slice(1));
     await expect.poll(async () => (await getMatch(id)).state?.hand).toBe(1);
     // The third always folds; the other two shove and call until one of them is out.
     const third = players[2].userId;
@@ -347,16 +291,26 @@ test.describe("Poker", () => {
     const seat = pageOf(third).getByRole("group", { name: "Poker table" }).getByRole("group", { name: new RegExp(`^${name}, `) });
     await expect(seat).toHaveAttribute("data-out", "true");
     await expect(pageOf(third).getByText(`Hand ${m.state.hand}`, { exact: true })).toBeVisible();
-    // Through the whole deal of the next hand, not only once it's settled.
-    for (let i = 0; i < 12; i++) {
-      expect(await seat.locator(".playing-card-back").count()).toBe(0);
-      await pageOf(third).waitForTimeout(500);
-    }
-    for (const o of others) await o.context.close();
+    // Through the whole deal of the next hand, not only once it's settled: every frame for six seconds,
+    // about how long the deal takes to play out (this one is about time passing).
+    const most = await seat.evaluate(
+      (el) =>
+        new Promise<number>((done) => {
+          let most = 0;
+          const t0 = performance.now();
+          const frame = () => {
+            most = Math.max(most, el.querySelectorAll("[data-back]").length);
+            if (performance.now() - t0 > 6000) done(most);
+            else requestAnimationFrame(frame);
+          };
+          frame();
+        }),
+    );
+    expect(most).toBe(0);
   });
 
-  test("Omaha deals four cards and they all fit", async ({ browser, context }) => {
-    const { first, close } = await twoPlayerGame(browser, context, "omaha");
+  test("Omaha deals four cards and they all fit", async ({ phones }) => {
+    const { first } = await twoPlayerGame(phones, "omaha", { reducedMotion: !process.env.SCREENS });
     const cards = first.page.getByRole("group", { name: "Your cards" }).locator("[data-card]");
     await expect(cards).toHaveCount(4);
     for (const box of await Promise.all((await cards.all()).map((c) => c.boundingBox()))) {
@@ -373,11 +327,10 @@ test.describe("Poker", () => {
       await first.page.waitForTimeout(800); // let the menu finish sliding in
       await first.page.screenshot({ path: "e2e/.state/screens/dark-poker-menu.png" });
     }
-    await close();
   });
 
-  test("five-card draw: pick cards and swap them", async ({ browser, context }) => {
-    const { id, first, second, close } = await twoPlayerGame(browser, context, "draw");
+  test("five-card draw: pick cards and swap them", async ({ phones }) => {
+    const { id, first, second } = await twoPlayerGame(phones, "draw", { reducedMotion: !process.env.SCREENS });
     await expect(first.page.getByRole("group", { name: "Your cards" }).locator("[data-card]")).toHaveCount(5);
     await first.page.getByRole("button", { name: "Call 10" }).click();
     await second.page.getByRole("button", { name: "Check", exact: true }).click();
@@ -396,6 +349,5 @@ test.describe("Poker", () => {
     expect(after.slice(0, 2)).not.toEqual(before.slice(0, 2));
     const m = await getMatch(id);
     expect(m.state.drew.filter((d: number | null) => d !== null).sort()).toEqual([0, 2]);
-    await close();
   });
 });

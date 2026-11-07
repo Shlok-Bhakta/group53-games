@@ -1,29 +1,8 @@
-import type { Browser, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { anyApi } from "convex/server";
-import { admin, createPlayer, expect, phone, test, type Player } from "./fixtures";
+import { admin, createPlayer, expect, getMatch, matchIdOf, onScreen, realtimePair, resign, settled, test, type Phones } from "./fixtures";
 
-// A second phone in its own browser context.
-async function otherPhone(browser: Browser, player: Player) {
-  const context = await browser.newContext({ viewport: { width: 393, height: 852 }, isMobile: true, hasTouch: true });
-  return { context, page: await phone(context, { player, notifications: "granted" }) };
-}
-
-// Games are locked until notifications are on; turn them on the way a player would.
-async function enablePush(page: Page) {
-  await page.goto("/");
-  await page.getByRole("button", { name: "Turn on notifications" }).click();
-  await expect(page.getByText("Turn on notifications to play")).toHaveCount(0);
-}
-
-const matchIdOf = (page: Page) => page.url().split("/chess/")[1].split("?")[0];
-const getMatch = (id: string) => admin().query(anyApi.testing.getMatch, { id });
 const rtCommands = (id: string) => admin().query(anyApi.testing.rtCommands, { id });
-
-async function colorsOf(id: string, a: Player) {
-  const m = await getMatch(id);
-  const white = m.players.find((p: { color: string }) => p.color === "w").userId;
-  return white === a.userId ? "a-white" : "b-white";
-}
 
 // Taps a piece and then its destination, the way a player would on a phone.
 async function tapMove(page: Page, from: string, to: string) {
@@ -33,59 +12,75 @@ async function tapMove(page: Page, from: string, to: string) {
 
 async function classicMove(page: Page, from: string, to: string) {
   // The chip under the board, not one on a game in a list sliding out behind it.
-  await expect(page.locator("span:not(a *)", { hasText: /^Your move$/ })).toBeVisible();
+  await expect(onScreen(page).locator("span:not(a *)", { hasText: /^Your move$/ })).toBeVisible();
   await tapMove(page, from, to);
   await page.getByRole("button", { name: /^Confirm/ }).click();
 }
 
-async function pieceOn(page: Page, piece: string, square: string) {
-  const sq = await page.locator(`[data-square=${square}]`).boundingBox();
-  const boxes = await page.locator(`[data-piece="${piece}"]`).evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON()));
-  return boxes.some((b) => Math.abs(b.x - sq!.x) < 2 && Math.abs(b.y - sq!.y) < 2);
+// The pieces drawn on a square (real-time pieces are placed by transform), with their status.
+function piecesOn(page: Page, piece: string, square: string) {
+  return page.evaluate(
+    ([piece, square]) => {
+      const sq = document.querySelector(`[data-square="${square}"]`)!.getBoundingClientRect();
+      return [...document.querySelectorAll(`[data-piece="${piece}"]`)]
+        .filter((el) => {
+          const b = el.getBoundingClientRect();
+          return Math.abs(b.x - sq.x) < 2 && Math.abs(b.y - sq.y) < 2;
+        })
+        .map((el) => el.getAttribute("data-status") ?? "here");
+    },
+    [piece, square] as const,
+  );
 }
+const pieceOn = async (page: Page, piece: string, square: string) => (await piecesOn(page, piece, square)).length > 0;
+// A real-time piece that has arrived (and may still be cooling down).
+const restsOn = async (page: Page, piece: string, square: string) => (await piecesOn(page, piece, square)).some((s) => s !== "moving");
+// A real-time piece that has arrived and cooled down, so it can move again.
+const readyOn = async (page: Page, piece: string, square: string) => (await piecesOn(page, piece, square)).includes("ready");
 
-async function startClassic(browser: Browser, context: Parameters<typeof phone>[0]) {
-  const shlok = await createPlayer("Shlok");
-  const chris = await createPlayer("Chris");
-  const a = await phone(context, { player: shlok, notifications: "granted" });
-  const b = await otherPhone(browser, chris);
-  await enablePush(a);
-  await enablePush(b.page);
+// Two phones in a classic game made through the queue: one finds a game, the other joins it.
+async function startClassic(phones: Phones) {
+  const [shlok, chris] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
+  const [a, b] = await Promise.all([phones.open({ player: shlok, push: "on" }), phones.open({ player: chris, push: "on" })]);
 
   await a.goto("/chess/mode/classic");
   await a.getByRole("button", { name: "Find a game" }).click();
   await expect(a.getByRole("heading", { name: "Looking for an opponent" })).toBeVisible();
   const id = matchIdOf(a);
 
-  await b.page.goto("/chess/mode/classic");
-  await expect(b.page.getByRole("region", { name: "Open seats" })).toContainText("Shlok");
-  await b.page.getByRole("button", { name: "Join a game" }).click();
-  await expect(b.page.getByRole("grid", { name: "Classic chess board" })).toBeVisible();
+  await b.goto("/chess/mode/classic");
+  await expect(b.getByRole("region", { name: "Open seats" })).toContainText("Shlok");
+  await b.getByRole("button", { name: "Join a game" }).click();
+  await expect(b.getByRole("grid", { name: "Classic chess board" })).toBeVisible();
   await expect(a.getByRole("grid", { name: "Classic chess board" })).toBeVisible();
 
-  const order = await colorsOf(id, shlok);
-  const [white, black] = order === "a-white" ? [a, b.page] : [b.page, a];
-  const [whitePlayer, blackPlayer] = order === "a-white" ? [shlok, chris] : [chris, shlok];
-  return { id, white, black, whitePlayer, blackPlayer, close: () => b.context.close() };
+  const m = await getMatch(id);
+  const aWhite = m.players.find((p: { color: string }) => p.color === "w").userId === shlok.userId;
+  const [white, black] = aWhite ? [a, b] : [b, a];
+  const [whitePlayer, blackPlayer] = aWhite ? [shlok, chris] : [chris, shlok];
+  return { id, white, black, whitePlayer, blackPlayer };
 }
 
 test.describe("chess", () => {
-  test("game links stay locked until notifications are on", async ({ context }) => {
+  test("game links stay locked until notifications are on", async ({ phones }) => {
     const me = await createPlayer("Shlok");
     const chris = await createPlayer("Chris");
     const id = await admin().action(anyApi.testing.startMatch, { mode: "chess:classic", a: me.userId, b: chris.userId });
-    const page = await phone(context, { player: me });
+    const page = await phones.open({ player: me });
     await page.goto(`/chess/${id}`);
     await expect(page.getByText("Turn on notifications to play")).toBeVisible();
     await expect(page.getByRole("grid")).toHaveCount(0);
   });
 
-  test("classic: find a game, play moves live on both phones, resign, and see the leaderboard", async ({ context, browser }) => {
-    const g = await startClassic(browser, context);
+  test("classic: find a game, play moves live on both phones, resign, and see the leaderboard", async ({ phones }) => {
+    const g = await startClassic(phones);
 
-    // Black can't move first.
+    // Picking up a piece shows where it can go, but only for whoever's move it is.
+    await g.white.locator("[data-square=e2]").click();
+    await expect(g.white.locator("[data-target]")).toHaveCount(2);
+    await expect(g.black.getByRole("grid")).toHaveAttribute("data-disabled", "true");
     await g.black.locator("[data-square=e7]").click();
-    await expect(g.black.locator("[data-square=e5] span.rounded-full")).toHaveCount(0);
+    await expect(g.black.locator("[data-target]")).toHaveCount(0);
 
     // The move waits on this phone only, and swapping the dock for Confirm doesn't shift the board.
     const grid = g.white.getByRole("grid");
@@ -148,8 +143,7 @@ test.describe("chess", () => {
 
     await tapMove(g.black, "b8", "c6");
     await expect(g.black.getByRole("button", { name: /^Confirm/ })).toBeVisible();
-    await g.white.getByRole("button", { name: "Resign" }).click();
-    await g.white.getByRole("alertdialog").getByRole("button", { name: "Resign" }).click();
+    await resign(g.white);
     await expect(g.white.getByRole("heading", { name: "You lost" })).toBeVisible();
     await expect(g.black.getByRole("heading", { name: "You won" })).toBeVisible();
     await expect(g.black.getByRole("button", { name: /^Confirm/ })).toHaveCount(0);
@@ -160,11 +154,10 @@ test.describe("chess", () => {
     await expect(board.getByRole("listitem").first()).toContainText("You");
     await expect(board.getByRole("listitem").first()).toContainText("1216");
     await expect(board).toContainText("1184");
-    await g.close();
   });
 
-  test("a game opened from a push goes back to Home, and back again from there leaves nothing stuck", async ({ context, browser }) => {
-    const g = await startClassic(browser, context);
+  test("a game opened from a push goes back to Home, and back again from there leaves nothing stuck", async ({ phones }) => {
+    const g = await startClassic(phones);
     // The app opened cold on the game, the way a notification tap opens it.
     const cold = await g.white.context().newPage();
     await cold.goto(`/chess/${g.id}`);
@@ -181,11 +174,10 @@ test.describe("chess", () => {
     await expect(cold.getByRole("button", { name: "Back" })).toHaveCount(1);
     await cold.getByRole("button", { name: "Back" }).click();
     await expect(cold).toHaveURL(/\/chess\/mode\/classic$/);
-    await g.close();
   });
 
-  test("classic: step back through the moves, stay put as a move lands, and tap the board to come back", async ({ context, browser }) => {
-    const g = await startClassic(browser, context);
+  test("classic: step back through the moves, stay put as a move lands, and tap the board to come back", async ({ phones }) => {
+    const g = await startClassic(phones);
     await classicMove(g.white, "e2", "e4");
     await classicMove(g.black, "e7", "e5");
     await classicMove(g.white, "g1", "f3");
@@ -225,11 +217,10 @@ test.describe("chess", () => {
     await expect.poll(() => pieceOn(p, "bN", "c6")).toBe(true);
     await classicMove(p, "f1", "c4");
     await expect(g.black.getByLabel("Moves")).toContainText("Bc4");
-    await g.close();
   });
 
-  test("classic: checkmate ends the game for both players", async ({ context, browser }) => {
-    const g = await startClassic(browser, context);
+  test("classic: checkmate ends the game for both players", async ({ phones }) => {
+    const g = await startClassic(phones);
     await classicMove(g.white, "f2", "f3");
     await expect(g.black.getByLabel("Moves")).toContainText("f3");
     await classicMove(g.black, "e7", "e5");
@@ -240,12 +231,11 @@ test.describe("chess", () => {
     await expect(g.black.getByRole("heading", { name: "You won" })).toBeVisible();
     await expect(g.white.getByRole("heading", { name: "You lost" })).toBeVisible();
     await expect(g.white.getByText("Checkmate")).toBeVisible();
-    await g.close();
   });
 
-  test("classic: choosing a promotion previews it until confirmed", async ({ context, browser }) => {
+  test("classic: choosing a promotion previews it until confirmed", async ({ phones }) => {
     test.setTimeout(60_000);
-    const g = await startClassic(browser, context);
+    const g = await startClassic(phones);
     for (const [page, from, to] of [
       [g.white, "a2", "a4"], [g.black, "h7", "h5"],
       [g.white, "a4", "a5"], [g.black, "h5", "h4"],
@@ -269,152 +259,99 @@ test.describe("chess", () => {
     await expect(g.black.getByLabel("Moves")).toContainText("bxa8=Q");
     await expect.poll(() => pieceOn(g.black, "wQ", "a8")).toBe(true);
     expect((await getMatch(g.id)).state.moves).toHaveLength(9);
-    await g.close();
   });
 
-  test("challenge someone, they accept from the inbox on the home screen", async ({ context, browser }) => {
-    const shlok = await createPlayer("Shlok");
-    const chris = await createPlayer("Chris");
-    const a = await phone(context, { player: shlok, notifications: "granted" });
-    const b = await otherPhone(browser, chris);
-    await enablePush(a);
-    await enablePush(b.page);
+  test("challenge someone, they accept from the inbox on the home screen", async ({ phones }) => {
+    const [shlok, chris] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
+    const [a, b] = await Promise.all([phones.open({ player: shlok, push: "on" }), phones.open({ player: chris, push: "on" })]);
 
     await a.goto("/chess/mode/classic");
     await a.getByRole("button", { name: "Challenge Chris" }).click();
     await expect(a.getByRole("heading", { name: "Challenge sent" })).toBeVisible();
 
     // The challenge shows up live on Home.
-    await b.page.goto("/");
-    const invite = b.page.getByRole("region", { name: "Challenge from Shlok" });
+    await b.goto("/");
+    const invite = b.getByRole("region", { name: "Challenge from Shlok" });
     await expect(invite).toBeVisible();
     await expect(invite).toContainText("Classic");
     await invite.getByRole("button", { name: "Accept" }).click();
-    await expect(b.page.getByRole("grid", { name: "Classic chess board" })).toBeVisible();
+    await expect(b.getByRole("grid", { name: "Classic chess board" })).toBeVisible();
     await expect(a.getByRole("grid", { name: "Classic chess board" })).toBeVisible();
-    await b.context.close();
   });
 
-  test("real-time: countdown, then pieces move without turns and show up on the other phone", async ({ context, browser }) => {
+  test("real-time: countdown, then pieces move without turns and show up on the other phone", async ({ phones }) => {
     test.setTimeout(60_000);
-    const shlok = await createPlayer("Shlok");
-    const chris = await createPlayer("Chris");
-    const a = await phone(context, { player: shlok, notifications: "granted" });
-    const b = await otherPhone(browser, chris);
-    await enablePush(a);
-    await enablePush(b.page);
+    const [shlok, chris] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
+    const [a, b] = await Promise.all([phones.open({ player: shlok, push: "on" }), phones.open({ player: chris, push: "on" })]);
 
     await a.goto("/chess/mode/realtime");
     await a.getByRole("button", { name: "Find a game" }).click();
     await a.waitForURL(/\/chess\/[a-z0-9]+$/);
     const id = matchIdOf(a);
-    await b.page.goto(`/chess/${id}`);
-    await b.page.getByRole("button", { name: "Join game" }).click();
-    await expect(a.getByRole("grid", { name: "Real-time chess board" })).toBeVisible();
-    await expect(b.page.getByRole("grid", { name: "Real-time chess board" })).toBeVisible();
+    await b.goto(`/chess/${id}`);
+    await b.getByRole("button", { name: "Join game" }).click();
+    const boardOf = (p: Page) => p.getByRole("grid", { name: "Real-time chess board" });
+    await expect(boardOf(a)).toBeVisible();
+    await expect(boardOf(b)).toBeVisible();
 
-    const m = await getMatch(id);
     await expect.poll(async () => (await getMatch(id)).state?.startAt ?? null, { timeout: 10_000 }).not.toBeNull();
-    const white = m.players.find((p: { color: string }) => p.color === "w").userId === shlok.userId ? a : b.page;
-    const black = white === a ? b.page : a;
-
-    // Wait out the countdown, then both players move at the same time.
-    await white.waitForTimeout(3300);
+    const m = await getMatch(id);
+    const white = m.players.find((p: { color: string }) => p.color === "w").userId === shlok.userId ? a : b;
+    const black = white === a ? b : a;
+    // Once the countdown's over, both players move at the same time.
+    for (const p of [white, black]) await expect(boardOf(p)).toHaveAttribute("data-playing", "true");
     await tapMove(white, "e2", "e4");
     await tapMove(black, "d7", "d5");
 
     // The white pawn lands on e4 on black's screen.
-    const e4 = black.locator("[data-square=e4]");
-    await expect
-      .poll(async () => {
-        const sq = await e4.boundingBox();
-        const pawns = await black.locator('[data-piece="wP"]').evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON()));
-        return pawns.some((p) => Math.abs(p.x - sq!.x) < 2 && Math.abs(p.y - sq!.y) < 2);
-      }, { timeout: 6000 })
-      .toBe(true);
+    await expect.poll(() => pieceOn(black, "wP", "e4"), { timeout: 6000 }).toBe(true);
 
     // Both moves are stored once each, as separate inserts.
     await expect.poll(async () => (await rtCommands(id)).map((c: { color: string }) => c.color).sort()).toEqual(["b", "w"]);
 
     // The pawn is cooling down now: picking it up offers premoves, and an arrow shows the queued one.
     await tapMove(white, "e4", "e5");
-    await expect(white.locator("svg line")).toHaveCount(1);
+    await expect(white.locator("[data-premove]")).toHaveCount(1);
     // Tapping the piece again cancels it.
     await white.locator("[data-square=e4]").click();
-    await expect(white.locator("svg line")).toHaveCount(0);
+    await expect(white.locator("[data-premove]")).toHaveCount(0);
     // Queue it again; it fires by itself the moment the cooldown ends.
     await tapMove(white, "e4", "e5");
-    await expect
-      .poll(async () => {
-        const sq = await black.locator("[data-square=e5]").boundingBox();
-        const pawns = await black.locator('[data-piece="wP"]').evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON()));
-        return pawns.some((p) => Math.abs(p.x - sq!.x) < 2 && Math.abs(p.y - sq!.y) < 2);
-      }, { timeout: 9000 })
-      .toBe(true);
+    await expect.poll(() => pieceOn(black, "wP", "e5"), { timeout: 9000 }).toBe(true);
 
-    await white.getByRole("button", { name: "Resign" }).click();
-    await white.getByRole("alertdialog").getByRole("button", { name: "Resign" }).click();
+    await resign(white);
     await expect(black.getByRole("heading", { name: "You won" })).toBeVisible();
-    await b.context.close();
   });
 
-  test("real-time: taking the king ends the game on its own, with no further moves", async ({ context, browser }) => {
-    test.setTimeout(90_000);
-    const shlok = await createPlayer("Shlok");
-    const chris = await createPlayer("Chris");
-    const a = await phone(context, { player: shlok, notifications: "granted" });
-    const b = await otherPhone(browser, chris);
-    await enablePush(a);
-    await enablePush(b.page);
-    await a.goto("/chess/mode/realtime");
-    await a.getByRole("button", { name: "Find a game" }).click();
-    await a.waitForURL(/\/chess\/[a-z0-9]+$/);
-    const id = matchIdOf(a);
-    await b.page.goto(`/chess/${id}`);
-    await b.page.getByRole("button", { name: "Join game" }).click();
-    await expect.poll(async () => (await getMatch(id)).state?.startAt ?? null, { timeout: 10_000 }).not.toBeNull();
-    const m = await getMatch(id);
-    const white = m.players.find((p: { color: string }) => p.color === "w").userId === shlok.userId ? a : b.page;
-    const black = white === a ? b.page : a;
-    await white.waitForTimeout(3300);
+  test("real-time: taking the king ends the game on its own, with no further moves", async ({ phones }) => {
+    // Fast pieces and short cooldowns: each move waits only for the last one to land and cool down.
+    const { id, white, black } = await realtimePair(phones, { cooldown: 2, speed: 15 });
 
-    // e4, queen out to h5, queen takes f7, queen takes the king. Each wait covers travel plus cooldown.
+    // e4, queen out to h5, queen takes f7, queen takes the king.
     await tapMove(white, "e2", "e4");
-    await white.waitForTimeout(7200);
+    await expect.poll(() => restsOn(white, "wP", "e4"), { timeout: 10_000 }).toBe(true);
     await tapMove(white, "d1", "h5");
-    await white.waitForTimeout(9300);
+    await expect.poll(() => readyOn(white, "wQ", "h5"), { timeout: 10_000 }).toBe(true);
     await tapMove(white, "h5", "f7");
-    await white.waitForTimeout(7300);
+    await expect.poll(() => readyOn(white, "wQ", "f7"), { timeout: 10_000 }).toBe(true);
     await tapMove(white, "f7", "e8");
 
     await expect(white.getByRole("heading", { name: "You won" })).toBeVisible({ timeout: 8000 });
     await expect(black.getByRole("heading", { name: "You lost" })).toBeVisible();
     await expect(black.getByText("King captured")).toBeVisible();
     expect((await getMatch(id)).result.reason).toBe("king");
-    await b.context.close();
   });
 
-  test("real-time: your own move never jumps backwards on your screen", async ({ context, browser }) => {
-    test.setTimeout(60_000);
-    const shlok = await createPlayer("Shlok");
-    const chris = await createPlayer("Chris");
-    const a = await phone(context, { player: shlok, notifications: "granted" });
-    const b = await otherPhone(browser, chris);
-    await enablePush(a);
-    await enablePush(b.page);
-    await a.goto("/chess/mode/realtime");
-    await a.getByRole("button", { name: "Find a game" }).click();
-    await a.waitForURL(/\/chess\/[a-z0-9]+$/);
-    const id = matchIdOf(a);
-    await b.page.goto(`/chess/${id}`);
-    await b.page.getByRole("button", { name: "Join game" }).click();
-    await expect.poll(async () => (await getMatch(id)).state?.startAt ?? null, { timeout: 10_000 }).not.toBeNull();
-    const m = await getMatch(id);
-    const white = m.players.find((p: { color: string }) => p.color === "w").userId === shlok.userId ? a : b.page;
-    await white.waitForTimeout(3300);
-
-    // The e-pawn travels two squares up the screen; sample it every 40ms and check it never goes back.
-    const pawn = white.locator('[data-piece="wP"]').nth(4);
+  test("real-time: your own move never jumps backwards on your screen", async ({ phones }) => {
+    const { white } = await realtimePair(phones);
+    // The e-pawn travels two squares up the screen; sample it every 40ms (this one is about how it moves
+    // over time) and check it never goes back.
+    const index = await white.locator('[data-piece="wP"]').evaluateAll((els) => {
+      const sq = document.querySelector("[data-square=e2]")!.getBoundingClientRect();
+      return els.findIndex((el) => Math.abs(el.getBoundingClientRect().x - sq.x) < 2 && Math.abs(el.getBoundingClientRect().y - sq.y) < 2);
+    });
+    expect(index).toBeGreaterThanOrEqual(0);
+    const pawn = white.locator('[data-piece="wP"]').nth(index);
     await tapMove(white, "e2", "e4");
     const ys: number[] = [];
     for (let i = 0; i < 40; i++) {
@@ -424,17 +361,15 @@ test.describe("chess", () => {
     for (let i = 1; i < ys.length; i++) expect(ys[i], `frame ${i}: ${ys.join(",")}`).toBeLessThanOrEqual(ys[i - 1] + 0.5);
     const e4 = (await white.locator("[data-square=e4]").boundingBox())!;
     expect(Math.abs(ys.at(-1)! - e4.y)).toBeLessThan(2);
-    await b.context.close();
   });
 
-  test("the game header scrolls with the page and the menu button lines up with the title", async ({ context, browser }) => {
-    const g = await startClassic(browser, context);
-    // The game's own header (the page we came from may still be fading out).
-    const header = g.white.locator("header", { has: g.white.getByRole("heading", { name: "Classic", exact: true, level: 1 }) }).last();
+  test("the game header scrolls with the page and the menu button lines up with the title", async ({ phones }) => {
+    const g = await startClassic(phones);
+    const heading = g.white.getByRole("heading", { name: "Classic", exact: true, level: 1 });
+    const header = g.white.locator("header", { has: heading });
     // iOS blurs things pinned to the top edge, so nothing with text there may be sticky or fixed.
     expect(await header.evaluate((el) => getComputedStyle(el).position)).toBe("static");
     // The title centers on the menu button.
-    const heading = g.white.getByRole("heading", { name: "Classic", exact: true, level: 1 }).last();
     const title = (await heading.boundingBox())!;
     const block = (await heading.locator("..").boundingBox())!;
     const menu = (await g.white.getByRole("button", { name: "Menu" }).boundingBox())!;
@@ -447,14 +382,12 @@ test.describe("chess", () => {
     await expect(settings).toContainText("Time to move");
     await expect(g.white.getByRole("dialog").getByRole("button", { name: "How to play" })).toBeVisible();
     await expect(g.white.getByRole("dialog").getByRole("button", { name: "Share this game" })).toBeVisible();
-    await g.close();
   });
 
-  test("mashing Find a game or a challenge only ever makes one game", async ({ context, browser }) => {
+  test("mashing Find a game or a challenge only ever makes one game", async ({ phones }) => {
     const shlok = await createPlayer("Shlok");
-    const chris = await createPlayer("Chris");
-    const a = await phone(context, { player: shlok, notifications: "granted" });
-    await enablePush(a);
+    await createPlayer("Chris");
+    const a = await phones.open({ player: shlok, push: "on" });
     await a.goto("/chess/mode/classic");
     const find = a.getByRole("button", { name: "Find a game" });
     await find.evaluate((el: HTMLElement) => { for (let i = 0; i < 8; i++) el.click(); });
@@ -464,17 +397,18 @@ test.describe("chess", () => {
     await expect(row).toBeVisible();
     await row.evaluate((el: HTMLElement) => { for (let i = 0; i < 8; i++) el.click(); });
     await a.waitForURL(/\/chess\/[a-z0-9]+$/);
-    const all = await admin().query(anyApi.testing.allMatches, {});
-    expect(all.filter((m: { mode: string }) => m.mode === "chess:classic")).toHaveLength(1);
-    expect(all.filter((m: { mode: string }) => m.mode === "chess:realtime")).toHaveLength(1);
-    void chris;
+    // Once the last of the taps has landed.
+    const count = async () => {
+      const all = await admin().query(anyApi.testing.allMatches, {});
+      return ["chess:classic", "chess:realtime"].map((mode) => all.filter((m: { mode: string }) => m.mode === mode).length);
+    };
+    expect(await settled(count)).toEqual([1, 1]);
   });
 
-  test("real-time pieces sit on their squares while waiting for the other player", async ({ context }) => {
+  test("real-time pieces sit on their squares while waiting for the other player", async ({ phones }) => {
     const shlok = await createPlayer("Shlok");
     const chris = await createPlayer("Chris");
-    const a = await phone(context, { player: shlok, notifications: "granted" });
-    await enablePush(a);
+    const a = await phones.open({ player: shlok, push: "on" });
     const id = await admin().action(anyApi.testing.startMatch, { mode: "chess:realtime", a: shlok.userId, b: chris.userId });
     await a.goto(`/chess/${id}`);
     await expect(a.getByText(/Waiting for Chris/)).toBeVisible();
@@ -485,10 +419,9 @@ test.describe("chess", () => {
     expect(inCorner.length).toBeLessThanOrEqual(1);
   });
 
-  test("rematch: ask in place, the other player accepts, and both land in the new game", async ({ context, browser }) => {
-    const g = await startClassic(browser, context);
-    await g.white.getByRole("button", { name: "Resign" }).click();
-    await g.white.getByRole("alertdialog").getByRole("button", { name: "Resign" }).click();
+  test("rematch: ask in place, the other player accepts, and both land in the new game", async ({ phones }) => {
+    const g = await startClassic(phones);
+    await resign(g.white);
     await expect(g.black.getByRole("heading", { name: "You won" })).toBeVisible();
     const oldUrl = g.white.url();
 
@@ -505,32 +438,26 @@ test.describe("chess", () => {
     // Colors swap: last game's black is white now.
     const next = await getMatch(matchIdOf(g.white));
     expect(next.players.find((p: { color: string }) => p.color === "w").userId).toBe(g.blackPlayer.userId);
-    await g.close();
   });
 
-  test("rematch: leaving the page declines it", async ({ context, browser }) => {
-    const g = await startClassic(browser, context);
-    await g.white.getByRole("button", { name: "Resign" }).click();
-    await g.white.getByRole("alertdialog").getByRole("button", { name: "Resign" }).click();
+  test("rematch: leaving the page declines it", async ({ phones }) => {
+    const g = await startClassic(phones);
+    await resign(g.white);
     await g.white.getByRole("button", { name: "Rematch" }).click();
     await expect(g.black.getByText(/wants a rematch/)).toBeVisible();
     await g.black.getByRole("button", { name: "Back", exact: true }).click();
     await expect(g.white.getByText(/passed on a rematch/)).toBeVisible();
     await expect(g.white.getByRole("button", { name: "New game" })).toBeVisible();
-    await g.close();
   });
 
-  test("someone else can watch a game but not touch it", async ({ context, browser }) => {
-    const g = await startClassic(browser, context);
+  test("someone else can watch a game but not touch it", async ({ phones }) => {
+    const g = await startClassic(phones);
     const boiler = await createPlayer("Boiler");
-    const c = await otherPhone(browser, boiler);
-    await enablePush(c.page);
-    await c.page.goto(`/chess/${g.id}`);
-    await expect(c.page.getByText("You're watching.")).toBeVisible();
-    await expect(c.page.getByRole("button", { name: "Resign" })).toHaveCount(0);
+    const c = await phones.open({ player: boiler, push: "on" });
+    await c.goto(`/chess/${g.id}`);
+    await expect(c.getByText("You're watching.")).toBeVisible();
+    await expect(c.getByRole("button", { name: "Resign" })).toHaveCount(0);
     await classicMove(g.white, "e2", "e4");
-    await expect(c.page.getByLabel("Moves")).toContainText("e4");
-    await c.context.close();
-    await g.close();
+    await expect(c.getByLabel("Moves")).toContainText("e4");
   });
 });

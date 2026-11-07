@@ -137,7 +137,7 @@ export function TapLayer({ meId }: { meId: Id<"users"> | undefined }) {
           const left = r.x * window.innerWidth;
           const top = r.y - window.scrollY;
           return (
-            <motion.div key={r.key} className="absolute" style={{ left, top }} initial={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.35 } }}>
+            <motion.div key={r.key} data-tap={p.name} className="absolute" style={{ left, top }} initial={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.35 } }}>
               <motion.span
                 className="absolute -left-7 -top-7 size-14 rounded-full border-2"
                 style={{ borderColor: p.frameColor }}

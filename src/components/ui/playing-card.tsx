@@ -32,7 +32,7 @@ function PlayingCard({
 }) {
   const vars = { "--w": `${width}px`, ...(seat ? { "--seat": seat } : {}), ...style } as CSSProperties
   if (!card) {
-    return <span data-slot="playing-card" className={cn("playing-card", slot ? "playing-card-slot" : "playing-card-back", className)} style={vars} aria-hidden="true" />
+    return <span data-slot="playing-card" data-back={slot ? undefined : ""} className={cn("playing-card", slot ? "playing-card-slot" : "playing-card-back", className)} style={vars} aria-hidden="true" />
   }
   return (
     <span data-slot="playing-card" className={cn("playing-card", className)} data-suit={card[1]} data-card={card} data-best={best ? "true" : undefined} style={vars} role="img" aria-label={cardName(card)}>

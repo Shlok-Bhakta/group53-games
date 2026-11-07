@@ -136,6 +136,7 @@ export function RtBoard({ sim, myColor, view, playing, selected, targets, pieceE
       ref={ref}
       role="grid"
       aria-label={small ? "4-player real-time chess board" : "Real-time chess board"}
+      data-playing={playing || undefined}
       className={cn("board relative aspect-square w-full touch-none select-none overflow-hidden rounded-sm", !small && "shadow-lg shadow-black/20")}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -257,7 +258,7 @@ function Arrow({ from: [fc, fr], to: [tc, tr] }: { from: Sq; to: Sq }) {
   const by = y2 - uy * head;
   const w = head * Math.tan(Math.PI / 6);
   return (
-    <g fill={COLORS.premove} stroke={COLORS.premove}>
+    <g fill={COLORS.premove} stroke={COLORS.premove} data-premove>
       <line x1={x1} y1={y1} x2={bx} y2={by} strokeWidth={0.15} strokeLinecap="round" />
       <polygon points={`${x2},${y2} ${bx - uy * w},${by + ux * w} ${bx + uy * w},${by - ux * w}`} stroke="none" />
     </g>

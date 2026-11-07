@@ -1,20 +1,7 @@
-import type { Browser, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { anyApi } from "convex/server";
-import { admin, createPlayer, expect, phone, test, type Player } from "./fixtures";
+import { admin, createPlayer, expect, fillLobby, getMatch, matchIdOf, openLobby, test, type Phones } from "./fixtures";
 
-async function otherPhone(browser: Browser, player: Player) {
-  const context = await browser.newContext({ viewport: { width: 393, height: 852 }, isMobile: true, hasTouch: true });
-  return { context, page: await phone(context, { player, notifications: "granted" }) };
-}
-
-async function enablePush(page: Page) {
-  await page.goto("/");
-  await page.getByRole("button", { name: "Turn on notifications" }).click();
-  await expect(page.getByText("Turn on notifications to play")).toHaveCount(0);
-}
-
-const getMatch = (id: string) => admin().query(anyApi.testing.getMatch, { id });
-const matchIdOf = (page: Page) => page.url().split("/scrabble/")[1].split("?")[0];
 const setRack = (id: string, userId: string, letters: string) => admin().mutation(anyApi.testing.setRack, { id, userId, letters });
 
 // Taps a rack tile, then a square. Squares are found by where they are on the board.
@@ -40,35 +27,30 @@ async function tapSquare(page: Page, x: number, y: number) {
 
 const sounds = (page: Page) => page.evaluate(() => (window as unknown as { __sfx: string[] }).__sfx);
 
-// Two phones in a started classic game. Returns them in seat order.
-async function twoPlayerGame(browser: Browser, context: Parameters<typeof phone>[0], mode = "classic") {
+// Two phones with push on.
+async function twoPhones(phones: Phones) {
   const [a, b] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
-  const pa = await phone(context, { player: a, notifications: "granted" });
-  const other = await otherPhone(browser, b);
-  const pb = other.page;
-  await enablePush(pa);
-  await enablePush(pb);
-  await pa.goto(`/scrabble/mode/${mode}`);
-  await pa.getByRole("button", { name: "Open a game" }).click();
-  await expect(pa.getByRole("heading", { name: "Waiting for players" })).toBeVisible();
-  const id = matchIdOf(pa);
-  await pb.goto(`/scrabble/${id}?accept=1`);
-  await expect(pb.getByRole("heading", { name: "Waiting for Shlok to start" })).toBeVisible();
-  await expect(pa.getByRole("heading", { name: "2 in" })).toBeVisible();
-  await pa.getByRole("button", { name: "Start with 2" }).click();
+  const [pa, pb] = await Promise.all([phones.open({ player: a, push: "on" }), phones.open({ player: b, push: "on" })]);
+  return { a, b, pa, pb };
+}
+
+// Two phones in a started classic game. Returns them in seat order.
+async function twoPlayerGame(phones: Phones, mode = "classic") {
+  const { a, b, pa, pb } = await twoPhones(phones);
+  const id = await openLobby(pa, "scrabble", mode);
+  await fillLobby(pa, [pb]);
   await expect(pa.getByRole("group", { name: "Board" })).toBeVisible();
   await expect(pb.getByRole("group", { name: "Board" })).toBeVisible();
   const m = await getMatch(id);
   const first = m.players[0].userId === a.userId ? { player: a, page: pa } : { player: b, page: pb };
   const second = first.player === a ? { player: b, page: pb } : { player: a, page: pa };
-  return { id, first, second, close: () => other.context.close() };
+  return { id, first, second };
 }
 
 test.describe("Scrabble", () => {
-  test("the game card opens the Scrabble page with its two modes", async ({ context }) => {
+  test("the game card opens the Scrabble page with its two modes", async ({ phones }) => {
     const me = await createPlayer("Shlok");
-    const page = await phone(context, { player: me, notifications: "granted" });
-    await enablePush(page);
+    const page = await phones.open({ player: me, push: "on" });
     await page.goto("/games");
     await page.getByRole("link", { name: "Play Scrabble" }).click();
     await expect(page).toHaveURL(/\/scrabble$/);
@@ -88,30 +70,22 @@ test.describe("Scrabble", () => {
     expect((await getMatch(matchIdOf(page))).settings).toEqual({ turnTime: 30 });
   });
 
-  test("the host's setting changes show up live in everyone's lobby", async ({ context, browser }) => {
-    const [a, b] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
-    const pa = await phone(context, { player: a, notifications: "granted" });
-    const other = await otherPhone(browser, b);
-    await enablePush(pa);
-    await enablePush(other.page);
-    await pa.goto("/scrabble/mode/classic");
-    await pa.getByRole("button", { name: "Open a game" }).click();
-    await expect(pa.getByRole("heading", { name: "Waiting for players" })).toBeVisible();
-    const id = matchIdOf(pa);
-    await other.page.goto(`/scrabble/${id}?accept=1`);
-    await expect(other.page.getByRole("heading", { name: "Waiting for Shlok to start" })).toBeVisible();
+  test("the host's setting changes show up live in everyone's lobby", async ({ phones }) => {
+    const { pa, pb } = await twoPhones(phones);
+    const id = await openLobby(pa, "scrabble", "classic");
+    await pb.goto(`/scrabble/${id}?accept=1`);
+    await expect(pb.getByRole("heading", { name: "Waiting for Shlok to start" })).toBeVisible();
     await pa.getByRole("button", { name: "Settings" }).click();
     await pa.getByRole("radiogroup", { name: "Board" }).getByRole("radio", { name: "21×21" }).click();
     await pa.getByRole("radiogroup", { name: "Rules" }).getByRole("radio", { name: "Letter League" }).click();
-    await expect(other.page.getByRole("list", { name: "Settings" })).toHaveText(/21×21 board.*Letter League rules/);
+    await expect(pb.getByRole("list", { name: "Settings" })).toHaveText(/21×21 board.*Letter League rules/);
     await pa.getByRole("button", { name: "Start with 2" }).click();
-    await expect(other.page.getByRole("group", { name: "Board" })).toBeVisible();
+    await expect(pb.getByRole("group", { name: "Board" })).toBeVisible();
     expect((await getMatch(id)).state.size).toBe(21);
-    await other.context.close();
   });
 
-  test("two phones play words, plans survive a reload, and the other phone sees it all live", async ({ context, browser }) => {
-    const { id, first, second, close } = await twoPlayerGame(browser, context);
+  test("two phones play words, plans survive a reload, and the other phone sees it all live", async ({ phones }) => {
+    const { id, first, second } = await twoPlayerGame(phones);
     await setRack(id, first.player.userId, "CATSDOG");
     await setRack(id, second.player.userId, "ZORPHIE");
     const p1 = first.page;
@@ -159,24 +133,19 @@ test.describe("Scrabble", () => {
     // Meanwhile the first player plans their next word out of turn, and it waits for them.
     await place(p1, "S", 9, 7);
     await expect(p1.getByRole("button", { name: "Planned: CATS, 6" })).toBeDisabled();
-    await close();
   });
 
-  test("a game link opened in Discord's browser sends the game to your phone", async ({ context, browser }) => {
-    const [a, b, c] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris"), createPlayer("Sam")]);
-    const pa = await phone(context, { player: a, notifications: "granted" });
-    await enablePush(pa);
-    const chris = await otherPhone(browser, b);
-    await enablePush(chris.page);
-    void c;
-    await pa.goto("/scrabble/mode/classic");
-    await pa.getByRole("button", { name: "Open a game" }).click();
-    await expect(pa.getByRole("heading", { name: "Waiting for players" })).toBeVisible();
-    const id = matchIdOf(pa);
+  test("a game link opened in Discord's browser sends the game to your phone", async ({ phones }) => {
+    // Chris has push on; Sam never turned it on.
+    const { pa } = await twoPhones(phones);
+    await createPlayer("Sam");
+    const id = await openLobby(pa, "scrabble", "classic");
 
     // Someone opens the shared link in a browser: not the app, and not signed in.
-    const linkCtx = await browser.newContext({ viewport: { width: 393, height: 852 }, isMobile: true, hasTouch: true, userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Discord/250.0" });
-    const link = await phone(linkCtx, { installed: false });
+    const link = await phones.open({
+      installed: false,
+      context: { viewport: { width: 393, height: 852 }, isMobile: true, hasTouch: true, userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Discord/250.0" },
+    });
     await link.goto(`/scrabble/${id}?accept=1`);
     await expect(link.getByRole("heading", { name: "Shlok wants Scrabble" })).toBeVisible();
     await link.getByRole("button", { name: "I'm Chris" }).click();
@@ -187,12 +156,10 @@ test.describe("Scrabble", () => {
     await expect(link.getByRole("status")).toContainText("Your notifications are off");
     // The install steps are still there for anyone new.
     await expect(link.getByRole("heading", { name: /New here/ })).toBeVisible();
-    await linkCtx.close();
-    await chris.context.close();
   });
 
-  test("the board fills the screen; the dock has the bag, Swap, Play and Shuffle, and the menu has scores, words and Resign", async ({ context, browser }) => {
-    const { id, first, second, close } = await twoPlayerGame(browser, context);
+  test("the board fills the screen; the dock has the bag, Swap, Play and Shuffle, and the menu has scores, words and Resign", async ({ phones }) => {
+    const { id, first, second } = await twoPlayerGame(phones);
     const p = first.page;
     const board = (await p.getByRole("group", { name: "Board" }).boundingBox())!;
     expect(board.width).toBeGreaterThanOrEqual(390);
@@ -229,12 +196,11 @@ test.describe("Scrabble", () => {
     await expect(menu.getByRole("region", { name: "Words played" }).getByRole("button", { name: "CAT" })).toBeVisible();
     await expect(menu.getByRole("region", { name: "Game settings" })).toContainText("Tiles in hand");
     await expect(menu.getByRole("button", { name: "Resign" })).toBeVisible();
-    await close();
   });
 
-  test("sound settings: pick music and an effects pack, and they stick", async ({ context }) => {
+  test("sound settings: pick music and an effects pack, and they stick", async ({ phones }) => {
     const me = await createPlayer("Shlok");
-    const page = await phone(context, { player: me, notifications: "granted" });
+    const page = await phones.open({ player: me, notifications: "granted" });
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto("/you");
@@ -262,9 +228,9 @@ test.describe("Scrabble", () => {
     expect(errors).toEqual([]);
   });
 
-  test("sound survives leaving the app and coming straight back", async ({ context }) => {
+  test("sound survives leaving the app and coming straight back", async ({ phones }) => {
     const me = await createPlayer("Shlok");
-    const page = await phone(context, { player: me, notifications: "granted" });
+    const page = await phones.open({ player: me, notifications: "granted" });
     await page.goto("/you");
     await page.getByRole("heading", { name: "You" }).click();
     type Audio = { state: () => string; rebuilds: () => number; break: () => void };
@@ -295,20 +261,23 @@ test.describe("Scrabble", () => {
     await expect.poll(music).toBe("lofi");
   });
 
-  test("every effects pack and music track makes sound, and none of it clips", async ({ context }) => {
+  test("every effects pack and music track makes sound, and none of it clips", async ({ phones }) => {
     test.setTimeout(240_000);
     const me = await createPlayer("Shlok");
-    const page = await phone(context, { player: me });
+    const page = await phones.open({ player: me });
     await page.goto("/you");
     const report = await page.evaluate(async () => {
       type Lab = { packs: string[]; tracks: string[]; sfx: (p: string, n: string) => Promise<{ peak: number; rms: number }>; music: (t: string, s: number) => Promise<{ peak: number; rms: number }> };
       const lab = (window as unknown as { __soundLab: Lab }).__soundLab;
       const names = ["pick", "place", "recall", "shuffle", "play", "bingo", "invalid", "turn", "ghost", "land", "tick", "win", "lose", "preview", "deal", "flip", "chips", "knock", "sweep", "slam", "payout"];
       const out: Record<string, { peak: number; rms: number }> = {};
-      for (const p of lab.packs) for (const n of names) out[`sfx ${p} ${n}`] = await lab.sfx(p, n);
-      for (const t of lab.tracks) out[`music ${t}`] = await lab.music(t, 10);
+      // Offline renders run side by side: a pack's sounds at once, then every track at once (ten seconds
+      // of each, the same as before, just not one after another).
+      for (const p of lab.packs) (await Promise.all(names.map((n) => lab.sfx(p, n)))).forEach((r, i) => (out[`sfx ${p} ${names[i]}`] = r));
+      (await Promise.all(lab.tracks.map((t) => lab.music(t, 10)))).forEach((r, i) => (out[`music ${lab.tracks[i]}`] = r));
       return out;
     });
+    expect(Object.keys(report).length).toBeGreaterThan(100);
     const silent = Object.entries(report).filter(([k, r]) => r.peak < (k.includes("ghost") ? 0.002 : 0.01)).map(([k]) => k);
     const clipping = Object.entries(report).filter(([, r]) => r.peak >= 0.99).map(([k]) => k);
     expect(silent).toEqual([]);
@@ -317,8 +286,8 @@ test.describe("Scrabble", () => {
     for (const [k, r] of Object.entries(report)) if (k.startsWith("music")) expect(r.rms, k).toBeLessThan(0.2);
   });
 
-  test("tiles drag from the rack onto the board and back", async ({ context, browser }) => {
-    const { id, first, close } = await twoPlayerGame(browser, context);
+  test("tiles drag from the rack onto the board and back", async ({ phones }) => {
+    const { id, first } = await twoPlayerGame(phones);
     await setRack(id, first.player.userId, "HIXYZQJ");
     const p = first.page;
     const tile = p.getByRole("button", { name: "Tile H" });
@@ -339,11 +308,10 @@ test.describe("Scrabble", () => {
     await expect(p.locator('[data-draft][data-cell="7,7"]')).toHaveAttribute("data-letter", "H");
     await place(p, "I", 8, 7);
     await expect(p.getByRole("button", { name: "Play HI for 10" })).toBeEnabled();
-    await close();
   });
 
-  test("live games show the turn clock and skip you when it runs out", async ({ context, browser }) => {
-    const { id, first, second, close } = await twoPlayerGame(browser, context, "live");
+  test("live games show the turn clock and skip you when it runs out", async ({ phones }) => {
+    const { id, first, second } = await twoPlayerGame(phones, "live");
     await expect(first.page.getByLabel(/seconds left/)).toBeVisible();
     await expect(second.page.getByLabel(/seconds left/)).toBeVisible();
     await expect(first.page.getByText("Your turn")).toBeVisible();
@@ -351,6 +319,5 @@ test.describe("Scrabble", () => {
     await admin().mutation(anyApi.scrabble.turnTimeout, { id, moveCount: 0 });
     await expect(second.page.getByText("Your turn")).toBeVisible();
     await expect(first.page.getByText(/ran out of time/)).toBeVisible();
-    await close();
   });
 });
