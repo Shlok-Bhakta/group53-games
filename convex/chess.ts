@@ -181,8 +181,10 @@ export const fourMove = mutation({
 async function applyFour(ctx: MutationCtx, match: Doc<"matches">, next: FourState, actor: Id<"users">) {
   const before = match.state as FourState;
   const now = Date.now();
-  const moveCount = match.moveCount + 1;
   const turn = next.turn ? playerWith(match, next.turn) : undefined;
+  // Someone else resigning leaves the player to move on the clock they had: same reminder, same strikes.
+  const fresh = turn !== match.turn || actor === match.turn;
+  const moveCount = fresh ? match.moveCount + 1 : match.moveCount;
   await ctx.db.patch(match._id, { state: next, moveCount, turn, lastActivityAt: now });
   const updated = { ...match, state: next, moveCount, turn };
 
@@ -202,7 +204,7 @@ async function applyFour(ctx: MutationCtx, match: Doc<"matches">, next: FourStat
     const why = o.reason === "checkmate" ? "You were checkmated" : o.reason === "stalemate" ? "You're stalemated: +20" : "You timed out";
     await notify(ctx, who, { title: why, body: "Your army is grey now. Stick around to see who wins.", url, tag });
   }
-  if (turn && turn !== before.turn && turn !== actor) {
+  if (fresh && turn && turn !== actor) {
     const checked = lastMove?.checks.includes(next.turn!);
     await notify(ctx, turn, {
       title: lastMove ? `${name} played ${lastMove.text}${checked ? ". You're in check!" : ""}` : `${name} ${retired?.reason === "timeout" ? "timed out" : "resigned"}`,
@@ -211,7 +213,7 @@ async function applyFour(ctx: MutationCtx, match: Doc<"matches">, next: FourStat
       tag,
     });
   }
-  await scheduleReminder(ctx, match._id, moveCount);
+  if (fresh) await scheduleReminder(ctx, match._id, moveCount);
 }
 
 // Resigning or timing out in four-player: the game carries on without you.

@@ -169,8 +169,8 @@ async function proceed(ctx: MutationCtx, match: Doc<"matches">, before: Table, a
   }
   await save(ctx, match, before, t);
   const now = Date.now();
-  const moveCount = match.moveCount + 1;
   if (ended || t.state.turn === -1) {
+    const moveCount = match.moveCount + 1;
     await ctx.db.patch(match._id, { state: t.state, moveCount, lastActivityAt: now });
     const places = standings(t.state).map((g) => g.map((seat) => match.players[seat].userId));
     const draw = places[0].length === match.players.length;
@@ -178,14 +178,17 @@ async function proceed(ctx: MutationCtx, match: Doc<"matches">, before: Table, a
     return;
   }
   const turn = match.players[t.state.turn].userId;
+  // Someone else resigning leaves the player to act on the clock they had: same reminder, same strikes, no push.
+  const fresh = turn !== match.turn || by === null || by === match.turn;
+  const moveCount = fresh ? match.moveCount + 1 : match.moveCount;
   await ctx.db.patch(match._id, { state: t.state, turn, moveCount, lastActivityAt: now });
-  await tell(ctx, match, t.state, results, by, before.state.hand === 0);
-  await scheduleReminder(ctx, match._id, moveCount);
+  await tell(ctx, match, t.state, results, by, before.state.hand === 0, fresh);
+  if (fresh) await scheduleReminder(ctx, match._id, moveCount);
 }
 
 // Pushes: whoever has to act now hears what just happened (notify skips anyone already looking at the game), winners of a showdown hear they won, and anyone
 // knocked out hears it. One push each, the most useful.
-async function tell(ctx: MutationCtx, match: Doc<"matches">, s: PokerState, results: HandResult[], by: Id<"users"> | null, first: boolean) {
+async function tell(ctx: MutationCtx, match: Doc<"matches">, s: PokerState, results: HandResult[], by: Id<"users"> | null, first: boolean, fresh: boolean) {
   if (first && match.rematchOf) return;
   const names = await Promise.all(match.players.map((p) => displayName(ctx, p.userId)));
   const pushes = new Map<Id<"users">, { title: string; body: string }>();
@@ -205,7 +208,7 @@ async function tell(ctx: MutationCtx, match: Doc<"matches">, s: PokerState, resu
   }
   const seat = s.turn;
   const up = match.players[seat].userId;
-  {
+  if (fresh) {
     const owe = toCall(s, seat);
     const street = streetOf(s);
     const pot = potOf(s) + s.bets.reduce((a, b) => a + b, 0);

@@ -59,6 +59,7 @@ export const MODES = {
     board: "two",
     slug: "classic",
     blurb: "Take turns at your own pace. We ping you when it's your move.",
+    draws: true,
     settings: [moveTime(0)],
   },
   "chess:four": {
@@ -83,6 +84,7 @@ export const MODES = {
     board: "two",
     slug: "realtime",
     blurb: "No turns. Move any piece any time, then it cools down for 5 seconds. Take the king to win.",
+    draws: true,
     settings: REALTIME_CHESS,
   },
   "chess:realtime4": {
@@ -177,7 +179,12 @@ export const MODES = {
 export type ModeKey = keyof typeof MODES;
 export const MODE_KEYS = Object.keys(MODES) as ModeKey[];
 export const isMode = (m: string): m is ModeKey => m in MODES;
-export const gameOf = (mode: string): GameKey => (isMode(mode) ? MODES[mode].game : "chess");
+export function gameOf(mode: string): GameKey {
+  if (!isMode(mode)) throw new Error(`Unknown mode: ${mode}`);
+  return MODES[mode].game;
+}
+// Two-player modes where players can offer each other a draw (matches.offerDraw).
+export const allowsDraws = (mode: string) => isMode(mode) && "draws" in MODES[mode] && MODES[mode].draws === true;
 export const modesOf = (game: string) => MODE_KEYS.filter((k) => MODES[k].game === game);
 export const modeBySlug = (game: string, slug: string) => modesOf(game).find((k) => MODES[k].slug === slug) ?? null;
 export const isFour = (mode: string) => isMode(mode) && MODES[mode].board === "four";

@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { MODES, REALTIME_LOBBY_MS, REMINDER_MS, acceptPath, changedSettings, flexibleSeats, isMode, matchPath, modePath, settingsOf, type ModeKey, type Settings } from "./modes";
+import { MODES, REALTIME_LOBBY_MS, REMINDER_MS, acceptPath, allowsDraws, changedSettings, flexibleSeats, isMode, matchPath, modePath, settingsOf, type ModeKey, type Settings } from "./modes";
 import { displayName, isTestUser, notify } from "./notify";
 import { placesOf, recordResult } from "./ratings";
 import { hooksFor } from "./games";
@@ -219,7 +219,7 @@ export const expireLobby = internalMutation({
   },
 });
 
-async function create(ctx: MutationCtx, userId: Id<"users">, mode: ModeKey, invited: Id<"users">[], settings?: Settings, rematchOf?: Id<"matches">) {
+async function create(ctx: MutationCtx, userId: Id<"users">, mode: ModeKey, invited: Id<"users">[], settings?: Settings) {
   const now = Date.now();
   const changed = changedSettings(mode, settings);
   const id = await ctx.db.insert("matches", {
@@ -234,7 +234,6 @@ async function create(ctx: MutationCtx, userId: Id<"users">, mode: ModeKey, invi
     state: null,
     moveCount: 0,
     lastActivityAt: now,
-    rematchOf,
   });
   if (MODES[mode].kind === "realtime") await ctx.scheduler.runAfter(REALTIME_LOBBY_MS, internal.matches.expireLobby, { id });
   return id;
@@ -285,7 +284,8 @@ export const queue = mutation({
       .query("matches")
       .withIndex("by_mode_status", (q) => q.eq("mode", mode).eq("status", "waiting"))
       .collect();
-    const mine = waiting.find((m) => isPlayer(m, userId));
+    // A challenge I sent isn't a lobby: queueing while it waits opens one.
+    const mine = waiting.find((m) => isPlayer(m, userId) && isOpen(m));
     if (mine) return mine._id;
     const open = waiting.find((m) => isOpen(m) && canJoin(m, userId));
     if (open) {
@@ -310,8 +310,8 @@ export const queue = mutation({
 // Invites specific players. Four-player games can invite fewer than three; the leftover seats are open to
 // the crew.
 export const challenge = mutation({
-  args: { mode: v.string(), opponent: v.optional(v.id("users")), opponents: v.optional(v.array(v.id("users"))), rematchOf: v.optional(v.id("matches")), settings: settingsArg },
-  handler: async (ctx, { mode, opponent, opponents, rematchOf, settings }) => {
+  args: { mode: v.string(), opponent: v.optional(v.id("users")), opponents: v.optional(v.array(v.id("users"))), settings: settingsArg },
+  handler: async (ctx, { mode, opponent, opponents, settings }) => {
     const userId = await me(ctx);
     if (!isMode(mode)) throw new Error("Unknown mode.");
     const invited = [...new Set([...(opponents ?? []), ...(opponent ? [opponent] : [])])];
@@ -328,7 +328,7 @@ export const challenge = mutation({
     const sameSet = (m: Doc<"matches">) => m.invited.length === invited.length && invited.every((id) => m.invited.includes(id));
     const existing = mine.find((m) => m.mode === mode && sameSet(m));
     if (existing) return existing._id;
-    const id = await create(ctx, userId, mode, invited, settings, rematchOf);
+    const id = await create(ctx, userId, mode, invited, settings);
     const name = await displayName(ctx, userId);
     const m = MODES[mode];
     const flexible = flexibleSeats(mode);
@@ -473,7 +473,7 @@ export const offerDraw = mutation({
     const userId = await me(ctx);
     const match = await loadMatch(ctx, id);
     if (match.status !== "active" || !isPlayer(match, userId)) throw new Error("You're not in an active game here.");
-    if (match.players.length > 2) throw new Error("There are no draws in 4-player chess.");
+    if (!allowsDraws(match.mode)) throw new Error("There are no draws in this game.");
     if (match.drawOffer && match.drawOffer !== userId) {
       await finish(ctx, match, { winners: [], draw: true, reason: "agreement" });
       return;
@@ -631,7 +631,8 @@ export const inbox = query({
     const realtime = (m: Doc<"matches">) => modeOf(m)?.kind === "realtime";
     return {
       invites: await views(waiting.filter((m) => m.invited.includes(userId) && !isPlayer(m, userId))),
-      myTurn: await views(mineActive.filter((m) => m.turn === userId)),
+      // Live games on my turn are already under `live`.
+      myTurn: await views(mineActive.filter((m) => !realtime(m) && m.turn === userId)),
       live: await views(mineActive.filter(realtime)),
       theirTurn: await views(mineActive.filter((m) => !realtime(m) && m.turn !== userId)),
       open: await views(waiting.filter((m) => !m.invited.includes(userId) && canJoin(m, userId))),

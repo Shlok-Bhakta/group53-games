@@ -330,6 +330,7 @@ export const saveDraft = mutation({
     const userId = await getAuthUserId(ctx);
     if (userId === null) throw new Error("Sign in first.");
     const match = await loadMatch(ctx, id);
+    if (!match.mode.startsWith("scrabble:")) throw new Error("Wrong kind of game.");
     if (match.status !== "active" || seatOf(match, userId) < 0) return;
     const data: Draft = { placed: placed.slice(0, 21), order: order.slice(0, 21) };
     const row = await draftRow(ctx, id, userId);
@@ -354,6 +355,7 @@ export const planning = query({
   handler: async (ctx, { id }) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) return [];
+    if (!(await ctx.db.get(id))?.mode.startsWith("scrabble:")) return [];
     const rows = await ctx.db
       .query("drafts")
       .withIndex("by_match_user", (q) => q.eq("matchId", id))
