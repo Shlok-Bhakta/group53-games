@@ -6,7 +6,6 @@ import { streetOf, toCall, type PokerState } from "../../../convex/poker/engine"
 import { AsyncButton } from "@/components/AsyncButton";
 import { DockNote } from "@/components/game/GameFrame";
 import { ResignButton } from "@/components/match";
-import { cn } from "@/lib/utils";
 import { chips } from "./format";
 
 // Not my turn: line up a move for when the action reaches me, so the game doesn't wait on me.
