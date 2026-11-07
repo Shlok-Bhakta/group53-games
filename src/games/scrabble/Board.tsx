@@ -340,6 +340,7 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
               animate={{ opacity: [0, 1, 1, 0], y: [0, -base * 0.9, -base * 1.3, -base * 1.8] }}
               transition={{ duration: 1.8, times: [0, 0.2, 0.7, 1], delay: 0.35 }}
             >
+              {/* White ink on the player's seat color, which is the same in every theme. */}
               <span className="block -translate-x-1/2 rounded-full px-2.5 py-1 font-display text-callout tabular-nums text-white shadow-lg" style={{ scale: "calc(1 / var(--s, 1))", background: scored.color }}>
                 {scored.text}
               </span>
