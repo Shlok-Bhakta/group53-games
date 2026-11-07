@@ -6,7 +6,6 @@ import { streetOf, toCall, type PokerState } from "../../../convex/poker/engine"
 import { AsyncButton } from "@/components/AsyncButton";
 import { DockNote } from "@/components/game/GameFrame";
 import { ResignButton } from "@/components/match";
-import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { chips } from "./format";
 
@@ -19,8 +18,8 @@ export function WaitDock({ match, state, seat }: { match: MatchView; state: Poke
   const resign = (
     <ResignButton
       match={match}
-      // A dock button like the others, still in red.
-      className={cn(buttonVariants({ variant: "card", size: "dock" }), "text-destructive")}
+      variant="card"
+      size="dock"
       detail={match.players.length > 2 ? "You fold, your chips leave with you, and you place below everyone still playing." : "You fold and your opponent gets the win."}
     />
   );
