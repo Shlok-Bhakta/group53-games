@@ -257,6 +257,9 @@ export default defineSchema({
     .index("by_endpoint", ["endpoint"]),
 
   // Games built and hosted apart from the app (convex/hosted.ts): which build is live, and its files.
+  // What test players would have been pushed, kept only on the throwaway test backend (ALLOW_TEST_HELPERS)
+  // so e2e tests can check who hears what. Never written on kiwi.
+  testPushes: defineTable({ userId: v.id("users"), title: v.string(), body: v.string(), url: v.string(), tag: v.optional(v.string()), badge: v.number() }).index("by_user", ["userId"]),
   hostedGames: defineTable({ game: v.string(), build: v.string(), previous: v.optional(v.string()) }).index("by_game", ["game"]),
   hostedFiles: defineTable({
     game: v.string(),

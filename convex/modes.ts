@@ -6,12 +6,13 @@
 // once enough people are in (it also starts by itself when every seat fills).
 
 // How a game ended (matches.result.reason): `label` for the result on screen, `push` to end the result push
-// ("Classic chess vs Chris: checkmate."). Each game lists its own; these are any game's.
-export type Reason = { label: string; push: string };
+// ("Classic chess vs Chris: checkmate."), and `won` where it reads well after a winner's name in a link
+// preview ("Chris won by checkmate"). Each game lists its own; these are any game's.
+export type Reason = { label: string; push: string; won?: string };
 const ENDINGS: Record<string, Reason> = {
-  resign: { label: "By resignation", push: "resignation" },
+  resign: { label: "By resignation", push: "resignation", won: "by resignation" },
   timeout: { label: "Timed out", push: "timed out" },
-  last_player: { label: "Last one standing", push: "last one standing" },
+  last_player: { label: "Last one standing", push: "last one standing", won: "as the last one standing" },
   agreement: { label: "Draw agreed", push: "draw agreed" },
 };
 
@@ -20,15 +21,15 @@ export const GAMES = {
     name: "Chess",
     path: "/chess",
     reasons: {
-      checkmate: { label: "Checkmate", push: "checkmate" },
+      checkmate: { label: "Checkmate", push: "checkmate", won: "by checkmate" },
       stalemate: { label: "Stalemate", push: "stalemate" },
       repetition: { label: "Threefold repetition", push: "threefold repetition" },
       insufficient: { label: "Insufficient material", push: "insufficient material" },
       fifty: { label: "Fifty-move rule", push: "fifty-move rule" },
-      king: { label: "King captured", push: "king captured" },
+      king: { label: "King captured", push: "king captured", won: "by taking the king" },
       both_kings: { label: "Both kings fell at once", push: "both kings fell at once" },
       no_progress: { label: "90 seconds with no captures or pawn moves", push: "90 seconds with no captures or pawn moves" },
-      last_king: { label: "Last king standing", push: "last king standing" },
+      last_king: { label: "Last king standing", push: "last king standing", won: "as the last king standing" },
     },
   },
   scrabble: {

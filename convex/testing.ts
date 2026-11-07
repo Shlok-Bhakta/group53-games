@@ -81,6 +81,15 @@ export const seedPush = internalMutation({
 });
 
 // A golf world as the server has it: whether it's still ticking, and the snapshot phones start from.
+// The pushes a test player would have got, oldest first (see notify).
+export const pushesOf = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, { userId }) => {
+    assertTestDeployment();
+    return (await ctx.db.query("testPushes").withIndex("by_user", (q) => q.eq("userId", userId)).collect()).map(({ title, body, url, tag, badge }) => ({ title, body, url, tag, badge }));
+  },
+});
+
 export const golfWorld = internalQuery({
   args: { key: v.string() },
   handler: async (ctx, { key }) => {
