@@ -4,6 +4,7 @@ import { CATEGORY, bestHand, type Card } from "../../../convex/poker/cards";
 import { VARIANTS, isOut, type HandResult, type LogEntry, type PokerState } from "../../../convex/poker/engine";
 import { resultText } from "../../../convex/poker/text";
 import { sfx } from "@/sound";
+import { sum } from "./format";
 
 // The table plays things out one step at a time, though the server gets there at once: one mutation can end a
 // hand and deal the next. So the screen draws a `Show`, which follows the real state through each step in
@@ -13,7 +14,6 @@ import { sfx } from "@/sound";
 // How fast it all plays. Everything below is scaled by this, so it's the one number to change.
 export const PACE = 1.2;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms * PACE));
-const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
 export type Spell = { word: string; tone: "green" | "hit" };
 export type Show = {
