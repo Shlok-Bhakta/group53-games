@@ -156,8 +156,11 @@ async function proceed(ctx: MutationCtx, match: Doc<"matches">, before: Table, a
     await finishBySeats(ctx, { ...match, state: t.state, moveCount }, standings(t.state), ended ?? "last_player");
     return;
   }
-  // Pushes are poker's own (tell), so passTurn sends none.
-  const { fresh } = await passTurn(ctx, match, { state: t.state, turn: match.players[t.state.turn].userId, by });
+  // Pushes are poker's own (tell), so passTurn sends none. The same seat to act is still a new decision if
+  // the hand or street moved on.
+  const b = before.state;
+  const newDecision = b.hand !== t.state.hand || b.street !== t.state.street || b.turn !== t.state.turn;
+  const { fresh } = await passTurn(ctx, match, { state: t.state, turn: match.players[t.state.turn].userId, by, newDecision });
   await tell(ctx, match, t.state, results, by, before.state.hand === 0, fresh);
 }
 

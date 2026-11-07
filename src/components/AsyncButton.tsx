@@ -10,7 +10,12 @@ export function usePending() {
   const [pending, setPending] = useState(false);
   const running = useRef(false);
   const mounted = useRef(true);
-  useEffect(() => () => void (mounted.current = false), []);
+  // Set on every mount, not just the first: StrictMode mounts twice in development, and a flag only ever
+  // cleared would leave `pending` stuck on after the first action.
+  useEffect(() => {
+    mounted.current = true;
+    return () => void (mounted.current = false);
+  }, []);
   const run = useCallback(async (action: () => Promise<unknown> | unknown) => {
     if (running.current) return;
     running.current = true;

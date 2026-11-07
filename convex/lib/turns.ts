@@ -35,13 +35,17 @@ type Pass = {
   timer?: TurnTimer | null;
   // Anything else to change on the match.
   patch?: Partial<Doc<"matches">>;
+  // The game's word that the player to move faces a new decision even though it's the same player (poker's
+  // next hand, dealt in the same mutation), so a resignation can't hand them their old clock.
+  newDecision?: boolean;
 };
 
 // Saves a move and hands the turn on: a new move count, a push for the next player, and their clock. A move
 // by someone who isn't on turn (a resignation) that leaves the turn where it was changes none of those, so
-// the player to move keeps the reminder and strikes they had. `fresh` says which it was.
-export async function passTurn(ctx: MutationCtx, match: Doc<"matches">, { state, turn, by, push, timer, patch }: Pass) {
-  const fresh = turn !== match.turn || by === null || by === match.turn;
+// the player to move keeps the reminder and strikes they had, unless the game says it's a `newDecision`.
+// `fresh` says which it was.
+export async function passTurn(ctx: MutationCtx, match: Doc<"matches">, { state, turn, by, push, timer, patch, newDecision }: Pass) {
+  const fresh = turn !== match.turn || by === null || by === match.turn || !!newDecision;
   const changes = { ...patch, state, turn, moveCount: fresh ? match.moveCount + 1 : match.moveCount, lastActivityAt: Date.now() };
   await ctx.db.patch(match._id, changes);
   const after = { ...match, ...changes };

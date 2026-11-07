@@ -92,6 +92,29 @@ describe("someone else resigning leaves the player to move on their clock", () =
     expect((await get(t, id))!.turn).not.toBe(match.turn);
   });
 
+  test("poker: a resignation that ends the hand gives the next hand a fresh clock, even for the same player", async () => {
+    const t = setup();
+    const { id, seats, match } = await game(t, "poker:holdem", 3);
+    const s = match.state as PokerState;
+    // Hand 1: seat 0 has the button and acts first, and folds; seat 1 is up.
+    expect(s.turn).toBe(0);
+    await seats[0].as.mutation(api.poker.move, { id, hand: s.hand, street: s.street, kind: "fold" });
+    const mid = (await get(t, id))!;
+    expect((mid.state as PokerState).turn).toBe(1);
+    await t.mutation(internal.matches.remind, { id, moveCount: mid.moveCount, strikes: 0 });
+    await t.mutation(internal.matches.remind, { id, moveCount: mid.moveCount, strikes: 1 });
+    await clearPushes(t);
+    // Seat 2 resigns: seat 1 wins the hand, and is the button and first to act in the heads-up hand 2.
+    await seats[2].as.mutation(api.matches.resign, { id });
+    const after = (await get(t, id))!;
+    const next = after.state as PokerState;
+    expect(next.hand).toBe(2);
+    expect(after.turn).toBe(mid.turn);
+    expect(after.moveCount).toBe(mid.moveCount + 1);
+    expect((await pending(t, "matches:remind")).filter((r) => r.moveCount === after.moveCount)).toEqual([expect.objectContaining({ strikes: 0 })]);
+    expect((await pending(t, "push:sendToUser")).filter((p) => p.userId === after.turn)).toHaveLength(1);
+  });
+
   test("four-player chess", async () => {
     const t = setup();
     const { id, seats, match } = await game(t, "chess:four", 4);

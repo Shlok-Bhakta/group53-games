@@ -119,6 +119,7 @@ export const startMatch = internalAction({
 export const insertActive = internalMutation({
   args: { mode: v.string(), a: v.id("users"), b: v.id("users"), settings: settingsArg },
   handler: async (ctx, { mode, a, b, settings }) => {
+    if (mode !== "chess:classic" && mode !== "chess:realtime") throw new Error(`startMatch builds two-player chess only, not ${mode}: open a lobby for other games.`);
     assertTestDeployment();
     const now = Date.now();
     const state = mode === "chess:realtime" ? { kind: "realtime", ready: [], startAt: null } : { kind: "classic", fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", moves: [] };
@@ -137,6 +138,7 @@ export const startFour = internalAction({
 export const insertFour = internalMutation({
   args: { mode: v.string(), players: v.array(v.id("users")), settings: settingsArg },
   handler: async (ctx, { mode, players, settings }) => {
+    if (mode !== "chess:four" && mode !== "chess:realtime4") throw new Error(`startFour builds four-player chess only, not ${mode}: open a lobby for other games.`);
     assertTestDeployment();
     const now = Date.now();
     const colors = ["red", "blue", "yellow", "green"];
