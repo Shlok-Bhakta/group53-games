@@ -512,7 +512,7 @@ export const get = query({
   },
 });
 
-// Everything the Chess screen needs for one mode.
+// Everything a mode page needs.
 export const lobby = query({
   args: { mode: v.string() },
   handler: async (ctx, { mode }) => {
@@ -529,7 +529,6 @@ export const lobby = query({
     return {
       mine: await views(active.filter((m) => isPlayer(m, userId)).sort((a, b) => b.lastActivityAt - a.lastActivityAt)),
       waiting: await views(waiting.filter((m) => isPlayer(m, userId))),
-      invites: await views(waiting.filter((m) => m.invited.includes(userId) && !isPlayer(m, userId))),
       open: await views(waiting.filter((m) => !m.invited.includes(userId) && canJoin(m, userId))),
       live: await views(active.filter((m) => !isPlayer(m, userId))),
       recent: await views(recent),
@@ -548,25 +547,24 @@ export const recent = query({
   },
 });
 
-// For badges: async games waiting on me, plus challenges and lobbies I could join.
+// For the app icon's badge: games waiting on my move, plus challenges waiting for an answer.
 export const attention = query({
   args: {},
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
-    if (userId === null) return { myTurn: 0, invites: 0, open: 0 };
+    if (userId === null) return { myTurn: 0, invites: 0 };
     const active = await ctx.db.query("matches").withIndex("by_status", (q) => q.eq("status", "active")).collect();
     const waiting = await ctx.db.query("matches").withIndex("by_status", (q) => q.eq("status", "waiting")).collect();
     return {
       myTurn: active.filter((m) => m.turn === userId).length,
       invites: waiting.filter((m) => m.invited.includes(userId) && !isPlayer(m, userId)).length,
-      open: waiting.filter((m) => !m.invited.includes(userId) && canJoin(m, userId)).length,
     };
   },
 });
 
-// Everything that wants me, across every mode, for the Play tab: challenges to answer, games where it's my
-// move, real-time games about to start, lobbies with a free seat, games I'm waiting on, other people's games
-// to watch, and my recent results.
+// Everything that wants me, across every mode, for Home: challenges to answer, games where it's my move,
+// real-time games about to start, lobbies with a free seat, games I'm waiting on, and other people's games
+// to watch.
 export const inbox = query({
   args: {},
   handler: async (ctx) => {
@@ -587,14 +585,6 @@ export const inbox = query({
       waiting: await views(waiting.filter((m) => isPlayer(m, userId))),
       // Other people's games, to watch.
       watch: await views(active.filter((m) => !isPlayer(m, userId))),
-      // My last few finished games, newest first.
-      recent: await Promise.all(
-        (await ctx.db.query("matches").withIndex("by_status", (q) => q.eq("status", "finished")).collect())
-          .filter((m) => isPlayer(m, userId))
-          .sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0))
-          .slice(0, 5)
-          .map((m) => withPeople(ctx, m)),
-      ),
     };
   },
 });

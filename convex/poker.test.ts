@@ -90,19 +90,6 @@ describe("starting", () => {
     expect(s).toMatchObject({ sb: 115, bb: 230 });
   });
 
-  test("games already going keep the 10 hands they started with", async () => {
-    const t = setup();
-    const going = await game(t, 2);
-    const changed = await game(t, 2, "poker:holdem", { hands: 20 });
-    await t.run(async (ctx) => {
-      const m = (await ctx.db.get(going.id))!;
-      await ctx.db.patch(going.id, { settings: undefined, moveCount: m.moveCount });
-    });
-    expect(await t.mutation(internal.poker.keepHandLimit, {})).toBe(1);
-    expect((await get(t, going.id))!.settings).toMatchObject({ hands: 10 });
-    expect((await get(t, changed.id))!.settings).toMatchObject({ hands: 20 });
-  });
-
   test("settings: stack, pot limit and Omaha's four cards", async () => {
     const t = setup();
     const { id, seats } = await game(t, 2, "poker:omaha", { stack: 2000 });

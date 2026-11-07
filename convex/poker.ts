@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { finishBySeats } from "./matches";
 import { MODES, settingsOf, type ModeKey } from "./modes";
@@ -269,20 +269,4 @@ export const cards = query({
 export const myPlan = query({
   args: { id: v.id("matches") },
   handler: async (ctx, { id }) => await myDraft<Pre>(ctx, id),
-});
-
-// Run once when the Hands default went from 10 to no limit (npx convex run poker:keepHandLimit). Settings only
-// store what differs from the default, so games that started on the old default get it written down, or
-// they'd turn into no-limit games part way through. Lobbies that haven't started take the new default.
-export const keepHandLimit = internalMutation({
-  args: {},
-  handler: async (ctx) => {
-    let kept = 0;
-    for (const m of await ctx.db.query("matches").collect()) {
-      if (!m.mode.startsWith("poker:") || m.status === "waiting" || m.status === "cancelled" || m.settings?.hands !== undefined) continue;
-      await ctx.db.patch(m._id, { settings: { ...m.settings, hands: 10 } });
-      kept++;
-    }
-    return kept;
-  },
 });

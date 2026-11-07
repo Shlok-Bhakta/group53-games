@@ -155,10 +155,9 @@ describe("lobby", () => {
     const { a, b } = await twoPlayers(t);
     const c = await signedIn(t, "Boiler");
     const open = await c.as.mutation(api.matches.queue, { mode: "chess:classic" });
-    const invite = await b.as.mutation(api.matches.challenge, { mode: "chess:classic", opponent: a.userId });
+    await b.as.mutation(api.matches.challenge, { mode: "chess:classic", opponent: a.userId });
     const view = (await a.as.query(api.matches.lobby, { mode: "chess:classic" }))!;
     expect(view.open.map((m) => m._id)).toEqual([open]);
-    expect(view.invites.map((m) => m._id)).toEqual([invite]);
     expect(view.open[0].players[0].name).toBe("Boiler");
   });
 });
@@ -360,16 +359,12 @@ describe("classic chess", () => {
     expect(await first.white.as.query(api.matches.recent, { game: "wordle" })).toEqual([]);
   });
 
-  test("the inbox lists other people's games to watch and my recent results", async () => {
+  test("the inbox lists other people's games to watch", async () => {
     const t = setup();
     const { id, white } = await classicGame(t);
     const boiler = await signedIn(t, "Boiler");
     expect((await boiler.as.query(api.matches.inbox, {}))!.watch.map((m) => m._id)).toEqual([id]);
     expect((await white.as.query(api.matches.inbox, {}))!.watch).toEqual([]);
-    await white.as.mutation(api.matches.resign, { id });
-    const inbox = (await white.as.query(api.matches.inbox, {}))!;
-    expect(inbox.recent.map((m) => m._id)).toEqual([id]);
-    expect((await boiler.as.query(api.matches.inbox, {}))!.recent).toEqual([]);
   });
 });
 
