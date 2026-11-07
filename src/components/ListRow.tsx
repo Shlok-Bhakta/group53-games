@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { AriaAttributes, ReactNode } from "react";
 import { Link } from "react-router";
 import { cn } from "@/lib/utils";
 
@@ -16,11 +16,14 @@ type Props = {
   // Me, or what's picked.
   selected?: boolean;
   className?: string;
-} & ({ to: string; onClick?: never; disabled?: never } | { onClick: () => void; to?: never; disabled?: boolean } | { to?: never; onClick?: never; disabled?: never });
+} & AriaAttributes & // an aria-label or aria-pressed, for a row that needs one
+  ({ to: string; onClick?: never; disabled?: never } | { onClick: () => void; to?: never; disabled?: boolean } | { to?: never; onClick?: never; disabled?: never });
 
 // One row in a Group: what's at the start, a title with a line under it, and what's at the end. With `to` it's a
-// link and with `onClick` a button, both pressing in; with neither, it's just a row.
-export function ListRow({ leading, title, detail, trailing, size = "md", selected, className, ...action }: Props) {
+// link and with `onClick` a button, both pressing in; with neither, it's just a row. Anything else a wrapper
+// hands it (a dialog trigger's ref and aria) goes on the element.
+export function ListRow({ leading, title, detail, trailing, size = "md", selected, className, to, onClick, disabled, ...rest }: Props) {
+  const action = { to, onClick, disabled };
   const cls = cn("flex w-full items-center gap-3 px-4 py-2 text-left", HEIGHT[size], selected && "bg-primary/8", (action.to || action.onClick) && "touch-manipulation transition-colors active:bg-muted disabled:opacity-60", className);
   const inner = (
     <>
@@ -34,15 +37,15 @@ export function ListRow({ leading, title, detail, trailing, size = "md", selecte
   );
   if (action.to)
     return (
-      <Link to={action.to} className={cls}>
+      <Link {...rest} to={action.to} className={cls}>
         {inner}
       </Link>
     );
   if (action.onClick)
     return (
-      <button type="button" className={cls} onClick={action.onClick} disabled={action.disabled}>
+      <button type="button" {...rest} className={cls} onClick={action.onClick} disabled={action.disabled}>
         {inner}
       </button>
     );
-  return <div className={cls}>{inner}</div>;
+  return <div {...rest} className={cls}>{inner}</div>;
 }
