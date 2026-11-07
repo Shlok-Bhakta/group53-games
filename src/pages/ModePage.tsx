@@ -9,6 +9,7 @@ import { MODES, flexibleSeats, matchPath, modeBySlug, type ModeKey, type Setting
 import { NavBar } from "@/components/AppHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AsyncButton, usePending } from "@/components/AsyncButton";
+import { ListRow } from "@/components/ListRow";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { Rules } from "@/components/Rules";
 import { SettingsSection, useModeSettings } from "@/components/SettingsPicker";
@@ -94,10 +95,9 @@ function ModeScreen({ game, mode }: { game: GameUI; mode: ModeKey }) {
         </Section>
       )}
 
-      <section aria-label="Leaderboard">
-        <h2 className="px-1 pb-2.5 font-display text-heading">Leaderboard</h2>
+      <Section title="Leaderboard" bare>
         <Leaderboard mode={mode} meId={me?._id} />
-      </section>
+      </Section>
 
       {lobby && lobby.recent.length > 0 && (
         <Section title="Recent games">
@@ -143,56 +143,60 @@ function Challenge({ mode, meId, settings }: { mode: ModeKey; meId?: Id<"users">
   const free = max - picked.length;
 
   return (
-    <section aria-label="Challenge" className="flex flex-col gap-2.5">
-      <h2 className="px-1 font-display text-heading">Challenge</h2>
-      <Group>
-        {others.map((p) => {
-          const on = picked.includes(p._id);
-          return (
-            <button
-              key={p._id}
-              type="button"
-              disabled={pending}
-              aria-pressed={multi ? on : undefined}
-              aria-label={multi ? p.name : `Challenge ${p.name}`}
-              onClick={() => tap(p._id)}
-              className={cn("flex min-h-16 w-full touch-manipulation items-center gap-3 px-4 py-2.5 text-left transition-colors active:bg-muted disabled:opacity-60", on && "bg-primary/10")}
-            >
-              <span className="relative shrink-0">
-                <PlayerAvatar name={p.name} image={p.image} frame={p.frame} frameColor={p.frameColor} size={40} />
-                <span className="absolute -bottom-0.5 -right-0.5">
-                  <OnlineDot online={isOnline(p._id)} />
-                </span>
-              </span>
-              <span className="min-w-0 flex-1 truncate font-semibold">{p.name}</span>
-              {busy === p._id ? (
-                <SpinnerGapIcon size={20} weight="bold" className="animate-spin text-muted-foreground" />
-              ) : multi ? (
-                <span className={cn("grid size-7 place-items-center rounded-full border-2 transition-colors", on ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40")}>
-                  <AnimatePresence>
-                    {on && (
-                      <motion.span initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} transition={{ type: "spring", bounce: 0.4, duration: 0.3 }}>
-                        <CheckIcon size={16} weight="bold" />
-                      </motion.span>
-                    )}
-                  </AnimatePresence>
-                </span>
-              ) : (
-                <SwordIcon size={20} weight="bold" className="text-muted-foreground" />
-              )}
-            </button>
-          );
-        })}
-      </Group>
-      <AnimatePresence initial={false}>
-        {multi && picked.length > 0 && (
-          <motion.div key="send" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ type: "spring", bounce: 0, duration: 0.3 }} className="overflow-hidden">
-            <AsyncButton size="xl" className="mt-0.5 w-full" icon={<SwordIcon weight="bold" />} onClick={() => send(picked)}>
-              {flexible ? `Challenge ${picked.length}` : free > 0 ? `Challenge ${picked.length}, open ${free} seat${free > 1 ? "s" : ""}` : "Send challenge"}
-            </AsyncButton>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </section>
+    <Section title="Challenge" bare>
+      <div className="flex flex-col gap-2.5">
+        <Group>
+          {others.map((p) => {
+            const on = picked.includes(p._id);
+            return (
+              <ListRow
+                key={p._id}
+                size="lg"
+                disabled={pending}
+                aria-pressed={multi ? on : undefined}
+                aria-label={multi ? p.name : `Challenge ${p.name}`}
+                onClick={() => tap(p._id)}
+                className={cn("py-2.5", on && "bg-primary/10")}
+                leading={
+                  <span className="relative shrink-0">
+                    <PlayerAvatar player={p} size={40} />
+                    <span className="absolute -bottom-0.5 -right-0.5">
+                      <OnlineDot online={isOnline(p._id)} />
+                    </span>
+                  </span>
+                }
+                title={p.name}
+                trailing={
+                  busy === p._id ? (
+                    <SpinnerGapIcon size={20} weight="bold" className="animate-spin text-muted-foreground" />
+                  ) : multi ? (
+                    <span className={cn("grid size-7 place-items-center rounded-full border-2 transition-colors", on ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40")}>
+                      <AnimatePresence>
+                        {on && (
+                          <motion.span initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} transition={{ type: "spring", bounce: 0.4, duration: 0.3 }}>
+                            <CheckIcon size={16} weight="bold" />
+                          </motion.span>
+                        )}
+                      </AnimatePresence>
+                    </span>
+                  ) : (
+                    <SwordIcon size={20} weight="bold" className="text-muted-foreground" />
+                  )
+                }
+              />
+            );
+          })}
+        </Group>
+        <AnimatePresence initial={false}>
+          {multi && picked.length > 0 && (
+            <motion.div key="send" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ type: "spring", bounce: 0, duration: 0.3 }} className="overflow-hidden">
+              <AsyncButton size="xl" className="mt-0.5 w-full" icon={<SwordIcon weight="bold" />} onClick={() => send(picked)}>
+                {flexible ? `Challenge ${picked.length}` : free > 0 ? `Challenge ${picked.length}, open ${free} seat${free > 1 ? "s" : ""}` : "Send challenge"}
+              </AsyncButton>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </Section>
   );
 }

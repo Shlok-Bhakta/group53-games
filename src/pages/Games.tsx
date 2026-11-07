@@ -7,7 +7,7 @@ import { games } from "@/games";
 import { Button } from "@/components/ui/button";
 import { LargeTitle } from "@/components/AppHeader";
 import { NotificationBanner } from "@/components/NotificationBanner";
-import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { AvatarStack } from "@/components/PlayerAvatar";
 import { useNotifications } from "@/notifications";
 import { usePlayingIn } from "@/presence";
 import { shareLink } from "@/share";
@@ -81,11 +81,8 @@ function PlayingNow({ gamePath }: { gamePath: string }) {
   const label = playing.length === 1 ? `${playing[0].name} is playing` : `${playing.length} playing`;
   return (
     <span className="flex min-w-0 items-center gap-2 text-footnote font-medium text-muted-foreground">
-      <span className="flex shrink-0 -space-x-2">
-        {playing.slice(0, 3).map((p) => (
-          <PlayerAvatar key={p._id} name={p.name} image={p.image} size={24} className="rounded-full ring-2 ring-card" />
-        ))}
-      </span>
+      {/* Just faces, no frames. */}
+      <AvatarStack people={playing.map((p) => ({ name: p.name, image: p.image }))} size={24} />
       <span className="truncate">{label}</span>
     </span>
   );

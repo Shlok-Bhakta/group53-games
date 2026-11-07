@@ -36,14 +36,15 @@ export function Home() {
       {!locked && inbox && (
         <>
           {inbox.invites.length > 0 && (
-            <section aria-label="Challenges" className="flex flex-col gap-2.5">
-              <h2 className="px-1 font-display text-heading">Challenges</h2>
-              <AnimatePresence initial={false}>
-                {inbox.invites.map((m) => (
-                  <InviteCard key={m._id} match={m} />
-                ))}
-              </AnimatePresence>
-            </section>
+            <Section title="Challenges" bare>
+              <div className="flex flex-col gap-2.5">
+                <AnimatePresence initial={false}>
+                  {inbox.invites.map((m) => (
+                    <InviteCard key={m._id} match={m} />
+                  ))}
+                </AnimatePresence>
+              </div>
+            </Section>
           )}
           {yourTurn.length > 0 && (
             <Section title="Your turn">
@@ -117,8 +118,7 @@ function Stats() {
   const played = MODE_KEYS.filter((m) => (ratings?.[m]?.games ?? 0) > 0);
   if (!ratings || played.length === 0) return null;
   return (
-    <section aria-label="Your ratings" className="flex flex-col gap-2.5">
-      <h2 className="px-1 font-display text-heading">Your ratings</h2>
+    <Section title="Your ratings" bare>
       <div className="grid grid-cols-2 gap-3">
         {played.map((m, i) => {
           const r = ratings[m]!;
@@ -130,7 +130,7 @@ function Stats() {
           );
         })}
       </div>
-    </section>
+    </Section>
   );
 }
 

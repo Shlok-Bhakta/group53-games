@@ -48,13 +48,13 @@ export function PlayerAvatar({ player, name = player?.name ?? "", image = player
   );
 }
 
-// A few faces overlapping, for "who's here" and games with several people in them.
-export function AvatarStack({ people, max = 3, size = 28, className }: { people: Face[]; max?: number; size?: number; className?: string }) {
+// A few faces overlapping, for "who's here" and games with several people in them. `ring` is what they sit on.
+export function AvatarStack({ people, max = 3, size = 28, ring = "card", className }: { people: Face[]; max?: number; size?: number; ring?: "card" | "background"; className?: string }) {
   if (people.length === 0) return null;
   return (
     <span className={cn("flex shrink-0", size >= 32 ? "-space-x-2.5" : "-space-x-2", className)}>
       {people.slice(0, max).map((p, i) => (
-        <PlayerAvatar key={i} player={p} size={size} className="rounded-full ring-2 ring-card" />
+        <PlayerAvatar key={i} player={p} size={size} className={cn("rounded-full ring-2", ring === "card" ? "ring-card" : "ring-background")} />
       ))}
     </span>
   );

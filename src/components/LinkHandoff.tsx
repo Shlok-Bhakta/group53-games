@@ -4,8 +4,10 @@ import { AnimatePresence, motion } from "motion/react";
 import { AppWindowIcon, BellRingingIcon } from "@phosphor-icons/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { AvatarStack, PlayerAvatar } from "@/components/PlayerAvatar";
 import { Button } from "@/components/ui/button";
+import { usePending } from "@/components/AsyncButton";
+import { SectionTitle } from "@/components/parts";
 import { platform } from "@/install";
 import { errorText } from "@/lib/errors";
 import { listNames } from "@/lib/text";
@@ -17,22 +19,21 @@ export function LinkHandoff({ path }: { path: string }) {
   const view = useQuery(api.links.preview, { path });
   const handoff = useMutation(api.links.handoff);
   const [sent, setSent] = useState<{ to: Id<"users">; result: "sent" | "no-push" | "wait" } | null>(null);
-  const [busy, setBusy] = useState<Id<"users"> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, run] = usePending();
   if (view === undefined) return <div className="h-40" />;
   if (view === null) return null;
 
-  const pick = async (userId: Id<"users">) => {
-    setBusy(userId);
-    setError(null);
-    try {
-      setSent({ to: userId, result: await handoff({ path, userId }) });
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setBusy(null);
-    }
-  };
+  // The error shows in the card below rather than as a toast.
+  const pick = (userId: Id<"users">) =>
+    run(async () => {
+      setError(null);
+      try {
+        setSent({ to: userId, result: await handoff({ path, userId }) });
+      } catch (e) {
+        setError(errorText(e));
+      }
+    });
   const title = view.status === "waiting" ? `${view.host} wants ${view.title}` : `${view.game}: ${listNames(view.players.map((p) => p.name))}`;
   // Android can hand a link to the installed app when the system lets it.
   const intent = `intent://${location.host}${path}#Intent;scheme=https;action=android.intent.action.VIEW;end`;
@@ -41,21 +42,17 @@ export function LinkHandoff({ path }: { path: string }) {
     <section aria-label="Open this game" className="flex flex-col gap-5">
       <div>
         <h1 className="font-display text-title">{title}</h1>
-        <div className="mt-3 flex -space-x-2">
-          {view.players.map((p) => (
-            <PlayerAvatar key={p._id} name={p.name} image={p.image ?? undefined} size={40} className="rounded-full ring-2 ring-background" />
-          ))}
-        </div>
+        <AvatarStack people={view.players.map((p) => ({ name: p.name, image: p.image ?? undefined }))} max={view.players.length} size={40} ring="background" className="mt-3 -space-x-2" />
       </div>
 
-      <div className="flex flex-col gap-3">
-        <h2 className="font-display text-heading">Which one's you?</h2>
+      <div>
+        <SectionTitle className="px-0 pb-3">Which one's you?</SectionTitle>
         <ul className="grid grid-cols-4 gap-x-2 gap-y-3" aria-label="Crew">
           {view.crew.map((p) => (
             <li key={p._id}>
               <button
                 type="button"
-                disabled={busy !== null}
+                disabled={busy}
                 onClick={() => void pick(p._id)}
                 aria-label={`I'm ${p.name}`}
                 className={cn("flex w-full touch-manipulation flex-col items-center gap-1.5 rounded-lg py-1.5 transition-transform duration-100 active:scale-[0.95]", sent?.to === p._id && "bg-primary/12")}

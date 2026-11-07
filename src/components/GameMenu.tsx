@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { ListIcon, ShareNetworkIcon } from "@phosphor-icons/react";
 import type { MatchView } from "../../convex/matches";
 import { MODES, GAMES, gameOf, matchPath, settingLabel, settingsOf, type ModeKey, type Setting } from "../../convex/modes";
-import { Group } from "@/components/parts";
+import { Group, SectionTitle } from "@/components/parts";
 import { Rules } from "@/components/Rules";
 import { Button } from "@/components/ui/button";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
@@ -65,13 +65,13 @@ export function GameMenu({
 }
 
 // Every setting this game is played with, the ones the host changed from the default in the primary color.
-export function MatchSettings({ match }: { match: MatchView }) {
+function MatchSettings({ match }: { match: MatchView }) {
   const defs = (MODES[match.mode as ModeKey]?.settings ?? []) as readonly Setting[];
   if (defs.length === 0) return null;
   const value = settingsOf(match.mode, match.settings);
   return (
     <section aria-label="Game settings" className="pt-6">
-      <h2 className="px-1 pb-2 font-display text-heading">Settings</h2>
+      <SectionTitle className="pb-2">Settings</SectionTitle>
       <Group className="bg-muted/50">
         {defs.map((s) => (
           <div key={s.key} className="flex min-h-12 items-center gap-3 px-3 py-2">
