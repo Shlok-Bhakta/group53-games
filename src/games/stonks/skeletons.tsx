@@ -23,8 +23,8 @@ export const S = {
   crewChart: 190,
 } as const;
 
-export const MOVERS = 6;
-export const STATS = 6;
+const MOVERS = 6;
+const STATS = 6;
 
 function SectionHead({ wide = "w-24" }: { wide?: string }) {
   return (
@@ -34,7 +34,7 @@ function SectionHead({ wide = "w-24" }: { wide?: string }) {
   );
 }
 
-export function HeroSkeleton({ extended }: { extended?: boolean }) {
+function HeroSkeleton({ extended }: { extended?: boolean }) {
   return (
     <div className="px-1">
       <div className={`flex ${S.heroTop} items-center justify-between`}>
@@ -52,7 +52,7 @@ export function HeroSkeleton({ extended }: { extended?: boolean }) {
   );
 }
 
-export function ChartSkeleton() {
+function ChartSkeleton() {
   return (
     <div className="relative w-full" style={{ height: S.chart }} aria-hidden>
       <div className="absolute inset-x-0 top-[38%] border-t border-dotted border-muted-foreground/30" />
@@ -61,7 +61,7 @@ export function ChartSkeleton() {
   );
 }
 
-export function RowSkeleton() {
+function RowSkeleton() {
   return (
     <div className={`flex ${S.row} items-center gap-3 px-4`}>
       <Skeleton className="h-3.5 w-4 shrink-0" />
@@ -136,7 +136,7 @@ export function BoardSkeleton() {
   );
 }
 
-export function StatsSkeleton() {
+function StatsSkeleton() {
   return (
     <section>
       <SectionHead wide="w-16" />

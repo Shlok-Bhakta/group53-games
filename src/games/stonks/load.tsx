@@ -12,7 +12,7 @@ type Mod = typeof import("./Stonks");
 type Tracked = Promise<Mod> & { status?: "pending" | "fulfilled" | "rejected"; value?: Mod; reason?: unknown };
 let loading: Tracked | null = null;
 
-export function loadStonks(): Promise<Mod> {
+function loadStonks(): Promise<Mod> {
   if (!loading) {
     const p: Tracked = import("./Stonks");
     p.status = "pending";
