@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Change, useWarmWhileSeen } from "./bits";
 import { kindOf, price, unitOf } from "./format";
 import { S } from "./skeletons";
-import { warmStock } from "./warm";
+import { stockPath, warmStock } from "./warm";
 
 // Search anything on Yahoo Finance: stocks anywhere, crypto, forex, futures, funds. What's already known
 // answers on every keystroke from Convex; a moment after you stop, the sidecar asks Yahoo (once a week per
@@ -118,7 +118,7 @@ const Row = memo(function Row({ r }: { r: RowData }) {
   return (
     <div ref={ref}>
       <Link
-        to={`/stonks/${encodeURIComponent(r.symbol)}`}
+        to={stockPath(r.symbol)}
         onPointerDown={() => warmStock(convex, r.symbol, "open")}
         aria-label={`${display(r.symbol)}, ${live?.name ?? r.name}`}
         className={`flex ${S.row} items-center gap-3 px-4 transition-transform duration-100 active:scale-[0.97]`}

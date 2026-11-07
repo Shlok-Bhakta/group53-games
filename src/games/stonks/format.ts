@@ -1,3 +1,4 @@
+import { ago } from "@/lib/time";
 import type { Range } from "../../../convex/stonks/market";
 
 const two = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -50,18 +51,11 @@ const dayName = new Intl.DateTimeFormat("en-US", { timeZone: NY, weekday: "long"
 /** "Today", or the session's day when it's over and another day has started (a weekend: "Friday"). */
 export const sessionName = (open: number, now: number) => (dayName.format(open) === dayName.format(now) ? "Today" : dayName.format(open));
 /** When a trade happened: "12s ago" while it's fresh, then the time ("Fri 7:59 PM ET"). */
-export const tradeTime = (t: number, now: number) => (now - t < 3600_000 ? ago(now - t) : `${weekday.format(t)} ET`);
+export const tradeTime = (t: number, now: number) => (now - t < 3600_000 ? ago(now - t, { seconds: true }) : `${weekday.format(t)} ET`);
+/** Where a price came from, as a reader would put it. */
+export const sourceName = (s: string) => ({ yahoo: "Yahoo", nasdaq: "Nasdaq", history: "Yahoo" })[s] ?? s;
 export const asOfDay = (iso: string) => short.format(new Date(`${iso}T12:00:00Z`));
 export const periodName: Record<Range, string> = { "1D": "Today", "1W": "Past week", "1M": "Past month", "1Y": "Past year", "5Y": "Past 5 years" };
-
-export function ago(ms: number) {
-  const s = Math.max(0, Math.round(ms / 1000));
-  if (s < 60) return `${s}s ago`;
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.round(m / 60);
-  return h < 24 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
-}
 
 const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 });
 const compact1 = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });

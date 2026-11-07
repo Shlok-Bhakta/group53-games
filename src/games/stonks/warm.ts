@@ -66,6 +66,8 @@ export function report(convex: ConvexReactClient, symbol: string, level: Level) 
   }, 60);
 }
 
+export const stockPath = (symbol: string) => `/stonks/${encodeURIComponent(symbol)}`;
+
 /** One stock's page as it'll open: its price and stats, and its chart in your range. */
 export function warmStock(convex: ConvexReactClient, symbol: string, level: Level = "seen") {
   report(convex, symbol, level);

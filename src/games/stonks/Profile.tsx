@@ -10,13 +10,16 @@ import { display } from "../../../convex/stonks/market";
 import { NavBar } from "@/components/AppHeader";
 import { Section } from "@/components/parts";
 import { PlayerCard } from "@/components/PlayerCard";
+import { ago, useNow } from "@/lib/time";
 import { cardColor, Change, gainColor, Pairs, playerColors, useHereNow } from "./bits";
 import { PriceChart } from "./Chart";
-import { ago, price } from "./format";
+import { worthLine } from "./Crew";
+import { price } from "./format";
+import { PositionRow, Waiting } from "./Positions";
 import { PlayerSkeleton, S } from "./skeletons";
 import { Ticker } from "./Ticker";
-import { PositionRow, Waiting, worthLine, type Portfolio } from "./Trade";
-import { warmBoard, warmStock } from "./warm";
+import type { Portfolio } from "./Trade";
+import { stockPath, warmBoard, warmStock } from "./warm";
 
 // A player's stock profile: their card, with all its frames and effects, then how they're doing, what they hold, what
 // they're waiting on and everything they've done. Tap anything they hold and you're on its page, with Buy at your thumb.
@@ -32,13 +35,11 @@ export function PlayerPage() {
   const p = useQuery(api.stonks.player, { userId });
   const crew = useQuery(api.stonks.crew);
   const history = useQuery(api.stonks.worthHistory);
-  const [now, setNow] = useState(() => Date.now());
+  const now = useNow(15_000);
   const [scrub, setScrub] = useState<Point | null>(null);
   useHereNow();
   useEffect(() => {
     warmBoard(convex);
-    const i = setInterval(() => setNow(Date.now()), 15_000);
-    return () => clearInterval(i);
   }, [convex]);
   const color = useMemo(() => (crew ? playerColors(crew).get(id)?.color : undefined), [crew, id]);
   const worth = p?.worth;
@@ -98,10 +99,7 @@ export function PlayerPage() {
       )}
       <Waiting orders={p.waiting as Portfolio["waiting"]} now={now} readOnly={!p.me} />
       {p.record.trades > 0 && (
-        <section aria-label="Record">
-          <div className="flex items-end justify-between px-1 pb-2.5">
-            <h2 className="font-display text-heading">Record</h2>
-          </div>
+        <Section title="Record" bare>
           <Pairs
             items={[
               ["Trades", String(p.record.trades)],
@@ -112,14 +110,14 @@ export function PlayerPage() {
               ["Worst", p.record.worst ? `${display(p.record.worst.symbol)} ${p.record.worst.realized < 0 ? "−" : "+"}${price(Math.abs(p.record.worst.realized))}` : undefined],
             ]}
           />
-        </section>
+        </Section>
       )}
       {p.history.length > 0 && (
         <Section title="History">
           {p.history.map((h) => (
             <Link
               key={h.id}
-              to={`/stonks/${encodeURIComponent(h.symbol)}`}
+              to={stockPath(h.symbol)}
               onPointerDown={() => warmStock(convex, h.symbol, "open")}
               className={`flex ${S.crew} items-center justify-between gap-3 px-4 transition-transform duration-100 active:scale-[0.97]`}
             >
@@ -128,7 +126,7 @@ export function PlayerPage() {
                   {DID[h.side]} {display(h.symbol)}
                 </span>
                 <span className="block truncate text-footnote text-muted-foreground">
-                  {price(h.amount)} at {price(h.price, h.currency)} · {ago(now - h.at)}
+                  {price(h.amount)} at {price(h.price, h.currency)} · {ago(now - h.at, { seconds: true })}
                 </span>
               </span>
               {h.realized ? <span className="shrink-0 text-footnote font-semibold tabular-nums">{`${h.realized < 0 ? "−" : "+"}${price(Math.abs(h.realized))}`}</span> : null}

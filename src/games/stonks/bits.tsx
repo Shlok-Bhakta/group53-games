@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { CUSTOM_COLOR_FRAMES } from "../../../convex/profileOptions";
 import { INDEX } from "../../../convex/stonks/market";
 import type { Dir } from "./Chart";
-import { percent, signed } from "./format";
+import { percent, price, signed } from "./format";
 import { S } from "./skeletons";
 import { Ticker } from "./Ticker";
 import { report, warmStock } from "./warm";
@@ -117,6 +117,31 @@ export function Stat({ label, children }: { label: string; children: ReactNode }
   );
 }
 
+// A range as a track with a dot where the price is: today's low to high, the year's, analysts' targets.
+export function RangeRow({ label, low, high, value, unit, mark }: { label: string; low?: number; high?: number; value?: number; unit: string; mark?: { at: number; name: string } }) {
+  const known = low !== undefined && high !== undefined && high > low;
+  const at = (x: number) => `${Math.max(0, Math.min(1, (x - low!) / (high! - low!))) * 100}%`;
+  return (
+    <div className={`${S.range} flex flex-col justify-center gap-2.5 px-4`} aria-label={known ? `${label}: ${price(low, unit)} to ${price(high, unit)}` : label}>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-callout text-muted-foreground">{label}</span>
+        <span className="text-callout font-semibold tabular-nums">{known ? `${price(low, unit)} – ${price(high, unit)}` : "—"}</span>
+      </div>
+      <div className="relative h-1.5 rounded-full bg-muted" aria-hidden>
+        {known && mark && <span className="absolute -top-1 h-3.5 w-0.5 -translate-x-1/2 rounded-full bg-muted-foreground" style={{ left: at(mark.at) }} title={mark.name} />}
+        {known && value !== undefined && (
+          <motion.span
+            className="absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground ring-2 ring-card"
+            initial={false}
+            animate={{ left: at(value) }}
+            transition={{ type: "spring", bounce: 0, duration: 0.5 }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Two numbers to a row, the way trading apps pack them.
 export function Pairs({ items }: { items: [string, string | undefined][] }) {
   const shown = items.filter((i): i is [string, string] => i[1] !== undefined);
@@ -138,7 +163,7 @@ export function Pairs({ items }: { items: [string, string | undefined][] }) {
   );
 }
 
-export type Colored = { color: string; dash?: string };
+type Colored = { color: string; dash?: string };
 // The color a card's frame shows: picked for these, built in for the rest. Holo and RGB are every color, so none.
 const FRAME_HUES: Record<string, string> = { gold: "#e3b341", fire: "#e5484d", ice: "#22d3ee", toxic: "#5fae57" };
 // Too light to see on a light theme, as a line.
