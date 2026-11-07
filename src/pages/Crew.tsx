@@ -8,7 +8,8 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { LargeTitle } from "@/components/AppHeader";
 import { PlayerCard } from "@/components/PlayerCard";
 import { Button } from "@/components/ui/button";
-import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
+import { DrawerDescription } from "@/components/ui/drawer";
+import { Sheet } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { lastSeenText, usePresence } from "@/presence";
 
@@ -60,22 +61,19 @@ export function Crew() {
         )}
       </section>
 
-      <Drawer open={open !== null} onOpenChange={(o) => !o && setOpenId(null)}>
-        <DrawerContent className="px-5 pb-[calc(env(safe-area-inset-bottom)+20px)]">
-          {open && (
-            <div className="mx-auto w-full max-w-sm pt-3">
-              <DrawerTitle className="sr-only">{open.name}</DrawerTitle>
-              <PlayerCard player={open} online={isOnline(open._id)} size="hero" />
-              <DrawerDescription className="mt-4 text-center">{lastSeenText(isOnline(open._id), byUser.get(open._id)?.lastSeen)}</DrawerDescription>
-              <Button size="xl" variant="secondary" className="mt-4 w-full" asChild>
-                <Link to={`/stonks/u/${open._id}`}>
-                  <ChartLineUpIcon weight="bold" /> Stonks profile
-                </Link>
-              </Button>
-            </div>
-          )}
-        </DrawerContent>
-      </Drawer>
+      <Sheet open={open !== null} onClose={() => setOpenId(null)} title={open?.name} hideTitle bodyClassName="px-5">
+        {open && (
+          <div className="mx-auto w-full max-w-sm pt-3">
+            <PlayerCard player={open} online={isOnline(open._id)} size="hero" />
+            <DrawerDescription className="mt-4 text-center">{lastSeenText(isOnline(open._id), byUser.get(open._id)?.lastSeen)}</DrawerDescription>
+            <Button size="xl" variant="secondary" className="mt-4 w-full" asChild>
+              <Link to={`/stonks/u/${open._id}`}>
+                <ChartLineUpIcon weight="bold" /> Stonks profile
+              </Link>
+            </Button>
+          </div>
+        )}
+      </Sheet>
     </div>
   );
 }

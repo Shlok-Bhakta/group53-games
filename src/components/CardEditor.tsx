@@ -9,7 +9,8 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { PlayerCard } from "@/components/PlayerCard";
 import { Segmented } from "@/components/Segmented";
 import { Switch } from "@/components/ui/switch";
-import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
+import { Sheet } from "@/components/ui/sheet";
+import { Section } from "@/components/parts";
 import { cn } from "@/lib/utils";
 
 const FRAME_NAMES: Record<Frame, string> = {
@@ -29,87 +30,73 @@ export function CardEditor({ open, onOpenChange, player }: { open: boolean; onOp
   const customColor = CUSTOM_COLOR_FRAMES.includes(player.frame as Frame);
 
   return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="max-h-[94dvh]">
-        <DrawerTitle className="sr-only">Edit card</DrawerTitle>
-        <div className="overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom)+24px)]">
-          {/* The preview stays pinned while you scroll the options. */}
-          <div className="sticky top-0 z-10 -mx-4 mb-4 flex justify-center border-b border-border/60 bg-popover px-4 pb-4 pt-2 shadow-[0_10px_20px_-16px_rgb(0_0_0/0.5)]">
-            <div className="w-[min(36vw,148px)]">
-              <PlayerCard player={player} />
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-7">
-            <TaglineField value={player.tagline} onSave={(tagline) => set({ tagline })} />
-
-            <Section title="Frame">
-              <div className="grid grid-cols-4 gap-2.5">
-                {FRAMES.map((frame) => (
-                  <Choice key={frame} selected={player.frame === frame} group="frame" onClick={() => set({ frame })} label={FRAME_NAMES[frame]}>
-                    <PlayerAvatar name={player.name} image={player.image} frame={frame} frameColor={player.frameColor} glow={player.glow} size={48} />
-                  </Choice>
-                ))}
-              </div>
-            </Section>
-
-            {customColor && (
-              <Section title="Frame color">
-                <div className="flex flex-wrap gap-2.5">
-                  {FRAME_COLORS.map((c) => (
-                    <motion.button
-                      key={c}
-                      type="button"
-                      whileTap={{ scale: 0.88 }}
-                      aria-label={`Color ${c}`}
-                      aria-pressed={player.frameColor === c}
-                      onClick={() => set({ frameColor: c })}
-                      className="relative size-11 touch-manipulation rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                      style={{ background: c }}
-                    >
-                      {player.frameColor.toLowerCase() === c && (
-                        <motion.span layoutId="color-selected" transition={spring} className="absolute -inset-[5px] rounded-full border-[3px] border-foreground" />
-                      )}
-                    </motion.button>
-                  ))}
-                  <CustomColor value={player.frameColor} onChange={(frameColor) => set({ frameColor })} selected={!FRAME_COLORS.includes(player.frameColor.toLowerCase() as never)} />
-                </div>
-              </Section>
-            )}
-
-            <div className="flex min-h-[56px] items-center justify-between rounded-lg bg-card px-4">
-              <label htmlFor="glow" className="font-medium">
-                Glow
-              </label>
-              <Switch id="glow" checked={player.glow} disabled={player.frame === "none"} onCheckedChange={(glow) => set({ glow })} />
-            </div>
-
-            <Section title="Effect">
-              <Segmented label="Effect" value={player.effect} onChange={(effect) => set({ effect })} options={EFFECTS.map((e) => ({ value: e, label: EFFECT_NAMES[e] }))} />
-            </Section>
-
-            <Section title="Badge">
-              <div className="grid grid-cols-6 gap-2">
-                {BADGES.map((badge) => (
-                  <Choice key={badge || "none"} selected={player.badge === badge} group="badge" onClick={() => set({ badge })} ariaLabel={badge || "No badge"} square>
-                    {badge ? <span className="text-title leading-none">{badge}</span> : <span className="text-footnote font-semibold text-muted-foreground">None</span>}
-                  </Choice>
-                ))}
-              </div>
-            </Section>
-          </div>
+    <Sheet open={open} onClose={() => onOpenChange(false)} title="Edit card" hideTitle className="max-h-[94dvh]" bodyClassName="block pb-[calc(env(safe-area-inset-bottom)+24px)]">
+      {/* The preview stays pinned while you scroll the options. */}
+      <div className="sticky top-0 z-10 -mx-4 mb-4 flex justify-center border-b border-border/60 bg-popover px-4 pb-4 pt-2 shadow-[0_10px_20px_-16px_rgb(0_0_0/0.5)]">
+        <div className="w-[min(36vw,148px)]">
+          <PlayerCard player={player} />
         </div>
-      </DrawerContent>
-    </Drawer>
-  );
-}
+      </div>
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section>
-      <h3 className="mb-2.5 px-1 font-display text-heading">{title}</h3>
-      {children}
-    </section>
+      <div className="flex flex-col gap-7">
+        <TaglineField value={player.tagline} onSave={(tagline) => set({ tagline })} />
+
+        <Section bare title="Frame">
+          <div className="grid grid-cols-4 gap-2.5">
+            {FRAMES.map((frame) => (
+              <Choice key={frame} selected={player.frame === frame} group="frame" onClick={() => set({ frame })} label={FRAME_NAMES[frame]}>
+                <PlayerAvatar name={player.name} image={player.image} frame={frame} frameColor={player.frameColor} glow={player.glow} size={48} />
+              </Choice>
+            ))}
+          </div>
+        </Section>
+
+        {customColor && (
+          <Section bare title="Frame color">
+            <div className="flex flex-wrap gap-2.5">
+              {FRAME_COLORS.map((c) => (
+                <motion.button
+                  key={c}
+                  type="button"
+                  whileTap={{ scale: 0.88 }}
+                  aria-label={`Color ${c}`}
+                  aria-pressed={player.frameColor === c}
+                  onClick={() => set({ frameColor: c })}
+                  className="relative size-11 touch-manipulation rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                  style={{ background: c }}
+                >
+                  {player.frameColor.toLowerCase() === c && (
+                    <motion.span layoutId="color-selected" transition={spring} className="absolute -inset-[5px] rounded-full border-[3px] border-foreground" />
+                  )}
+                </motion.button>
+              ))}
+              <CustomColor value={player.frameColor} onChange={(frameColor) => set({ frameColor })} selected={!FRAME_COLORS.includes(player.frameColor.toLowerCase() as never)} />
+            </div>
+          </Section>
+        )}
+
+        <div className="flex min-h-[56px] items-center justify-between rounded-lg bg-card px-4">
+          <label htmlFor="glow" className="font-medium">
+            Glow
+          </label>
+          <Switch id="glow" checked={player.glow} disabled={player.frame === "none"} onCheckedChange={(glow) => set({ glow })} />
+        </div>
+
+        <Section bare title="Effect">
+          <Segmented label="Effect" value={player.effect} onChange={(effect) => set({ effect })} options={EFFECTS.map((e) => ({ value: e, label: EFFECT_NAMES[e] }))} />
+        </Section>
+
+        <Section bare title="Badge">
+          <div className="grid grid-cols-6 gap-2">
+            {BADGES.map((badge) => (
+              <Choice key={badge || "none"} selected={player.badge === badge} group="badge" onClick={() => set({ badge })} ariaLabel={badge || "No badge"} square>
+                {badge ? <span className="text-title leading-none">{badge}</span> : <span className="text-footnote font-semibold text-muted-foreground">None</span>}
+              </Choice>
+            ))}
+          </div>
+        </Section>
+      </div>
+    </Sheet>
   );
 }
 
@@ -185,7 +172,7 @@ function TaglineField({ value, onSave }: { value: string; onSave: (v: string) =>
     timer.current = setTimeout(() => onSave(clean), 600);
   };
   return (
-    <Section title="Tagline">
+    <Section bare title="Tagline">
       <div className="relative">
         <textarea
           name="card-tagline"
