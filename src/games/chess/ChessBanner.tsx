@@ -10,7 +10,7 @@ const HOP = 0.34;
 export function ChessBanner() {
   return (
     <div className="relative mx-auto w-full max-w-[320px]" aria-label="Chess" role="img">
-      <div className="grid aspect-[4/1] grid-cols-8 grid-rows-2 overflow-hidden rounded-xl shadow-md">
+      <div className="grid aspect-[4/1] grid-cols-8 grid-rows-2 overflow-hidden rounded-lg shadow-md">
         {Array.from({ length: 16 }, (_, i) => {
           const c = i % 8;
           const r = Math.floor(i / 8);

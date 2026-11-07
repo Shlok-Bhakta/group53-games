@@ -13,15 +13,18 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { AsyncButton } from "@/components/AsyncButton";
 import { Chip } from "@/components/parts";
 import { ResignButton, Result } from "@/components/match";
-import { OnlineDot, ThinkingDots, useHere } from "@/presence";
+import { DockNote, GameFrame } from "@/components/game/GameFrame";
+import { SeatDot } from "@/components/game/SeatDot";
+import { TurnText } from "@/components/game/TurnText";
+import { useHere } from "@/presence";
+import { seatColor } from "@/games/seats";
+import type { Player } from "@/games/types";
 import { cn } from "@/lib/utils";
 import { ClassicGame } from "./ClassicGame";
-import { FourGame, SEAT_COLORS } from "./FourGame";
+import { FourGame } from "./FourGame";
 import { RealtimeGame } from "./RealtimeGame";
-import { ChessFrame, type Dock } from "./dock";
+import type { Dock } from "./dock";
 import { COLOR_NAMES } from "./text";
-
-type Player = MatchView["players"][number];
 
 // A chess game in progress or finished.
 export function ChessGame({ match, meId }: { match: MatchView; meId: Id<"users"> | undefined }) {
@@ -47,9 +50,9 @@ export function ChessGame({ match, meId }: { match: MatchView; meId: Id<"users">
   ) : match.mode === "chess:four" ? (
     <FourGame match={match} meId={meId} overlay={seats} below={bottom} dock={dock} />
   ) : (
-    <ChessFrame dock={dock()}>
+    <GameFrame dock={dock()}>
       <RealtimeGame match={match} meId={meId} above={top} below={bottom} overlay={seats} />
-    </ChessFrame>
+    </GameFrame>
   );
 }
 
@@ -67,12 +70,7 @@ function PlayerBar({ player, match, meId }: { player: Player; match: MatchView; 
   const color = COLOR_NAMES[player.color ?? ""] ?? "";
   return (
     <div className="flex min-h-12 items-center gap-3 px-1">
-      <span className="relative shrink-0">
-        <PlayerAvatar name={player.name} image={player.image} frame={player.frame} frameColor={player.frameColor} size={36} />
-        <span className="absolute -bottom-0.5 -right-0.5 [--dot-ring:var(--background)]">
-          <OnlineDot online={online} />
-        </span>
-      </span>
+      <PlayerAvatar player={player} size={36} online={online} dotRing="background" />
       <div className="min-w-0 flex-1">
         <p className="truncate font-semibold">
           {isMe ? "You" : player.name} {player.badge}
@@ -134,7 +132,7 @@ function FourSeats({ match, meId }: { match: MatchView; meId: Id<"users"> | unde
 
 function Seat({ player: p, isMe, style, out, toMove, ready, winner, points }: { player: Player; isMe: boolean; style: CSSProperties; out?: string; toMove: boolean; ready: boolean; winner: boolean; points: number | null }) {
   const { online } = useHere(p.userId);
-  const color = SEAT_COLORS[out ? "dead" : p.color!];
+  const color = seatColor(p, !!out);
   return (
     <div data-seat={p.color} className="absolute flex h-[21.4%] w-[21.4%] flex-col items-center justify-center gap-0.5 text-center" style={style}>
       <span
@@ -143,17 +141,14 @@ function Seat({ player: p, isMe, style, out, toMove, ready, winner, points }: { 
         className={cn("relative flex rounded-full transition-shadow duration-300", out && "opacity-50 grayscale")}
         style={{ boxShadow: toMove ? `0 0 0 2.5px var(--background), 0 0 0 5px ${color}` : undefined }}
       >
-        <PlayerAvatar name={p.name} image={p.image} frame={p.frame} frameColor={p.frameColor} size={34} />
-        <span className="absolute -bottom-0.5 -right-0.5 [--dot-ring:var(--background)]">
-          <OnlineDot online={online} />
-        </span>
+        <PlayerAvatar player={p} size={34} online={online} dotRing="background" />
       </span>
       <span className="w-full truncate px-0.5 text-caption font-semibold">{isMe ? "You" : p.name}</span>
       <span className="flex items-center gap-1 text-footnote font-semibold tabular-nums leading-none">
         {winner ? (
           <CrownSimpleIcon size={14} weight="fill" className="text-[var(--tile-yellow)]" aria-label="Winner" />
         ) : (
-          <span className="size-2 rounded-full" style={{ background: color }} />
+          <SeatDot color={color} />
         )}
         {out ? outText(out) : ready ? "Ready" : points !== null ? points : COLOR_NAMES[p.color!]}
       </span>
@@ -165,13 +160,11 @@ function Seat({ player: p, isMe, style, out, toMove, ready, winner, points }: { 
 function FourStatus({ match, meId }: { match: MatchView; meId: Id<"users"> | undefined }) {
   const classic = match.mode === "chess:four" ? (match.state as FourState) : null;
   const up = classic && match.status === "active" ? match.players.find((p) => p.color === classic.turn) : undefined;
-  const { here } = useHere(up?.userId ?? ("" as Id<"users">));
   if (!up) return match.mode === "chess:four" ? <div className="min-h-12" /> : null;
   return (
     <p className="flex min-h-12 items-center justify-center gap-2 font-display text-heading">
-      <span className="size-2.5 rounded-full" style={{ background: SEAT_COLORS[up.color!] }} />
-      {up.userId === meId ? "Your move" : here ? `${up.name} is on it` : `Waiting for ${up.name}`}
-      {up.userId !== meId && here && <ThinkingDots />}
+      <SeatDot color={seatColor(up)} size="md" />
+      <TurnText up={up} meId={meId} />
     </p>
   );
 }
@@ -183,19 +176,18 @@ const outText = (reason: string) => ({ checkmate: "Mated", stalemate: "Stalemate
 function Controls({ match, meId, confirm }: { match: MatchView; meId: Id<"users">; confirm?: ReactNode }) {
   const offerDraw = useMutation(api.matches.offerDraw);
   const declineDraw = useMutation(api.matches.declineDraw);
-  const resign = useMutation(api.matches.resign);
   const rtOut = useRtOut(match);
   const four = match.players.length > 2;
   const myColor = match.players.find((p) => p.userId === meId)?.color;
   const alreadyOut = match.mode === "chess:four" ? (match.state as FourState).out.some((o) => o.color === myColor) : rtOut.includes(myColor ?? "");
   const theyOffered = match.drawOffer && match.drawOffer !== meId;
   const iOffered = match.drawOffer === meId;
-  if (four && alreadyOut) return <p className="py-3 text-center text-callout text-muted-foreground">You're out. Stick around to see who wins.</p>;
-  const bar = "h-[60px] flex-col gap-1 rounded-lg bg-card text-footnote [&_svg:not([class*='size-'])]:size-[22px]";
+  if (four && alreadyOut) return <DockNote>You're out. Stick around to see who wins.</DockNote>;
   const resignButton = (
     <ResignButton
       match={match}
-      className={bar}
+      variant="card"
+      size="dock"
       detail={four ? "Your army turns grey and the others play on. You keep your place for how long you lasted." : "Your opponent gets the win and the rating points."}
     />
   );
@@ -216,7 +208,7 @@ function Controls({ match, meId, confirm }: { match: MatchView; meId: Id<"users"
       )}
       {confirm ?? (
         <div className="grid grid-cols-2 gap-2.5">
-          <AsyncButton variant="secondary" className={bar} disabled={iOffered} icon={<HandshakeIcon weight="bold" />} onClick={() => offerDraw({ id: match._id })}>
+          <AsyncButton variant="card" size="dock" disabled={iOffered} icon={<HandshakeIcon weight="bold" />} onClick={() => offerDraw({ id: match._id })}>
             {iOffered ? "Draw offered" : "Offer draw"}
           </AsyncButton>
           {resignButton}

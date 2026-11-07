@@ -4,17 +4,6 @@ import { Button } from "@/components/ui/button";
 import { usePending } from "@/components/AsyncButton";
 import { same, type Sq } from "./geometry";
 
-// A chess screen: the board and its players as one block in the middle, and the actions docked at the
-// bottom where thumbs are.
-export function ChessFrame({ children, dock }: { children: ReactNode; dock: ReactNode }) {
-  return (
-    <>
-      <div className="flex flex-1 flex-col justify-center gap-2 py-2">{children}</div>
-      <div className="pt-4">{dock}</div>
-    </>
-  );
-}
-
 export type Dock = (confirm?: ReactNode) => ReactNode;
 
 // A move made on the board in an async game waits here until it's confirmed. It belongs to one position, so
@@ -38,7 +27,6 @@ export function draftTargets(draft: { from: Sq; to: Sq } | null, from: Sq, legal
   return [...legal.filter((t) => !same(t, draft.to)), draft.from];
 }
 
-const bar = "h-[60px] rounded-lg";
 // Confirm stays up, spinning, at least this long, so a double tap on it can't land on Resign once the dock
 // swaps back.
 const HOLD_MS = 400;
@@ -63,10 +51,11 @@ export function useSendMove() {
 export function ConfirmMove({ move, busy, onConfirm, onCancel }: { move: string; busy?: boolean; onConfirm?: () => void; onCancel?: () => void }) {
   return (
     <div className="grid grid-cols-[1fr_2fr] gap-2.5">
-      <Button variant="secondary" className={`${bar} flex-col gap-1 bg-card text-footnote [&_svg:not([class*='size-'])]:size-[22px]`} disabled={busy} onClick={onCancel}>
+      <Button variant="card" size="dock" disabled={busy} onClick={onCancel}>
         <XIcon weight="bold" /> Cancel
       </Button>
-      <Button className={`${bar} gap-2.5 text-body [&_svg:not([class*='size-'])]:size-5`} disabled={busy} aria-busy={busy} onClick={onConfirm}>
+      {/* Wide, so it names the move beside its icon instead of under it, at the dock's height. */}
+      <Button className="h-[60px] gap-2.5 rounded-lg text-body [&_svg:not([class*='size-'])]:size-5" disabled={busy} aria-busy={busy} onClick={onConfirm}>
         {busy ? <SpinnerGapIcon weight="bold" className="animate-spin" /> : <CheckIcon weight="bold" />}
         Confirm <span className="min-w-0 truncate font-display text-heading">{move}</span>
       </Button>

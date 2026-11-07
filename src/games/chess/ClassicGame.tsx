@@ -7,8 +7,10 @@ import type { ClassicState } from "../../../convex/chess";
 import type { MatchView } from "../../../convex/matches";
 import { Board, fromName, squareName, type BoardPiece, type Sq } from "./Board";
 import { same, viewFor } from "./geometry";
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
-import { ChessFrame, ConfirmMove, draftTargets, realSquare, useMoveDraft, useSendMove, type Dock } from "./dock";
+import { Button } from "@/components/ui/button";
+import { Sheet } from "@/components/ui/sheet";
+import { GameFrame } from "@/components/game/GameFrame";
+import { ConfirmMove, draftTargets, realSquare, useMoveDraft, useSendMove, type Dock } from "./dock";
 import { BackToNow, MoveChip, MoveLine, useHistory, type History } from "./history";
 
 type Kind = BoardPiece["kind"];
@@ -112,7 +114,7 @@ export function ClassicGame({ match, meId, above, below, dock }: { match: MatchV
   const confirm = (d: Draft, san: string) => send(san, () => move({ id: match._id, from: squareName(d.from), to: squareName(d.to), promotion: d.promotion }));
 
   return (
-    <ChessFrame
+    <GameFrame
       dock={dock(
         sending ? <ConfirmMove move={sending} busy /> : shown && preview ? <ConfirmMove move={preview.move.san} onCancel={() => setDraft(null)} onConfirm={() => void confirm(shown, preview.move.san)} /> : undefined,
       )}
@@ -136,27 +138,22 @@ export function ClassicGame({ match, meId, above, below, dock }: { match: MatchV
       </div>
       {below}
       <MoveList moves={state.moves.map((m) => m.san)} history={history} />
-      <Drawer open={!!draft?.choosing && myTurn} onOpenChange={(o) => !o && setDraft(null)}>
-        <DrawerContent className="pb-[calc(env(safe-area-inset-bottom)+20px)]">
-          <DrawerHeader>
-            <DrawerTitle>Promote to</DrawerTitle>
-          </DrawerHeader>
-          <div className="grid grid-cols-4 gap-3 px-4">
-            {(["q", "r", "b", "n"] as const).map((p) => (
-              <button
-                key={p}
-                type="button"
-                aria-label={{ q: "Queen", r: "Rook", b: "Bishop", n: "Knight" }[p]}
-                onClick={() => draft && setDraft({ from: draft.from, to: draft.to, promotion: p })}
-                className="grid aspect-square touch-manipulation place-items-center rounded-lg bg-card transition-transform duration-100 active:scale-[0.97]"
-              >
-                <img src={`/pieces/${myColor}${p.toUpperCase()}.svg`} alt="" className="size-4/5" />
-              </button>
-            ))}
-          </div>
-        </DrawerContent>
-      </Drawer>
-    </ChessFrame>
+      <Sheet open={!!draft?.choosing && myTurn} onClose={() => setDraft(null)} title="Promote to">
+        <div className="grid grid-cols-4 gap-3">
+          {(["q", "r", "b", "n"] as const).map((p) => (
+            <Button
+              key={p}
+              variant="card"
+              aria-label={{ q: "Queen", r: "Rook", b: "Bishop", n: "Knight" }[p]}
+              onClick={() => draft && setDraft({ from: draft.from, to: draft.to, promotion: p })}
+              className="aspect-square h-auto rounded-lg p-0"
+            >
+              <img src={`/pieces/${myColor}${p.toUpperCase()}.svg`} alt="" className="size-4/5" />
+            </Button>
+          ))}
+        </div>
+      </Sheet>
+    </GameFrame>
   );
 }
 

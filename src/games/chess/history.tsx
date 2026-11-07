@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { CaretLeftIcon, CaretRightIcon } from "@phosphor-icons/react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 // Which position the board shows: `at` moves into the game, `count` being now. Now follows the game as moves
@@ -60,15 +61,9 @@ export function MoveLine({ history: { at, count, go }, empty, children }: { hist
 
 function Step({ label, disabled, onClick, children }: { label: string; disabled: boolean; onClick: () => void; children: ReactNode }) {
   return (
-    <button
-      type="button"
-      aria-label={label}
-      disabled={disabled}
-      onClick={onClick}
-      className="grid size-11 shrink-0 touch-manipulation place-items-center rounded-md transition-[transform,opacity] duration-100 active:scale-[0.97] disabled:opacity-30 [&_svg]:size-[22px]"
-    >
+    <Button variant="ghost" size="icon" aria-label={label} disabled={disabled} onClick={onClick} className="rounded-md disabled:opacity-30 [&_svg:not([class*='size-'])]:size-[22px]">
       {children}
-    </button>
+    </Button>
   );
 }
 

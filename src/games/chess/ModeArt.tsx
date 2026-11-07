@@ -1,6 +1,7 @@
 import { motion } from "motion/react";
 import { LightningIcon } from "@phosphor-icons/react";
 import { MODES, type ModeKey } from "../../../convex/modes";
+import { SEAT_COLORS } from "@/games/seats";
 
 export const ChessModeArt = ({ mode }: { mode: ModeKey }) => <ModeArt four={MODES[mode].players > 2} realtime={MODES[mode].kind === "realtime"} />;
 
@@ -11,10 +12,10 @@ function ModeArt({ four, realtime }: { four: boolean; realtime: boolean }) {
   const cut = (x: number, y: number) => four && (x === 0 || x === n - 1) && (y === 0 || y === n - 1);
   const dots = four
     ? [
-        { x: 2.5, y: 5, c: "#e0503f" },
-        { x: 0, y: 2.5, c: "#3f7be0" },
-        { x: 2.5, y: 0, c: "#e8b928" },
-        { x: 5, y: 2.5, c: "#3faa5a" },
+        { x: 2.5, y: 5, c: SEAT_COLORS.red },
+        { x: 0, y: 2.5, c: SEAT_COLORS.blue },
+        { x: 2.5, y: 0, c: SEAT_COLORS.yellow },
+        { x: 5, y: 2.5, c: SEAT_COLORS.green },
       ]
     : [];
   return (

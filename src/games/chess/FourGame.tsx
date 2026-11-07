@@ -7,13 +7,12 @@ import type { Color4 } from "../../../convex/chess/four/board";
 import { fourBoards, inCheck, legalTargetsFrom, liveColors, move4, type FourState } from "../../../convex/chess/four/classic";
 import { Board, type BoardPiece } from "./Board";
 import { same, viewFor, type Sq } from "./geometry";
-import { ChessFrame, ConfirmMove, draftTargets, realSquare, useMoveDraft, useSendMove, type Dock } from "./dock";
+import { GameFrame } from "@/components/game/GameFrame";
+import { ConfirmMove, draftTargets, realSquare, useMoveDraft, useSendMove, type Dock } from "./dock";
 import { BackToNow, MoveChip, MoveLine, useHistory, type History } from "./history";
-
-// The armies' colors, matching the piece art (scripts/gen-four-pieces.mjs). They're the pieces' own colors,
-// so they stay the same in every theme.
-import { SEAT_COLORS } from "../seats";
-export { SEAT_COLORS };
+import { SeatDot } from "@/components/game/SeatDot";
+// The armies' colors match the piece art (scripts/gen-four-pieces.mjs), so they stay the same in every theme.
+import { SEAT_COLORS } from "@/games/seats";
 
 export function FourGame({ match, meId, overlay, below, dock }: { match: MatchView; meId: Id<"users"> | undefined; overlay?: ReactNode; below?: ReactNode; dock: Dock }) {
   const state = match.state as FourState;
@@ -69,7 +68,7 @@ export function FourGame({ match, meId, overlay, below, dock }: { match: MatchVi
   const confirm = (d: { from: Sq; to: Sq }, text: string) => send(text, () => move({ id: match._id, fromX: d.from[0], fromY: d.from[1], toX: d.to[0], toY: d.to[1] }));
 
   return (
-    <ChessFrame
+    <GameFrame
       dock={dock(sending ? <ConfirmMove move={sending} busy /> : shown && text ? <ConfirmMove move={text} onCancel={() => setDraft(null)} onConfirm={() => void confirm(shown, text)} /> : undefined)}
     >
       <div className="relative -mx-2.5">
@@ -93,7 +92,7 @@ export function FourGame({ match, meId, overlay, below, dock }: { match: MatchVi
       </div>
       {below}
       <FourMoves state={state} history={history} />
-    </ChessFrame>
+    </GameFrame>
   );
 }
 
@@ -102,7 +101,7 @@ function FourMoves({ state, history }: { state: FourState; history: History }) {
     <MoveLine history={history} empty="Red moves first, then play goes clockwise.">
       {state.moves.map((m, i) => (
         <MoveChip key={i} ply={i} history={history} currentClass="bg-card">
-          <span className="size-2 rounded-full" style={{ background: SEAT_COLORS[m.color] }} />
+          <SeatDot color={SEAT_COLORS[m.color]} />
           {m.text}
         </MoveChip>
       ))}
