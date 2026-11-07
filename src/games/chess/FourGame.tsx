@@ -4,11 +4,11 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { MatchView } from "../../../convex/matches";
 import type { Color4 } from "../../../convex/chess/four/board";
-import { inCheck, legalTargetsFrom, liveColors, move4, type FourState } from "../../../convex/chess/four/classic";
+import { fourBoards, inCheck, legalTargetsFrom, liveColors, move4, type FourState } from "../../../convex/chess/four/classic";
 import { Board, type BoardPiece } from "./Board";
 import { same, viewFor, type Sq } from "./geometry";
-import { cn } from "@/lib/utils";
 import { ChessFrame, ConfirmMove, draftTargets, realSquare, useMoveDraft, useSendMove, type Dock } from "./dock";
+import { BackToNow, MoveChip, MoveLine, useHistory, type History } from "./history";
 
 // The armies' colors, matching the piece art (scripts/gen-four-pieces.mjs). They're the pieces' own colors,
 // so they stay the same in every theme.
@@ -27,8 +27,13 @@ export function FourGame({ match, meId, overlay, below, dock }: { match: MatchVi
   const [sending, send] = useSendMove();
   // The position after the waiting move, shown on the board until it's confirmed.
   const preview = useMemo(() => (draft && myTurn ? move4(state, draft.from, draft.to) : null), [state, draft, myTurn]);
-  const shown = preview ? draft : null;
-  const display = preview ?? state;
+  const history = useHistory(match._id, state.moves.length);
+  // Stepped back through the game: every board it's been through, worked out once on the first step back.
+  const boards = useMemo(() => (history.live ? null : fourBoards(state)), [history.live, state]);
+  const board = boards?.[history.at];
+  const past = board ? { ...state, ...board } : null;
+  const shown = preview && !past ? draft : null;
+  const display = past ?? preview ?? state;
 
   const move = useMutation(api.chess.fourMove).withOptimisticUpdate((store, { id, fromX, fromY, toX, toY }) => {
     const current = store.getQuery(api.matches.get, { id });
@@ -46,10 +51,10 @@ export function FourGame({ match, meId, overlay, below, dock }: { match: MatchVi
   // While a move waits you can still pick up any of your pieces, the waiting one included, and move it instead.
   const pickable = myTurn && !sending;
   const mineIn = (s: FourState, [x, y]: Sq) => s.pieces.some((p) => p.color === myColor && !p.dead && p.x === x && p.y === y);
-  const mine = pickable ? display.pieces.map((p): Sq => [p.x, p.y]).filter((sq) => mineIn(display, sq) && mineIn(state, realSquare(shown, sq))) : [];
+  const mine = pickable && !past ? display.pieces.map((p): Sq => [p.x, p.y]).filter((sq) => mineIn(display, sq) && mineIn(state, realSquare(shown, sq))) : [];
   const from = selected && realSquare(shown, selected);
   const targets = from && pickable ? draftTargets(shown, from, legalTargetsFrom(state, from[0], from[1])) : [];
-  const last = state.moves.at(-1);
+  const last = past ? state.moves[history.at - 1] : state.moves.at(-1);
   const checked = liveColors(display)
     .filter((c) => inCheck(display, c))
     .map((c) => display.pieces.find((p) => p.kind === "K" && p.color === c && !p.dead))
@@ -67,41 +72,40 @@ export function FourGame({ match, meId, overlay, below, dock }: { match: MatchVi
     <ChessFrame
       dock={dock(sending ? <ConfirmMove move={sending} busy /> : shown && text ? <ConfirmMove move={text} onCancel={() => setDraft(null)} onConfirm={() => void confirm(shown, text)} /> : undefined)}
     >
-      <div className="-mx-2.5">
+      <div className="relative -mx-2.5">
         <Board
           label="4-player chess board"
           pieces={pieces}
           view={view}
           canSelect={(sq) => mine.some((m) => same(m, sq))}
           selectable={mine}
-          selected={selected}
-          targets={targets}
+          selected={past ? null : selected}
+          targets={past ? [] : targets}
           onSelect={setSelected}
           onMove={onMove}
           lastMove={shown ? [shown.from, shown.to] : last ? [last.from, last.to] : null}
           check={checked}
-          disabled={!pickable}
+          disabled={!pickable || !!past}
         >
           {overlay}
         </Board>
+        <BackToNow history={history} />
       </div>
       {below}
-      <FourMoves state={state} />
+      <FourMoves state={state} history={history} />
     </ChessFrame>
   );
 }
 
-function FourMoves({ state }: { state: FourState }) {
-  if (state.moves.length === 0) return <p className="flex h-7 items-center justify-center px-1 text-footnote text-muted-foreground">Red moves first, then play goes clockwise.</p>;
-  const recent = state.moves.slice(-24);
+function FourMoves({ state, history }: { state: FourState; history: History }) {
   return (
-    <div className="flex h-7 items-center gap-3.5 overflow-x-auto px-1 font-display text-callout tabular-nums [scrollbar-width:none]" aria-label="Moves" ref={(el) => el?.scrollTo({ left: el.scrollWidth })}>
-      {recent.map((m, i) => (
-        <span key={state.moves.length - recent.length + i} className={cn("flex shrink-0 items-center gap-1.5 rounded-sm", i === recent.length - 1 && "bg-card px-1.5")}>
+    <MoveLine history={history} empty="Red moves first, then play goes clockwise.">
+      {state.moves.map((m, i) => (
+        <MoveChip key={i} ply={i} history={history} currentClass="bg-card">
           <span className="size-2 rounded-full" style={{ background: SEAT_COLORS[m.color] }} />
           {m.text}
-        </span>
+        </MoveChip>
       ))}
-    </div>
+    </MoveLine>
   );
 }

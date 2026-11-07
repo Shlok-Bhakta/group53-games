@@ -295,3 +295,26 @@ export function retire4(s: FourState, color: Color4, reason: "resign" | "timeout
   }
   return next;
 }
+
+// The board after each move, for stepping back through a game: `[i]` is how it stood after `i` moves, with
+// everyone who'd gone out by then greyed. It trusts the recorded moves instead of checking them (a full
+// replay through `move4` took over a second for 200 moves), so only the board, who's out and whose turn it
+// was are the position's; points and the result are the game's.
+export type FourBoard = Pick<FourState, "pieces" | "out" | "turn">;
+export function fourBoards(s: FourState): FourBoard[] {
+  let pieces = initialFour().pieces;
+  const outBy = (ply: number) => s.out.filter((o) => o.ply <= ply);
+  const grey = (ps: Piece4[], out: Out[]) => (out.length ? ps.map((p) => (out.some((o) => o.color === p.color) ? { ...p, dead: true } : p)) : ps);
+  const boards: FourBoard[] = [{ pieces, out: outBy(0), turn: s.moves[0]?.color ?? s.turn }];
+  for (let i = 0; i < s.moves.length; i++) {
+    const m = s.moves[i];
+    const at: FourState = { ...s, pieces, out: outBy(i) };
+    const mover = pieces.find((p) => !p.dead && p.x === m.from[0] && p.y === m.from[1]);
+    const c = mover && pseudoMoves(at, mover).find((c) => c.to[0] === m.to[0] && c.to[1] === m.to[1]);
+    if (!c) break;
+    const out = outBy(i + 1);
+    pieces = play(at, c).pieces;
+    boards.push({ pieces: grey(pieces, out), out, turn: s.moves[i + 1]?.color ?? s.turn });
+  }
+  return boards;
+}

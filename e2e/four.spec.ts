@@ -176,6 +176,15 @@ test.describe("4-player chess", () => {
     expect((await getMatch(id)).state.moves).toHaveLength(2);
     await expect(g.green.getByText("You're out")).toBeVisible();
 
+    // Stepping back shows the board as it stood, green's army still in colour before it resigned.
+    await g.red.getByRole("button", { name: "Previous move" }).click();
+    await expect(g.red.getByLabel("Moves").locator("[aria-current=step]")).toContainText("e4");
+    await expect.poll(() => pieceOn(g.red, "blueP", "b5")).toBe(true);
+    await expect(g.red.locator('[data-piece="deadK"]')).toHaveCount(0);
+    await g.red.getByRole("button", { name: "Next move" }).click();
+    await expect(g.red.locator('[data-piece="deadK"]')).toHaveCount(1);
+    await expect(g.red.getByRole("button", { name: "Next move" })).toBeDisabled();
+
     // Blue and yellow resign too, so red is the last one standing.
     for (const p of [g.yellow, g.blue]) {
       await p.getByRole("button", { name: "Resign" }).click();

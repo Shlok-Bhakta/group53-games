@@ -71,6 +71,11 @@ test("chess screens", async ({ browser }) => {
   await black.emulateMedia({ colorScheme: "light" });
   await shot(black, "classic-confirm-light");
   await black.getByRole("button", { name: "Cancel", exact: true }).click();
+  await white.getByRole("button", { name: "Previous move" }).click();
+  await white.getByRole("button", { name: "Previous move" }).click();
+  await white.waitForTimeout(500);
+  await shot(white, "classic-history");
+  await white.getByRole("button", { name: "Back to the current position" }).click();
 
   // Real-time
   await a.goto("/chess/mode/realtime");

@@ -184,6 +184,50 @@ test.describe("chess", () => {
     await g.close();
   });
 
+  test("classic: step back through the moves, stay put as a move lands, and tap the board to come back", async ({ context, browser }) => {
+    const g = await startClassic(browser, context);
+    await classicMove(g.white, "e2", "e4");
+    await classicMove(g.black, "e7", "e5");
+    await classicMove(g.white, "g1", "f3");
+    const p = g.white;
+    await expect(g.black.getByLabel("Moves")).toContainText("Nf3");
+    const back = p.getByRole("button", { name: "Previous move" });
+    const next = p.getByRole("button", { name: "Next move" });
+    const current = p.getByLabel("Moves").locator("[aria-current=step]");
+    await expect(next).toBeDisabled();
+    await expect(current).toHaveText("Nf3");
+
+    await back.click();
+    await expect(current).toHaveText("e5");
+    await expect.poll(() => pieceOn(p, "wN", "g1")).toBe(true);
+    await back.click();
+    await back.click();
+    await expect(back).toBeDisabled();
+    await expect(current).toHaveCount(0);
+    await expect.poll(() => pieceOn(p, "wP", "e2")).toBe(true);
+    await p.getByLabel("Moves").getByRole("button", { name: "e4" }).click();
+    await expect(current).toHaveText("e4");
+    await expect.poll(() => pieceOn(p, "bP", "e7")).toBe(true);
+
+    // A move landing doesn't pull the board away from someone looking back.
+    await classicMove(g.black, "b8", "c6");
+    await expect(p.getByLabel("Moves")).toContainText("Nc6");
+    await expect(current).toHaveText("e4");
+    await expect.poll(() => pieceOn(p, "bN", "b8")).toBe(true);
+    await next.click();
+    await expect(current).toHaveText("e5");
+    await expect.poll(() => pieceOn(p, "bP", "e5")).toBe(true);
+
+    // Tapping the board goes back to now, and play goes on.
+    await p.getByRole("button", { name: "Back to the current position" }).click();
+    await expect(current).toHaveText("Nc6");
+    await expect(next).toBeDisabled();
+    await expect.poll(() => pieceOn(p, "bN", "c6")).toBe(true);
+    await classicMove(p, "f1", "c4");
+    await expect(g.black.getByLabel("Moves")).toContainText("Bc4");
+    await g.close();
+  });
+
   test("classic: checkmate ends the game for both players", async ({ context, browser }) => {
     const g = await startClassic(browser, context);
     await classicMove(g.white, "f2", "f3");

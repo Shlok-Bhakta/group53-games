@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { onBoard, type Color4, type Kind } from "./board";
-import { initialFour, inCheck, legalMoves, legalTargetsFrom, liveColors, move4, retire4, type FourState, type Piece4 } from "./classic";
+import { initialFour, inCheck, legalMoves, legalTargetsFrom, liveColors, move4, retire4, fourBoards, type FourState, type Piece4 } from "./classic";
 
 // "redK@h1"-style specs; files a..n, ranks 1..14.
 const sq = (s: string): [number, number] => [s.charCodeAt(0) - 97, Number(s.slice(1)) - 1];
@@ -183,5 +183,56 @@ describe("going out", () => {
     s = go(s, "h1", "h2");
     expect(s.result?.reason).toBe("fifty");
     expect(s.points).toEqual({ red: 10, blue: 10, yellow: 10, green: 10 });
+  });
+});
+
+describe("history", () => {
+  // A long scrappy game with a resignation out of turn and a timeout on turn, played with a seeded random.
+  function scrappyGame() {
+    let seed = 7;
+    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    let s = initialFour();
+    for (let ply = 0; ply < 160 && s.turn; ply++) {
+      if (ply === 40) s = retire4(s, "yellow", "resign");
+      if (ply === 90 && s.turn) s = retire4(s, s.turn, "timeout");
+      if (!s.turn) break;
+      const options = legalMoves(s, s.turn);
+      const m = options[Math.floor(rand() * options.length)];
+      const piece = s.pieces.find((p) => p.id === m.pieceId)!;
+      s = move4(s, [piece.x, piece.y], m.to)!;
+    }
+    return s;
+  }
+
+  test("stepping back through a game shows each board as it stood, resignations and timeouts included", () => {
+    const s = scrappyGame();
+    expect(s.out.map((o) => o.reason)).toEqual(expect.arrayContaining(["resign", "timeout"]));
+    // Every position, replayed the slow, checked way.
+    const slow = [initialFour()];
+    for (let i = 0; i < s.moves.length; i++) {
+      let p = slow[i];
+      for (const o of s.out) if (o.ply === i && (o.reason === "resign" || o.reason === "timeout")) p = retire4(p, o.color, o.reason);
+      slow.push(move4(p, s.moves[i].from, s.moves[i].to)!);
+    }
+    const boards = fourBoards(s);
+    expect(boards).toHaveLength(s.moves.length + 1);
+    // Whoever had gone out by then, by the time the board stood there.
+    const outAt = (i: number) => s.out.filter((o) => o.ply <= i).map((o) => o.color);
+    boards.forEach((b, i) => {
+      expect(b.out.map((o) => o.color)).toEqual(outAt(i));
+      const greyed = slow[i].pieces.map((p) => (outAt(i).includes(p.color) ? { ...p, dead: true } : p));
+      expect(b.pieces).toEqual(greyed);
+      if (i < s.moves.length) expect(b.turn).toBe(s.moves[i].color);
+    });
+    expect(boards.at(-1)!.pieces).toEqual(s.pieces);
+    expect(boards[40].out.map((o) => o.color)).toContain("yellow");
+    expect(boards[39].out).toEqual([]);
+  });
+
+  test("a long game steps back in a blink", () => {
+    const s = scrappyGame();
+    const t = performance.now();
+    fourBoards(s);
+    expect(performance.now() - t).toBeLessThan(100);
   });
 });

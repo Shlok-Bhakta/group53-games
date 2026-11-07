@@ -8,8 +8,8 @@ import type { MatchView } from "../../../convex/matches";
 import { Board, fromName, squareName, type BoardPiece, type Sq } from "./Board";
 import { same, viewFor } from "./geometry";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
-import { cn } from "@/lib/utils";
 import { ChessFrame, ConfirmMove, draftTargets, realSquare, useMoveDraft, useSendMove, type Dock } from "./dock";
+import { BackToNow, MoveChip, MoveLine, useHistory, type History } from "./history";
 
 type Kind = BoardPiece["kind"];
 
@@ -58,8 +58,16 @@ export function ClassicGame({ match, meId, above, below, dock }: { match: MatchV
     const after = new Chess(state.fen);
     return { chess: after, move: after.move({ from: squareName(draft.from), to: squareName(draft.to), promotion: draft.promotion }) };
   }, [draft, state.fen, myTurn]);
-  const shown = preview ? draft : null;
-  const display = preview?.chess ?? chess;
+  const history = useHistory(match._id, state.moves.length);
+  // Stepped back through the game: the board as it stood after `history.at` moves.
+  const past = useMemo(() => {
+    if (history.live) return null;
+    const c = new Chess();
+    for (const m of state.moves.slice(0, history.at)) c.move({ from: m.lan.slice(0, 2), to: m.lan.slice(2, 4), promotion: m.lan[4] });
+    return c;
+  }, [history.live, history.at, state.moves]);
+  const shown = preview && !past ? draft : null;
+  const display = past ?? preview?.chess ?? chess;
   const board = useMemo(() => display.board(), [display]);
   const keys = useStableKeys(board);
 
@@ -90,7 +98,8 @@ export function ClassicGame({ match, meId, above, below, dock }: { match: MatchV
   const from = selected && realSquare(shown, selected);
   const targets: Sq[] = from && pickable ? draftTargets(shown, from, legalFrom(from)) : [];
   const last = state.moves.at(-1);
-  const lastMove: [Sq, Sq] | null = shown ? [shown.from, shown.to] : last ? [fromName(last.lan.slice(0, 2)), fromName(last.lan.slice(2, 4))] : null;
+  const lastLan = past ? state.moves[history.at - 1]?.lan : last?.lan;
+  const lastMove: [Sq, Sq] | null = shown ? [shown.from, shown.to] : lastLan ? [fromName(lastLan.slice(0, 2)), fromName(lastLan.slice(2, 4))] : null;
   const king = display.inCheck() ? kingSquare(display, display.turn()) : null;
   const view = useMemo(() => viewFor("two", myColor), [myColor]);
 
@@ -109,21 +118,24 @@ export function ClassicGame({ match, meId, above, below, dock }: { match: MatchV
       )}
     >
       {above}
-      <Board
-        label="Classic chess board"
-        pieces={pieces}
-        view={view}
-        canSelect={(sq) => pickable && mineIn(display, sq) && mineIn(chess, realSquare(shown, sq))}
-        selected={selected}
-        targets={targets}
-        onSelect={setSelected}
-        onMove={onMove}
-        lastMove={lastMove}
-        check={king ? [king] : []}
-        disabled={!pickable}
-      />
+      <div className="relative">
+        <Board
+          label="Classic chess board"
+          pieces={pieces}
+          view={view}
+          canSelect={(sq) => pickable && mineIn(display, sq) && mineIn(chess, realSquare(shown, sq))}
+          selected={past ? null : selected}
+          targets={past ? [] : targets}
+          onSelect={setSelected}
+          onMove={onMove}
+          lastMove={lastMove}
+          check={king ? [king] : []}
+          disabled={!pickable || !!past}
+        />
+        <BackToNow history={history} />
+      </div>
       {below}
-      <MoveList moves={state.moves.map((m) => m.san)} />
+      <MoveList moves={state.moves.map((m) => m.san)} history={history} />
       <Drawer open={!!draft?.choosing && myTurn} onOpenChange={(o) => !o && setDraft(null)}>
         <DrawerContent className="pb-[calc(env(safe-area-inset-bottom)+20px)]">
           <DrawerHeader>
@@ -153,19 +165,23 @@ function kingSquare(chess: Chess, color: "w" | "b"): Sq | null {
   return null;
 }
 
-function MoveList({ moves }: { moves: string[] }) {
-  if (moves.length === 0) return <p className="flex h-7 items-center px-1 text-footnote text-muted-foreground">No moves yet. White starts.</p>;
+function MoveList({ moves, history }: { moves: string[]; history: History }) {
   const pairs = Array.from({ length: Math.ceil(moves.length / 2) }, (_, i) => [moves[2 * i], moves[2 * i + 1]] as const);
-  const last = moves.length - 1;
   return (
-    <div className="flex h-7 items-center gap-3.5 overflow-x-auto px-1 font-display text-callout tabular-nums [scrollbar-width:none]" aria-label="Moves" ref={(el) => el?.scrollTo({ left: el.scrollWidth })}>
+    <MoveLine history={history} empty="No moves yet. White starts.">
       {pairs.map(([w, b], i) => (
-        <span key={i} className="flex shrink-0 items-center gap-1.5">
+        <span key={i} className="flex h-full shrink-0 items-center gap-1.5">
           <span className="text-muted-foreground">{i + 1}.</span>
-          <span className={cn(2 * i === last && "rounded-sm bg-primary px-1.5 text-primary-foreground")}>{w}</span>
-          {b && <span className={cn(2 * i + 1 === last && "rounded-sm bg-primary px-1.5 text-primary-foreground")}>{b}</span>}
+          <MoveChip ply={2 * i} history={history}>
+            {w}
+          </MoveChip>
+          {b && (
+            <MoveChip ply={2 * i + 1} history={history}>
+              {b}
+            </MoveChip>
+          )}
         </span>
       ))}
-    </div>
+    </MoveLine>
   );
 }
