@@ -227,12 +227,14 @@ describe("history", () => {
     expect(boards.at(-1)!.pieces).toEqual(s.pieces);
     expect(boards[40].out.map((o) => o.color)).toContain("yellow");
     expect(boards[39].out).toEqual([]);
-  });
+  }, 60_000); // the slow, checked replay is about a second on a quiet machine, several when it's busy
 
+  // A few milliseconds normally; replaying through move4 took over a second. The bound is loose enough for a
+  // busy machine and still catches that.
   test("a long game steps back in a blink", () => {
     const s = scrappyGame();
     const t = performance.now();
     fourBoards(s);
-    expect(performance.now() - t).toBeLessThan(100);
+    expect(performance.now() - t).toBeLessThan(500);
   });
 });

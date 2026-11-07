@@ -55,11 +55,21 @@ describe("starting", () => {
     expect(m.turn).toBe(seats[0].userId);
     // Nothing hidden in the public state.
     expect(JSON.stringify(s)).not.toMatch(/"[2-9TJQKA][shdc]"/);
-    const mine = await seats[0].as.query(api.poker.cards, { id });
-    expect(mine).toMatchObject({ hand: 1 });
-    expect(mine!.cards).toHaveLength(2);
-    const theirs = await seats[1].as.query(api.poker.cards, { id });
-    expect(theirs!.cards).not.toEqual(mine!.cards);
+    // Each player gets exactly their own cards: the ones the server dealt to them, and nobody else's.
+    const rows = await t.run((ctx) => ctx.db.query("secrets").withIndex("by_match_user", (q) => q.eq("matchId", id)).collect());
+    const dealt = new Map(rows.filter((r) => r.userId).map((r) => [r.userId!, (r.data as { cards: string[] }).cards]));
+    const hands = [];
+    for (const p of seats) {
+      const got = await p.as.query(api.poker.cards, { id });
+      expect(got).toEqual({ hand: 1, cards: dealt.get(p.userId) });
+      expect(got!.cards).toHaveLength(2);
+      hands.push(...got!.cards);
+    }
+    expect(new Set(hands).size).toBe(6);
+    // Someone watching, or signed out, gets none.
+    const outsider = await signedIn(t, "Lurker");
+    expect(await outsider.as.query(api.poker.cards, { id })).toBeNull();
+    expect(await t.query(api.poker.cards, { id })).toBeNull();
     expect((await pushes(t)).map((p) => [p.userId, p.title, p.body])).toEqual(
       expect.arrayContaining([
         [seats[0].userId, "Texas Hold'em is on", "You're first to act. 20 to call, 30 in the pot."],
@@ -300,5 +310,42 @@ describe("ending", () => {
     // The button had 10 to call, so it folded and the next hand is on.
     expect(s.hand).toBe(2);
     expect(s.last).toMatchObject({ hand: 1, showdown: false });
+  });
+});
+
+describe("hidden information and stale taps", () => {
+  test("a folded hand never shows, even when the others go to a showdown", async () => {
+    const t = setup();
+    const { id, seats } = await game(t, 3);
+    // Button (seat 0) folds; the blinds check it down to a showdown.
+    const folded = (await seats[0].as.query(api.poker.cards, { id }))!;
+    expect(folded.hand).toBe(1);
+    const shown = [(await seats[1].as.query(api.poker.cards, { id }))!.cards, (await seats[2].as.query(api.poker.cards, { id }))!.cards];
+    await seats[0].as.mutation(api.poker.move, { id, hand: 1, street: 0, kind: "fold" });
+    for (let i = 0; i < 20 && (await stateOf(t, id)).hand === 1; i++) {
+      const u = await up(t, id, seats);
+      await u.move(u.s.current > u.s.bets[u.s.turn] ? "call" : "check");
+    }
+    const s = await stateOf(t, id);
+    expect(s.hand).toBe(2);
+    expect(s.last).toMatchObject({ hand: 1, showdown: true });
+    expect(s.last!.shown).toEqual([null, shown[0], shown[1]]);
+    expect(s.last!.names[0]).toBeNull();
+    // Not one of the folded cards is anywhere in what everyone can read.
+    const everything = JSON.stringify((await get(t, id))!);
+    for (const card of folded.cards) expect(everything).not.toContain(`"${card}"`);
+  });
+
+  test("a tap from the last hand is refused when the next is dealt on the same street", async () => {
+    const t = setup();
+    const { id, seats } = await game(t, 2);
+    await (await up(t, id, seats)).move("fold");
+    const before = await stateOf(t, id);
+    expect(before).toMatchObject({ hand: 2, street: 0 });
+    const p = seats[before.turn];
+    // It's their turn and the street index matches; only the hand number is stale.
+    await expect(p.as.mutation(api.poker.move, { id, hand: 1, street: 0, kind: "fold" })).rejects.toThrow("The hand moved on.");
+    await expect(p.as.mutation(api.poker.move, { id, hand: 1, street: 0, kind: "call" })).rejects.toThrow("The hand moved on.");
+    expect(await stateOf(t, id)).toEqual(before);
   });
 });

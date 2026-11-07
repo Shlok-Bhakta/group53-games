@@ -480,9 +480,47 @@ describe("real-time chess", () => {
     const t = setup();
     const g = await started(t);
     vi.advanceTimersByTime(REALTIME_COUNTDOWN_MS + 2000);
+    const ticks = async () => (await scheduled(t)).filter((s) => s.name === "chess:rtTick" && s.state.kind === "pending");
+    // Let the tick the scheduler already started finish, so only ours runs from here.
+    await t.finishInProgressScheduledFunctions();
+    const before = await ticks();
     await t.mutation(internal.chess.rtTick, { id: g.id });
-    const pending = (await scheduled(t)).filter((s) => s.name === "chess:rtTick" && s.state.kind === "pending");
-    expect(pending.length).toBeGreaterThanOrEqual(1);
+    const after = await ticks();
+    // Running one tick arms exactly one more, half a second out.
+    expect(after).toHaveLength(before.length + 1);
+    const armed = after.find((s) => !before.some((b) => b._id === s._id))!;
+    expect(armed.args[0]).toEqual({ id: g.id });
+    expect(Math.round((armed.scheduledTime - Date.now()) / 100)).toBe(5);
     expect((await match(t, g.id))!.status).toBe("active");
+  });
+});
+
+describe("who may change a lobby", () => {
+  test("declining a challenge you weren't sent is refused, and the challenge keeps waiting", async () => {
+    const t = setup();
+    const { a, b } = await twoPlayers(t);
+    const c = await signedIn(t, "Sam");
+    const id = await a.as.mutation(api.matches.challenge, { mode: "chess:classic", opponents: [b.userId] });
+    const before = await match(t, id);
+    await expect(c.as.mutation(api.matches.decline, { id })).rejects.toThrow("There's nothing to decline.");
+    // Nor can the challenger decline their own challenge.
+    await expect(a.as.mutation(api.matches.decline, { id })).rejects.toThrow("There's nothing to decline.");
+    expect(await match(t, id)).toEqual(before);
+    expect(before).toMatchObject({ status: "waiting", invited: [b.userId] });
+    // The one it was sent to still can.
+    await b.as.mutation(api.matches.decline, { id });
+    expect((await match(t, id))!.status).toBe("cancelled");
+  });
+
+  test("the settings can't change once the game has started", async () => {
+    const t = setup();
+    const { a, b } = await twoPlayers(t);
+    const id = await a.as.mutation(api.matches.queue, { mode: "scrabble:classic", settings: { rack: 9 } });
+    await b.as.mutation(api.matches.queue, { mode: "scrabble:classic" });
+    await a.as.mutation(api.matches.startGame, { id });
+    const before = await match(t, id);
+    expect(before).toMatchObject({ status: "active", settings: { rack: 9 } });
+    await expect(a.as.mutation(api.matches.configure, { id, settings: { rack: 5, board: 21 } })).rejects.toThrow("Only the host can change the settings.");
+    expect(await match(t, id)).toEqual(before);
   });
 });

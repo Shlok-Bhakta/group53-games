@@ -515,3 +515,90 @@ describe("paper trading", () => {
     expect((await shlok.as.query(api.stonks.player, { userId: shlok.userId }))?.me).toBe(true);
   });
 });
+
+describe("filling against the book as it is at the fill", () => {
+  afterEach(() => vi.useRealTimers());
+  const open = ET("2026-10-30T09:30:00");
+  async function market() {
+    vi.useFakeTimers();
+    vi.setSystemTime(open);
+    const t = setup();
+    await t.mutation(internal.stonks.ingest, { ticks: [tick("NVDA", 200, open - 1000), tick("TSLA", 400, open - 1000)] });
+    return t;
+  }
+  const tickAt = (t: ReturnType<typeof setup>, symbol: string, price: number, time: number, extra = {}) => t.mutation(internal.stonks.ingest, { ticks: [tick(symbol, price, time, extra)] });
+  const orders = (t: ReturnType<typeof setup>) => t.run((ctx) => ctx.db.query("stockOrders").collect());
+
+  test("a buy that waited is capped at what's free when it fills, after a short has moved against you", async () => {
+    const t = await market();
+    const { as } = await signedIn(t);
+    vi.setSystemTime(open + 1000);
+    await as.mutation(api.stonks.order, { symbol: "TSLA", side: "short", dollars: 5000 });
+    await tickAt(t, "TSLA", 400, open + 2000);
+    expect(await as.query(api.stonks.portfolio, {})).toMatchObject({ cash: 15000, free: 5000 });
+    // Everything that's free goes on NVDA, which waits for its next trade.
+    vi.setSystemTime(open + 3000);
+    await as.mutation(api.stonks.order, { symbol: "NVDA", side: "buy", dollars: 5000 });
+    expect((await as.query(api.stonks.portfolio, {}))?.free).toBe(0);
+    // TSLA squeezes to 480 first: worth 15000 - 12.5 x 480 = 9000, the short backs 6000, so 3000 is free.
+    await tickAt(t, "TSLA", 480, open + 4000);
+    await tickAt(t, "NVDA", 200, open + 5000);
+    const nvda = (await orders(t)).find((o) => o.symbol === "NVDA")!;
+    expect(nvda).toMatchObject({ status: "filled", amount: 3000, filledShares: 15, price: 200 });
+    const p = await as.query(api.stonks.portfolio, {});
+    expect(p).toMatchObject({ cash: 12000, worth: 9000, free: 0 });
+    expect(p?.positions.find((x) => x.symbol === "NVDA")).toMatchObject({ shares: 15, avg: 200 });
+  });
+
+  test("two waiting orders to sell everything: the first sells it, the second is refused", async () => {
+    const t = await market();
+    const { as, userId } = await signedIn(t);
+    vi.setSystemTime(open + 1000);
+    await as.mutation(api.stonks.order, { symbol: "NVDA", side: "buy", dollars: 1000 });
+    await tickAt(t, "NVDA", 200, open + 2000);
+    vi.setSystemTime(open + 3000);
+    const first = await as.mutation(api.stonks.order, { symbol: "NVDA", side: "sell" });
+    // Far enough apart not to be taken for a double tap.
+    vi.setSystemTime(open + 7000);
+    const second = await as.mutation(api.stonks.order, { symbol: "NVDA", side: "sell" });
+    expect(second).not.toBe(first);
+    vi.setSystemTime(open + 60_000);
+    await tickAt(t, "NVDA", 250, open + 60_000);
+    const byId = new Map((await orders(t)).map((o) => [o._id, o]));
+    expect(byId.get(first)).toMatchObject({ status: "filled", filledShares: 5, amount: 1250, realized: 250 });
+    expect(byId.get(second)).toMatchObject({ status: "refused", reason: "You don't own any.", filledAt: open + 60_000 });
+    expect(byId.get(second)!.amount).toBeUndefined();
+    // Sold once, not twice.
+    expect(await as.query(api.stonks.portfolio, {})).toMatchObject({ cash: 10250, worth: 10250, positions: [], waiting: [] });
+    const pushes = (await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect())).filter((f) => f.name === "push:sendToUser").map((f) => f.args[0] as { userId: string; title: string; body: string });
+    expect(pushes).toContainEqual(expect.objectContaining({ userId, title: "NVDA order refused", body: "You don't own any." }));
+  });
+
+  test("a batch quote after hours carries the close: it fills what was placed before the close, not after", async () => {
+    vi.useFakeTimers();
+    const close = ET("2026-10-29T16:00:00");
+    vi.setSystemTime(close - 60_000);
+    const t = setup();
+    const { as } = await signedIn(t);
+    await t.mutation(internal.stonks.snapshot, { rows: [{ symbol: "AAPL", price: 100, time: close - 60_000, state: "REGULAR" }] });
+    vi.setSystemTime(close - 30_000);
+    const before = await as.mutation(api.stonks.order, { symbol: "AAPL", side: "buy", dollars: 101 });
+    vi.setSystemTime(close + 3600_000);
+    const after = await as.mutation(api.stonks.order, { symbol: "AAPL", side: "buy", dollars: 202 });
+    // Yahoo's batch quote in the evening: the market's in post, and the trade it carries is the 4pm close
+    // (the sidecar sends regularMarketPrice and regularMarketTime, never the after-hours price).
+    vi.setSystemTime(close + 3900_000);
+    await t.mutation(internal.stonks.snapshot, { rows: [{ symbol: "AAPL", price: 101, time: close, state: "POST" }] });
+    // And an after-hours trade on the stream doesn't fill anything either.
+    await t.mutation(internal.stonks.ingest, { ticks: [tick("AAPL", 105, close + 3950_000, { session: "post" })] });
+    let byId = new Map((await orders(t)).map((o) => [o._id, o]));
+    expect(byId.get(before)).toMatchObject({ status: "filled", price: 101, amount: 101, filledShares: 1, filledAt: close });
+    expect(byId.get(after)).toMatchObject({ status: "waiting" });
+    // The next morning's first regular trade fills the evening's order.
+    const next = ET("2026-10-30T09:30:00");
+    vi.setSystemTime(next + 1000);
+    await t.mutation(internal.stonks.snapshot, { rows: [{ symbol: "AAPL", price: 101, time: next + 500, state: "REGULAR" }] });
+    byId = new Map((await orders(t)).map((o) => [o._id, o]));
+    expect(byId.get(after)).toMatchObject({ status: "filled", price: 101, amount: 202, filledShares: 2, filledAt: next + 500 });
+  });
+});

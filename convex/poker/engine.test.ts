@@ -295,3 +295,28 @@ test("a hand that ends at a showdown stays on its last street", () => {
   // Games stored before the fix had the street one past the end.
   expect(streetOf({ ...t.state, street: 4 }).name).toBe("River");
 });
+
+describe("split pots", () => {
+  test("a tied board splits the pot, the odd chips to the winners nearest the button's left, and no chip is lost", () => {
+    // Four players, button on seat 1 (a game whose first hand went to seat 0): seat 2 posts the small blind,
+    // seat 3 the big, seat 0 is first to act. Holes are dealt from the button's left: 2, 3, 0, 1.
+    const before = { ...newGame("holdem", "nl", 4, 1000), hand: 1, button: 0 };
+    let t = deal(before, { sb: 5, bb: 10 }, stacked("2c 3d 2d 3h 4c 5d 4d 5h Ts Js Qs Ks As"), noRandom);
+    expect(t.state).toMatchObject({ button: 1, turn: 0, bets: [0, 0, 5, 10] });
+    t = act(t, 0, { kind: "call" });
+    t = act(t, 1, { kind: "call" });
+    t = act(t, 2, { kind: "fold" }); // the small blind's 5 stays in: 35 in all, three ways
+    t = act(t, 3, { kind: "check" });
+    while (t.state.turn !== -1) t = act(t, t.state.turn, { kind: "check" });
+    const last = t.state.last!;
+    expect(last.board).toEqual(["Ts", "Js", "Qs", "Ks", "As"]);
+    expect(last.names).toEqual(["Royal flush", "Royal flush", null, "Royal flush"]);
+    expect(last.pots).toEqual([{ amount: 35, eligible: [0, 1, 3], winners: [0, 1, 3] }]);
+    // 35 / 3 is 11 each with 2 left over. Going round from the button (seat 1): seat 2 folded, so seat 3
+    // gets one, then seat 0; the button itself is last in line and gets none.
+    expect(last.won).toEqual([12, 11, 0, 12]);
+    expect(last.net).toEqual([2, 1, -5, 2]);
+    expect(t.state.stacks).toEqual([1002, 1001, 995, 1002]);
+    expect(t.state.stacks.reduce((a, b) => a + b, 0)).toBe(4000);
+  });
+});

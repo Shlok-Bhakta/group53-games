@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { REALTIME_COUNTDOWN_MS, REMINDER_MS } from "./modes";
+import { REALTIME_COUNTDOWN_MS } from "./modes";
 import { TICK_MS } from "./chess/realtime";
 import { setup, signedIn } from "./test.setup";
 import type { FourState, RealtimeState } from "./chess";
@@ -211,11 +211,10 @@ describe("four-player chess", () => {
     const changes = m.ratingChanges!;
     expect(changes).toHaveLength(4);
     const delta = (p: Player) => changes.find((c) => c.userId === p.userId)!;
-    expect(delta(g.yellow).after).toBeGreaterThan(1200);
-    expect(delta(g.green).after).toBeLessThan(1200);
-    expect(delta(g.red).after).toBeGreaterThan(delta(g.blue).after);
+    // Everyone started at 1200: first to last is 16, 5, -5, -16 (see multiElo).
+    expect([g.yellow, g.red, g.blue, g.green].map((p) => [delta(p).before, delta(p).after])).toEqual([[1200, 1216], [1200, 1205], [1200, 1195], [1200, 1184]]);
     const titles = Object.fromEntries((await pushes(t)).map((p) => [p.userId, p.title]));
-    expect(titles[g.yellow.userId]).toMatch(/^You won \(\+\d+\)$/);
+    expect(titles[g.yellow.userId]).toBe("You won (+16)");
     expect(titles[g.red.userId]).toMatch(/^You placed 2nd/);
     expect(titles[g.green.userId]).toMatch(/^You placed 4th/);
     const board = await g.red.as.query(api.ratings.leaderboard, { mode: "chess:four" });
@@ -272,7 +271,7 @@ describe("four-player real-time", () => {
     for (const p of g.players.slice(0, 3)) await p.as.mutation(api.chess.ready, { id: g.id });
     expect(((await match(t, g.id))!.state as RealtimeState).startAt).toBeNull();
     await g.players[3].as.mutation(api.chess.ready, { id: g.id });
-    expect(((await match(t, g.id))!.state as RealtimeState).startAt).not.toBeNull();
+    expect(((await match(t, g.id))!.state as RealtimeState).startAt).toBeCloseTo(Date.now() + REALTIME_COUNTDOWN_MS, -2);
     vi.advanceTimersByTime(REALTIME_COUNTDOWN_MS + 1);
     const view = (await g.red.as.query(api.chess.rtState, { id: g.id }))!;
     expect(view.variant).toBe("four");
@@ -315,7 +314,20 @@ describe("multiplayer Elo", () => {
     expect(four.reduce((a, b) => a + b, 0)).toBe(0);
   });
 
-  test("reminders still go out every 8 hours", () => {
-    expect(REMINDER_MS * TIMEOUT_STRIKES).toBe(48 * 60 * 60 * 1000);
+  test("by default you're timed out two days in: a reminder every 8 hours, and the sixth puts you out", async () => {
+    const t = setup();
+    const g = await fourGame(t);
+    const start = Date.now();
+    const hours = (ms: number) => Math.round(ms / 3600_000);
+    // Follow the chain the way the scheduler would: each reminder runs at its time and arms the next.
+    for (let strike = 0; strike < 6; strike++) {
+      const next = (await scheduled(t)).find((s) => s.name === "matches:remind" && (s.args[0] as { strikes: number }).strikes === strike && (s.args[0] as { moveCount: number }).moveCount === 0)!;
+      expect(hours(next.scheduledTime - start)).toBe(8 * (strike + 1));
+      vi.setSystemTime(next.scheduledTime);
+      expect(((await match(t, g.id))!.state as FourState).out).toEqual([]);
+      await t.mutation(internal.matches.remind, next.args[0] as { id: Id<"matches">; moveCount: number; strikes: number });
+    }
+    expect(hours(Date.now() - start)).toBe(48);
+    expect(((await match(t, g.id))!.state as FourState).out).toEqual([{ color: "red", reason: "timeout", ply: 0 }]);
   });
 });

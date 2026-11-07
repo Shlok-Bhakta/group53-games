@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { canShoot, compile, DT, groundUnder, ICE_S, poseOf, rng, type Power } from "./engine";
+import { canShoot, compile, groundUnder, ICE_S, poseOf, rng, type Power } from "./engine";
 import { datan, datan2, dcos, dexp, dlog, dpow, dsin, hyp } from "./dmath";
 import { courseOf, worldOf } from "./holes";
 import { SANDBOX } from "./sandbox";
@@ -97,13 +97,15 @@ describe("the world", () => {
     expect(fingerprint(s)).toBe(fingerprint(run(TPS * 14)));
   });
 
+  // It takes tens of milliseconds; stepping every tick of the day would take minutes. The bound is loose so
+  // a busy machine doesn't fail it, and still catches that.
   test("an idle world catches up a day in no time", () => {
     const s = newWorld(SANDBOX);
     const t0 = performance.now();
     advance(s, W, TPS * 60 * 60 * 24, script().sort(cmdOrder));
-    expect(performance.now() - t0).toBeLessThan(2000);
+    expect(performance.now() - t0).toBeLessThan(10_000);
     expect(s.balls.every((b) => b.mode === "aim")).toBe(true);
-  });
+  }, 30_000);
 
   test("everyone starts on their own tee", () => {
     const s = newWorld(SANDBOX);
@@ -603,7 +605,17 @@ describe("playing a hole", () => {
   });
 });
 
-// Ticks are whole engine steps.
-test("a tick is one engine step", () => expect(TPS * DT).toBe(1));
+// Ticks are whole engine steps: a second of ticks is a second on every ball's clock, whether the world
+// stepped through it (a ball rolling) or jumped it (everything still).
+test("a second of ticks is a second of world time, stepping or quiet", () => {
+  const s = crowd(["a"]);
+  advance(s, W, TPS, [{ tick: 0, by: "a", seq: 1, kind: "shot", a: 0, p: 0.5 }]);
+  expect(quiet(s, SANDBOX)).toBe(false);
+  expect(s.tick).toBe(TPS);
+  expect(at(s, "a").t).toBeCloseTo(1, 9);
+  advance(s, W, TPS * 60, []);
+  expect(quiet(s, SANDBOX)).toBe(true);
+  expect(at(s, "a").t).toBeCloseTo(60, 9);
+});
 
 const PINNED = 3583485931;

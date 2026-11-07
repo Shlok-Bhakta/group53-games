@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { buyingPower, fill, netWorth, refusal, START_CASH, type Book } from "./trade";
+import { buyingPower, fill, fxPair, netWorth, refusal, START_CASH, toUsd, type Book } from "./trade";
 
 const empty: Book = { cash: START_CASH, positions: [] };
 const at = (prices: Record<string, number>) => (s: string) => prices[s];
@@ -61,5 +61,44 @@ describe("paper trading rules", () => {
     expect(refusal(empty, { side: "sell", symbol: "A" })).toBe("You don't own any.");
     expect(refusal(empty, { side: "cover", symbol: "A" })).toBe("You aren't short.");
     expect(refusal(long, { side: "buy", symbol: "A" })).toBeNull();
+  });
+});
+
+describe("currencies", () => {
+  test("each currency's pair against the dollar, with Yahoo's cents mapped to their whole currency", () => {
+    expect(fxPair(undefined)).toBeNull();
+    expect(fxPair("")).toBeNull();
+    expect(fxPair("USD")).toBeNull();
+    expect(fxPair("usd")).toBeNull();
+    expect(fxPair("JPY")).toBe("JPYUSD=X");
+    expect(fxPair("eur")).toBe("EURUSD=X");
+    expect(fxPair("GBp")).toBe("GBPUSD=X");
+    expect(fxPair("GBX")).toBe("GBPUSD=X");
+    expect(fxPair("GBP")).toBe("GBPUSD=X");
+    expect(fxPair("ILA")).toBe("ILSUSD=X");
+    expect(fxPair("ZAc")).toBe("ZARUSD=X");
+    expect(fxPair("ZAC")).toBe("ZARUSD=X");
+    // Anything else is taken at its word: its pair just won't have a price until Yahoo has one.
+    expect(fxPair("XYZ")).toBe("XYZUSD=X");
+  });
+
+  test("dollars per unit: 1 for dollars, the pair's price for whole currencies, a hundredth of it for cents", () => {
+    expect(toUsd(undefined, undefined)).toBe(1);
+    expect(toUsd("USD", undefined)).toBe(1);
+    expect(toUsd("USD", 7)).toBe(1); // a dollar is a dollar whatever a stray pair says
+    expect(toUsd("JPY", 0.0065)).toBe(0.0065);
+    expect(toUsd("GBP", 1.25)).toBe(1.25);
+    expect(toUsd("GBp", 1.25)).toBe(1.25 / 100);
+    expect(toUsd("GBX", 1.3)).toBe(1.3 / 100);
+    expect(toUsd("ILA", 0.27)).toBe(0.27 / 100);
+    expect(toUsd("ZAc", 0.055)).toBe(0.055 / 100);
+    expect(toUsd("ZAC", 0.055)).toBe(0.055 / 100);
+  });
+
+  test("a rate that isn't known yet is undefined, so an order waits instead of filling at 0 or 1", () => {
+    expect(toUsd("JPY", undefined)).toBeUndefined();
+    expect(toUsd("GBp", undefined)).toBeUndefined();
+    expect(toUsd("XYZ", undefined)).toBeUndefined();
+    expect(toUsd("JPY", 0)).toBeUndefined();
   });
 });
