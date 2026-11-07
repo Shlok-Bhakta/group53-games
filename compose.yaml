@@ -1,5 +1,8 @@
 services:
   convex:
+    # Convex now publishes as ghcr.io/convex/convex-backend (the get-convex name no longer pulls), with this
+    # same digest. kiwi has it cached under the old name; switching the name recreates convex, so do it with a
+    # backend upgrade, not on its own.
     image: ghcr.io/get-convex/convex-backend@sha256:01aaebb72d7e9a32c82d183b3a25ffe15278f4dc656ecf30b21777691929d1ab
     restart: unless-stopped
     stop_signal: SIGINT
