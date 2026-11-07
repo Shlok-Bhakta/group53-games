@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { FONTS, PALETTES, type FontId, type PaletteId } from "./themes";
 
-export type ThemeChoice = "system" | "light" | "dark";
+type ThemeChoice = "system" | "light" | "dark";
 
 const media = window.matchMedia("(prefers-color-scheme: dark)");
 

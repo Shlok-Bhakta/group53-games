@@ -4,7 +4,7 @@ import { api } from "../convex/_generated/api";
 
 export type PushState = "loading" | "unsupported" | "blocked" | "off" | "on";
 
-export const pushSupported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const pushSupported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 
 function base64UrlToBytes(base64: string) {
   const padded = (base64 + "=".repeat((4 - (base64.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/");

@@ -12,7 +12,7 @@ const KINDS = {
 const KIND_ORDER = ["async", "realtime"] as const;
 
 // "1v1", "4-Player", "2–8": the section heading already says async or real-time.
-export const seatLabel = (mode: ModeKey) => {
+const seatLabel = (mode: ModeKey) => {
   const m = MODES[mode];
   if (m.minPlayers < m.players) return `${m.minPlayers}–${m.players}`;
   return m.players === 2 ? "1v1" : `${m.players}-Player`;

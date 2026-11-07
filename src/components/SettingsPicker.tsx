@@ -5,7 +5,7 @@ import { Segmented } from "@/components/Segmented";
 import { Disclosure } from "@/components/ui/disclosure";
 
 // One segmented control per setting, labelled above it.
-export function SettingsFields({ mode, value, onChange }: { mode: ModeKey; value: Settings; onChange: (next: Settings) => void }) {
+function SettingsFields({ mode, value, onChange }: { mode: ModeKey; value: Settings; onChange: (next: Settings) => void }) {
   const defs = MODES[mode].settings as readonly Setting[];
   return (
     <div className="flex flex-col gap-4">

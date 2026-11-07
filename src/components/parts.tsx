@@ -17,7 +17,7 @@ import { ListRow } from "@/components/ListRow";
 
 // A mode's one name, the same everywhere: "Classic", "4-Player", "Real-time", "Real-time 4-Player". Lists that
 // can mix games put the game first: "Chess Classic", "Scrabble Live".
-export const modeLabel = (mode: string) => MODES[mode as ModeKey]?.name ?? mode;
+const modeLabel = (mode: string) => MODES[mode as ModeKey]?.name ?? mode;
 export const fullModeLabel = (mode: string) => {
   const m = MODES[mode as ModeKey];
   return m ? `${GAMES[m.game].name} ${m.name}` : mode;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-export type Platform = "ios" | "android" | "desktop";
+type Platform = "ios" | "android" | "desktop";
 
 const ua = navigator.userAgent;
 

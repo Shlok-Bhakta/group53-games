@@ -38,7 +38,7 @@ export const MUSIC_TRACKS = [
 ] as const;
 export type SfxPack = (typeof SFX_PACKS)[number]["value"];
 export type MusicTrack = (typeof MUSIC_TRACKS)[number]["value"];
-export type SoundSettings = { sfx: SfxPack; music: MusicTrack; lastMusic: Exclude<MusicTrack, "off">; onSilent: boolean };
+type SoundSettings = { sfx: SfxPack; music: MusicTrack; lastMusic: Exclude<MusicTrack, "off">; onSilent: boolean };
 
 // --- Settings store ---
 
@@ -421,7 +421,7 @@ const VOICES: Record<Exclude<SfxPack, "off">, Voice> = {
   },
 };
 
-export type SfxName = "pick" | "place" | "recall" | "shuffle" | "play" | "bingo" | "invalid" | "turn" | "ghost" | "land" | "tick" | "win" | "lose" | "preview" | "deal" | "flip" | "chips" | "knock" | "sweep" | "slam" | "payout";
+type SfxName = "pick" | "place" | "recall" | "shuffle" | "play" | "bingo" | "invalid" | "turn" | "ghost" | "land" | "tick" | "win" | "lose" | "preview" | "deal" | "flip" | "chips" | "knock" | "sweep" | "slam" | "payout";
 // `live`: something happening on its own, not a tap's answer. It's dropped while audio is still locked; waiting
 // for the first tap would play every one of them at once.
 type SfxOpts = { count?: number; score?: number; live?: boolean };
