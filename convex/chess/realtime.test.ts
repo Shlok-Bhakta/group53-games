@@ -37,7 +37,6 @@ function position(...specs: string[]): State {
   });
   return { ...initialState(), pieces };
 }
-const run = (commands: Command[], toTick: number, from: State) => simulate(commands, toTick, from);
 
 describe("movement", () => {
   test("pieces travel one square per second and then cool down for five seconds", () => {
