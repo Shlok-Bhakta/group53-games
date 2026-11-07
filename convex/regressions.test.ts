@@ -184,5 +184,9 @@ describe("per-game tables", () => {
     expect(await preview(scrabble.id)).toMatchObject({ mode: "scrabble:classic", seats: 2, toMove: "red", scrabble: { size: 15, tiles: [], scores: [0, 0] } });
     expect(await preview(poker.id)).toMatchObject({ mode: "poker:holdem", seats: 2, poker: { hand: 1, pot: 30 } });
     expect(await preview("nope")).toBeNull();
+    // A finished game's preview carries the phrase for "Chris won ...", from the game's own endings.
+    await chess.seats[1].as.mutation(api.matches.resign, { id: chess.id });
+    const winner = (await t.run((ctx) => ctx.db.get(chess.seats[0].userId)))!.name;
+    expect(await preview(chess.id)).toMatchObject({ status: "finished", result: { draw: false, reason: "resign", how: "by resignation", winner } });
   });
 });

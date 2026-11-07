@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { Chess } from "chess.js";
 import { internalQuery, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { gameOf, isMode, type GameKey } from "./modes";
+import { gameOf, isMode, reasonOf, type GameKey } from "./modes";
 import { person } from "./lib/people";
 import { CELL, TICK_MS, positionAt, simulate, type Command, type State } from "./chess/realtime";
 import { DEFAULT_PROFILE } from "./profileOptions";
@@ -129,7 +129,7 @@ export const match = internalQuery({
       moveCount: m.moveCount,
       ...(await BOARDS[gameOf(m.mode)](ctx, m, players)),
       result: m.result
-        ? { draw: m.result.draw, reason: m.result.reason, winner: players.filter((p) => winners.includes(p.userId)).map((p) => p.name).join(" and ") || null }
+        ? { draw: m.result.draw, reason: m.result.reason, how: reasonOf(m.result.reason, m.mode).won ?? "", winner: players.filter((p) => winners.includes(p.userId)).map((p) => p.name).join(" and ") || null }
         : null,
     };
   },
