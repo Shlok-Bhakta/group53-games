@@ -1,8 +1,8 @@
 import { v } from "convex/values";
 import { mutation, query, type QueryCtx } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
 import { GAMES, MODES, acceptPath, matchPath, type ModeKey } from "./modes";
-import { notify } from "./notify";
+import { notifyMatch } from "./notify";
+import { person } from "./lib/people";
 
 // Game links shared in Discord open in a browser, not in the installed app: iOS can't open a home screen
 // web app from a link at all, and Android only sometimes can. A browser there isn't signed in either, so
@@ -22,11 +22,6 @@ async function matchFromPath(ctx: QueryCtx, path: string) {
   const mode = match ? MODES[match.mode as ModeKey] : undefined;
   return match && mode && GAMES[mode.game].path === `/${m[1]}` ? match : null;
 }
-
-const person = async (ctx: QueryCtx, userId: Id<"users">) => {
-  const u = await ctx.db.get(userId);
-  return { _id: userId, name: u?.name ?? "Player", image: u?.image ?? null };
-};
 
 // What the link is for, and the crew to pick yourself from.
 export const preview = query({
@@ -66,11 +61,10 @@ export const handoff = mutation({
     const mode = MODES[match.mode as ModeKey];
     const host = (await ctx.db.get(match.createdBy))?.name ?? "Someone";
     const isPlayer = match.players.some((p) => p.userId === userId);
-    await notify(ctx, userId, {
+    await notifyMatch(ctx, userId, match, {
       title: match.status === "waiting" && !isPlayer ? `Join ${host}'s game` : "Your game link",
       body: `${mode.title[0].toUpperCase()}${mode.title.slice(1)}. Tap to open it in Group 53.`,
       url: match.status === "waiting" && !isPlayer ? acceptPath(match) : matchPath(match),
-      tag: `match:${match._id}`,
     });
     return "sent";
   },

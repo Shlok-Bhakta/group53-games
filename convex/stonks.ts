@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { requireUser } from "./lib/seats";
 import { v } from "convex/values";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -708,8 +709,7 @@ const SIDE = v.union(v.literal("buy"), v.literal("sell"), v.literal("short"), v.
 export const order = mutation({
   args: { symbol: v.string(), side: SIDE, dollars: v.optional(v.number()), shares: v.optional(v.number()) },
   handler: async (ctx, { symbol, side, dollars, shares }) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) throw new Error("Sign in first.");
+    const userId = await requireUser(ctx);
     if (!(await quoteOf(ctx, symbol))) throw new Error("You can't trade that.");
     const ask: Ask = { side, symbol, dollars, shares };
     const book = await bookOf(ctx, userId);

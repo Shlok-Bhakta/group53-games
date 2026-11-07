@@ -1,11 +1,15 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { finish, loadMatch, scheduleReminder } from "./matches";
-import { MODES, matchPath, settingsOf, type ModeKey } from "./modes";
-import { displayName, notify } from "./notify";
+import { finishBySeats } from "./matches";
+import { MODES, settingsOf, type ModeKey } from "./modes";
+import { notifyMatch } from "./notify";
 import type { GameHooks } from "./games";
+import { SEAT_COLORS, onTurn, seatOf, seated } from "./lib/seats";
+import { displayName } from "./lib/people";
+import { mySecret, readSecret, writeSecret } from "./lib/secrets";
+import { clearDraft, myDraft, readDraft, writeDraft } from "./lib/drafts";
+import { passTurn, startPushes } from "./lib/turns";
 import { deckOf, shuffle, type Card, type Variant } from "./poker/cards";
 import {
   VARIANTS,
@@ -35,7 +39,6 @@ import { actionText, handInSentence, resultText } from "./poker/text";
 
 export type { PokerState } from "./poker/engine";
 
-export const POKER_SEATS = ["red", "blue", "yellow", "green", "purple", "orange", "teal", "pink"] as const;
 const VARIANT: Record<string, Variant> = { "poker:holdem": "holdem", "poker:omaha": "omaha", "poker:short": "short", "poker:draw": "draw" };
 // At most this many automatic moves and hands in one go, so nothing can spin forever.
 const MAX_STEPS = 200;
@@ -49,39 +52,18 @@ type Hand = { cards: Card[]; hand: number };
 // action reaches you.
 export type Pre = { kind: "checkfold" | "check" | "call"; amount: number; hand: number; street: number };
 
-const tag = (match: Doc<"matches">) => `match:${match._id}`;
-const seatOf = (match: Doc<"matches">, userId: Id<"users">) => match.players.findIndex((p) => p.userId === userId);
-
-async function secretRow(ctx: QueryCtx, matchId: Id<"matches">, userId?: Id<"users">) {
-  return await ctx.db
-    .query("secrets")
-    .withIndex("by_match_user", (q) => q.eq("matchId", matchId).eq("userId", userId))
-    .unique();
-}
-async function writeSecret(ctx: MutationCtx, matchId: Id<"matches">, userId: Id<"users"> | undefined, data: Shoe | Hand) {
-  const row = await secretRow(ctx, matchId, userId);
-  if (row) await ctx.db.patch(row._id, { data });
-  else await ctx.db.insert("secrets", { matchId, userId, data });
-}
-async function draftRow(ctx: QueryCtx, matchId: Id<"matches">, userId: Id<"users">) {
-  return await ctx.db
-    .query("drafts")
-    .withIndex("by_match_user", (q) => q.eq("matchId", matchId).eq("userId", userId))
-    .unique();
-}
-
 async function load(ctx: QueryCtx, match: Doc<"matches">): Promise<Table> {
-  const shoe = ((await secretRow(ctx, match._id))?.data ?? { deck: [], muck: [] }) as Shoe;
-  const holes = await Promise.all(match.players.map(async (p) => ((await secretRow(ctx, match._id, p.userId))?.data as Hand | undefined)?.cards ?? []));
+  const shoe = await readSecret<Shoe>(ctx, match._id, undefined, { deck: [], muck: [] });
+  const holes = await Promise.all(match.players.map(async (p) => (await readSecret<Hand | null>(ctx, match._id, p.userId, null))?.cards ?? []));
   return { state: match.state as PokerState, hidden: { deck: shoe.deck, muck: shoe.muck, holes } };
 }
 
 async function save(ctx: MutationCtx, match: Doc<"matches">, before: Table, after: Table) {
-  await writeSecret(ctx, match._id, undefined, { deck: after.hidden.deck, muck: after.hidden.muck });
+  await writeSecret<Shoe>(ctx, match._id, undefined, { deck: after.hidden.deck, muck: after.hidden.muck });
   for (const [i, p] of match.players.entries()) {
     const cards = after.hidden.holes[i] ?? [];
     if (JSON.stringify(cards) !== JSON.stringify(before.hidden.holes[i] ?? []) || before.state.hand !== after.state.hand) {
-      await writeSecret(ctx, match._id, p.userId, { cards, hand: after.state.hand });
+      await writeSecret<Hand>(ctx, match._id, p.userId, { cards, hand: after.state.hand });
     }
   }
 }
@@ -99,7 +81,7 @@ function planned(s: PokerState, seat: number, pre: Pre): Action | null {
 // --- Start, resign, timeout ---
 
 export const pokerHooks: GameHooks = {
-  seats: (_mode, n) => POKER_SEATS.slice(0, n),
+  seats: (_mode, n) => SEAT_COLORS.slice(0, n),
   start: async (ctx, match) => {
     const s = settingsOf(match.mode, match.settings);
     const state = newGame(VARIANT[match.mode], s.betting === 1 ? "pl" : "nl", match.players.length, s.stack);
@@ -127,7 +109,7 @@ export const pokerHooks: GameHooks = {
       null,
       "timeout",
     );
-    if (gone) await notify(ctx, userId, { title: "You've left the table", body: `Your time ran out on ${IDLE_OUT} moves in a row.`, url: matchPath(match), tag: tag(match) });
+    if (gone) await notifyMatch(ctx, userId, match, { title: "You've left the table", body: `Your time ran out on ${IDLE_OUT} moves in a row.` });
   },
   timeoutWarning: "or we check or fold for you",
 };
@@ -160,42 +142,45 @@ async function proceed(ctx: MutationCtx, match: Doc<"matches">, before: Table, a
       continue;
     }
     const seat = t.state.turn;
-    const row = await draftRow(ctx, match._id, match.players[seat].userId);
-    if (!row) break;
-    await ctx.db.delete(row._id);
-    const move = planned(t.state, seat, row.data as Pre);
+    const pre = await readDraft<Pre>(ctx, match._id, match.players[seat].userId);
+    if (!pre) break;
+    await clearDraft(ctx, match._id, match.players[seat].userId);
+    const move = planned(t.state, seat, pre);
     if (!move) break;
     t = act(t, seat, move);
   }
   await save(ctx, match, before, t);
-  const now = Date.now();
   if (ended || t.state.turn === -1) {
     const moveCount = match.moveCount + 1;
-    await ctx.db.patch(match._id, { state: t.state, moveCount, lastActivityAt: now });
-    const places = standings(t.state).map((g) => g.map((seat) => match.players[seat].userId));
-    const draw = places[0].length === match.players.length;
-    await finish(ctx, { ...match, state: t.state, moveCount }, { winners: draw ? [] : places[0], draw, reason: ended ?? "last_player", standings: places });
+    await ctx.db.patch(match._id, { state: t.state, moveCount, lastActivityAt: Date.now() });
+    await finishBySeats(ctx, { ...match, state: t.state, moveCount }, standings(t.state), ended ?? "last_player");
     return;
   }
-  const turn = match.players[t.state.turn].userId;
-  // Someone else resigning leaves the player to act on the clock they had: same reminder, same strikes, no push.
-  const fresh = turn !== match.turn || by === null || by === match.turn;
-  const moveCount = fresh ? match.moveCount + 1 : match.moveCount;
-  await ctx.db.patch(match._id, { state: t.state, turn, moveCount, lastActivityAt: now });
+  // Pushes are poker's own (tell), so passTurn sends none.
+  const { fresh } = await passTurn(ctx, match, { state: t.state, turn: match.players[t.state.turn].userId, by });
   await tell(ctx, match, t.state, results, by, before.state.hand === 0, fresh);
-  if (fresh) await scheduleReminder(ctx, match._id, moveCount);
 }
 
-// Pushes: whoever has to act now hears what just happened (notify skips anyone already looking at the game), winners of a showdown hear they won, and anyone
-// knocked out hears it. One push each, the most useful.
+// Pushes: whoever has to act now hears what just happened (notify skips anyone already looking at the game),
+// winners of a showdown hear they won, and anyone knocked out hears it. One push each, the most useful.
+// Unless `fresh`, the player to act is the one they were before and has heard already.
 async function tell(ctx: MutationCtx, match: Doc<"matches">, s: PokerState, results: HandResult[], by: Id<"users"> | null, first: boolean, fresh: boolean) {
-  if (first && match.rematchOf) return;
   const names = await Promise.all(match.players.map((p) => displayName(ctx, p.userId)));
-  const pushes = new Map<Id<"users">, { title: string; body: string }>();
   const game = MODES[match.mode as ModeKey].title;
+  const seat = s.turn;
+  const up = match.players[seat].userId;
+  const owe = toCall(s, seat);
+  const pot = potOf(s) + s.bets.reduce((a, b) => a + b, 0);
+  const ask =
+    streetOf(s).kind === "draw" ? "Pick the cards to swap."
+    : owe > 0 ? `${owe} to call, ${pot} in the pot.`
+    : raiseBounds(s, seat) ? `Check or bet. ${pot} in the pot.`
+    : "Your move.";
   if (first) {
-    for (const p of match.players) pushes.set(p.userId, { title: `${game} is on`, body: `${names[s.turn]} is first to act.` });
+    await startPushes(ctx, match, (p) => ({ title: `${game} is on`, body: p.userId === up ? `You're first to act. ${ask}` : `${names[seat]} is first to act.` }));
+    return;
   }
+  const pushes = new Map<Id<"users">, { title: string; body: string }>();
   for (const r of results) {
     for (const [seat, p] of match.players.entries()) {
       const exit = s.out.find((o) => o.seat === seat && o.hand === r.hand && o.reason === "bust");
@@ -206,23 +191,12 @@ async function tell(ctx: MutationCtx, match: Doc<"matches">, s: PokerState, resu
       }
     }
   }
-  const seat = s.turn;
-  const up = match.players[seat].userId;
   if (fresh) {
-    const owe = toCall(s, seat);
-    const street = streetOf(s);
-    const pot = potOf(s) + s.bets.reduce((a, b) => a + b, 0);
-    const ask =
-      street.kind === "draw" ? "Pick the cards to swap."
-      : owe > 0 ? `${owe} to call, ${pot} in the pot.`
-      : raiseBounds(s, seat) ? `Check or bet. ${pot} in the pot.`
-      : "Your move.";
     const latest = s.log.filter((e) => e.kind !== "blind").at(-1);
     const last = results.at(-1);
     const nameOf = (i: number) => (i === seat ? "You" : names[i]);
     let push: { title: string; body: string };
-    if (first) push = { title: `${game} is on`, body: `You're first to act. ${ask}` };
-    else if (latest) push = { title: actionText(latest, names[latest.seat]), body: ask };
+    if (latest) push = { title: actionText(latest, names[latest.seat]), body: ask };
     else if (last) push = { title: `Hand ${s.hand}: your move`, body: `${resultText(last, nameOf)}. ${ask}` };
     else push = { title: `Hand ${s.hand}: your move`, body: ask };
     pushes.set(up, push);
@@ -230,21 +204,11 @@ async function tell(ctx: MutationCtx, match: Doc<"matches">, s: PokerState, resu
   for (const [userId, push] of pushes) {
     // Whoever moved saw what happened, unless the action has come back round to them.
     if (userId === by && userId !== up) continue;
-    await notify(ctx, userId, { ...push, url: matchPath(match), tag: tag(match) });
+    await notifyMatch(ctx, userId, match, push);
   }
 }
 
 // --- Moves ---
-
-async function mine(ctx: MutationCtx | QueryCtx, id: Id<"matches">) {
-  const userId = await getAuthUserId(ctx);
-  if (userId === null) throw new Error("Sign in first.");
-  const match = await loadMatch(ctx, id);
-  if (!match.mode.startsWith("poker:")) throw new Error("Wrong kind of game.");
-  const seat = seatOf(match, userId);
-  if (seat < 0) throw new Error("You're not playing in this game.");
-  return { userId, match, seat };
-}
 
 export const move = mutation({
   args: {
@@ -257,10 +221,8 @@ export const move = mutation({
     discard: v.optional(v.array(v.number())),
   },
   handler: async (ctx, { id, hand, street, kind, to, discard }) => {
-    const { userId, match, seat } = await mine(ctx, id);
-    if (match.status !== "active") throw new Error("This game is over.");
+    const { userId, match, seat } = await onTurn(ctx, id, { game: "poker" });
     const state = match.state as PokerState;
-    if (state.turn !== seat) throw new Error("It's not your turn.");
     if (state.hand !== hand || state.street !== street) throw new Error("The hand moved on. Have another look.");
     const action: Action = kind === "raise" ? { kind, to: to ?? 0 } : kind === "draw" ? { kind, discard: discard ?? [] } : { kind };
     await apply(ctx, match, (t) => act(t, seat, action), userId);
@@ -280,9 +242,8 @@ export const plan = mutation({
     amount: v.optional(v.number()),
   },
   handler: async (ctx, { id, hand, street, kind, amount }) => {
-    const { userId, match, seat } = await mine(ctx, id);
-    const row = await draftRow(ctx, id, userId);
-    if (row) await ctx.db.delete(row._id);
+    const { userId, match, seat } = await seated(ctx, id, { game: "poker", active: false });
+    await clearDraft(ctx, id, userId);
     if (!kind || match.status !== "active") return;
     const state = match.state as PokerState;
     if (state.hand !== hand || state.street !== street) return;
@@ -292,7 +253,7 @@ export const plan = mutation({
       if (now) await apply(ctx, match, (t) => act(t, seat, now), userId);
       return;
     }
-    await ctx.db.insert("drafts", { matchId: id, userId, data: pre, count: 0, at: Date.now() });
+    await writeDraft(ctx, id, userId, pre, 0);
   },
 });
 
@@ -302,21 +263,12 @@ export const plan = mutation({
 // cards against this hand's board.
 export const cards = query({
   args: { id: v.id("matches") },
-  handler: async (ctx, { id }) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) return null;
-    const row = await secretRow(ctx, id, userId);
-    return (row?.data as Hand | undefined) ?? null;
-  },
+  handler: async (ctx, { id }) => await mySecret<Hand>(ctx, id),
 });
 
 export const myPlan = query({
   args: { id: v.id("matches") },
-  handler: async (ctx, { id }) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) return null;
-    return ((await draftRow(ctx, id, userId))?.data as Pre | undefined) ?? null;
-  },
+  handler: async (ctx, { id }) => await myDraft<Pre>(ctx, id),
 });
 
 // Run once when the Hands default went from 10 to no limit (npx convex run poker:keepHandLimit). Settings only

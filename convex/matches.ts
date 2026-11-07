@@ -3,27 +3,16 @@ import { v } from "convex/values";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { MODES, REALTIME_LOBBY_MS, REMINDER_MS, acceptPath, allowsDraws, changedSettings, flexibleSeats, isMode, matchPath, modePath, settingsOf, type ModeKey, type Settings } from "./modes";
-import { displayName, isTestUser, notify } from "./notify";
+import { MODES, REALTIME_LOBBY_MS, REMINDER_MS, acceptPath, allowsDraws, changedSettings, flexibleSeats, isMode, modePath, settingsOf, type ModeKey, type Settings } from "./modes";
+import { isTestUser, notify, notifyMatch } from "./notify";
 import { placesOf, recordResult } from "./ratings";
 import { hooksFor } from "./games";
 import { DEFAULT_PROFILE } from "./profileOptions";
-
-async function me(ctx: QueryCtx) {
-  const userId = await getAuthUserId(ctx);
-  if (userId === null) throw new Error("Sign in first.");
-  return userId;
-}
-
-export async function loadMatch(ctx: QueryCtx, id: Id<"matches">) {
-  const match = await ctx.db.get(id);
-  if (!match) throw new Error("That game doesn't exist.");
-  return match;
-}
+import { isPlayer, loadMatch, opponentsOf, requireUser } from "./lib/seats";
+import { displayName, namesOf } from "./lib/people";
+import { scheduleReminder } from "./lib/turns";
 
 const modeOf = (match: Doc<"matches">) => MODES[match.mode as ModeKey];
-export const isPlayer = (match: Doc<"matches">, userId: Id<"users">) => match.players.some((p) => p.userId === userId);
-export const opponentsOf = (match: Doc<"matches">, userId: Id<"users">) => match.players.filter((p) => p.userId !== userId).map((p) => p.userId);
 // Anyone may take a seat: an open lobby, or a challenge with seats left over for the crew.
 const isOpen = (match: Doc<"matches">) => match.invited.length === 0 || match.openSeats === true;
 // Seats nobody has claimed: invited players who haven't answered yet keep theirs.
@@ -36,7 +25,6 @@ export function listNames(names: string[]) {
   if (names.length <= 1) return names[0] ?? "nobody";
   return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }
-export const namesOf = async (ctx: QueryCtx, ids: Id<"users">[]) => Promise.all(ids.map(async (id) => (await ctx.db.get(id))?.name ?? "Someone"));
 
 // Players with their Discord name, avatar, and card cosmetics, for rendering a match.
 async function withPeople(ctx: QueryCtx, match: Doc<"matches">) {
@@ -110,13 +98,16 @@ export async function finish(ctx: MutationCtx, match: Doc<"matches">, result: No
         ? place === 0 ? (places[0].length > 1 ? "You tied for first" : "You won") : `You placed ${ordinal(place + 1)}`
         : result.draw ? "Draw" : result.winners.includes(p.userId) ? "You won" : "You lost";
     const others = listNames(await namesOf(ctx, opponentsOf(match, p.userId)));
-    await notify(ctx, p.userId, {
-      title: `${title}${swing}`,
-      body: `${capitalize(mode.title)} vs ${others}: ${describeReason(result.reason, match.mode)}.`,
-      url: matchPath(match),
-      tag: `match:${match._id}`,
-    });
+    await notifyMatch(ctx, p.userId, match, { title: `${title}${swing}`, body: `${capitalize(mode.title)} vs ${others}: ${describeReason(result.reason, match.mode)}.` });
   }
+}
+
+// Ends a game by places given as groups of seats, best first (ties share a group). Everyone sharing first
+// is a draw.
+export async function finishBySeats(ctx: MutationCtx, match: Doc<"matches">, groups: number[][], reason: string) {
+  const places = groups.map((g) => g.map((seat) => match.players[seat].userId));
+  const draw = places[0].length === match.players.length;
+  await finish(ctx, match, { winners: draw ? [] : places[0], draw, reason, standings: places });
 }
 
 export const ordinal = (n: number) => `${n}${n === 1 ? "st" : n === 2 ? "nd" : n === 3 ? "rd" : "th"}`;
@@ -147,12 +138,6 @@ export function describeReason(reason: string, mode?: string) {
   );
 }
 
-// Re-arms the "it's your move" reminder. Each reminder checks the move count it was set for, so old ones
-// fizzle out on their own instead of needing to be cancelled.
-export async function scheduleReminder(ctx: MutationCtx, matchId: Id<"matches">, moveCount: number, strikes = 0) {
-  await ctx.scheduler.runAfter(REMINDER_MS, internal.matches.remind, { id: matchId, moveCount, strikes });
-}
-
 // How many reminders (8 hours apart) a player gets before their move timer runs out, from the game's
 // "Time to move" setting. 0 means no limit. Four-player chess defaults to 6 (two days): one player
 // sitting on their move holds up three others.
@@ -174,12 +159,7 @@ export const remind = internalMutation({
     }
     const others = listNames(await namesOf(ctx, opponentsOf(match, match.turn)));
     const left = limit > 0 && strikes + 2 === limit ? ` Move in the next 8 hours ${hooks.timeoutWarning}.` : "";
-    await notify(ctx, match.turn, {
-      title: "Still your move",
-      body: `${others} ${multi ? "are" : "is"} waiting on you in ${modeOf(match).title}.${left}`,
-      url: matchPath(match),
-      tag: `match:${id}`,
-    });
+    await notifyMatch(ctx, match.turn, match, { title: "Still your move", body: `${others} ${multi ? "are" : "is"} waiting on you in ${modeOf(match).title}.${left}` });
     await scheduleReminder(ctx, id, moveCount, strikes + 1);
   },
 });
@@ -249,13 +229,11 @@ async function addPlayer(ctx: MutationCtx, match: Doc<"matches">, userId: Id<"us
   const flexible = flexibleSeats(match.mode);
   for (const p of match.players) {
     const host = p.userId === match.createdBy;
-    await notify(ctx, p.userId, {
+    await notifyMatch(ctx, p.userId, match, {
       title: full || flexible ? `${name} joined` : `${name} joined (${players.length}/${mode.players})`,
       body: full
         ? mode.kind === "realtime" ? `Your ${mode.title} game is ready. Tap to play.` : `Your ${mode.title} game is on.`
         : flexible ? (host ? `${players.length} in. Start whenever you're ready.` : `${players.length} in.`) : `Waiting for ${mode.players - players.length} more.`,
-      url: matchPath(match),
-      tag: `match:${match._id}`,
     });
   }
   if (full) await start(ctx, updated);
@@ -278,7 +256,7 @@ async function pingCrew(ctx: MutationCtx, match: Doc<"matches">, title: string, 
 export const queue = mutation({
   args: { mode: v.string(), settings: settingsArg },
   handler: async (ctx, { mode, settings }) => {
-    const userId = await me(ctx);
+    const userId = await requireUser(ctx);
     if (!isMode(mode)) throw new Error("Unknown mode.");
     const waiting = await ctx.db
       .query("matches")
@@ -312,7 +290,7 @@ export const queue = mutation({
 export const challenge = mutation({
   args: { mode: v.string(), opponent: v.optional(v.id("users")), opponents: v.optional(v.array(v.id("users"))), settings: settingsArg },
   handler: async (ctx, { mode, opponent, opponents, settings }) => {
-    const userId = await me(ctx);
+    const userId = await requireUser(ctx);
     if (!isMode(mode)) throw new Error("Unknown mode.");
     const invited = [...new Set([...(opponents ?? []), ...(opponent ? [opponent] : [])])];
     if (invited.length === 0) throw new Error("Pick someone to challenge.");
@@ -337,12 +315,7 @@ export const challenge = mutation({
       // Games that start whenever the host likes don't count empty seats.
       const free = flexible ? 0 : m.players - 1 - invited.length;
       const with_ = others.length ? ` with ${listNames(free > 0 ? [...others, `${free} more`] : others)}` : free > 0 ? ` with ${free} more` : "";
-      await notify(ctx, who, {
-        title: `${name} challenged you`,
-        body: `${capitalize(m.title)}${with_}. Tap to accept.`,
-        url: acceptPath({ _id: id, mode }),
-        tag: `match:${id}`,
-      });
+      await notifyMatch(ctx, who, { _id: id, mode }, { title: `${name} challenged you`, body: `${capitalize(m.title)}${with_}. Tap to accept.`, url: acceptPath({ _id: id, mode }) });
     }
     const match = (await ctx.db.get(id))!;
     // Bigger games tell the crew about the seats left over. Flexible ones just leave them open: anyone who
@@ -358,7 +331,7 @@ export const challenge = mutation({
 export const join = mutation({
   args: { id: v.id("matches") },
   handler: async (ctx, { id }) => {
-    const userId = await me(ctx);
+    const userId = await requireUser(ctx);
     const match = await loadMatch(ctx, id);
     if (isPlayer(match, userId)) return;
     if (match.status !== "waiting") throw new Error(match.status === "cancelled" ? "That game was called off." : "That game already started.");
@@ -370,19 +343,19 @@ export const join = mutation({
 export const decline = mutation({
   args: { id: v.id("matches") },
   handler: async (ctx, { id }) => {
-    const userId = await me(ctx);
+    const userId = await requireUser(ctx);
     const match = await loadMatch(ctx, id);
     if (match.status !== "waiting" || !match.invited.includes(userId) || isPlayer(match, userId)) throw new Error("There's nothing to decline.");
     const name = await displayName(ctx, userId);
     const mode = modeOf(match);
     if (mode.players === 2) {
       await ctx.db.patch(id, { status: "cancelled", lastActivityAt: Date.now() });
-      await notify(ctx, match.createdBy, { title: `${name} declined`, body: `Your ${mode.title} challenge was turned down.`, url: modePath(match.mode as ModeKey), tag: `match:${id}` });
+      await notifyMatch(ctx, match.createdBy, match, { title: `${name} declined`, body: `Your ${mode.title} challenge was turned down.`, url: modePath(match.mode as ModeKey) });
       return;
     }
     if (flexibleSeats(match.mode)) {
       await ctx.db.patch(id, { invited: match.invited.filter((x) => x !== userId), lastActivityAt: Date.now() });
-      await notify(ctx, match.createdBy, { title: `${name} declined`, body: `They're sitting this ${mode.title} game out.`, url: matchPath(match), tag: `match:${id}` });
+      await notifyMatch(ctx, match.createdBy, match, { title: `${name} declined`, body: `They're sitting this ${mode.title} game out.` });
       return;
     }
     // In a bigger game one "no" doesn't sink it: their seat opens up to the crew.
@@ -390,7 +363,7 @@ export const decline = mutation({
     const updated = { ...match, invited, openSeats: true };
     await ctx.db.patch(id, { invited, openSeats: true, lastActivityAt: Date.now() });
     for (const p of match.players) {
-      await notify(ctx, p.userId, { title: `${name} declined`, body: "Their seat is open to the crew now.", url: matchPath(match), tag: `match:${id}` });
+      await notifyMatch(ctx, p.userId, match, { title: `${name} declined`, body: "Their seat is open to the crew now." });
     }
     await pingCrew(ctx, { ...updated, invited: [...invited, userId] }, `A seat opened up`, `${capitalize(mode.title)} with ${listNames(await namesOf(ctx, match.players.map((p) => p.userId)))}. Tap to join.`);
   },
@@ -400,7 +373,7 @@ export const decline = mutation({
 export const leave = mutation({
   args: { id: v.id("matches") },
   handler: async (ctx, { id }) => {
-    const userId = await me(ctx);
+    const userId = await requireUser(ctx);
     const match = await loadMatch(ctx, id);
     if (match.status !== "waiting" || !isPlayer(match, userId)) return;
     if (match.createdBy === userId) throw new Error("Cancel the game instead.");
@@ -419,13 +392,13 @@ export const leave = mutation({
 export const cancel = mutation({
   args: { id: v.id("matches") },
   handler: async (ctx, { id }) => {
-    const userId = await me(ctx);
+    const userId = await requireUser(ctx);
     const match = await loadMatch(ctx, id);
     if (match.status !== "waiting" || match.createdBy !== userId) throw new Error("You can only cancel a game you're waiting in.");
     await ctx.db.patch(id, { status: "cancelled", lastActivityAt: Date.now() });
     const name = await displayName(ctx, userId);
     for (const other of opponentsOf(match, userId)) {
-      await notify(ctx, other, { title: `${name} called it off`, body: `The ${modeOf(match).title} game you joined isn't happening.`, url: matchPath(match), tag: `match:${id}` });
+      await notifyMatch(ctx, other, match, { title: `${name} called it off`, body: `The ${modeOf(match).title} game you joined isn't happening.` });
     }
   },
 });
@@ -435,7 +408,7 @@ export const cancel = mutation({
 export const startGame = mutation({
   args: { id: v.id("matches") },
   handler: async (ctx, { id }) => {
-    const userId = await me(ctx);
+    const userId = await requireUser(ctx);
     const match = await loadMatch(ctx, id);
     if (match.status === "active") return;
     if (match.status !== "waiting" || match.createdBy !== userId) throw new Error("Only the host can start this game.");
@@ -450,7 +423,7 @@ export const startGame = mutation({
 export const configure = mutation({
   args: { id: v.id("matches"), settings: v.record(v.string(), v.number()) },
   handler: async (ctx, { id, settings }) => {
-    const userId = await me(ctx);
+    const userId = await requireUser(ctx);
     const match = await loadMatch(ctx, id);
     if (match.status !== "waiting" || match.createdBy !== userId) throw new Error("Only the host can change the settings.");
     await ctx.db.patch(id, { settings: changedSettings(match.mode, { ...settingsOf(match.mode, match.settings), ...settings }) });
@@ -460,7 +433,7 @@ export const configure = mutation({
 export const resign = mutation({
   args: { id: v.id("matches") },
   handler: async (ctx, { id }) => {
-    const userId = await me(ctx);
+    const userId = await requireUser(ctx);
     const match = await loadMatch(ctx, id);
     if (match.status !== "active" || !isPlayer(match, userId)) throw new Error("You're not in an active game here.");
     await hooksFor(match.mode).resign(ctx, match, userId);
@@ -470,7 +443,7 @@ export const resign = mutation({
 export const offerDraw = mutation({
   args: { id: v.id("matches") },
   handler: async (ctx, { id }) => {
-    const userId = await me(ctx);
+    const userId = await requireUser(ctx);
     const match = await loadMatch(ctx, id);
     if (match.status !== "active" || !isPlayer(match, userId)) throw new Error("You're not in an active game here.");
     if (!allowsDraws(match.mode)) throw new Error("There are no draws in this game.");
@@ -481,7 +454,7 @@ export const offerDraw = mutation({
     await ctx.db.patch(id, { drawOffer: userId });
     const name = await displayName(ctx, userId);
     for (const other of opponentsOf(match, userId)) {
-      await notify(ctx, other, { title: `${name} offered a draw`, body: "Tap to accept or keep playing.", url: matchPath(match), tag: `match:${id}` });
+      await notifyMatch(ctx, other, match, { title: `${name} offered a draw`, body: "Tap to accept or keep playing." });
     }
   },
 });
@@ -489,7 +462,7 @@ export const offerDraw = mutation({
 export const declineDraw = mutation({
   args: { id: v.id("matches") },
   handler: async (ctx, { id }) => {
-    const userId = await me(ctx);
+    const userId = await requireUser(ctx);
     const match = await loadMatch(ctx, id);
     if (match.status !== "active" || !isPlayer(match, userId) || !match.drawOffer || match.drawOffer === userId) return;
     await ctx.db.patch(id, { drawOffer: undefined });
@@ -507,7 +480,7 @@ export const REMATCH_TTL_MS = 2 * 60 * 1000;
 export const rematch = mutation({
   args: { id: v.id("matches") },
   handler: async (ctx, { id }) => {
-    const userId = await me(ctx);
+    const userId = await requireUser(ctx);
     const match = await loadMatch(ctx, id);
     if (match.status !== "finished" || !isPlayer(match, userId)) throw new Error("You can only rematch a game you just played.");
     const offer = match.rematch;
@@ -546,7 +519,7 @@ export const rematch = mutation({
 export const answerRematch = mutation({
   args: { id: v.id("matches") },
   handler: async (ctx, { id }) => {
-    const userId = await me(ctx);
+    const userId = await requireUser(ctx);
     const match = await loadMatch(ctx, id);
     if (!isPlayer(match, userId) || match.rematch?.status !== "pending") return;
     await ctx.db.patch(id, { rematch: { ...match.rematch, status: "declined" } });

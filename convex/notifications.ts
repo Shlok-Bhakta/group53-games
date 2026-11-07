@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { requireUser } from "./lib/seats";
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
@@ -25,8 +26,7 @@ export const hasEndpoint = query({
 export const subscribe = mutation({
   args: { endpoint: v.string(), p256dh: v.string(), auth: v.string() },
   handler: async (ctx, sub) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) throw new Error("Sign in first.");
+    const userId = await requireUser(ctx);
     const existing = await ctx.db
       .query("pushSubscriptions")
       .withIndex("by_endpoint", (q) => q.eq("endpoint", sub.endpoint))
@@ -61,8 +61,7 @@ export const unsubscribe = mutation({
 export const sendTest = mutation({
   args: {},
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) throw new Error("Sign in first.");
+    const userId = await requireUser(ctx);
     await ctx.scheduler.runAfter(0, internal.push.sendToUser, {
       userId,
       title: "Test notification",

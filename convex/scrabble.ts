@@ -3,10 +3,14 @@ import { v } from "convex/values";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { finish, loadMatch, scheduleReminder } from "./matches";
-import { MODES, matchPath, settingsOf, type ModeKey } from "./modes";
-import { displayName, notify } from "./notify";
+import { finishBySeats } from "./matches";
+import { MODES, settingsOf, type ModeKey } from "./modes";
 import type { GameHooks } from "./games";
+import { SEAT_COLORS, loadMatch, onTurn, requireUser, seatOf } from "./lib/seats";
+import { displayName } from "./lib/people";
+import { mySecret, readSecret, writeSecret } from "./lib/secrets";
+import { draftsOf, myDraft, readDraft, writeDraft } from "./lib/drafts";
+import { armTurn, passTurn, startPushes, type TurnTimer } from "./lib/turns";
 import { isWord } from "./scrabble/dictionary";
 import {
   bagLetters,
@@ -28,35 +32,17 @@ import {
 
 export type { ScrabbleState } from "./scrabble/engine";
 
-// Each seat's tile color on the board, in seat order.
-export const SCRABBLE_SEATS = ["red", "blue", "yellow", "green", "purple", "orange", "teal", "pink"] as const;
-
 type Bag = { bag: string[]; nextId: number };
 type Hand = { rack: Tile[] };
 type Draft = { placed: Placement[]; order: number[] };
 
 const isLive = (match: Doc<"matches">) => MODES[match.mode as ModeKey]?.kind === "realtime";
 const settings = (match: Doc<"matches">) => settingsOf(match.mode, match.settings);
-const seatOf = (match: Doc<"matches">, userId: Id<"users">) => match.players.findIndex((p) => p.userId === userId);
-const tag = (match: Doc<"matches">) => `match:${match._id}`;
-
-async function secretRow(ctx: QueryCtx, matchId: Id<"matches">, userId?: Id<"users">) {
-  return await ctx.db
-    .query("secrets")
-    .withIndex("by_match_user", (q) => q.eq("matchId", matchId).eq("userId", userId))
-    .unique();
-}
-async function readBag(ctx: QueryCtx, matchId: Id<"matches">) {
-  return ((await secretRow(ctx, matchId))?.data ?? { bag: [], nextId: 0 }) as Bag;
-}
-async function readHand(ctx: QueryCtx, matchId: Id<"matches">, userId: Id<"users">) {
-  return ((await secretRow(ctx, matchId, userId))?.data ?? { rack: [] }) as Hand;
-}
-async function writeSecret(ctx: MutationCtx, matchId: Id<"matches">, userId: Id<"users"> | undefined, data: Bag | Hand) {
-  const row = await secretRow(ctx, matchId, userId);
-  if (row) await ctx.db.patch(row._id, { data });
-  else await ctx.db.insert("secrets", { matchId, userId, data });
-}
+const readBag = (ctx: QueryCtx, matchId: Id<"matches">) => readSecret<Bag>(ctx, matchId, undefined, { bag: [], nextId: 0 });
+const readHand = (ctx: QueryCtx, matchId: Id<"matches">, userId: Id<"users">) => readSecret<Hand>(ctx, matchId, userId, { rack: [] });
+// Live games run a clock on every turn; async ones get the 8-hour reminder.
+const timerFor = (state: ScrabbleState): TurnTimer | null =>
+  state.deadline !== null ? { at: state.deadline, fn: internal.scrabble.turnTimeout } : null;
 
 // Takes up to `n` tiles off the top of the bag, giving each a fresh id.
 function draw(bag: Bag, n: number): Tile[] {
@@ -67,13 +53,13 @@ function draw(bag: Bag, n: number): Tile[] {
 // --- Start, resign, timeout ---
 
 export const scrabbleHooks: GameHooks = {
-  seats: (_mode, n) => SCRABBLE_SEATS.slice(0, n),
+  seats: (_mode, n) => SEAT_COLORS.slice(0, n),
   start: async (ctx, match) => {
     const s = settings(match);
     const rules = rulesOf(s);
     const bag: Bag = { bag: shuffle(bagLetters(s.bag)), nextId: 0 };
     const racks = match.players.map(() => draw(bag, rules.rack));
-    for (const [i, p] of match.players.entries()) await writeSecret(ctx, match._id, p.userId, { rack: racks[i] });
+    for (const [i, p] of match.players.entries()) await writeSecret<Hand>(ctx, match._id, p.userId, { rack: racks[i] });
     await writeSecret(ctx, match._id, undefined, bag);
     const now = Date.now();
     const state: ScrabbleState = {
@@ -92,20 +78,13 @@ export const scrabbleHooks: GameHooks = {
     };
     const first = match.players[0].userId;
     await ctx.db.patch(match._id, { state, turn: first, lastActivityAt: now });
-    const started = { ...match, state, turn: first };
-    if (!match.rematchOf) {
-      const name = await displayName(ctx, first);
-      for (const p of match.players) {
-        const mine = p.userId === first;
-        await notify(ctx, p.userId, {
-          title: mine ? "You go first" : `${MODES[match.mode as ModeKey].name} Scrabble is on`,
-          body: mine ? "Put down a word through the centre star." : `${name} goes first. Plan your word while you wait.`,
-          url: matchPath(match),
-          tag: tag(match),
-        });
-      }
-    }
-    await arm(ctx, started, state);
+    const name = await displayName(ctx, first);
+    await startPushes(ctx, match, (p) =>
+      p.userId === first
+        ? { title: "You go first", body: "Put down a word through the centre star." }
+        : { title: `${MODES[match.mode as ModeKey].name} Scrabble is on`, body: `${name} goes first. Plan your word while you wait.` },
+    );
+    await armTurn(ctx, match, timerFor(state));
   },
   resign: async (ctx, match, userId) => {
     const state = match.state as ScrabbleState;
@@ -116,7 +95,7 @@ export const scrabbleHooks: GameHooks = {
     const hand = await readHand(ctx, match._id, userId);
     bag.bag = shuffle([...bag.bag, ...hand.rack.map((t) => t.letter)]);
     await writeSecret(ctx, match._id, undefined, bag);
-    await writeSecret(ctx, match._id, userId, { rack: [] });
+    await writeSecret<Hand>(ctx, match._id, userId, { rack: [] });
     const racks = state.racks.map((n, i) => (i === seat ? 0 : n));
     const next: ScrabbleState = { ...state, out: [...state.out, seat], racks, bag: bag.bag.length };
     const record: Move = { seat, kind: "resign", score: 0, at: Date.now() };
@@ -132,12 +111,6 @@ export const scrabbleHooks: GameHooks = {
   },
   timeoutWarning: "or we skip your turn",
 };
-
-// Async games get the 8-hour reminder; live ones a turn timer.
-async function arm(ctx: MutationCtx, match: Doc<"matches">, state: ScrabbleState) {
-  if (state.deadline !== null) await ctx.scheduler.runAt(state.deadline, internal.scrabble.turnTimeout, { id: match._id, moveCount: match.moveCount });
-  else await scheduleReminder(ctx, match._id, match.moveCount);
-}
 
 // Live games: the clock ran out on someone's turn. Like reminders, a stale one (the turn already moved on)
 // does nothing.
@@ -166,21 +139,15 @@ async function advance(ctx: MutationCtx, match: Doc<"matches">, state: ScrabbleS
 
   const now = Date.now();
   const updated: ScrabbleState = { ...base, turn: next, round, deadline: isLive(match) ? now + s.turnTime * 1000 : null };
-  const moveCount = match.moveCount + 1;
-  const turn = match.players[next].userId;
-  await ctx.db.patch(match._id, { state: updated, turn, moveCount, lastActivityAt: now });
-  const after = { ...match, state: updated, turn, moveCount };
-  const who = await displayName(ctx, match.players[record.seat].userId);
-  if (turn !== match.players[record.seat].userId) {
-    const title =
-      record.kind === "play" ? `${who} played ${record.words![0].word} for ${record.score}`
-      : record.kind === "swap" ? `${who} swapped ${record.count} tile${record.count === 1 ? "" : "s"}`
-      : record.kind === "resign" ? `${who} resigned`
-      : record.kind === "timeout" ? `${who} ran out of time`
-      : `${who} passed`;
-    await notify(ctx, turn, { title, body: "Your move.", url: matchPath(match), tag: tag(match) });
-  }
-  await arm(ctx, after, updated);
+  const mover = match.players[record.seat].userId;
+  const who = await displayName(ctx, mover);
+  const title =
+    record.kind === "play" ? `${who} played ${record.words![0].word} for ${record.score}`
+    : record.kind === "swap" ? `${who} swapped ${record.count} tile${record.count === 1 ? "" : "s"}`
+    : record.kind === "resign" ? `${who} resigned`
+    : record.kind === "timeout" ? `${who} ran out of time`
+    : `${who} passed`;
+  await passTurn(ctx, match, { state: updated, turn: match.players[next].userId, by: mover, push: { title, body: "Your move." }, timer: timerFor(updated) });
 }
 
 // Leftover tiles count against whoever holds them. If someone went out, they also get everyone else's.
@@ -190,31 +157,22 @@ async function endGame(ctx: MutationCtx, match: Doc<"matches">, state: ScrabbleS
   if (wentOut !== undefined) adjust[wentOut] = left.reduce((a, b) => a + b, 0);
   const final: ScrabbleState = { ...state, scores: state.scores.map((sc, i) => sc + adjust[i]), adjust, turn: -1, deadline: null };
   await ctx.db.patch(match._id, { state: final });
-  const places = standings(final).map((g) => g.map((seat) => match.players[seat].userId));
-  const draw = places[0].length === match.players.length;
-  await finish(ctx, { ...match, state: final }, { winners: draw ? [] : places[0], draw, reason, standings: places });
+  await finishBySeats(ctx, { ...match, state: final }, standings(final), reason);
 }
 
 // --- Turns ---
 
 async function myTurn(ctx: MutationCtx, id: Id<"matches">, as?: Id<"users">) {
-  const userId = as ?? (await getAuthUserId(ctx));
-  if (userId === null) throw new Error("Sign in first.");
-  const match = await loadMatch(ctx, id);
-  if (!match.mode.startsWith("scrabble:")) throw new Error("Wrong kind of game.");
-  if (match.status !== "active") throw new Error("This game is over.");
-  const seat = seatOf(match, userId);
-  if (seat < 0) throw new Error("You're not playing in this game.");
-  const state = match.state as ScrabbleState;
-  if (state.turn !== seat) throw new Error("It's not your turn.");
-  return { userId, match, seat, state };
+  const s = await onTurn(ctx, id, { game: "scrabble", as });
+  return { ...s, state: s.match.state as ScrabbleState };
 }
 
-async function clearDraft(ctx: MutationCtx, matchId: Id<"matches">, userId: Id<"users">, keep: Tile[]) {
-  const row = await draftRow(ctx, matchId, userId);
-  if (!row) return;
-  const order = ((row.data as Draft).order ?? []).filter((id) => keep.some((t) => t.id === id));
-  await ctx.db.patch(row._id, { data: { placed: [], order }, count: 0, at: Date.now() });
+// After a play or swap: the plan's tiles are gone, but the rack keeps its order.
+async function clearPlan(ctx: MutationCtx, matchId: Id<"matches">, userId: Id<"users">, keep: Tile[]) {
+  const draft = await readDraft<Draft>(ctx, matchId, userId);
+  if (!draft) return;
+  const order = (draft.order ?? []).filter((id) => keep.some((t) => t.id === id));
+  await writeDraft<Draft>(ctx, matchId, userId, { placed: [], order }, 0);
 }
 
 const placementArg = v.array(v.object({ id: v.number(), x: v.number(), y: v.number(), letter: v.optional(v.string()) }));
@@ -243,9 +201,9 @@ export async function playTiles(ctx: MutationCtx, id: Id<"matches">, tiles: Plac
   const bag = await readBag(ctx, id);
   const kept = hand.rack.filter((t) => !tiles.some((p) => p.id === t.id));
   const rack = [...kept, ...draw(bag, tiles.length)];
-  await writeSecret(ctx, id, userId, { rack });
+  await writeSecret<Hand>(ctx, id, userId, { rack });
   await writeSecret(ctx, id, undefined, bag);
-  await clearDraft(ctx, id, userId, rack);
+  await clearPlan(ctx, id, userId, rack);
 
   const next: ScrabbleState = {
     ...state,
@@ -273,9 +231,9 @@ export const swap = mutation({
     const fresh = draw(bag, ids.length);
     bag.bag = shuffle([...bag.bag, ...out.map((t) => t.letter)]);
     const rack = [...hand.rack.filter((t) => !ids.includes(t.id)), ...fresh];
-    await writeSecret(ctx, id, userId, { rack });
+    await writeSecret<Hand>(ctx, id, userId, { rack });
     await writeSecret(ctx, id, undefined, bag);
-    await clearDraft(ctx, id, userId, rack);
+    await clearPlan(ctx, id, userId, rack);
     await advance(ctx, match, { ...state, bag: bag.bag.length }, { seat, kind: "swap", score: 0, count: ids.length, at: Date.now() }, false);
   },
 });
@@ -292,12 +250,7 @@ export const pass = mutation({
 
 export const rack = query({
   args: { id: v.id("matches") },
-  handler: async (ctx, { id }) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) return null;
-    const row = await secretRow(ctx, id, userId);
-    return row ? (row.data as Hand).rack : null;
-  },
+  handler: async (ctx, { id }) => (await mySecret<Hand>(ctx, id))?.rack ?? null,
 });
 
 // Which of these words the dictionary doesn't know, for the live preview while you place tiles.
@@ -311,13 +264,6 @@ export const check = query({
 
 // --- Plans ---
 
-async function draftRow(ctx: QueryCtx, matchId: Id<"matches">, userId: Id<"users">) {
-  return await ctx.db
-    .query("drafts")
-    .withIndex("by_match_user", (q) => q.eq("matchId", matchId).eq("userId", userId))
-    .unique();
-}
-
 // Saved as you go: tiles you've laid out on the board, and the order of your rack. Anyone's turn, not just
 // yours. If someone else plays over a planned square, that tile just goes back to your rack on screen.
 export const saveDraft = mutation({
@@ -327,25 +273,18 @@ export const saveDraft = mutation({
     order: v.array(v.number()),
   },
   handler: async (ctx, { id, placed, order }) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) throw new Error("Sign in first.");
+    const userId = await requireUser(ctx);
     const match = await loadMatch(ctx, id);
     if (!match.mode.startsWith("scrabble:")) throw new Error("Wrong kind of game.");
     if (match.status !== "active" || seatOf(match, userId) < 0) return;
     const data: Draft = { placed: placed.slice(0, 21), order: order.slice(0, 21) };
-    const row = await draftRow(ctx, id, userId);
-    if (row) await ctx.db.patch(row._id, { data, count: data.placed.length, at: Date.now() });
-    else await ctx.db.insert("drafts", { matchId: id, userId, data, count: data.placed.length, at: Date.now() });
+    await writeDraft(ctx, id, userId, data, data.placed.length);
   },
 });
 
 export const draft = query({
   args: { id: v.id("matches") },
-  handler: async (ctx, { id }) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) return null;
-    return ((await draftRow(ctx, id, userId))?.data as Draft | undefined) ?? null;
-  },
+  handler: async (ctx, { id }) => await myDraft<Draft>(ctx, id),
 });
 
 // Who else is planning right now, and the squares they're trying (never the letters), so their phones can
@@ -356,11 +295,7 @@ export const planning = query({
     const userId = await getAuthUserId(ctx);
     if (userId === null) return [];
     if (!(await ctx.db.get(id))?.mode.startsWith("scrabble:")) return [];
-    const rows = await ctx.db
-      .query("drafts")
-      .withIndex("by_match_user", (q) => q.eq("matchId", id))
-      .collect();
-    return rows
+    return (await draftsOf(ctx, id))
       .filter((r) => r.userId !== userId && r.count > 0)
       .map((r) => ({ userId: r.userId, count: r.count, at: r.at, cells: (r.data as Draft).placed.map((p) => [p.x, p.y] as [number, number]) }));
   },

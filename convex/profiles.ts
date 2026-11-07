@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { requireUser } from "./lib/seats";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
@@ -62,8 +63,7 @@ export const update = mutation({
     tagline: v.optional(v.string()),
   },
   handler: async (ctx, changes) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) throw new Error("Sign in first.");
+    const userId = await requireUser(ctx);
     oneOf(FRAMES, changes.frame, "frame");
     oneOf(EFFECTS, changes.effect, "effect");
     oneOf(BADGES, changes.badge, "badge");

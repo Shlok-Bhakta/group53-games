@@ -2,6 +2,7 @@ import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { ONLINE_WINDOW_MS } from "./presenceConfig";
+import { matchPath } from "./modes";
 
 export type Push = { title: string; body: string; url: string; tag?: string };
 
@@ -27,8 +28,12 @@ export async function badgeCount(ctx: MutationCtx, userId: Id<"users">) {
   return myTurn + invites;
 }
 
-export async function displayName(ctx: MutationCtx, userId: Id<"users">) {
-  return (await ctx.db.get(userId))?.name ?? "Someone";
+// Every push about a game carries its tag, so a newer one replaces the last on the phone.
+export const matchTag = (match: { _id: string }) => `match:${match._id}`;
+
+// A push about a game, opening it (or `url`).
+export async function notifyMatch(ctx: MutationCtx, userId: Id<"users">, match: { _id: string; mode: string }, push: { title: string; body: string; url?: string }) {
+  await notify(ctx, userId, { title: push.title, body: push.body, url: push.url ?? matchPath(match), tag: matchTag(match) });
 }
 
 export async function isTestUser(ctx: MutationCtx, userId: Id<"users">) {

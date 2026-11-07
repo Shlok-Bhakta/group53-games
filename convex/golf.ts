@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { requireUser } from "./lib/seats";
 import { v } from "convex/values";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
@@ -100,8 +101,7 @@ export const commands = query({
 export const join = mutation({
   args: { key: v.optional(v.string()) },
   handler: async (ctx, { key = KEY }) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) throw new Error("Sign in first.");
+    const userId = await requireUser(ctx);
     const course = courseOf(key);
     if (!course) throw new Error("There's no such hole.");
     const now = Date.now();
@@ -236,8 +236,7 @@ export const act = mutation({
     y: v.optional(v.number()),
   },
   handler: async (ctx, { worldId, kind, clientTick, seq, a, p, i, x, y }) => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) throw new Error("Sign in first.");
+    const userId = await requireUser(ctx);
     const w = await ctx.db.get(worldId);
     if (!w) throw new Error("That world's gone.");
     for (const n of [clientTick, seq, a, p, i, x, y]) if (n !== undefined && !Number.isFinite(n)) throw new Error("That's not a number.");
