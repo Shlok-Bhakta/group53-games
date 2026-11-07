@@ -6,6 +6,7 @@ import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
 import { HEARTBEAT_MS, ONLINE_WINDOW_MS } from "../convex/presenceConfig";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { ago, useNow } from "@/lib/time";
 
 const TAP_THROTTLE_MS = 200;
 
@@ -52,11 +53,7 @@ export function usePresenceReporter({ shareTaps }: { shareTaps: boolean }) {
 // re-run when data changes, not when time passes.
 export function usePresence() {
   const rows = useQuery(api.presence.list);
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 5_000);
-    return () => clearInterval(timer);
-  }, []);
+  const now = useNow(5_000);
   return useMemo(() => {
     const byUser = new Map((rows ?? []).map((r) => [r.userId, r]));
     const isOnline = (userId: Id<"users">) => {
@@ -76,11 +73,26 @@ export function OnlineDot({ online }: { online: boolean }) {
 export function lastSeenText(online: boolean, lastSeen: number | undefined) {
   if (online) return "On now";
   if (!lastSeen) return "Hasn't opened the app yet";
-  const mins = Math.round((Date.now() - lastSeen) / 60_000);
-  if (mins < 60) return `Last on ${Math.max(1, mins)}m ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `Last on ${hours}h ago`;
-  return `Last on ${Math.round(hours / 24)}d ago`;
+  return `Last on ${ago(Date.now() - lastSeen)}`;
+}
+
+// Someone with this game open right now: `here` when they're on the same screen as me.
+export function useHere(userId: Id<"users"> | undefined) {
+  const { pathname } = useLocation();
+  const { isOnline, byUser } = usePresence();
+  if (!userId) return { online: false, here: false };
+  return { online: isOnline(userId), here: isOnline(userId) && byUser.get(userId)?.path === pathname };
+}
+
+// Three dots breathing: someone's working on their move right now. One of the few things allowed to loop.
+export function ThinkingDots() {
+  return (
+    <span className="flex gap-1" aria-hidden="true">
+      {[0, 1, 2].map((i) => (
+        <motion.span key={i} className="size-1.5 rounded-full bg-muted-foreground" animate={{ opacity: [0.25, 1, 0.25] }} transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }} />
+      ))}
+    </span>
+  );
 }
 
 type Ripple = { key: string; x: number; y: number; userId: Id<"users"> };

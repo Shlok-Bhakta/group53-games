@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Link, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
 import { useMutation, useQuery } from "convex/react";
 import { motion } from "motion/react";
 import { SwordIcon } from "@phosphor-icons/react";
@@ -7,11 +7,13 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import type { MatchView } from "../../convex/matches";
 import { GAMES, MODES, flexibleSeats, matchPath, type ModeKey } from "../../convex/modes";
-import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { AvatarStack, PlayerAvatar } from "@/components/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { AsyncButton } from "@/components/AsyncButton";
 import { lastMove } from "@/games/summary";
 import { listNames, ordinal, reasonText } from "@/lib/text";
+import { ago } from "@/lib/time";
+import { ListRow } from "@/components/ListRow";
 
 // A mode's one name, the same everywhere: "Classic", "4-Player", "Real-time", "Real-time 4-Player". Lists that
 // can mix games put the game first: "Chess Classic", "Scrabble Live".
@@ -21,15 +23,24 @@ export const fullModeLabel = (mode: string) => {
   return m ? `${GAMES[m.game].name} ${m.name}` : mode;
 };
 
-// A titled group of rows. The heading carries the section; the group is a single flat surface.
-export function Section({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
+// A section heading. Headings carry sections; never small grey labels.
+export function SectionTitle({ children, action, className }: { children: ReactNode; action?: ReactNode; className?: string }) {
   return (
-    <section aria-label={title}>
-      <div className="flex items-end justify-between px-1 pb-2.5">
-        <h2 className="font-display text-heading">{title}</h2>
-        {action}
-      </div>
-      <Group>{children}</Group>
+    <div className={cn("flex items-end justify-between gap-3 px-1 pb-2.5", className)}>
+      <h2 className="font-display text-heading">{children}</h2>
+      {action}
+    </div>
+  );
+}
+
+// A titled group of rows. The heading carries the section; the group is a single flat surface. `bare` leaves
+// out the group, for sections that lay out their own content; `footer` is a line of fine print under it.
+export function Section({ title, children, action, footer, bare, className }: { title: string; children: ReactNode; action?: ReactNode; footer?: ReactNode; bare?: boolean; className?: string }) {
+  return (
+    <section aria-label={title} className={className}>
+      <SectionTitle action={action}>{title}</SectionTitle>
+      {bare ? children : <Group>{children}</Group>}
+      {footer && <p className="px-1 pt-2 text-footnote text-muted-foreground">{footer}</p>}
     </section>
   );
 }
@@ -56,13 +67,6 @@ export function Chip({ tone = "primary", children }: { tone?: "primary" | "live"
   );
 }
 
-const ago = (at: number) => {
-  const mins = Math.max(1, Math.round((Date.now() - at) / 60_000));
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.round(mins / 60);
-  return hours < 24 ? `${hours}h ago` : `${Math.round(hours / 24)}d ago`;
-};
-
 // The line under a game's names: its mode, the last move, and how long ago.
 function detail(match: MatchView) {
   const parts: string[] = [fullModeLabel(match.mode)];
@@ -75,7 +79,7 @@ function detail(match: MatchView) {
   if (match.status === "active") {
     const last = lastMove(match);
     if (last) parts.push(last);
-    if (MODES[match.mode as ModeKey]?.kind === "async") parts.push(ago(match.lastActivityAt));
+    if (MODES[match.mode as ModeKey]?.kind === "async") parts.push(ago(Date.now() - match.lastActivityAt));
   }
   return parts.join(", ");
 }
@@ -84,21 +88,21 @@ function detail(match: MatchView) {
 export function MatchRow({ match, meId, status, vs }: { match: MatchView; meId?: Id<"users">; status: ReactNode; vs?: boolean }) {
   const others = vs ? match.players : match.players.filter((p) => p.userId !== meId);
   const label = others.map((p) => p.name).join(vs && others.length === 2 ? " vs " : ", ");
-  const stacked = others.length > 1;
   return (
-    <Link to={matchPath(match)} className="flex min-h-16 items-center gap-3 px-4 py-2.5 transition-colors active:bg-muted">
-      <span className="flex shrink-0 -space-x-2.5">
-        {others.slice(0, 3).map((p) => (
-          <PlayerAvatar key={p.userId} name={p.name} image={p.image} frame={p.frame} frameColor={p.frameColor} size={stacked ? 32 : 40} className="rounded-full ring-2 ring-card" />
-        ))}
-        {others.length === 0 && <span className="grid size-10 place-items-center rounded-full border-2 border-dashed border-muted-foreground/40" />}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate font-semibold">{label || "Open seat"}</span>
-        <span className="block truncate text-footnote text-muted-foreground">{detail(match)}</span>
-      </span>
-      {status}
-    </Link>
+    <ListRow
+      to={matchPath(match)}
+      size="lg"
+      leading={
+        others.length === 0 ? (
+          <span className="grid size-10 shrink-0 place-items-center rounded-full border-2 border-dashed border-muted-foreground/40" />
+        ) : (
+          <AvatarStack people={others} size={others.length > 1 ? 32 : 40} />
+        )
+      }
+      title={label || "Open seat"}
+      detail={detail(match)}
+      trailing={status}
+    />
   );
 }
 
@@ -198,33 +202,19 @@ export function Leaderboard({ mode, meId, onPick }: { mode: ModeKey; meId?: Id<"
         if (!p) return null;
         const ranked = r.games > 0;
         if (ranked) rank++;
-        const inner = (
-          <>
-            <RankTile rank={ranked ? rank : null} />
-            <PlayerAvatar name={p.name} image={p.image} frame={p.frame} frameColor={p.frameColor} size={34} />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate font-semibold">{r.userId === meId ? "You" : p.name}</span>
-              {ranked && (
-                <span className="block text-footnote tabular-nums text-muted-foreground">
-                  {four ? `${r.wins} won of ${r.games}` : `${r.wins} won, ${r.losses} lost${r.draws ? `, ${r.draws} drawn` : ""}`}
-                </span>
-              )}
-            </span>
-            <span className={cn("font-display text-heading tabular-nums", !ranked && "text-muted-foreground")}>{r.rating}</span>
-          </>
-        );
-        const cls = cn("flex min-h-14 w-full items-center gap-3 px-4 py-2 text-left", r.userId === meId && "bg-primary/8");
-        return (
-          <li key={r.userId}>
-            {onPick ? (
-              <button type="button" className={cn(cls, "touch-manipulation transition-colors active:bg-muted")} onClick={() => onPick(r.userId)}>
-                {inner}
-              </button>
-            ) : (
-              <div className={cls}>{inner}</div>
-            )}
-          </li>
-        );
+        const row = {
+          leading: (
+            <>
+              <RankTile rank={ranked ? rank : null} />
+              <PlayerAvatar player={p} size={34} />
+            </>
+          ),
+          title: r.userId === meId ? "You" : p.name,
+          detail: ranked && <span className="tabular-nums">{four ? `${r.wins} won of ${r.games}` : `${r.wins} won, ${r.losses} lost${r.draws ? `, ${r.draws} drawn` : ""}`}</span>,
+          trailing: <span className={cn("font-display text-heading tabular-nums", !ranked && "text-muted-foreground")}>{r.rating}</span>,
+          selected: r.userId === meId,
+        };
+        return <li key={r.userId}>{onPick ? <ListRow {...row} onClick={() => onPick(r.userId)} /> : <ListRow {...row} />}</li>;
       })}
     </ol>
   );

@@ -18,6 +18,8 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 hover:underline",
+        // A quiet button on the page background: game docks, rows of choices.
+        card: "bg-card text-card-foreground hover:bg-[color-mix(in_oklch,var(--card),var(--foreground)_5%)]",
       },
       size: {
         default:
@@ -26,6 +28,10 @@ const buttonVariants = cva(
         sm: "h-11 gap-1.5 rounded-md px-3.5 text-callout has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-4",
         lg: "h-12 gap-2 rounded-lg px-5 text-body has-data-[icon=inline-end]:pr-4 has-data-[icon=inline-start]:pl-4 [&_svg:not([class*='size-'])]:size-5",
         xl: "h-14 gap-2.5 rounded-lg px-6 text-body [&_svg:not([class*='size-'])]:size-5",
+        // A game's dock: an icon over a short label, 60px for thumbs.
+        dock: "h-[60px] flex-col gap-1 rounded-lg px-2 text-footnote [&_svg:not([class*='size-'])]:size-[22px]",
+        // A square tool in a dock (Shuffle, Recall).
+        "dock-square": "size-14 shrink-0 rounded-lg [&_svg:not([class*='size-'])]:size-6",
         icon: "size-11 rounded-full",
         "icon-xs": "size-6 rounded-sm [&_svg:not([class*='size-'])]:size-3",
         "icon-sm": "size-10 rounded-full",

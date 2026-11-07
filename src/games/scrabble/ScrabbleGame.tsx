@@ -23,7 +23,7 @@ import {
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { AsyncButton } from "@/components/AsyncButton";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
-import { ResignButton, Result, ThinkingDots, useHere } from "@/components/match";
+import { ResignButton, Result } from "@/components/match";
 import { OnlineDot } from "@/presence";
 import { SEAT_COLORS } from "@/games/seats";
 import { errorText } from "@/lib/errors";

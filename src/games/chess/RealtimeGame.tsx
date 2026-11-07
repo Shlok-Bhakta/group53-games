@@ -23,7 +23,7 @@ import {
   type Variant,
 } from "../../../convex/chess/realtime";
 import { MODES, settingsOf, type ModeKey } from "../../../convex/modes";
-import { useServerClock } from "./clock";
+import { useServerClock } from "@/lib/serverClock";
 import { nearest, pieceSrc, pointToScreen, same, viewFor, type Sq, type View } from "./geometry";
 import { cn } from "@/lib/utils";
 import { errorText } from "@/lib/errors";

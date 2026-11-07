@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { usePlayingIn } from "@/presence";
 import { SEAT_COLORS } from "@/games/seats";
-import { useServerClock } from "@/games/chess/clock";
+import { useServerClock } from "@/lib/serverClock";
 import { cn } from "@/lib/utils";
 import * as sound from "./audio";
 import { ITEMS } from "./items";

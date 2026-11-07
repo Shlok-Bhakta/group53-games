@@ -10,20 +10,11 @@ import type { MatchView } from "../../convex/matches";
 import { MODES, acceptPath, flexibleSeats, matchPath, modePath, settingsOf, settingsSummary, type ModeKey } from "../../convex/modes";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { Button } from "@/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { ConfirmButton } from "@/components/ConfirmButton";
 import { AsyncButton } from "@/components/AsyncButton";
 import { SettingsSection } from "@/components/SettingsPicker";
 import { OnlineDot, usePresence } from "@/presence";
+import type { Player } from "@/games/types";
 import { shareLink } from "@/share";
 import { cn } from "@/lib/utils";
 import { errorText } from "@/lib/errors";
@@ -35,24 +26,6 @@ import { pointsOf, pointsUnit } from "@/games/summary";
 // The parts of a game screen every game shares: who's here, the lobby, resigning, and the result with its
 // rematch.
 
-type Player = MatchView["players"][number];
-
-// Someone with this game open right now.
-export function useHere(userId: Id<"users">) {
-  const { pathname } = useLocation();
-  const { isOnline, byUser } = usePresence();
-  return { online: isOnline(userId), here: isOnline(userId) && byUser.get(userId)?.path === pathname };
-}
-
-export function ThinkingDots() {
-  return (
-    <span className="flex gap-1" aria-hidden="true">
-      {[0, 1, 2].map((i) => (
-        <motion.span key={i} className="size-1.5 rounded-full bg-muted-foreground" animate={{ opacity: [0.25, 1, 0.25] }} transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }} />
-      ))}
-    </span>
-  );
-}
 
 // The result, spelled in tiles: WON in green, LOST with a crooked red hit tile, DRAW in yellow, and places
 // for four players.
@@ -330,9 +303,18 @@ export function Lobby({ match, meId, onLeave }: { match: MatchView; meId: Id<"us
             </AsyncButton>
           )}
           {share}
-          <AsyncButton size="xl" variant="ghost" className="text-destructive" onClick={() => cancel({ id: match._id }).then(onLeave)}>
-            Cancel game
-          </AsyncButton>
+          <ConfirmButton
+            trigger={
+              <Button size="xl" variant="ghost" className="text-destructive">
+                Cancel game
+              </Button>
+            }
+            title="Cancel this game?"
+            detail={match.players.length > 1 ? "Everyone who's joined is sent back." : "The invite stops working."}
+            keep="Keep it"
+            confirm="Cancel game"
+            onConfirm={() => cancel({ id: match._id }).then(onLeave)}
+          />
         </div>
       ) : joined ? (
         <AsyncButton size="xl" variant="ghost" className="w-full" onClick={() => leave({ id: match._id }).then(onLeave)}>
@@ -428,24 +410,17 @@ function Seats({ match }: { match: MatchView }) {
 export function ResignButton({ match, detail, className }: { match: MatchView; detail: string; className?: string }) {
   const resign = useMutation(api.matches.resign);
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
+    <ConfirmButton
+      trigger={
         <Button variant="secondary" className={cn("text-destructive", className)}>
           <FlagIcon weight="bold" /> Resign
         </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Resign this game?</AlertDialogTitle>
-          <AlertDialogDescription>{detail}</AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Keep playing</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={() => void resign({ id: match._id }).catch((e) => toast.error(errorText(e)))}>
-            Resign
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      }
+      title="Resign this game?"
+      detail={detail}
+      keep="Keep playing"
+      confirm="Resign"
+      onConfirm={() => resign({ id: match._id })}
+    />
   );
 }

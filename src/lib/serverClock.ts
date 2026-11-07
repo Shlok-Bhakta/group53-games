@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
+import { api } from "../../convex/_generated/api";
 
 // Largest correction applied per millisecond of real time once synced, so re-syncs never make pieces jump.
 const SLEW_PER_MS = 0.1;
