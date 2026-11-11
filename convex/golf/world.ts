@@ -29,7 +29,7 @@ export const STORM = { r: 5, life: 7, every: 0.8, bolt: 1.8, hit: 15, stun: 1.5 
 export const FREEZE_R = 4.2;
 
 // "turn" (from the server, in a turn-based game): it's `by`'s turn now. "pickup": `by` is picked up off the
-// hole (a live game's hole clock ran out).
+// hole with par plus four (a live game's hole clock ran out).
 export type CmdKind = "join" | "leave" | "shot" | "use" | "fire" | "hop" | "brake" | "reset" | "turn" | "pickup";
 // `bag`, on a join: what the player's carrying from the last hole of their run.
 export type Cmd = { tick: number; by: string; seq: number; kind: CmdKind; a?: number; p?: number; i?: number; x?: number; y?: number; bag?: Power[] };
@@ -196,7 +196,9 @@ export function applyCmd(s: WorldState, c: Course, cmd: Cmd) {
     return;
   }
   if (cmd.kind === "pickup") {
-    if (s.rules) finishBall(s, b, "picked", Math.min(s.rules.cap, b.strokes + 2));
+    // Par plus four, whatever they'd taken: sitting out the clock is never a way to a good score. (A ball
+    // already dropping into the cup isn't picked up: it's in.)
+    if (s.rules && b.mode !== "sunk") finishBall(s, b, "picked", s.rules.cap);
     return;
   }
   // A turn-based game: only the player whose turn it is, and only one shot (Coffee's putt while it's

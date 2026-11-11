@@ -14,7 +14,9 @@ export type Field = (x: number, y: number) => number;
 const cache = new Map<string, Field>();
 
 export function distanceField(c: Course, w: World): Field {
-  const hit = cache.get(c.id);
+  // By id and shape, so two holes that happen to share an id never share distances.
+  const key = `${c.id}|${c.w}|${c.h}|${c.cup.x}|${c.cup.y}|${c.tee.x}|${c.zones.length}|${c.greens.length}|${c.walls.length}`;
+  const hit = cache.get(key);
   if (hit) return hit;
   const W = Math.ceil(c.w / S) + 1, H = Math.ceil(c.h / S) + 1;
   const d = new Float64Array(W * H).fill(Infinity);
@@ -90,7 +92,7 @@ export function distanceField(c: Course, w: World): Field {
     return v === Infinity ? hyp(x - c.cup.x, y - c.cup.y) + TOLL : v + hyp(x - (i + 0.5) * S, y - (j + 0.5) * S);
   };
   if (cache.size > 100) cache.clear();
-  cache.set(c.id, field);
+  cache.set(key, field);
   return field;
 }
 

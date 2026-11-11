@@ -740,7 +740,9 @@ function drawOther(ctx: Ctx, c: Course, o: Other, t: number) {
   const base = ctx.globalAlpha;
   ctx.globalAlpha = base * alpha;
   if (b.mode === "aim" || b.mode === "roll") drawStatus(ctx, b, { x, y: y - lift }, t);
-  worldText(ctx, o.name, x, y - lift - b.r - 0.75, 0.62, o.color, C.cup);
+  // Under the ball when it's bunched up with others (on a tee), so the names don't run into each other.
+  const name = o.name.length > 10 ? `${o.name.slice(0, 9)}…` : o.name;
+  worldText(ctx, name, x, o.below ? y - lift + b.r + 1.15 : y - lift - b.r - 0.75, 0.62, o.color, C.cup);
   ctx.globalAlpha = base;
 }
 
@@ -857,7 +859,7 @@ export type Frame = {
   air?: { missiles: readonly Missile[]; storms: readonly Storm[] };
   flagOut?: Map<number, number>;
 };
-export type Other = { sim: Sim; at: Vec; color: string; name: string };
+export type Other = { sim: Sim; at: Vec; color: string; name: string; below?: boolean };
 export const allCups = (c: Course) => [c.cup, ...(c.cups ?? [])];
 const nearestCup = (c: Course, p: Vec) => allCups(c).reduce((a, k) => (Math.hypot(k.x - p.x, k.y - p.y) < Math.hypot(a.x - p.x, a.y - p.y) ? k : a));
 

@@ -39,10 +39,10 @@ export function SeedRow({ match }: { match: MatchView }) {
     navigate(`${modePath(match.mode as ModeKey)}?settings=${settings}`);
   };
   return (
-    <div className="mt-3 flex items-center gap-2">
+    <div className="mt-3 grid gap-2">
       <Button
         variant="secondary"
-        className="h-12 flex-1 justify-start rounded-lg font-display"
+        className="h-12 w-full justify-start rounded-lg font-display"
         aria-label={`Copy seed ${s.seed}`}
         onClick={() =>
           void navigator.clipboard
@@ -53,7 +53,7 @@ export function SeedRow({ match }: { match: MatchView }) {
       >
         <CopyIcon weight="bold" /> Seed {s.seed}
       </Button>
-      <Button variant="secondary" className="h-12 rounded-lg" onClick={again}>
+      <Button variant="secondary" className="h-12 w-full justify-start rounded-lg" onClick={again}>
         <ArrowClockwiseIcon weight="bold" /> Play these holes
       </Button>
     </div>

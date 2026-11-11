@@ -11,7 +11,7 @@ export function golfRules(mode: ModeKey, s: Settings): string[] {
     `2 to 8 players, ${s.holes ?? 9} holes on ${COURSE[s.course ?? 0]}. Fewest strokes over the round wins.`,
     "Drag back from anywhere and let go to putt: the further you pull, the harder you hit. Water and the void cost a stroke and put you back where you hit from.",
     live
-      ? `Everyone plays the hole at once. You've ${s.holeTime ?? 3} minutes: whoever's still out when the clock runs out picks up with two more strokes.`
+      ? `Everyone plays the hole at once. You've ${s.holeTime ?? 3} minutes: whoever's still out when the clock runs out picks up and takes par plus four.`
       : "One shot at a time. Whoever's farthest from the cup goes next, like real golf; on the tee, whoever did best on the last hole goes first.",
     `Take par plus four and you pick up. Your ball's done once it's in; watch everyone else finish.`,
     s.boxes === 0
@@ -20,6 +20,6 @@ export function golfRules(mode: ModeKey, s: Settings): string[] {
     hits
       ? `Balls knock into each other. Getting knocked never costs you a stroke: knocked into the water, you go back where you were.${s.mark !== 0 ? " Balls sitting close to the cup are marked, so nobody can knock them away (items still can)." : ""}`
       : "Balls roll straight through each other this game. Items still reach other players.",
-    ...(live ? [] : [`We ping you when it's your shot. Leave it ${hours(s.shotTime ?? 480)} and your caddie putts for you; three in a row and they keep at it till you're back.`]),
+    ...(live ? [] : [`We ping you when it's your shot. Leave it ${hours(s.shotTime ?? 480)} and your caddie putts for you; three in a row and they keep at it till you open the game again.`]),
   ];
 }

@@ -370,6 +370,11 @@ export function useGolfLoop({
           fx.current.push({ kind: "puff", x: b.x, y: b.y - b.z * 0.5, t, seed: (t * 977) | 0, color: "#9c9a92" });
         }
       const others: Other[] = s.balls.filter((b) => b !== mine).map((b) => ({ sim: b, at: drawn(b), color: ballColor(b), name: namesRef.current.get(b.id) ?? "" }));
+      // Names of balls bunched together alternate above and below.
+      others.forEach((o, i) => {
+        const near = [...(mine ? [at] : []), ...others.slice(0, i).map((x) => x.at)].filter((p) => Math.abs(p.x - o.at.x) < 4 && Math.abs(p.y - o.at.y) < 1.5).length;
+        o.below = near % 2 === 1;
+      });
       const tg = targetRef.current;
       drawFrame(ctx, {
         c: COURSE,

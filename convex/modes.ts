@@ -110,9 +110,9 @@ const poker = (betting: number): Setting[] => [
 // Golf (convex/golf.ts): which course, and for a generated one what it's like and its seed, then the items,
 // and whether balls knock into each other. `items` is a bit per item in POWERS' order.
 const GENERATED = { key: "course", is: [0] } as const;
-const GOLF: Setting[] = [
+const golf = (holes: number): Setting[] => [
   { key: "course", label: "Course", short: "{}", options: [{ value: 0, label: "Generated" }, { value: 1, label: "Bumper Plains" }, { value: 2, label: "Cold Start" }], default: 0 },
-  { key: "holes", label: "Holes", short: "{} holes", options: [{ value: 3, label: "3" }, { value: 6, label: "6" }, { value: 9, label: "9" }, { value: 18, label: "18" }], default: 9 },
+  { key: "holes", label: "Holes", short: "{} holes", options: [{ value: 3, label: "3" }, { value: 6, label: "6" }, { value: 9, label: "9" }, { value: 18, label: "18" }], default: holes },
   { key: "terrain", label: "Terrain", short: "{}", options: [{ value: 0, label: "Grass" }, { value: 1, label: "Ice" }, { value: 2, label: "Both" }], default: 0, when: GENERATED },
   { key: "style", label: "Holes like", short: "{} holes", options: [{ value: 0, label: "Mini golf" }, { value: 1, label: "Fairways" }, { value: 2, label: "Both" }], default: 2, when: GENERATED },
   { key: "hazards", label: "Hazards", short: "{} hazards", options: [{ value: 0, label: "Few" }, { value: 1, label: "Some" }, { value: 2, label: "Lots" }], default: 1, when: GENERATED },
@@ -282,8 +282,9 @@ export const MODES = {
     blurb: "One course, one shot at a time: whoever's farthest from the cup goes next. Knock each other about, and keep your items from hole to hole.",
     wants: "a round of golf",
     settings: [
-      ...GOLF,
-      { key: "shotTime", label: "Time to shoot", short: "{} to shoot", options: [{ value: 60, label: "1 hour" }, { value: 240, label: "4 hours" }, { value: 480, label: "8 hours" }, { value: 1440, label: "1 day" }], default: 480 },
+      // Six holes and four hours a shot, so a round of one shot at a time fits in about a day.
+      ...golf(6),
+      { key: "shotTime", label: "Time to shoot", short: "{} to shoot", options: [{ value: 60, label: "1 hour" }, { value: 240, label: "4 hours" }, { value: 480, label: "8 hours" }, { value: 1440, label: "1 day" }], default: 240 },
     ],
   },
   "golf:live": {
@@ -298,7 +299,7 @@ export const MODES = {
     blurb: "Everyone on the same hole at once. Shoot whenever you like, knock each other into the water, and sink it before the hole clock runs out.",
     wants: "a live round of golf",
     settings: [
-      ...GOLF,
+      ...golf(9),
       { key: "holeTime", label: "Hole clock", short: "{} a hole", options: [{ value: 2, label: "2 min" }, { value: 3, label: "3 min" }, { value: 5, label: "5 min" }], default: 3 },
     ],
   },

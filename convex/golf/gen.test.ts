@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { generateHole, problems } from "./gen";
 
 // The generator: every hole it keeps passes the checks (and the bot sank it to get kept), the same seed
@@ -39,5 +39,14 @@ describe("generated holes", () => {
     }
     expect(shapes.size).toBeGreaterThanOrEqual(3);
     expect(names.size).toBeGreaterThanOrEqual(4);
+  }, 120_000);
+
+  test("a seed's hole doesn't depend on what was generated before it (the caches)", async () => {
+    const a = { seed: 101, n: 0, terrain: 0, style: 0, hazards: 1 }, b = { seed: 101, n: 0, terrain: 1, style: 1, hazards: 2 };
+    generateHole(a);
+    const after = generateHole(b);
+    vi.resetModules();
+    const fresh = (await import("./gen")).generateHole(b);
+    expect(after).toEqual(fresh);
   }, 120_000);
 });

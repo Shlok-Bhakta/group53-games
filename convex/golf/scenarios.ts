@@ -1,7 +1,7 @@
 import { compile, rng, type Course, type Power } from "./engine";
 import { worldOf } from "./holes";
 import { SANDBOX } from "./sandbox";
-import { advance, applyCmd, cmdOrder, fingerprint, newWorld, pack, TPS, unpack, type Cmd, type Packed } from "./world";
+import { advance, applyCmd, cmdOrder, fingerprint, newWorld, pack, TPS, unpack, type Cmd, type Packed, type Rules } from "./world";
 
 // Games played by script, for checking that every JavaScript engine (Safari's on iPhones, Chrome's on
 // Android and the server) comes out with exactly the same world. See src/games/golf/determinism.test.ts.
@@ -25,11 +25,17 @@ export function chaos(seed = 1): { cmds: Cmd[]; checkpoints: number[] } {
   return { cmds: cmds.sort(cmdOrder), checkpoints: [TPS * 5, TPS * 20, TPS * 40, TPS * 61] };
 }
 
+// The same, turn-based: each shot or item comes on its player's own turn, given just before it.
+function turned(scn: { cmds: Cmd[]; checkpoints: number[] }) {
+  const cmds = scn.cmds.flatMap((c) => (c.kind === "join" ? [c] : [{ tick: c.tick, by: c.by, seq: c.seq - 0.5, kind: "turn" as const }, c]));
+  return { cmds: cmds.sort(cmdOrder), checkpoints: scn.checkpoints };
+}
+
 // Runs a scenario and returns the world's fingerprint at each checkpoint. `bags` fills everyone's bag
 // once they've joined, so the items get used.
-export function play(scn: { cmds: Cmd[]; checkpoints: number[] }, bags: Power[] = ["laser", "railgun", "mine"]) {
+export function play(scn: { cmds: Cmd[]; checkpoints: number[] }, bags: Power[] = ["laser", "railgun", "mine"], rules?: Rules) {
   const W = compile(SANDBOX);
-  const s = newWorld(SANDBOX);
+  const s = newWorld(SANDBOX, { rules });
   const out: number[] = [];
   const filled = new Set<string>();
   let tick = 0;
@@ -59,6 +65,10 @@ export function allFingerprints() {
     chaos5: play(chaos(5), ["freeze", "elephant", "horn"]),
     chaos6: play(chaos(6), ["honey", "coffee", "shield"]),
     chaos7: play(chaos(7), ["flash", "missile", "freeze"]),
+    // A game's rules: balls done when they're in or out of strokes, knocks free, balls by the cup marked.
+    rules8: play(chaos(8), ["missile", "railgun", "laser"], { cap: 6, turns: false, knockFree: true, markR: 3.2 }),
+    // Turn-based statuses that last until the next turn (no "turn" commands, so they never wear off here).
+    rules9: play(turned(chaos(9)), ["freeze", "honey", "shield"], { cap: 99, turns: true, knockFree: true, markR: 0 }),
   };
 }
 

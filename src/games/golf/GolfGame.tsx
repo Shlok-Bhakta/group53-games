@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "convex/react";
-import { AnimatePresence, motion } from "motion/react";
+import { useMutation, useQuery } from "convex/react";
+import { motion } from "motion/react";
 import { CaretLeftIcon, ListIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
@@ -11,6 +11,7 @@ import { totals, vsPar, type GolfState } from "../../../convex/golf/round";
 import { useGoBack } from "@/components/AppHeader";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { Result } from "@/components/match";
+import { Sheet } from "@/components/ui/sheet";
 import { Countdown } from "@/components/game/Countdown";
 import { FloatButton, FloatPill, FloatingTopBar, FullscreenStage } from "@/components/game/floating";
 import { useTurnText } from "@/components/game/TurnText";
@@ -32,6 +33,16 @@ export function GolfGame({ match, meId }: { match: MatchView; meId: Id<"users"> 
   const [menu, setMenu] = useState(false);
   const seat = match.players.findIndex((p) => p.userId === meId);
   const playing = seat >= 0 && !!st && !st.out.includes(seat);
+  // Opening the game (or coming back to it) stands the caddie down, and restarts a course that stopped building.
+  const here = useMutation(api.golf.here);
+  const active = match.status === "active";
+  useEffect(() => {
+    if (!active || seat < 0) return;
+    const ping = () => document.visibilityState === "visible" && void here({ id: match._id }).catch(() => {});
+    ping();
+    document.addEventListener("visibilitychange", ping);
+    return () => document.removeEventListener("visibilitychange", ping);
+  }, [active, seat, match._id, here]);
 
   if (match.status === "finished" && st) return <Finished match={match} st={st} meId={meId} />;
   if (!st) return null;
@@ -64,10 +75,6 @@ function Hole({ match, st, meId, course, onMenu }: { match: MatchView; st: GolfS
     minTick: st.turnTick + 1,
     colorOf: (id) => colors.get(id),
     bar: <TurnBar match={match} st={st} meId={meId} par={course.par} />,
-    strokes: (id) => {
-      const i = match.players.findIndex((p) => p.userId === id);
-      return st.scores[st.hole]?.[i] ?? null;
-    },
     onMenu,
     onSunk: (strokes) => toast.success(`${scoreName(strokes, course.par)}`, { description: `${strokes} on a par ${course.par}. Watch the rest come in.` }),
   };
@@ -131,8 +138,8 @@ function Building({ st, onMenu }: { st: GolfState; onMenu: () => void }) {
   );
 }
 
-// A hole's just finished: everyone's score on it, best first, with the running totals. Comes up over the next
-// hole and goes on a tap, or by itself after a while.
+// A hole's just finished: everyone's score on it, best first, with the running totals, in a sheet over the
+// next hole. Goes on a swipe or the X, or by itself after a while.
 function HoleCard({ match, st, meId }: { match: MatchView; st: GolfState; meId: Id<"users"> | undefined }) {
   const seen = useRef(st.scores.length);
   const [show, setShow] = useState<number | null>(null);
@@ -157,45 +164,35 @@ function HoleCard({ match, st, meId }: { match: MatchView; st: GolfState; meId: 
   const rows = n === null ? [] : match.players.map((p, i) => ({ p, i, x: st.scores[n]?.[i] ?? null })).filter((r) => r.x !== null).sort((a, b) => a.x! - b.x!);
   const next = n !== null ? st.holes[n + 1] : null;
   return (
-    <AnimatePresence>
+    <Sheet open={n !== null && !!h} onClose={() => setShow(null)} title={h ? h.name : ""} closable>
       {n !== null && h && (
-        <motion.div
-          key={n}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-40 flex items-end bg-black/40 p-3 pb-[calc(env(safe-area-inset-bottom)+12px)]"
-          onClick={() => setShow(null)}
-        >
-          <motion.div initial={{ y: 40 }} animate={{ y: 0 }} exit={{ y: 40 }} transition={{ type: "spring", bounce: 0, duration: 0.35 }} className="mx-auto flex w-full max-w-md flex-col gap-4 rounded-3xl bg-card p-5" role="dialog" aria-label={`Hole ${n + 1} scores`}>
-            <div className="text-center">
-              <p className="text-callout text-muted-foreground">Hole {n + 1}, par {h.par}</p>
-              <h2 className="font-display text-title">{h.name}</h2>
-            </div>
-            <ol className="flex flex-col gap-2">
-              {rows.map(({ p, i, x }) => (
-                <li key={p.userId} className="flex items-center gap-3">
-                  <span className="rounded-full p-0.5" style={{ boxShadow: `0 0 0 2px ${seatColor(p)}` }}>
-                    <PlayerAvatar player={p} size={32} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className={cn("block truncate font-semibold", p.userId === meId && "text-primary")}>{p.userId === meId ? "You" : p.name}</span>
-                    <span className="block text-footnote text-muted-foreground">{st.sunk[n]?.[i] === false ? "Picked up" : scoreName(x!, h.par)}</span>
-                  </span>
-                  <span className="font-display text-heading tabular-nums">{x}</span>
-                  <span className="w-10 text-right font-display text-callout tabular-nums text-muted-foreground">{vsPar(t[i], par)}</span>
-                </li>
-              ))}
-            </ol>
-            {next && n + 1 < st.total && (
-              <p className="text-center text-callout text-muted-foreground">
-                Next: hole {n + 2}, {next.name}, par {next.par}
-              </p>
-            )}
-          </motion.div>
-        </motion.div>
+        <>
+          <p className="-mt-3 text-callout text-muted-foreground">
+            Hole {n + 1}, par {h.par}
+          </p>
+          <ol className="flex flex-col gap-2" aria-label={`Hole ${n + 1} scores`}>
+            {rows.map(({ p, i, x }) => (
+              <li key={p.userId} className="flex items-center gap-3">
+                <span className="rounded-full p-0.5" style={{ boxShadow: `0 0 0 2px ${seatColor(p)}` }}>
+                  <PlayerAvatar player={p} size={32} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className={cn("block truncate font-semibold", p.userId === meId && "text-primary")}>{p.userId === meId ? "You" : p.name}</span>
+                  <span className="block text-footnote text-muted-foreground">{st.sunk[n]?.[i] === false ? "Picked up" : scoreName(x!, h.par)}</span>
+                </span>
+                <span className="font-display text-heading tabular-nums">{x}</span>
+                <span className="w-10 text-right font-display text-callout tabular-nums text-muted-foreground">{vsPar(t[i], par)}</span>
+              </li>
+            ))}
+          </ol>
+          {next && n + 1 < st.total && (
+            <p className="text-callout text-muted-foreground">
+              Next: hole {n + 2}, {next.name}, par {next.par}
+            </p>
+          )}
+        </>
       )}
-    </AnimatePresence>
+    </Sheet>
   );
 }
 

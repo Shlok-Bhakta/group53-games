@@ -18,7 +18,7 @@ import type { GameHooks } from "./games";
 import { finish, finishBySeats } from "./matches";
 import { notifyMatch } from "./notify";
 import { displayName } from "./lib/people";
-import { passTurn } from "./lib/turns";
+import { passTurn, startPushes } from "./lib/turns";
 
 // Golf, played live: the open world, and each of the holes (convex/golf/holes.ts), every one its own
 // world with whoever's on it right now.
@@ -334,7 +334,9 @@ export const tick = internalMutation({
     }
     // A game's hole: hand the turn on, and finish the hole once everyone's done.
     const ended = w.matchId ? await roundTick(ctx, w, course, state, now) : false;
-    if (still || ended) await ctx.db.patch(worldId, { awake: false });
+    // The round may have just put in a command (the next turn, a caddie's shot): then it isn't still.
+    const queued = w.matchId && !ended && still && !!(await ctx.db.query("golfCommands").withIndex("by_world_tick", (q) => q.eq("worldId", worldId).gte("tick", settled)).first());
+    if ((still && !queued) || ended) await ctx.db.patch(worldId, { awake: false });
     else await ctx.scheduler.runAfter(tickMs(w), internal.golf.tick, { worldId });
   },
 });
@@ -358,7 +360,8 @@ async function stateNow(ctx: QueryCtx, w: Doc<"golfWorlds">, course: Course, set
 }
 async function insertCmd(ctx: MutationCtx, w: Doc<"golfWorlds">, cmd: Omit<Cmd, "seq"> & { by: Id<"users"> }) {
   await ctx.db.insert("golfCommands", { worldId: w._id, seq: (Date.now() % 1_000_000_000) + Math.floor(Math.random() * 1000), ...cmd, bag: cmd.bag });
-  await wake(ctx, w);
+  // As it is now, not as the caller read it: it may have gone to sleep since.
+  await wake(ctx, (await ctx.db.get(w._id))!);
 }
 
 async function roundTick(ctx: MutationCtx, w: Doc<"golfWorlds">, course: Course, settled: WorldState, now: number) {
@@ -420,41 +423,106 @@ async function giveTurn(ctx: MutationCtx, w: Doc<"golfWorlds">, match: Doc<"matc
     push: { title: "Your shot", body: b.strokes === 0 ? `Hole ${n + 1}, par ${course.par}. You're on the tee.` : `Hole ${n + 1}, par ${course.par}. You're on ${b.strokes}.` },
     timer: { at: now + shotTime * 60_000, fn: internal.golf.shotTimeout },
   });
-  if (st.idle[seatOfId(next)] >= IDLE_OUT) await caddie(ctx, w, after, course, s, next, tick);
+  // Someone who's been away a while: the caddie plays for them straight off, unless they're looking at the
+  // game right now.
+  if (st.idle[seatOfId(next)] >= IDLE_OUT && !(await onGame(ctx, next, after))) await callCaddie(ctx, after, "away");
 }
 
-// The caddie's shot: the best of a fan of shots, for someone who's out of time.
-async function caddie(ctx: MutationCtx, w: Doc<"golfWorlds">, match: Doc<"matches">, course: Course, s: WorldState, id: Id<"users">, tick: number) {
-  const from = unpack(pack(s));
-  applyCmd(from, course, { tick, by: id, seq: 0, kind: "turn" });
-  from.tick = tick;
-  const shot = bestShot(worldOf(course), pack(from), id, undefined, { angles: 16, powers: [0.15, 0.3, 0.5, 0.75, 1] });
-  if (!shot) return;
-  await insertCmd(ctx, w, { tick: tick + 1, by: id, kind: "shot", a: shot.a, p: shot.p });
-  const st = match.state as GolfState;
-  const seat = seatOf(match, id);
-  await ctx.db.patch(match._id, { state: { ...st, idle: st.idle.map((n, k) => (k === seat ? n + 1 : n)) } });
+async function onGame(ctx: QueryCtx, userId: Id<"users">, match: Doc<"matches">) {
+  const p = await ctx.db.query("presence").withIndex("by_user", (q) => q.eq("userId", userId)).unique();
+  return !!p && Date.now() - p.lastSeen < ONLINE_WINDOW_MS && p.path.includes(match._id);
 }
+
+// The caddie: the best of a fan of shots, for someone who's out of time (or away). Working it out can take a
+// second or more, too long for a mutation, so it's an action: it reads the world as it stands, picks the shot,
+// and puts it in only if it's still that player's turn and their ball hasn't moved (`caddieShoot`).
+const callCaddie = (ctx: MutationCtx, match: Doc<"matches">, why: "timeout" | "away") =>
+  ctx.scheduler.runAfter(0, internal.golf.caddie, { id: match._id, moveCount: match.moveCount, why });
+
+export const caddieInfo = internalQuery({
+  args: { id: v.id("matches"), moveCount: v.number() },
+  handler: async (ctx, { id, moveCount }) => {
+    const match = await ctx.db.get(id);
+    if (!match || match.status !== "active" || match.moveCount !== moveCount || !match.turn) return null;
+    const st = match.state as GolfState;
+    const w = st.worldId ? await ctx.db.get(st.worldId as Id<"golfWorlds">) : null;
+    const course = w && (await courseFor(ctx, w));
+    const snap = w && (await snapshotOf(ctx, w._id));
+    if (!w || !course || !snap) return null;
+    return { turn: match.turn, startAt: w.startAt, course, snapshot: snap.state as Packed, cmds: await commandsFrom(ctx, w._id, snap.tick) };
+  },
+});
+
+export const caddie = internalAction({
+  args: { id: v.id("matches"), moveCount: v.number(), why: v.union(v.literal("timeout"), v.literal("away")) },
+  handler: async (ctx, { id, moveCount, why }) => {
+    const info = await ctx.runQuery(internal.golf.caddieInfo, { id, moveCount });
+    if (!info) return;
+    const s = unpack(info.snapshot);
+    const w = worldOf(info.course);
+    const tick = Math.max(s.tick, Math.floor(((Date.now() - info.startAt) * TPS) / 1000));
+    advance(s, w, tick, info.cmds);
+    s.events.length = 0;
+    const b = s.balls.find((o) => o.id === info.turn);
+    // Already shot (still rolling, or about to pass the turn), or off the hole: nothing to do.
+    if (!b || b.mode !== "aim" || (b.turnShots ?? 0) > 0) return;
+    const shot = bestShot(w, pack(s), info.turn, undefined, { angles: 24, powers: [0.15, 0.3, 0.45, 0.6, 0.8, 1] });
+    if (!shot) return;
+    await ctx.runMutation(internal.golf.caddieShoot, { id, moveCount, a: shot.a, p: shot.p, x: b.x, y: b.y, why });
+  },
+});
+
+export const caddieShoot = internalMutation({
+  args: { id: v.id("matches"), moveCount: v.number(), a: v.number(), p: v.number(), x: v.number(), y: v.number(), why: v.union(v.literal("timeout"), v.literal("away")) },
+  handler: async (ctx, { id, moveCount, a, p, x, y, why }) => {
+    const match = await ctx.db.get(id);
+    if (!match || match.status !== "active" || match.moveCount !== moveCount || !match.turn) return;
+    const st = match.state as GolfState;
+    const w = st.worldId ? await ctx.db.get(st.worldId as Id<"golfWorlds">) : null;
+    const course = w && (await courseFor(ctx, w));
+    const snap = w && (await snapshotOf(ctx, w._id));
+    if (!w || !course || !snap) return;
+    const s = await stateNow(ctx, w, course, unpack(snap.state as Packed), Date.now());
+    const b = s.balls.find((o) => o.id === match.turn);
+    // The shot was worked out for the ball where it sat; if they've played since, or it's moved, leave it.
+    if (!b || b.mode !== "aim" || (b.turnShots ?? 0) > 0 || Math.hypot(b.x - x, b.y - y) > 0.01) return;
+    const tick = Math.max(s.tick, tickAt(w, Date.now()), st.turnTick + 1);
+    await insertCmd(ctx, w, { tick, by: match.turn, kind: "shot", a, p });
+    const seat = seatOf(match, match.turn);
+    await ctx.db.patch(match._id, { state: { ...st, idle: st.idle.map((n, k) => (k === seat ? n + 1 : n)) } });
+    if (why === "timeout") await notifyMatch(ctx, match.turn, match, { title: "Your caddie took your shot", body: "You ran out of time, so they had a go for you." });
+  },
+});
 
 export const shotTimeout = internalMutation({
   args: { id: v.id("matches"), moveCount: v.number() },
   handler: async (ctx, { id, moveCount }) => {
     const match = await ctx.db.get(id);
     if (!match || match.status !== "active" || match.moveCount !== moveCount || !match.turn) return;
-    const st = match.state as GolfState;
-    const w = st.worldId ? await ctx.db.get(st.worldId as Id<"golfWorlds">) : null;
-    const course = w && (await courseFor(ctx, w));
-    if (!w || !course) return;
-    const snap = await snapshotOf(ctx, w._id);
-    if (!snap) return;
-    const s = await stateNow(ctx, w, course, unpack(snap.state as Packed), Date.now());
-    const b = s.balls.find((o) => o.id === match.turn);
-    // Already shot and still rolling: the turn's about to pass anyway.
-    if (!b || (b.turnShots ?? 0) > 0) return;
-    await caddie(ctx, w, match, course, s, match.turn, Math.max(s.tick, tickAt(w, Date.now())));
-    await notifyMatch(ctx, match.turn, match, { title: "Your caddie took your shot", body: "You ran out of time, so they had a go for you." });
+    await callCaddie(ctx, match, "timeout");
   },
 });
+
+// The player's opened the game: the caddie stands down, and a course that stopped being built (a restart
+// mid-build) starts again.
+export const here = mutation({
+  args: { id: v.id("matches") },
+  handler: async (ctx, { id }) => {
+    const userId = await requireUser(ctx);
+    const match = await ctx.db.get(id);
+    if (!match || match.status !== "active" || !match.mode.startsWith("golf:")) return;
+    const st = match.state as GolfState;
+    const seat = seatOf(match, userId);
+    if (seat >= 0 && st.idle[seat] > 0) await ctx.db.patch(id, { state: { ...st, idle: st.idle.map((n, k) => (k === seat ? 0 : n)) } });
+    const built = st.holes.filter(Boolean).length;
+    const stalled = built < st.total && Date.now() - (st.builtAt ?? match.startedAt ?? 0) > BUILD_STALL_MS;
+    if (stalled) {
+      await ctx.db.patch(id, { state: { ...((await ctx.db.get(id))!.state as GolfState), builtAt: Date.now() } });
+      await ctx.scheduler.runAfter(0, internal.golf.build, { id });
+    }
+  },
+});
+const BUILD_STALL_MS = 90_000;
 
 // A live hole's clock running out: everyone still out there picks up.
 export const holeClock = internalMutation({
@@ -594,7 +662,7 @@ export const addHole = internalMutation({
     await ctx.db.insert("golfCourses", { matchId: id, n, course: c });
     const holes = [...st.holes];
     holes[n] = { name: c.name, par: c.par, theme: c.theme, open: !!c.greens.every((g) => g.rim === false) };
-    const next = { ...st, holes };
+    const next = { ...st, holes, builtAt: Date.now() };
     await ctx.db.patch(id, { state: next });
     const updated = { ...match, state: next };
     if (n === 0 && st.hole < 0) await startHole(ctx, updated, 0);
@@ -630,6 +698,8 @@ export const golfHooks: GameHooks = {
     const st = newRound(holeCount(settings), match.players.length);
     await ctx.db.patch(match._id, { state: st, turn: undefined });
     await ctx.scheduler.runAfter(0, internal.golf.build, { id: match._id });
+    const live = match.mode === "golf:live";
+    await startPushes(ctx, match, () => ({ title: live ? "Golf is on" : "Your round of golf is on", body: live ? `${st.total} holes, everyone at once. Get on the course.` : `${st.total} holes. We'll ping you when it's your shot.` }));
   },
   // Your ball comes off the hole and you place last; everyone else plays on.
   resign: async (ctx, match, userId) => {

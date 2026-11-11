@@ -49,6 +49,9 @@ export function courseOf(key: string): Course | null {
 const compiled = new Map<string, World>();
 export function worldOf(course: Course) {
   let w = compiled.get(course.id);
+  // Only if it's this very hole: a game's holes are new objects each time they're read, but a stale entry
+  // under a reused id must never stand in for different walls.
+  if (w && w.course !== course && (w.course.w !== course.w || w.course.h !== course.h || w.course.cup.x !== course.cup.x || w.course.greens.length !== course.greens.length)) w = undefined;
   // A game's holes come and go: keep the cache from growing for good.
   if (!w) {
     if (compiled.size > 120) compiled.clear();

@@ -149,10 +149,51 @@ describe("a turn-based round", () => {
     const m = await get(t, id);
     vi.advanceTimersByTime(60 * 60_000);
     await t.mutation(internal.golf.shotTimeout, { id, moveCount: m.moveCount });
+    // The timeout calls the caddie, an action (working out the shot takes too long for a mutation).
+    await t.action(internal.golf.caddie, { id, moveCount: m.moveCount, why: "timeout" });
     const { s } = await worldNow(t, id);
     expect(s.balls.find((b) => b.id === seats[0].userId)?.strokes ?? 1).toBe(1);
     expect((await stateOf(t, id)).idle[0]).toBe(1);
     expect((await pushes(t)).some((p) => p.title === "Your caddie took your shot")).toBe(true);
+  });
+
+  test("someone the caddie's playing for gets their shot taken at once, and the game keeps going", async () => {
+    const t = setup();
+    const { id, players, seats } = await game(t, 2, "golf:turns", { course: 1, holes: 3 });
+    // The second seat's been away three turns running.
+    await t.run(async (ctx) => {
+      const m = (await ctx.db.get(id))!;
+      await ctx.db.patch(id, { state: { ...(m.state as GolfState), idle: [0, 3] } });
+    });
+    const w = await worldOfMatch(t, id);
+    await seats[0].as.mutation(api.golf.act, { worldId: w._id, kind: "shot", clientTick: 0, seq: 1, a: -Math.PI / 2, p: 0.1 });
+    // A slow scheduler: the next tick only comes round well after the ball's stopped.
+    vi.advanceTimersByTime(15_000);
+    await t.mutation(internal.golf.tick, { worldId: w._id });
+    expect((await get(t, id)).turn).toBe(seats[1].userId);
+    // The caddie's called straight away (an action, as the scheduler would run it).
+    await t.action(internal.golf.caddie, { id, moveCount: (await get(t, id)).moveCount, why: "away" });
+    // The caddie's shot is in, and the world stayed awake to play it out.
+    expect((await worldOfMatch(t, id)).awake).toBe(true);
+    await settle(t, id, 20);
+    const { s } = await worldNow(t, id);
+    const caddied = s.balls.find((b) => b.id === seats[1].userId);
+    expect(caddied ? caddied.strokes : 1).toBeGreaterThanOrEqual(1);
+    // And it came back round to the first player (or the hole moved on).
+    const m = await get(t, id);
+    expect(m.turn === seats[0].userId || (m.state as GolfState).hole > 0).toBe(true);
+    void players;
+  }, 60_000);
+
+  test("opening the game stands the caddie down", async () => {
+    const t = setup();
+    const { id, seats } = await game(t, 2, "golf:turns", { course: 1, holes: 3 });
+    await t.run(async (ctx) => {
+      const m = (await ctx.db.get(id))!;
+      await ctx.db.patch(id, { state: { ...(m.state as GolfState), idle: [0, 3] } });
+    });
+    await seats[1].as.mutation(api.golf.here, { id });
+    expect((await stateOf(t, id)).idle).toEqual([0, 0]);
   });
 
   test("resigning takes your ball off and the other player wins", async () => {
@@ -189,7 +230,8 @@ describe("a live round", () => {
     await settle(t, id, 6);
     const st = await stateOf(t, id);
     expect(st.scores[0]).toHaveLength(2);
-    expect(st.scores[0].every((x) => x !== null && x >= 1)).toBe(true);
+    // Picked up by the clock: par plus four, however few they'd taken, so sitting it out never pays.
+    expect(st.scores[0]).toEqual([st.holes[0]!.par + 4, st.holes[0]!.par + 4]);
     // The next hole after a moment to see the scores.
     vi.advanceTimersByTime(6000);
     await t.mutation(internal.golf.nextHole, { id, hole: 1 });

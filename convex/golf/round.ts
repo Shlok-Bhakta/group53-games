@@ -25,6 +25,7 @@ export type GolfState = {
   idle: number[];
   order: number[]; // who tees off first on this hole, by seat
   waiting: boolean; // a hole's finished and the next isn't built yet
+  builtAt?: number; // when the last hole was built, to tell a build that's stopped
   // Live: when the hole clock runs out, and when the next hole starts (a moment to see the scores).
   clockAt?: number;
   nextAt?: number;

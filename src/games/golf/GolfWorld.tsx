@@ -34,7 +34,6 @@ export type Round = {
   minTick: number; // commands count from here: just after the turn started
   colorOf: (id: string) => string | undefined;
   bar: ReactNode; // what the top bar says: whose turn, the clock
-  strokes: (id: string) => number | null; // a ball's strokes so far, for anyone done with the hole
   onMenu: () => void;
   onSunk: (strokes: number) => void;
 };

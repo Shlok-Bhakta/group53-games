@@ -112,7 +112,7 @@ for (const scheme of ["dark", "light"] as const) {
       const p = await up();
       if (!p) {
         await a.waitForTimeout(500);
-        if (await a.getByRole("dialog", { name: /Hole 1 scores/ }).isVisible()) break;
+        if (await a.getByRole("list", { name: /Hole 1 scores/ }).isVisible()) break;
         continue;
       }
       await p.evaluate(() => {
@@ -120,9 +120,9 @@ for (const scheme of ["dark", "light"] as const) {
         g.shoot(-Math.PI / 2 + (Math.random() - 0.5) * 0.6, 0.35 + Math.random() * 0.3);
       });
       await p.waitForTimeout(2500);
-      if (await a.getByRole("dialog", { name: /Hole 1 scores/ }).isVisible()) break;
+      if (await a.getByRole("list", { name: /Hole 1 scores/ }).isVisible()) break;
     }
-    if (await a.getByRole("dialog", { name: /Hole 1 scores/ }).isVisible()) await shot("hole-card");
+    if (await a.getByRole("list", { name: /Hole 1 scores/ }).isVisible()) await shot("hole-card");
     await shot("hole-2-or-later");
   });
 }

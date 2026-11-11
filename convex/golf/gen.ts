@@ -1016,6 +1016,7 @@ function judge(c: Course): number | null {
 
 // Hole `n` from the seed: candidates until one passes, the nth of a shuffled list of shapes so a course
 // mixes them up. A plain straight hole if nothing passes, which never happens in practice.
+const idOf = (o: GenOpts) => `gen-${o.seed}-${o.n}-t${o.terrain}s${o.style}h${o.hazards}`;
 export function generateHole(o: GenOpts, debug?: (msg: string) => void): Course {
   const order = [...MINI];
   const sr = randOf(mix(o.seed, 77));
@@ -1027,7 +1028,8 @@ export function generateHole(o: GenOpts, debug?: (msg: string) => void): Course 
     const seed = mix(o.seed, o.n, attempt);
     const kindIndex = MINI.indexOf(order[(o.n + Math.floor(attempt / 3)) % order.length]);
     const { c: raw, ramps, kind } = candidate(seed, o, kindIndex);
-    const c = withTees({ ...raw, id: `gen-${o.seed}-${o.n}-${attempt}` });
+    // An id unique to everything that shaped it: compiled walls and distances are cached by id.
+    const c = withTees({ ...raw, id: `${idOf(o)}-${attempt}` });
     const why = problems(c, ramps);
     if (why) {
       debug?.(`${c.name}: ${why}`);
@@ -1039,7 +1041,7 @@ export function generateHole(o: GenOpts, debug?: (msg: string) => void): Course 
       continue;
     }
     debug?.(`kept ${kind} on attempt ${attempt + 1}`);
-    return { ...c, par, id: `gen-${o.seed}-${o.n}` };
+    return { ...c, par, id: idOf(o) };
   }
   return fallback(o);
 }
@@ -1047,7 +1049,7 @@ export function generateHole(o: GenOpts, debug?: (msg: string) => void): Course 
 function fallback(o: GenOpts): Course {
   const ice = o.terrain === 1;
   const c: Course = {
-    id: `gen-${o.seed}-${o.n}`,
+    id: idOf(o),
     name: ice ? "Plain Sailing" : "Easy Does It",
     course: "Generated",
     theme: THEME(ice),
