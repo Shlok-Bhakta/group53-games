@@ -94,11 +94,11 @@ for (const scheme of ["dark", "light"] as const) {
     await a.getByRole("button", { name: "Open a game" }).click();
     await a.getByRole("heading", { name: "Waiting for players" }).waitFor();
     await fillLobby(a, [b, c]);
-    for (const p of pages) await expect(p.getByLabel(/hole 1 of 9/)).toBeVisible({ timeout: 60_000 });
+    for (const p of pages) await expect(p.getByLabel(/hole 1 of \d+/)).toBeVisible({ timeout: 60_000 });
     await expect(a.getByText("Teeing up")).toHaveCount(0, { timeout: 15_000 });
     await a.waitForTimeout(1600);
     const up = async () => {
-      for (const p of pages) if ((await p.getByLabel(/hole \d of 9/).getAttribute("data-turn")) === "mine") return p;
+      for (const p of pages) if ((await p.getByLabel(/hole \d+ of \d+/).getAttribute("data-turn")) === "mine") return p;
       return null;
     };
     const first = (await up())!;

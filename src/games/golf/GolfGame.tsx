@@ -167,7 +167,7 @@ function HoleCard({ match, st, meId }: { match: MatchView; st: GolfState; meId: 
     <Sheet open={n !== null && !!h} onClose={() => setShow(null)} title={h ? h.name : ""} closable>
       {n !== null && h && (
         <>
-          <p className="-mt-3 text-callout text-muted-foreground">
+          <p className="text-callout text-muted-foreground">
             Hole {n + 1}, par {h.par}
           </p>
           <ol className="flex flex-col gap-2" aria-label={`Hole ${n + 1} scores`}>
