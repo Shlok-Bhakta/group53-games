@@ -21,9 +21,7 @@ export function Scorecard({ match, st, meId }: { match: MatchView; st: GolfState
             <th className="px-1.5 py-2 font-semibold">Par</th>
             {seats.map(({ p, i }) => (
               <th key={p.userId} className="px-1 py-2" aria-label={p.name}>
-                <span className={cn("mx-auto block w-fit rounded-full p-0.5", st.out.includes(i) && "opacity-40")} style={{ boxShadow: `0 0 0 2px ${seatColor(p)}` }}>
-                  <PlayerAvatar player={p} size={24} />
-                </span>
+                <PlayerAvatar player={p} size={24} seat={seatColor(p)} className={cn("m-1", st.out.includes(i) && "opacity-40")} />
               </th>
             ))}
           </tr>

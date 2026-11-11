@@ -316,6 +316,11 @@ test("a turn-based game: the lobby, then one shot at a time, and the card", asyn
   await expect(mine.getByLabel(/hole 1 of 3/)).toHaveAttribute("data-turn", "mine");
   await expect(theirs.getByLabel(/hole 1 of 3/)).toHaveAttribute("data-turn", "theirs");
   await expect(mine.getByText("Your shot")).toBeVisible();
+  // The seat ring round whoever's up is drawn on the avatar itself, so it stays a circle: a ring on a wrapper
+  // grew by the line's height into an egg. Its parent is the pill, nothing in between.
+  const ring = theirs.getByRole("button", { name: "Scorecard" }).locator(".pa[data-seat]");
+  await expect(ring).toHaveCount(1);
+  expect(await ring.evaluate((el) => el.parentElement?.getAttribute("aria-label"))).toBe("Scorecard");
   // A short putt up the hole: the turn goes to the other phone once it stops (they haven't teed off).
   await shoot(mine, -Math.PI / 2, 0.2);
   await expect(theirs.getByLabel(/hole 1 of 3/)).toHaveAttribute("data-turn", "mine", { timeout: 20_000 });

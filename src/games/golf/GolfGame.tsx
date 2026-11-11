@@ -93,9 +93,7 @@ function TurnBar({ match, st, meId, par }: { match: MatchView; st: GolfState; me
   return (
     <>
       {up ? (
-        <span className="shrink-0 rounded-full p-0.5" style={{ boxShadow: `0 0 0 2px ${seatColor(up)}` }}>
-          <PlayerAvatar player={up} size={32} />
-        </span>
+        <PlayerAvatar player={up} size={32} seat={seatColor(up)} className="m-1" />
       ) : null}
       <span className="min-w-0 flex-1 pl-1">
         <motion.span key={up?.userId ?? "live"} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className={cn("flex items-center gap-1.5 truncate font-display text-callout leading-tight", mine && "text-primary")} aria-live="polite">
@@ -173,9 +171,7 @@ function HoleCard({ match, st, meId }: { match: MatchView; st: GolfState; meId: 
           <ol className="flex flex-col gap-2" aria-label={`Hole ${n + 1} scores`}>
             {rows.map(({ p, i, x }) => (
               <li key={p.userId} className="flex items-center gap-3">
-                <span className="rounded-full p-0.5" style={{ boxShadow: `0 0 0 2px ${seatColor(p)}` }}>
-                  <PlayerAvatar player={p} size={32} />
-                </span>
+                <PlayerAvatar player={p} size={32} seat={seatColor(p)} className="m-1" />
                 <span className="min-w-0 flex-1">
                   <span className={cn("block truncate font-semibold", p.userId === meId && "text-primary")}>{p.userId === meId ? "You" : p.name}</span>
                   <span className="block text-footnote text-muted-foreground">{st.sunk[n]?.[i] === false ? "Picked up" : scoreName(x!, h.par)}</span>

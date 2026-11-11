@@ -57,8 +57,8 @@ export function RoundBar({ ref, course, round, hud, onBack }: { ref: Ref<HTMLDiv
       </FloatButton>
       <FloatPill onClick={round.onMenu} aria-label="Scorecard" className="flex-1 py-1 pl-1.5 pr-1.5">
         {round.bar}
-        <span className="flex h-9 min-w-9 shrink-0 flex-col items-center justify-center rounded-full bg-primary px-2.5 font-display leading-none text-primary-foreground" aria-label={`Hole ${round.number}, par ${course.par}, ${hud.strokes} strokes`}>
-          <span className="text-callout">{hud.strokes}</span>
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary font-display text-callout tabular-nums leading-none text-primary-foreground" aria-label={`Hole ${round.number}, par ${course.par}, ${hud.strokes} strokes`}>
+          {hud.strokes}
         </span>
       </FloatPill>
       <FloatButton aria-label="Menu" onClick={round.onMenu}>

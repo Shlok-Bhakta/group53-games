@@ -15,12 +15,14 @@ type Props = FrameStyle & {
   // A steady green dot in the corner while they've got the app open. `dotRing` is what the avatar sits on.
   online?: boolean;
   dotRing?: "card" | "background";
+  // A ring in their seat's color, round whatever it sits in (golf's turn bar and scorecard).
+  seat?: string;
   className?: string;
 };
 
-export function PlayerAvatar({ player, name = player?.name ?? "", image = player?.image, frame = player?.frame ?? "none", frameColor = player?.frameColor, glow = false, badge, size = 48, online, dotRing = "card", className }: Props) {
+export function PlayerAvatar({ player, name = player?.name ?? "", image = player?.image, frame = player?.frame ?? "none", frameColor = player?.frameColor, glow = false, badge, size = 48, online, dotRing = "card", seat, className }: Props) {
   const face = (
-    <span className={cn("pa", className)} style={{ "--s": `${size}px`, "--frame-color": frameColor } as CSSProperties}>
+    <span className={cn("pa", className)} data-seat={seat ? "" : undefined} style={{ "--s": `${size}px`, "--frame-color": frameColor, "--seat": seat } as CSSProperties}>
       <span className="frame block" data-frame={frame} data-glow={glow}>
         <span className="pa-face">
           {image ? (
