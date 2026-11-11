@@ -10,6 +10,7 @@ import { SIZE as SIZE4, onBoard as onBoard4, setup as setup4 } from "./chess/fou
 import type { FourState } from "./chess/four/classic";
 import { layout, type ScrabbleState } from "./scrabble/engine";
 import { potOf, type PokerState } from "./poker/engine";
+import { parSoFar, totals, type GolfState } from "./golf/round";
 
 // Read by the og/ preview service with the admin key, so none of this is public.
 export const crew = internalQuery({
@@ -63,6 +64,20 @@ const BOARDS: Record<GameKey, Board> = {
       board: [],
       toMove: m.status === "active" && st && st.turn >= 0 ? (players[st.turn]?.color ?? null) : null,
       poker: st ? { hand: st.hand, board: st.board, stacks: st.stacks, pot: m.status === "active" ? potOf(st) + st.bets.reduce((a, b) => a + b, 0) : 0, out: st.out.map((o) => o.seat) } : null,
+    };
+  },
+  golf: async (_ctx, m, players) => {
+    const st = m.state as GolfState | null;
+    const hole = st && st.hole >= 0 ? st.holes[st.hole] : null;
+    const t = st ? totals(st, m.players.length) : [];
+    return {
+      seats: m.players.length,
+      points: null,
+      board: [],
+      toMove: m.status === "active" && m.turn ? (players.find((p) => p.userId === m.turn)?.color ?? null) : null,
+      golf: st
+        ? { hole: st.hole + 1, total: st.total, name: hole?.name ?? null, par: hole?.par ?? null, theme: hole?.theme ?? "hills", totals: t, par0: parSoFar(st), played: st.scores.length, out: st.out, last: st.last ?? null, seed: m.settings?.seed ?? null }
+        : null,
     };
   },
   chess: async (ctx, m) => {

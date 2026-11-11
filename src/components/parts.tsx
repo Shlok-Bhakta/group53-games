@@ -6,7 +6,7 @@ import { SwordIcon } from "@phosphor-icons/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import type { MatchView } from "../../convex/matches";
-import { GAMES, MODES, flexibleSeats, matchPath, type ModeKey } from "../../convex/modes";
+import { GAMES, MODES, flexibleSeats, matchPath, seedSummary, type ModeKey } from "../../convex/modes";
 import { AvatarStack, PlayerAvatar } from "@/components/PlayerAvatar";
 import { cn } from "@/lib/utils";
 import { AsyncButton } from "@/components/AsyncButton";
@@ -80,6 +80,11 @@ function detail(match: MatchView) {
     const last = lastMove(match);
     if (last) parts.push(last);
     if (MODES[match.mode as ModeKey]?.kind === "async") parts.push(ago(Date.now() - match.lastActivityAt));
+  }
+  // A finished game keeps its seed in the list, to play the same holes again.
+  if (match.status === "finished") {
+    const seed = seedSummary(match.mode, match.settings);
+    if (seed) parts.push(seed.toLowerCase());
   }
   return parts.join(", ");
 }

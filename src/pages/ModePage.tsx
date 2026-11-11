@@ -65,7 +65,7 @@ function ModeScreen({ game, mode }: { game: GameUI; mode: ModeKey }) {
           >
             {lobby.open.length ? "Join a game" : flexible ? "Open a game" : "Find a game"}
           </AsyncButton>
-          <SettingsSection mode={mode} value={settings} onChange={setSettings} />
+          <SettingsSection mode={mode} value={settings} onChange={setSettings} defaultOpen={new URLSearchParams(location.search).has("settings")} />
         </div>
       )}
 

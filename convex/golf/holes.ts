@@ -10,11 +10,13 @@ import { SANDBOX } from "./sandbox";
 
 // More places to start, so a few players on one hole don't begin on top of each other: anywhere a step
 // from the tee that's clear of the rails and everything on the board.
-function withTees(c: Course): Course {
+export function withTees(c: Course): Course {
   const w = compile(c);
+  const tg = groundAt(w, c.tee);
   const clear = (p: Vec) => {
-    if (groundAt(w, p) !== (c.surface ?? "green")) return false;
-    if (c.zones.some((z) => inPoly(p, z.poly))) return false;
+    // The same ground as the tee itself: the board, or a fairway's mown tee box.
+    if (groundAt(w, p) !== tg) return false;
+    if (c.zones.some((z) => z.kind !== tg && inPoly(p, z.poly))) return false;
     if (w.segs.some((s) => hyp(p.x - closest(p, s.a, s.b).x, p.y - closest(p, s.a, s.b).y) < s.r + 0.8)) return false;
     if (c.bumpers.some((b) => hyp(p.x - b.at.x, p.y - b.at.y) < b.r + 0.9)) return false;
     return [...c.boxes, ...(c.mines ?? []), c.cup].every((o) => hyp(p.x - o.x, p.y - o.y) > 1.8);
@@ -47,6 +49,10 @@ export function courseOf(key: string): Course | null {
 const compiled = new Map<string, World>();
 export function worldOf(course: Course) {
   let w = compiled.get(course.id);
-  if (!w) compiled.set(course.id, (w = compile(course)));
+  // A game's holes come and go: keep the cache from growing for good.
+  if (!w) {
+    if (compiled.size > 120) compiled.clear();
+    compiled.set(course.id, (w = compile(course)));
+  }
   return w;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { useQuery } from "convex/react";
 import { AnimatePresence, motion } from "motion/react";
@@ -10,7 +10,7 @@ import { FullscreenStage } from "@/components/game/floating";
 import { usePlayingIn } from "@/presence";
 import * as sound from "./audio";
 import type { Camera } from "./toy";
-import { Dock, TargetHint, TopBar, type Hud } from "./Hud";
+import { Dock, RoundBar, TargetHint, TopBar, type Hud } from "./Hud";
 import { HoleResult } from "./HoleResult";
 import { useGolfLoop, type Aim, type Box, type Target } from "./useGolfLoop";
 import { useGolfNet } from "./useGolfNet";
@@ -25,16 +25,33 @@ type Vec = { x: number; y: number };
 
 // Where a hole sits in its course, and where to go after it. The open world has none of this.
 export type HoleInfo = { number: number; total: number; next: string | null };
+// A hole in a game (GolfGame.tsx): whose turn it is, everyone's colors, and the menu.
+export type Round = {
+  turns: boolean; // turn-based, rather than everyone at once
+  turn: string | null;
+  number: number;
+  total: number;
+  minTick: number; // commands count from here: just after the turn started
+  colorOf: (id: string) => string | undefined;
+  bar: ReactNode; // what the top bar says: whose turn, the clock
+  strokes: (id: string) => number | null; // a ball's strokes so far, for anyone done with the hole
+  onMenu: () => void;
+  onSunk: (strokes: number) => void;
+};
 
-export default function GolfWorld({ course: COURSE, hole }: { course: Course; hole?: HoleInfo }) {
+export default function GolfWorld({ course: COURSE, hole, round }: { course: Course; hole?: HoleInfo; round?: Round }) {
   const WORLD = worldOf(COURSE);
-  const golfNet = useGolfNet(COURSE);
+  const roundRef = useRef(round);
+  roundRef.current = round;
+  const minTick = useRef(0);
+  minTick.current = round?.minTick ?? 0;
+  const golfNet = useGolfNet(COURSE, minTick);
   const { meId, meRef, net, send } = golfNet;
-  const goBack = useGoBack("/golf");
+  const goBack = useGoBack(round ? "/" : hole ? "/golf/practice" : "/golf");
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const playing = usePlayingIn(pathname);
-  const scores = useQuery(api.golf.scores, hole ? {} : "skip");
+  const scores = useQuery(api.golf.scores, hole && !round ? {} : "skip");
   // What I just shot, for the result sheet.
   const [result, setResult] = useState<{ strokes: number } | null>(null);
   // The board's own bounds: a small hole shows whole and stays put; a big one follows the ball.
@@ -113,7 +130,16 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [overview]);
 
-  useGolfLoop({ course: COURSE, world: WORLD, hole, net: golfNet, scene: { cv, cam, box, overview: overviewRef, aim, blind, target: targetRef, targetAt }, setHud, setResult });
+  useGolfLoop({ course: COURSE, world: WORLD, hole, round: roundRef, net: golfNet, scene: { cv, cam, box, overview: overviewRef, aim, blind, target: targetRef, targetAt }, setHud, setResult });
+  // A sink in a game goes on the card; the game shows the hole's scores once everyone's done.
+  useEffect(() => {
+    if (round && result) {
+      round.onSunk(result.strokes);
+      setResult(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result]);
+  const myTurn = !round?.turns || round.turn === meId;
 
   // --- Input: drag back to aim and let go to shoot; tap the map to place a targeted item. ---
   const pointers = useRef(new Map<number, Vec>());
@@ -138,7 +164,11 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
       return;
     }
     const m = mine();
-    if (!m) return;
+    if (!m) {
+      // Done with the hole, or just watching: look around.
+      gesture.current = { kind: "pan" };
+      return;
+    }
     if (m.mode === "roll" && m.shot === "brake") return send("brake");
     if (m.mode === "roll" && m.shot === "jump") return send("hop");
     if (targetRef.current && m.mode === "aim") {
@@ -146,8 +176,10 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
       targetAt.current = toWorld(p);
       return;
     }
-    // Still (or rolling on Coffee), and not frozen or stunned: drag to putt. Otherwise drag to look around.
-    gesture.current = canShoot(m) && !e.shiftKey && e.button !== 2 ? { kind: "aim", start: p } : { kind: "pan" };
+    // Still (or rolling on Coffee), not frozen or stunned, and my turn: drag to putt. Otherwise drag to look
+    // around.
+    const turnOk = !roundRef.current?.turns || roundRef.current.turn === meRef.current;
+    gesture.current = canShoot(m) && turnOk && !e.shiftKey && e.button !== 2 ? { kind: "aim", start: p } : { kind: "pan" };
   };
   const move = (e: RPointerEvent) => {
     const prev = pointers.current.get(e.pointerId);
@@ -156,9 +188,9 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
     pointers.current.set(e.pointerId, p);
     const g = gesture.current;
     const m = mine();
-    if (!g || !m) return;
+    if (!g) return;
     if (g.kind === "target") targetAt.current = toWorld(p);
-    else if (g.kind === "aim" && g.start) {
+    else if (g.kind === "aim" && g.start && m) {
       const dx = g.start.x - p.x, dy = g.start.y - p.y;
       const pull = Math.hypot(dx, dy);
       if (pull < 10) {
@@ -220,7 +252,7 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
 
   const tapItem = (i: number) => {
     const p = hud.bag[i];
-    if (!p || hud.mode !== "aim") return;
+    if (!p || hud.mode !== "aim" || !myTurn) return;
     if (TARGETED.includes(p)) {
       setTarget(target?.i === i ? null : { i, kind: p });
       return;
@@ -232,15 +264,17 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
 
   return (
     <FullscreenStage ref={wrap} data-mode={hud.mode ?? ""} className="touch-none select-none">
-      <canvas ref={cv} className="absolute inset-0 size-full" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} aria-label={hole ? `${COURSE.name}, hole ${hole.number}` : `${COURSE.name}, an open course`} />
+      <canvas ref={cv} className="absolute inset-0 size-full" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} aria-label={round ? `${COURSE.name}, hole ${round.number} of ${round.total}` : hole ? `${COURSE.name}, hole ${hole.number}` : `${COURSE.name}, an open course`} data-turn={round ? (myTurn ? "mine" : "theirs") : undefined} />
 
-      <TopBar ref={top} course={COURSE} hole={hole} others={others} hud={hud} onBack={goBack} />
+      {round ? <RoundBar ref={top} course={COURSE} round={round} hud={hud} onBack={goBack} /> : <TopBar ref={top} course={COURSE} hole={hole} others={others} hud={hud} onBack={goBack} />}
       <TargetHint target={target} onCancel={() => setTarget(null)} />
       <Dock
         ref={dock}
         hud={hud}
         target={target}
         hole={!!hole}
+        game={!!round}
+        myTurn={myTurn}
         big={big}
         overview={overview}
         onItem={tapItem}
@@ -252,7 +286,7 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
       {/* A Flash Camera going off: white light over the map, whatever the theme. */}
       <div ref={blind} aria-hidden className="pointer-events-none absolute inset-0 z-20 bg-white opacity-0" />
 
-      {hole && (
+      {(hole || round) && (
         // The hole's name as it comes up, white over the course's own fixed colors.
         <motion.div
           initial={{ opacity: 1 }}
@@ -261,14 +295,14 @@ export default function GolfWorld({ course: COURSE, hole }: { course: Course; ho
           className="pointer-events-none absolute inset-x-0 top-1/3 z-10 text-center text-white [text-shadow:0_2px_12px_rgb(0_0_0/0.55)]"
           aria-hidden
         >
-          <p className="font-display text-callout">Hole {hole.number}</p>
+          <p className="font-display text-callout">Hole {(hole ?? round)!.number}{round ? ` of ${round.total}` : ""}</p>
           <p className="font-display text-title-lg">{COURSE.name}</p>
           <p className="text-callout">Par {COURSE.par}</p>
         </motion.div>
       )}
 
       <AnimatePresence>
-        {result && hole && (
+        {result && hole && !round && (
           <HoleResult
             key="result"
             strokes={result.strokes}

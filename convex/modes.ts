@@ -1,3 +1,6 @@
+import { POWERS } from "./golf/engine";
+import { POWER_NAMES } from "./golf/names";
+
 // Every game and every playable mode. Shared by the server and the client.
 //  - async modes take turns over hours; players get a push when it's their move and a reminder every 8 hours.
 //  - realtime modes need everyone on the screen at once.
@@ -46,12 +49,32 @@ export const GAMES = {
     path: "/poker",
     reasons: { hands: { label: "Last hand played", push: "the last hand" } },
   },
+  golf: {
+    name: "Golf",
+    path: "/golf",
+    reasons: { holes: { label: "Last hole played", push: "the last hole", won: "with the fewest strokes" } },
+  },
 } as const satisfies Record<string, { name: string; path: string; reasons: Record<string, Reason> }>;
 export type GameKey = keyof typeof GAMES;
 
 // A choice the host makes before the game starts. Values are numbers so they compare and store simply.
 // `short` says a changed value in a few words, "{}" standing for the option's label: "9 tiles".
-export type Setting = { key: string; label: string; short: string; options: readonly { value: number; label: string }[]; default: number };
+// `kind` "seed": any whole number, 0 (the default) meaning "roll one when the game's made" (matches.create),
+// so a game's seed can be copied and played again. `kind` "mask": pick any of the options (at least one),
+// stored as a bit per option, `value` being the bit. `when`: only shown, and only matters, while another
+// setting has one of these values (a generated course's seed).
+export type Setting = {
+  key: string;
+  label: string;
+  short: string;
+  options: readonly { value: number; label: string }[];
+  default: number;
+  kind?: "seed" | "mask";
+  when?: { key: string; is: readonly number[] };
+};
+export const SEED_MAX = 999_999;
+export const rollSeed = () => 1 + Math.floor(Math.random() * SEED_MAX);
+const maskAll = (n: number) => 2 ** n - 1;
 
 // Async move timers: after this long on one move the game moves on without you (see matches.remind).
 const moveTime = (def: number, none = true): Setting => ({
@@ -82,6 +105,22 @@ const poker = (betting: number): Setting[] => [
   { key: "blindsBy", label: "Blinds multiply by", short: "Blinds {}", options: [{ value: 1.25, label: "×1.25" }, { value: 1.5, label: "×1.5" }, { value: 2, label: "×2" }, { value: 3, label: "×3" }], default: 2 },
   { key: "betting", label: "Betting", short: "{}", options: [{ value: 0, label: "No limit" }, { value: 1, label: "Pot limit" }], default: betting },
   moveTime(24),
+];
+
+// Golf (convex/golf.ts): which course, and for a generated one what it's like and its seed, then the items,
+// and whether balls knock into each other. `items` is a bit per item in POWERS' order.
+const GENERATED = { key: "course", is: [0] } as const;
+const GOLF: Setting[] = [
+  { key: "course", label: "Course", short: "{}", options: [{ value: 0, label: "Generated" }, { value: 1, label: "Bumper Plains" }, { value: 2, label: "Cold Start" }], default: 0 },
+  { key: "holes", label: "Holes", short: "{} holes", options: [{ value: 3, label: "3" }, { value: 6, label: "6" }, { value: 9, label: "9" }, { value: 18, label: "18" }], default: 9 },
+  { key: "terrain", label: "Terrain", short: "{}", options: [{ value: 0, label: "Grass" }, { value: 1, label: "Ice" }, { value: 2, label: "Both" }], default: 0, when: GENERATED },
+  { key: "style", label: "Holes like", short: "{} holes", options: [{ value: 0, label: "Mini golf" }, { value: 1, label: "Fairways" }, { value: 2, label: "Both" }], default: 2, when: GENERATED },
+  { key: "hazards", label: "Hazards", short: "{} hazards", options: [{ value: 0, label: "Few" }, { value: 1, label: "Some" }, { value: 2, label: "Lots" }], default: 1, when: GENERATED },
+  { key: "seed", label: "Seed", short: "Seed {}", options: [], default: 0, kind: "seed", when: GENERATED },
+  { key: "boxes", label: "Item boxes", short: "{} boxes", options: [{ value: 0, label: "None" }, { value: 1, label: "Few" }, { value: 2, label: "Normal" }, { value: 3, label: "Lots" }], default: 2 },
+  { key: "items", label: "Items", short: "{} items", options: POWERS.map((p, i) => ({ value: i, label: POWER_NAMES[p] })), default: 2 ** POWERS.length - 1, kind: "mask", when: { key: "boxes", is: [1, 2, 3] } },
+  { key: "collide", label: "Ball hits", short: "Ball hits {}", options: [{ value: 1, label: "On" }, { value: 0, label: "Off" }], default: 1 },
+  { key: "mark", label: "Safe near the cup", short: "Safe near the cup: {}", options: [{ value: 1, label: "On" }, { value: 0, label: "Off" }], default: 1, when: { key: "collide", is: [1] } },
 ];
 
 // What every mode has. `draws`: players can offer each other a draw (two-player only). `wants`: how a push
@@ -231,6 +270,38 @@ export const MODES = {
     blurb: "Five cards each and no board. Bet, swap what you don't want, bet again.",
     settings: poker(0),
   },
+  "golf:turns": {
+    game: "golf",
+    name: "Turn-based",
+    title: "golf",
+    kind: "async",
+    players: 8,
+    minPlayers: 2,
+    board: "golf",
+    slug: "turns",
+    blurb: "One course, one shot at a time: whoever's farthest from the cup goes next. Knock each other about, and keep your items from hole to hole.",
+    wants: "a round of golf",
+    settings: [
+      ...GOLF,
+      { key: "shotTime", label: "Time to shoot", short: "{} to shoot", options: [{ value: 60, label: "1 hour" }, { value: 240, label: "4 hours" }, { value: 480, label: "8 hours" }, { value: 1440, label: "1 day" }], default: 480 },
+    ],
+  },
+  "golf:live": {
+    game: "golf",
+    name: "Live",
+    title: "live golf",
+    kind: "realtime",
+    players: 8,
+    minPlayers: 2,
+    board: "golf",
+    slug: "live",
+    blurb: "Everyone on the same hole at once. Shoot whenever you like, knock each other into the water, and sink it before the hole clock runs out.",
+    wants: "a live round of golf",
+    settings: [
+      ...GOLF,
+      { key: "holeTime", label: "Hole clock", short: "{} a hole", options: [{ value: 2, label: "2 min" }, { value: 3, label: "3 min" }, { value: 5, label: "5 min" }], default: 3 },
+    ],
+  },
 } as const satisfies Record<string, ModeDef>;
 
 export type ModeKey = keyof typeof MODES;
@@ -255,15 +326,31 @@ export const flexibleSeats = (mode: string) => isMode(mode) && MODES[mode].minPl
 
 export type Settings = Record<string, number>;
 
+function validSetting(s: Setting, v: number | undefined): v is number {
+  if (v === undefined) return false;
+  if (s.kind && !Number.isInteger(v)) return false;
+  if (s.kind === "seed") return v >= 0 && v <= SEED_MAX;
+  if (s.kind === "mask") return v >= 1 && v <= maskAll(s.options.length);
+  return s.options.some((o) => o.value === v);
+}
+// Whether a setting matters with the rest as they are (see `when`).
+export const settingApplies = (s: Setting, value: Settings) => !s.when || s.when.is.includes(value[s.when.key] ?? NaN);
+export const settingDefs = (mode: string) => (isMode(mode) ? (MODES[mode].settings as readonly Setting[]) : []);
+// Every seed setting rolled where it's still 0, for a game being made. `fresh` rolls them all again (a rematch).
+export function withSeeds(mode: string, raw: Settings | undefined, fresh = false): Settings {
+  const out = { ...raw };
+  for (const s of settingDefs(mode)) if (s.kind === "seed" && (fresh || !out[s.key])) out[s.key] = rollSeed();
+  return out;
+}
+// Which options of a mask setting are on.
+export const maskOn = (value: number, bit: number) => (Math.floor(value / 2 ** bit) & 1) === 1;
+
 // A mode's settings with defaults filled in. Anything unknown or not one of the options falls back to the
 // default, so old games and hand-made requests always read sensibly.
 export function settingsOf(mode: string, raw?: Settings | null): Settings {
   if (!isMode(mode)) return {};
   const out: Settings = {};
-  for (const s of MODES[mode].settings as readonly Setting[]) {
-    const v = raw?.[s.key];
-    out[s.key] = v !== undefined && s.options.some((o) => o.value === v) ? v : s.default;
-  }
+  for (const s of MODES[mode].settings as readonly Setting[]) out[s.key] = validSetting(s, raw?.[s.key]) ? raw![s.key] : s.default;
   return out;
 }
 // Only the settings that differ from the defaults: what gets stored, and what a lobby calls out.
@@ -273,14 +360,30 @@ export function changedSettings(mode: string, raw?: Settings | null): Settings {
   return Object.fromEntries(defs.filter((s) => full[s.key] !== s.default).map((s) => [s.key, full[s.key]]));
 }
 export const settingLabel = (mode: string, key: string, value: number) => {
-  const s = isMode(mode) ? (MODES[mode].settings as readonly Setting[]).find((x) => x.key === key) : undefined;
+  const s = settingDefs(mode).find((x) => x.key === key);
+  if (s?.kind === "seed") return value ? String(value) : "Random";
+  if (s?.kind === "mask") {
+    const on = s.options.filter((o) => maskOn(value, o.value)).length;
+    return on === s.options.length ? "All" : on === 1 ? s.options.find((o) => maskOn(value, o.value))!.label : `${on} of ${s.options.length}`;
+  }
   return s?.options.find((o) => o.value === value)?.label ?? String(value);
 };
 // The changed settings in a few words each: ["21×21 board", "Letter League rules"].
+// Seeds aren't a change anyone needs called out (every game rolls a new one), and settings that don't apply
+// right now are left out.
 export function settingsSummary(mode: string, raw?: Settings | null): string[] {
   const changed = changedSettings(mode, raw);
-  const defs = isMode(mode) ? (MODES[mode].settings as readonly Setting[]) : [];
-  return defs.filter((s) => s.key in changed).map((s) => s.short.replace("{}", settingLabel(mode, s.key, changed[s.key])));
+  const full = settingsOf(mode, raw);
+  return settingDefs(mode)
+    .filter((s) => s.key in changed && s.kind !== "seed" && settingApplies(s, full))
+    .map((s) => s.short.replace("{}", settingLabel(mode, s.key, changed[s.key])));
+}
+
+// "Seed 4242", for a game with a seed that applies (a generated course), so everyone can see which holes.
+export function seedSummary(mode: string, raw?: Settings | null): string | null {
+  const full = settingsOf(mode, raw);
+  const s = settingDefs(mode).find((d) => d.kind === "seed" && settingApplies(d, full) && full[d.key]);
+  return s ? `Seed ${full[s.key]}` : null;
 }
 
 export const REMINDER_MS = 8 * 60 * 60 * 1000;

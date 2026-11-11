@@ -1,6 +1,6 @@
 import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from "react";
 import { toast } from "sonner";
-import { canShoot, groundUnder, type Course, type Power } from "../../../convex/golf/engine";
+import { canShoot, groundUnder, newSim, type Course, type Power } from "../../../convex/golf/engine";
 import type { worldOf } from "../../../convex/golf/holes";
 import { advance, newWorld, TPS, unpack, withPending, type Ball, type WorldState } from "../../../convex/golf/world";
 import { SEAT_COLORS } from "@/games/seats";
@@ -9,7 +9,7 @@ import { ITEMS } from "./items";
 import { allCups, drawFrame, refreshTheme, type Camera, type Fx, type Juice, type Other } from "./toy";
 import type { Hud } from "./Hud";
 import type { GolfNet } from "./useGolfNet";
-import type { HoleInfo } from "./GolfWorld";
+import type { HoleInfo, Round } from "./GolfWorld";
 
 // Ball colors, in the order players first joined. Seat colors, minus the ones lost on grass.
 const BALL_COLORS = [SEAT_COLORS.yellow, SEAT_COLORS.blue, SEAT_COLORS.pink, SEAT_COLORS.orange, SEAT_COLORS.purple, SEAT_COLORS.teal, SEAT_COLORS.red, "#f4f1e8"];
@@ -54,6 +54,7 @@ export function useGolfLoop({
   course: COURSE,
   world: WORLD,
   hole,
+  round,
   net: g,
   scene,
   setHud,
@@ -62,6 +63,8 @@ export function useGolfLoop({
   course: Course;
   world: ReturnType<typeof worldOf>;
   hole: HoleInfo | undefined;
+  // In a game: whose turn it is and everyone's colors, always the latest.
+  round: RefObject<Round | undefined>;
   net: GolfNet;
   scene: Scene;
   setHud: Dispatch<SetStateAction<Hud>>;
@@ -94,6 +97,22 @@ export function useGolfLoop({
 
     const positions = (s: WorldState) => new Map(s.balls.map((b) => [b.id, { x: b.x, y: b.y }]));
     const myBall = (s: WorldState) => s.balls.find((b) => b.id === meRef.current);
+    // In a game, seat colors; elsewhere, the order people turned up in.
+    const ballColor = (b: Ball) => round.current?.colorOf(b.id) ?? colorOf(b);
+    // Who the camera follows: in a turn-based game whoever's shooting, otherwise me, or (watching, or
+    // done with the hole) whoever's still out there.
+    const focusOf = (s: WorldState, mine: Ball | undefined) => {
+      const r = round.current;
+      if (r?.turns && r.turn) return s.balls.find((b) => b.id === r.turn) ?? mine ?? s.balls[0];
+      return mine ?? s.balls.find((b) => b.mode === "roll") ?? s.balls[0];
+    };
+    // Something to draw the shared things from (boxes, bumpers, mines) once my ball's off the hole.
+    let placeholder: Ball | null = null;
+    const watching = (s: WorldState): Ball => {
+      if (!placeholder) placeholder = Object.assign(newSim(COURSE), { id: "", holes: 0, color: 0, startBag: [], carry: null, mode: "sunk" as const, modeT: 99 }) as Ball;
+      Object.assign(placeholder, { boxes: s.boxes, gone: s.gone, mines: s.mines, strikes: s.strikes, patches: s.patches, t: s.tick / TPS, x: COURSE.cup.x, y: COURSE.cup.y, modeT: 99 });
+      return placeholder;
+    };
 
     // "fresh": just happened, play it. "rebuilt": history replayed after a late command; play only what's
     // recent and not heard yet. "arrived": the first build on opening; nothing plays.
@@ -151,9 +170,9 @@ export function useGolfLoop({
             fx.current.push({ kind: "ring", x: ev.x, y: ev.y, t, seed }, { kind: "ring", x: ev.x, y: ev.y, t: t + 0.12, seed }, { kind: "confetti", x: ev.x, y: ev.y - 1, t: t + 0.15, seed });
             const ci = allCups(COURSE).findIndex((k) => Math.hypot(k.x - ev.x, k.y - ev.y) < 0.01);
             if (ci >= 0 && !isMe) flagOut.current.set(ci, t);
-            if (!isMe) toast(`${namesRef.current.get(id) ?? "Someone"} sank one`);
+            if (!isMe) toast(`${namesRef.current.get(id) ?? "Someone"} sank one${strokes !== undefined && round.current ? `, ${strokes}` : ""}`);
             // Long enough to watch it drop.
-            else if (hole && strokes !== undefined) setTimeout(() => setResult({ strokes }), 1100);
+            else if ((hole || round.current) && strokes !== undefined) setTimeout(() => setResult({ strokes }), 1100);
             break;
           }
           case "spawn":
@@ -303,7 +322,7 @@ export function useGolfLoop({
       };
 
       const mine = myBall(s);
-      if (!mine) {
+      if (!mine && !round.current) {
         // Cleared off a hole while the phone was away: straight back on.
         if (worldIdRef.current && nowMs - lastJoin > 3000) {
           lastJoin = nowMs;
@@ -311,9 +330,12 @@ export function useGolfLoop({
         }
         return;
       }
-      const at = drawn(mine);
-      lastDrawn.current = at;
-      if (mine.mode === "roll") {
+      const focus = focusOf(s, mine);
+      const me: Ball = mine ?? watching(s);
+      const at = mine ? drawn(mine) : { x: me.x, y: me.y };
+      const focusAt = focus ? drawn(focus) : at;
+      if (mine) lastDrawn.current = at;
+      if (me.mode === "roll") {
         wasRolling = true;
         const tr = trail.current;
         const lp = tr[tr.length - 1];
@@ -323,17 +345,18 @@ export function useGolfLoop({
         wasRolling = false;
         stoppedAt = t;
       }
-      sound.rolling(mine.mode === "roll" && mine.z <= 0 ? Math.hypot(mine.vx, mine.vy) : 0, mine.mode === "roll" ? groundUnder(WORLD, mine) : null);
+      sound.rolling(me.mode === "roll" && me.z <= 0 ? Math.hypot(me.vx, me.vy) : 0, me.mode === "roll" ? groundUnder(WORLD, me) : null);
 
-      // The camera follows my ball, leaning the way it's going (or toward the nearest flag).
+      // The camera follows the ball that matters (mine, or whoever's shooting), leaning the way it's going
+      // (or toward the nearest flag).
       const c = cam.current, bx = box.current;
-      if (bx.big && !overviewRef.current && nowMs - bx.panned > 1500) {
-        const cup = allCups(COURSE).reduce((a, q) => (Math.hypot(q.x - at.x, q.y - at.y) < Math.hypot(a.x - at.x, a.y - at.y) ? q : a));
-        const dx = cup.x - at.x, dy = cup.y - at.y, d = Math.hypot(dx, dy) || 1;
-        const lean = mine.mode === "roll" ? { x: mine.vx * 0.35, y: mine.vy * 0.35 } : { x: (dx / d) * Math.min(5, d * 0.3), y: (dy / d) * Math.min(5, d * 0.3) };
+      if (bx.big && !overviewRef.current && nowMs - bx.panned > 1500 && focus) {
+        const cup = allCups(COURSE).reduce((a, q) => (Math.hypot(q.x - focusAt.x, q.y - focusAt.y) < Math.hypot(a.x - focusAt.x, a.y - focusAt.y) ? q : a));
+        const dx = cup.x - focusAt.x, dy = cup.y - focusAt.y, d = Math.hypot(dx, dy) || 1;
+        const lean = focus.mode === "roll" ? { x: focus.vx * 0.35, y: focus.vy * 0.35 } : { x: (dx / d) * Math.min(5, d * 0.3), y: (dy / d) * Math.min(5, d * 0.3) };
         const kc = 1 - Math.exp(-dt * 3);
-        c.x += (at.x + lean.x - c.x) * kc;
-        c.y += (at.y + lean.y - c.y) * kc;
+        c.x += (focusAt.x + lean.x - c.x) * kc;
+        c.y += (focusAt.y + lean.y - c.y) * kc;
       }
       const sa = t - shake.current.t;
       const sk = sa < 0.45 ? shake.current.power * Math.exp(-sa * 9) * Math.sin(sa * 52) : 0;
@@ -346,38 +369,42 @@ export function useGolfLoop({
           smoked.set(b.id, t);
           fx.current.push({ kind: "puff", x: b.x, y: b.y - b.z * 0.5, t, seed: (t * 977) | 0, color: "#9c9a92" });
         }
-      const others: Other[] = s.balls.filter((b) => b !== mine).map((b) => ({ sim: b, at: drawn(b), color: colorOf(b), name: namesRef.current.get(b.id) ?? "" }));
+      const others: Other[] = s.balls.filter((b) => b !== mine).map((b) => ({ sim: b, at: drawn(b), color: ballColor(b), name: namesRef.current.get(b.id) ?? "" }));
       const tg = targetRef.current;
       drawFrame(ctx, {
         c: COURSE,
-        sim: mine,
+        sim: me,
         cam: shook,
         juice: juice.current,
         dpr: cv.current!.width / Math.max(1, bx.w),
         t,
         trail: trail.current,
         ball: at,
-        trailAlpha: mine.mode === "roll" ? 1 : Math.max(0, 1 - (t - stoppedAt) / 0.4),
+        trailAlpha: me.mode === "roll" ? 1 : Math.max(0, 1 - (t - stoppedAt) / 0.4),
         fx: fx.current,
         hits: hits.current,
         // A Flash Camera took the aim line away.
-        aim: aim.current && mine.t < mine.blindUntil ? { ...aim.current, line: [] } : aim.current,
+        aim: aim.current && me.t < me.blindUntil ? { ...aim.current, line: [] } : aim.current,
         air: { missiles: s.missiles, storms: s.storms },
         target: tg && ITEMS[tg.kind].aim ? { ...ITEMS[tg.kind].aim!, at: targetAt.current } : null,
         inset: { top: bx.top, bottom: bx.bottom },
         others,
-        myColor: colorOf(mine),
+        myColor: mine ? ballColor(mine) : undefined,
         flagOut: flagOut.current,
       });
 
-      // The flash fading off the screen.
-      if (blind.current) blind.current.style.opacity = String(Math.max(0, Math.min(1, (mine.blindUntil - mine.t) / 1.2)) * 0.92);
-      const status = statusOf(mine), shootable = canShoot(mine);
+      // The flash fading off the screen. (In a turn-based game it lasts till your shot, so it fades to a
+      // haze rather than going.)
+      if (blind.current) blind.current.style.opacity = String(Math.max(0, Math.min(1, (me.blindUntil - me.t) / 1.2)) * (me.blindUntil > 1e8 ? 0.35 : 0.92));
+      const r = round.current;
+      const status = mine ? statusOf(mine) : null;
+      const shootable = !!mine && canShoot(mine) && (!r?.turns || r.turn === mine.id);
       const slow = n.pending.some((p) => !p.acked && nowMs - (p.at ?? nowMs) > SLOW_MS);
-      const h = `${mine.mode}|${mine.bag.join()}|${mine.armed}|${mine.shot}|${mine.holes}|${mine.strokes}|${status}|${shootable}|${slow}`;
+      const mode = mine ? mine.mode : null;
+      const h = `${mode}|${me.bag.join()}|${me.armed}|${me.shot}|${me.holes}|${me.strokes}|${status}|${shootable}|${slow}|${focus?.id}`;
       if (h !== lastHud) {
         lastHud = h;
-        setHud({ ready: true, mode: mine.mode, bag: [...mine.bag], armed: mine.armed, shot: mine.shot, holes: mine.holes, strokes: mine.strokes, status, canShoot: shootable, slow });
+        setHud({ ready: true, mode, bag: mine ? [...mine.bag] : [], armed: mine?.armed ?? null, shot: mine?.shot ?? null, holes: me.holes, strokes: mine?.strokes ?? 0, status, canShoot: shootable, slow });
       }
     };
     raf = requestAnimationFrame(frame);

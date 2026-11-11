@@ -1,4 +1,4 @@
-import { BALL_R, CUP_R, LASER_R, newSim, poseOf, rng, sliderRect, type Course, type Mover, type Patch, type Sim, type Vec } from "./engine";
+import { BALL_R, CUP_R, LASER_R, inPoly, newSim, poseOf, rng, sliderRect, type Course, type Mover, type Patch, type Sim, type Vec } from "./engine";
 import type { Missile, Storm } from "../../../convex/golf/world";
 
 // The look: flat and straight down, in fixed natural golf colors, on a dot grid in the app theme's
@@ -28,6 +28,7 @@ export const PALETTE = {
   pad: "#c9853f",
   ramp: "#5f819c",
   sand: "#d8c9a8",
+  rough: "#4a7d3c", // longer grass off the fairway: darker, no stripes
   mine: "#3a3934",
   mineLight: "#e0503f",
   ball: "#fbf9f3",
@@ -59,6 +60,7 @@ const ICE_PALETTE: Palette = {
   bumper: "#bd5645",
   cup: "#1d2d38",
   sand: "#eef4f7", // snow drifts
+  rough: "#dfe9ee", // deep snow off the fairway
   ramp: "#47677f",
   water: "#3b6a84",
   waterLight: "#5789a2",
@@ -154,8 +156,19 @@ const ease = (k: number) => 1 - (1 - Math.max(0, Math.min(1, k))) ** 3;
 
 // --- The parts ---
 
-export function drawBoard(ctx: Ctx, boards: Vec[][], cup: Vec | Vec[] | null, view: { x0: number; y0: number; x1: number; y1: number }) {
+// `plain`: the land is rough (or deep snow) and the fairway's drawn over it as zones, so no stripes here.
+export function drawBoard(ctx: Ctx, boards: Vec[][], cup: Vec | Vec[] | null, view: { x0: number; y0: number; x1: number; y1: number }, plain = false) {
   const cups = cup === null ? [] : Array.isArray(cup) ? cup : [cup];
+  if (plain) {
+    ctx.beginPath();
+    for (const b of boards) {
+      b.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+      ctx.closePath();
+    }
+    ctx.fillStyle = C.rough;
+    ctx.fill("evenodd");
+    return;
+  }
   for (const b of boards) {
     path(ctx, b);
     ctx.fillStyle = C.grass;
@@ -886,7 +899,9 @@ function drawScene(ctx: Ctx, f: Frame) {
     for (const g of c.greens) if (g.rim === false) drawShore(ctx, g.poly, t);
     ctx.globalAlpha = intro;
   }
-  drawBoard(ctx, c.greens.map((g) => g.poly), allCups(c), view);
+  // Fairway holes: rough (or deep snow) everywhere, the fairway and green painted on as zones.
+  const rough = c.surface === "rough" || c.surface === "snow";
+  drawBoard(ctx, c.greens.map((g) => g.poly), allCups(c), view, rough);
   // On a hole, what's painted on the ground stops at the edge of the board. (The open world's beaches
   // run out past the grass on purpose.)
   if (!c.open) {
@@ -899,7 +914,11 @@ function drawScene(ctx: Ctx, f: Frame) {
     ctx.clip("evenodd");
   }
   for (const z of c.zones) {
-    if (z.kind === "sand" || z.kind === "snow") {
+    if (rough && (z.kind === "green" || z.kind === "packed" || z.kind === "fringe")) {
+      ctx.save();
+      drawBoard(ctx, [z.poly], allCups(c).filter((k) => inPoly(k, z.poly)), view);
+      ctx.restore();
+    } else if (z.kind === "sand" || z.kind === "snow") {
       path(ctx, z.poly);
       ctx.fillStyle = C.sand;
       ctx.fill();

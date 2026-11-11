@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { anyApi } from "convex/server";
 import { SOLUTIONS } from "../convex/golf/solutions";
-import { admin, createPlayer, expect, test, type Phones } from "./fixtures";
+import { admin, createPlayer, expect, fillLobby, getMatch, openLobby, test, type Phones } from "./fixtures";
 
 // Golf's open world on two phones: both in, a shot on one, and the ball ending up in exactly the same
 // place on both (every phone runs the same physics from the same commands).
@@ -52,9 +52,16 @@ test("Golf has a card on Games, and Play opens the courses and the open world", 
   await expect(page.getByRole("img", { name: "A putt rolling into the cup" })).toBeVisible();
   await page.getByRole("link", { name: "Play Golf" }).click();
   await expect(page).toHaveURL(/\/golf$/);
+  // Golf's page: its two modes, then practice.
+  await expect(page.getByRole("link", { name: /^Async/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Real-time/ })).toBeVisible();
+  await page.getByRole("link", { name: /Practice holes/ }).click();
+  await expect(page).toHaveURL(/\/golf\/practice$/);
   await expect(page.getByRole("heading", { name: "Bumper Plains" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Cold Start" })).toBeVisible();
   await expect(page.getByRole("link", { name: /Hole \d, par \d/ })).toHaveCount(18);
+  await page.getByRole("button", { name: "Back" }).click();
+  await expect(page).toHaveURL(/\/golf$/);
   await page.getByRole("link", { name: /Driftwood Bay/ }).click();
   await expect(page).toHaveURL(/\/golf\/world$/);
   // Golf loads on demand, then tees up.
@@ -137,7 +144,7 @@ test("a shot costs the other phone a few kilobytes, not a stream of positions", 
 
 test("a hole: sink it, see the score on both phones, go on to the next, and it's on the course page", async ({ phones }) => {
   const [pa, pb] = await twoPhones(phones);
-  await pa.goto("/golf");
+  await pa.goto("/golf/practice");
   await pa.getByRole("link", { name: "Hello, Hole 1, par 2" }).click();
   // (Exactly: the row on the course page has this in its label too.)
   await expect(pa.getByLabel("Hello, hole 1", { exact: true })).toBeVisible();
@@ -168,7 +175,7 @@ test("a hole: sink it, see the score on both phones, go on to the next, and it's
   await expect.poll(async () => (await balls(pb)).map((x) => x.id), { timeout: 15_000 }).toEqual([await meOn(pb)]);
 
   await pa.getByRole("button", { name: "Back" }).click();
-  await expect(pa).toHaveURL(/\/golf$/);
+  await expect(pa).toHaveURL(/\/golf\/practice$/);
   await expect(pa.getByRole("link", { name: "Play Bumper Plains" })).toContainText("Play from hole 2");
 });
 
@@ -290,4 +297,51 @@ test("moving obstacles keep moving while your ball sits still", async ({ phones 
   expect(first.mode).toBe("aim");
   await expect.poll(async () => (await balls(page))[0].t - first.t).toBeGreaterThan(1);
   expect((await balls(page))[0].mode).toBe("aim");
+});
+
+// A game: a lobby with settings, two phones, one shot at a time.
+test("a turn-based game: the lobby, then one shot at a time, and the card", async ({ phones }) => {
+  test.setTimeout(120_000);
+  const [pa, pb] = await twoPhones(phones);
+  const id = await openLobby(pa, "golf", "turns", { Course: "Bumper Plains", Holes: "3" });
+  await fillLobby(pa, [pb]);
+  for (const p of [pa, pb]) {
+    await expect(p.getByLabel(/hole 1 of 3/)).toBeVisible({ timeout: 20_000 });
+    await expect(p.getByText("Teeing up")).toHaveCount(0, { timeout: 15_000 });
+  }
+  const m = await getMatch(id);
+  const turnId = m.turn as string;
+  const [mine, theirs] = (await meOn(pa)) === turnId ? [pa, pb] : [pb, pa];
+  // Whose turn it is, on both.
+  await expect(mine.getByLabel(/hole 1 of 3/)).toHaveAttribute("data-turn", "mine");
+  await expect(theirs.getByLabel(/hole 1 of 3/)).toHaveAttribute("data-turn", "theirs");
+  await expect(mine.getByText("Your shot")).toBeVisible();
+  // A short putt up the hole: the turn goes to the other phone once it stops (they haven't teed off).
+  await shoot(mine, -Math.PI / 2, 0.2);
+  await expect(theirs.getByLabel(/hole 1 of 3/)).toHaveAttribute("data-turn", "mine", { timeout: 20_000 });
+  await expect(mine.getByLabel(/hole 1 of 3/)).toHaveAttribute("data-turn", "theirs");
+  // Both phones agree where the first ball stopped.
+  const strip = (b: BallView[]) => b.map(({ t: _t, ...x }) => x).sort((p, q) => p.id.localeCompare(q.id));
+  await expect.poll(async () => JSON.stringify(strip(await balls(theirs))) === JSON.stringify(strip(await balls(mine))), { timeout: 10_000 }).toBe(true);
+  // The card's in the menu, with the seedless course's holes on it.
+  await mine.getByRole("button", { name: "Menu" }).click();
+  await expect(mine.getByRole("region", { name: "Scorecard" })).toBeVisible();
+  await expect(mine.getByRole("region", { name: "Scorecard" })).toContainText("Hello");
+  await expect(mine.getByRole("region", { name: "Scorecard" })).toContainText("Elbow");
+});
+
+test("a generated course shows its seed, and the same seed plays the same holes", async ({ phones }) => {
+  test.setTimeout(120_000);
+  const [pa, pb] = await twoPhones(phones);
+  await pa.goto("/golf/mode/turns");
+  await pa.getByRole("button", { name: "Settings" }).click();
+  await pa.getByRole("radiogroup", { name: "Holes" }).getByRole("radio", { name: "3", exact: true }).click();
+  await pa.getByRole("textbox", { name: "Seed" }).fill("4242");
+  await pa.getByRole("textbox", { name: "Seed" }).press("Enter");
+  await pa.getByRole("button", { name: "Open a game" }).click();
+  await expect(pa.getByRole("heading", { name: "Waiting for players" })).toBeVisible();
+  await fillLobby(pa, [pb]);
+  await expect(pa.getByLabel(/hole 1 of 3/)).toBeVisible({ timeout: 60_000 });
+  await pa.getByRole("button", { name: "Menu" }).click();
+  await expect(pa.getByRole("button", { name: "Copy seed 4242" })).toBeVisible();
 });

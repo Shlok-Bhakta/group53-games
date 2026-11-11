@@ -40,6 +40,7 @@ export function GameHub({ game }: { game: GameUI }) {
           : null
         }
       />
+      {game.extra?.()}
       {recent && recent.length > 0 && (
         <Section title="Recent games">
           {recent.map((m) => (

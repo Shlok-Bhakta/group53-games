@@ -54,7 +54,7 @@ export function GolfHub() {
   };
   return (
     <div className="flex flex-col gap-6">
-      <NavBar title="Golf" back="/games" />
+      <NavBar title="Practice" back="/golf" />
       {COURSES.map((co) => {
         const par = co.holes.reduce((a, h) => a + h.par, 0);
         const played = co.holes.filter((h) => mine(h.id));
@@ -91,6 +91,7 @@ export function GolfHub() {
 }
 
 export function GolfOpenWorld() {
+  // (Back from the open world goes to golf's page, where it's listed.)
   return <GolfWorld course={SANDBOX} />;
 }
 

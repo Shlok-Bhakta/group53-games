@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { ListIcon, ShareNetworkIcon } from "@phosphor-icons/react";
 import type { MatchView } from "../../convex/matches";
-import { MODES, GAMES, gameOf, matchPath, settingLabel, settingsOf, type ModeKey, type Setting } from "../../convex/modes";
+import { MODES, GAMES, gameOf, matchPath, settingApplies, settingLabel, settingsOf, type ModeKey, type Setting } from "../../convex/modes";
 import { Group, SectionTitle } from "@/components/parts";
 import { Rules } from "@/components/Rules";
 import { Button } from "@/components/ui/button";
@@ -66,9 +66,10 @@ export function GameMenu({
 
 // Every setting this game is played with, the ones the host changed from the default in the primary color.
 function MatchSettings({ match }: { match: MatchView }) {
-  const defs = (MODES[match.mode as ModeKey]?.settings ?? []) as readonly Setting[];
-  if (defs.length === 0) return null;
   const value = settingsOf(match.mode, match.settings);
+  // Only what applies: no seed for a course made by hand.
+  const defs = ((MODES[match.mode as ModeKey]?.settings ?? []) as readonly Setting[]).filter((s) => settingApplies(s, value));
+  if (defs.length === 0) return null;
   return (
     <section aria-label="Game settings" className="pt-6">
       <SectionTitle className="pb-2">Settings</SectionTitle>
@@ -76,7 +77,7 @@ function MatchSettings({ match }: { match: MatchView }) {
         {defs.map((s) => (
           <div key={s.key} className="flex min-h-12 items-center gap-3 px-3 py-2">
             <span className="min-w-0 flex-1 text-callout text-muted-foreground">{s.label}</span>
-            <span className={cn("shrink-0 text-callout font-semibold", value[s.key] !== s.default && "text-primary")}>{settingLabel(match.mode, s.key, value[s.key])}</span>
+            <span className={cn("shrink-0 text-callout font-semibold", value[s.key] !== s.default && s.kind !== "seed" && "text-primary")}>{settingLabel(match.mode, s.key, value[s.key])}</span>
           </div>
         ))}
       </Group>

@@ -103,7 +103,7 @@ function SignedIn() {
                 <Route path="/settings" element={<Navigate to="/you" replace />} />
                 <Route path="/wordle" element={<Wordle />} />
                 {golfRoute("/mereddia", <HostedGame game="mereddia" title="Journey Across Mereddia" />)}
-                {golfRoute("/golf", <GolfHub />)}
+                {golfRoute("/golf/practice", <GolfHub />)}
                 {golfRoute("/golf/world", <GolfOpenWorld />)}
                 {golfRoute("/golf/:course/:hole", <GolfHole />)}
                 {/* Stonks' code loads before it's opened (src/games/stonks/load.tsx); the skeletons are its exact shape. */}

@@ -1,6 +1,6 @@
 // Visual review of golf: SCREENS=1 npm run test:e2e -- golf-screens. Writes PNGs to e2e/.state/screens.
 import type { Page } from "@playwright/test";
-import { createPlayer, expect, phone, test } from "./fixtures";
+import { createPlayer, expect, fillLobby, phone, test } from "./fixtures";
 
 test.skip(!process.env.SCREENS, "Set SCREENS=1 to capture review screenshots");
 
@@ -35,8 +35,11 @@ for (const scheme of ["dark", "light"] as const) {
     await a.getByRole("heading", { name: "Golf" }).scrollIntoViewIfNeeded();
     await shot("games");
     await a.goto("/golf");
-    await a.getByRole("heading", { name: "Cold Start" }).waitFor();
+    await a.getByRole("link", { name: /^Async/ }).waitFor();
     await shot("hub");
+    await a.goto("/golf/practice");
+    await a.getByRole("heading", { name: "Cold Start" }).waitFor();
+    await shot("practice");
     await a.screenshot({ path: `e2e/.state/screens/${scheme}-golf-hub-full.png`, fullPage: true, animations: "allow" });
     for (const [name, path] of [["hole-green", "/golf/plains/3"], ["hole-big", "/golf/plains/7"], ["hole-ice", "/golf/cold/5"], ["hole-floes", "/golf/cold/8"], ["hole-final", "/golf/cold/9"]] as const) {
       await a.goto(path);
@@ -60,5 +63,66 @@ for (const scheme of ["dark", "light"] as const) {
     await shot("rolling");
     await a.getByRole("button", { name: "See the whole map" }).click();
     await shot("overview");
+  });
+}
+
+// A game on a generated course: the mode page and its settings, the lobby, the hole on whoever's turn it
+// is and on everyone else's, the menu with the card, and the scores after a hole.
+for (const scheme of ["dark", "light"] as const) {
+  test(`golf game screens ${scheme}`, async ({ browser }) => {
+    test.setTimeout(300_000);
+    const players = await Promise.all(["WashableBowl700", "chrisis14", "Boiler"].map((n) => createPlayer(n)));
+    const ctxs = await Promise.all(players.map(() => browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: scheme })));
+    const pages = await Promise.all(players.map((p, i) => phone(ctxs[i], { player: p, notifications: "granted" })));
+    for (const p of pages) {
+      await p.goto("/");
+      await p.getByRole("button", { name: "Turn on notifications" }).click();
+    }
+    const [a, b, c] = pages;
+    const shot = async (name: string, page = a, full = false) => {
+      await page.waitForTimeout(900);
+      await page.screenshot({ path: `e2e/.state/screens/${scheme}-golfgame-${name}.png`, animations: "allow", fullPage: full });
+    };
+    const seed = process.env.SEED ?? "4242";
+    const style = process.env.STYLE ?? "Both";
+    await a.goto("/golf/mode/turns");
+    await a.getByRole("button", { name: "Settings" }).click();
+    await a.getByRole("radiogroup", { name: "Holes like" }).getByRole("radio", { name: style, exact: true }).click();
+    await a.getByRole("textbox", { name: "Seed" }).fill(seed);
+    await a.getByRole("textbox", { name: "Seed" }).press("Enter");
+    await shot("mode", a, true);
+    await a.getByRole("button", { name: "Open a game" }).click();
+    await a.getByRole("heading", { name: "Waiting for players" }).waitFor();
+    await fillLobby(a, [b, c]);
+    for (const p of pages) await expect(p.getByLabel(/hole 1 of 9/)).toBeVisible({ timeout: 60_000 });
+    await expect(a.getByText("Teeing up")).toHaveCount(0, { timeout: 15_000 });
+    await a.waitForTimeout(1600);
+    const up = async () => {
+      for (const p of pages) if ((await p.getByLabel(/hole \d of 9/).getAttribute("data-turn")) === "mine") return p;
+      return null;
+    };
+    const first = (await up())!;
+    await shot("my-turn", first);
+    await shot("their-turn", pages.find((p) => p !== first)!);
+    await first.getByRole("button", { name: "Menu" }).click();
+    await shot("menu", first);
+    await first.keyboard.press("Escape");
+    // Everyone plays the hole out with the test hook, so the hole card comes up.
+    for (let k = 0; k < 40; k++) {
+      const p = await up();
+      if (!p) {
+        await a.waitForTimeout(500);
+        if (await a.getByRole("dialog", { name: /Hole 1 scores/ }).isVisible()) break;
+        continue;
+      }
+      await p.evaluate(() => {
+        const g = (window as unknown as { __golf: { shoot(a: number, p: number): void; balls(): { id: string; x: number; y: number }[]; me(): string } }).__golf;
+        g.shoot(-Math.PI / 2 + (Math.random() - 0.5) * 0.6, 0.35 + Math.random() * 0.3);
+      });
+      await p.waitForTimeout(2500);
+      if (await a.getByRole("dialog", { name: /Hole 1 scores/ }).isVisible()) break;
+    }
+    if (await a.getByRole("dialog", { name: /Hole 1 scores/ }).isVisible()) await shot("hole-card");
+    await shot("hole-2-or-later");
   });
 }

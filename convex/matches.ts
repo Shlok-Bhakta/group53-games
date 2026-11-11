@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { MODES, REALTIME_LOBBY_MS, REMINDER_MS, acceptPath, allowsDraws, changedSettings, flexibleSeats, isMode, modeDef, modePath, reasonOf, settingsOf, type ModeKey, type Settings } from "./modes";
+import { MODES, REALTIME_LOBBY_MS, REMINDER_MS, acceptPath, allowsDraws, changedSettings, flexibleSeats, isMode, modeDef, modePath, reasonOf, settingsOf, withSeeds, type ModeKey, type Settings } from "./modes";
 import { isTestUser, notify, notifyMatch } from "./notify";
 import { placesOf, recordResult } from "./ratings";
 import { hooksFor } from "./games";
@@ -176,7 +176,8 @@ export const expireLobby = internalMutation({
 
 async function create(ctx: MutationCtx, userId: Id<"users">, mode: ModeKey, invited: Id<"users">[], settings?: Settings) {
   const now = Date.now();
-  const changed = changedSettings(mode, settings);
+  // A seed left on Random is rolled now, so everyone sees the one they'll play.
+  const changed = changedSettings(mode, withSeeds(mode, settings));
   const id = await ctx.db.insert("matches", {
     mode,
     status: "waiting",
@@ -401,7 +402,7 @@ export const configure = mutation({
     const userId = await requireUser(ctx);
     const match = await loadMatch(ctx, id);
     if (match.status !== "waiting" || match.createdBy !== userId) throw new Error("Only the host can change the settings.");
-    await ctx.db.patch(id, { settings: changedSettings(match.mode, { ...settingsOf(match.mode, match.settings), ...settings }) });
+    await ctx.db.patch(id, { settings: changedSettings(match.mode, withSeeds(match.mode, { ...settingsOf(match.mode, match.settings), ...settings })) });
   },
 });
 
@@ -467,6 +468,7 @@ export const rematch = mutation({
     if (live && match.players.every((p) => votes.includes(p.userId))) {
       // Everyone's in: same players, colors moved one seat along (in two-player, swapped).
       const now = Date.now();
+      const settings = changedSettings(match.mode, withSeeds(match.mode, match.settings, true));
       const colors = hooksFor(match.mode).seats(match.mode as ModeKey, match.players.length);
       const order = colors.map((_, i) => ({ userId: match.players.find((p) => p.color === colors[(i + 1) % colors.length])!.userId }));
       const newId = await ctx.db.insert("matches", {
@@ -475,7 +477,9 @@ export const rematch = mutation({
         createdBy: offer!.by,
         players: order,
         invited: [],
-        ...(match.settings ? { settings: match.settings } : {}),
+        // The same settings, with any seed rolled again: a rematch is a new course. (The old seed's still on
+        // the finished game to play again.)
+        ...(Object.keys(settings).length ? { settings } : {}),
         state: null,
         moveCount: 0,
         lastActivityAt: now,

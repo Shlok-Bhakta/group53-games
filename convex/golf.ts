@@ -1,14 +1,24 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { requireUser } from "./lib/seats";
+import { requireUser, seatOf, SEAT_COLORS } from "./lib/seats";
 import { v } from "convex/values";
-import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { courseOf, holeOf, worldOf } from "./golf/holes";
 import { SANDBOX } from "./golf/sandbox";
-import type { Power } from "./golf/engine";
-import { advance, carryOf, cmdOrder, newWorld, pack, quiet, TPS, unpack, type Cmd, type Packed } from "./golf/world";
+import type { Course, Power } from "./golf/engine";
+import { advance, applyCmd, carryOf, cmdOrder, newWorld, pack, quiet, TPS, unpack, type Cmd, type Packed, type Rules, type WorldState } from "./golf/world";
+import { buildHole, holeCount, holeKey } from "./golf/build";
+import { bestShot } from "./golf/bot";
+import { distanceField } from "./golf/distance";
+import { activeSeats, capOf, honors, IDLE_OUT, MARK_R, newRound, nextUp, standings, type GolfState } from "./golf/round";
 import { ONLINE_WINDOW_MS } from "./presenceConfig";
+import { settingsOf, type ModeKey } from "./modes";
+import type { GameHooks } from "./games";
+import { finish, finishBySeats } from "./matches";
+import { notifyMatch } from "./notify";
+import { displayName } from "./lib/people";
+import { passTurn } from "./lib/turns";
 
 // Golf, played live: the open world, and each of the holes (convex/golf/holes.ts), every one its own
 // world with whoever's on it right now.
@@ -58,10 +68,23 @@ async function commandsFrom(ctx: QueryCtx, worldId: Id<"golfWorlds">, from: numb
 }
 const toCmd = (r: Doc<"golfCommands">): Cmd => ({ tick: r.tick, by: r.by, seq: r.seq, kind: r.kind, a: r.a, p: r.p, i: r.i, x: r.x, y: r.y, ...(r.bag ? { bag: r.bag as Power[] } : {}) });
 
+// A game's worlds tick twice as often, so the next player's turn comes round soon after the last ball stops.
+const tickMs = (w: Doc<"golfWorlds">) => (w.matchId ? TICK_MS / 2 : TICK_MS);
+
 async function wake(ctx: MutationCtx, world: Doc<"golfWorlds">) {
   if (world.awake) return;
   await ctx.db.patch(world._id, { awake: true });
-  await ctx.scheduler.runAfter(TICK_MS, internal.golf.tick, { worldId: world._id });
+  await ctx.scheduler.runAfter(tickMs(world), internal.golf.tick, { worldId: world._id });
+}
+
+// What a world's played on: a game's hole from its table, or one of the holes and the open world in code.
+async function courseFor(ctx: QueryCtx, w: Doc<"golfWorlds">): Promise<Course | null> {
+  if (!w.matchId) return courseOf(w.key);
+  const row = await ctx.db
+    .query("golfCourses")
+    .withIndex("by_match", (q) => q.eq("matchId", w.matchId!).eq("n", w.hole ?? 0))
+    .unique();
+  return (row?.course as Course | undefined) ?? null;
 }
 
 // The world, its settled snapshot and everyone who's played in it. Changes only when the snapshot
@@ -83,7 +106,7 @@ export const world = query({
         return { id: r.userId, name: u?.name ?? "Someone", image: u?.image ?? null };
       }),
     );
-    return { worldId: w._id, startAt: w.startAt, collide: w.collide, course: w.key, snapshot: (snap?.state as Packed | undefined) ?? null, players };
+    return { worldId: w._id, startAt: w.startAt, collide: w.collide, course: w.key, matchId: w.matchId ?? null, hole: w.hole ?? null, snapshot: (snap?.state as Packed | undefined) ?? null, players };
   },
 });
 
@@ -102,10 +125,12 @@ export const join = mutation({
   args: { key: v.optional(v.string()) },
   handler: async (ctx, { key = KEY }) => {
     const userId = await requireUser(ctx);
+    let w = await worldByKey(ctx, key);
+    // A game's hole: everyone's ball was put on the tee when it started, and stays there.
+    if (w?.matchId) return w._id;
     const course = courseOf(key);
     if (!course) throw new Error("There's no such hole.");
     const now = Date.now();
-    let w = await worldByKey(ctx, key);
     if (!w) {
       const id = await ctx.db.insert("golfWorlds", { key, startAt: now, awake: false, collide: true });
       w = (await ctx.db.get(id))!;
@@ -158,7 +183,8 @@ export const leave = mutation({
     const userId = await getAuthUserId(ctx);
     if (userId === null) return;
     const w = await ctx.db.get(worldId);
-    const course = w && courseOf(w.key);
+    // A game's ball stays put however often you leave.
+    const course = w && !w.matchId && courseOf(w.key);
     if (!w || !course || course.open) return;
     const now = Date.now();
     const snap = await snapshotOf(ctx, worldId);
@@ -242,7 +268,20 @@ export const act = mutation({
     for (const n of [clientTick, seq, a, p, i, x, y]) if (n !== undefined && !Number.isFinite(n)) throw new Error("That's not a number.");
     const serverTick = tickAt(w, Date.now());
     // Honour the tick the player saw, within reason.
-    const tick = Math.min(serverTick + SLACK, Math.max(serverTick - MAX_LAG, Math.floor(clientTick)));
+    let tick = Math.min(serverTick + SLACK, Math.max(serverTick - MAX_LAG, Math.floor(clientTick)));
+    if (w.matchId) {
+      const match = await ctx.db.get(w.matchId);
+      const st = match?.state as GolfState | null;
+      if (!match || match.status !== "active" || !st || st.hole !== w.hole) throw new Error("That hole's over.");
+      const seat = seatOf(match, userId);
+      if (seat < 0 || st.out.includes(seat)) throw new Error("You're not playing in this game.");
+      if (kind === "reset") throw new Error("There's no starting again in a game.");
+      if (isTurns(match) && kind !== "hop" && kind !== "brake" && match.turn !== userId) throw new Error("It's not your turn.");
+      // Nothing from before this turn started, nor on its very tick (the "turn" command might sort after it).
+      tick = Math.max(tick, st.turnTick + 1);
+      // Back from being away: the caddie stands down.
+      if (st.idle[seat] > 0) await ctx.db.patch(match._id, { state: { ...st, idle: st.idle.map((n, k) => (k === seat ? 0 : n)) } });
+    }
     await ctx.db.insert("golfCommands", {
       worldId,
       tick,
@@ -266,8 +305,9 @@ export const tick = internalMutation({
   handler: async (ctx, { worldId }) => {
     const w = await ctx.db.get(worldId);
     if (!w || !w.awake) return;
-    const settled = settledAt(tickAt(w, Date.now()));
-    const course = courseOf(w.key);
+    const now = Date.now();
+    const settled = settledAt(tickAt(w, now));
+    const course = await courseFor(ctx, w);
     if (!course) return;
     const snap = await snapshotOf(ctx, worldId);
     const state = snap ? unpack(snap.state as Packed) : newWorld(course, { collide: w.collide });
@@ -292,7 +332,336 @@ export const tick = internalMutation({
         for (const e of state.events)
           if (e.ev.type === "sink" && e.strokes !== undefined) await recordScore(ctx, w.key, e.id as Id<"users">, e.strokes, Date.now());
     }
-    if (still) await ctx.db.patch(worldId, { awake: false });
-    else await ctx.scheduler.runAfter(TICK_MS, internal.golf.tick, { worldId });
+    // A game's hole: hand the turn on, and finish the hole once everyone's done.
+    const ended = w.matchId ? await roundTick(ctx, w, course, state, now) : false;
+    if (still || ended) await ctx.db.patch(worldId, { awake: false });
+    else await ctx.scheduler.runAfter(tickMs(w), internal.golf.tick, { worldId });
   },
 });
+
+// --- Games: a round on a course, through the shared match framework (convex/matches.ts) ---
+//
+// Each hole of a game is its own world (the same netcode as above), made when the hole starts with every
+// player's ball already on the tee. Turn-based ("golf:turns"): one ball at a time, whoever's farthest from
+// the cup next (round.ts), told to the world with a "turn" command so every phone enforces it. Live
+// ("golf:live"): everyone at once against a hole clock. A ball that's in, or out of strokes, is done; once
+// every ball is, the scores go on the card and the next hole starts.
+
+const isTurns = (m: Doc<"matches">) => m.mode === "golf:turns";
+const nameOf = async (ctx: QueryCtx, id: Id<"users">) => (await displayName(ctx, id)).split(" ")[0];
+// A world's state right now: the settled one run on through every command since.
+async function stateNow(ctx: QueryCtx, w: Doc<"golfWorlds">, course: Course, settled: WorldState, now: number) {
+  const s = unpack(pack(settled));
+  advance(s, worldOf(course), Math.max(s.tick, tickAt(w, now)), await commandsFrom(ctx, w._id, s.tick));
+  s.events.length = 0;
+  return s;
+}
+async function insertCmd(ctx: MutationCtx, w: Doc<"golfWorlds">, cmd: Omit<Cmd, "seq"> & { by: Id<"users"> }) {
+  await ctx.db.insert("golfCommands", { worldId: w._id, seq: (Date.now() % 1_000_000_000) + Math.floor(Math.random() * 1000), ...cmd, bag: cmd.bag });
+  await wake(ctx, w);
+}
+
+async function roundTick(ctx: MutationCtx, w: Doc<"golfWorlds">, course: Course, settled: WorldState, now: number) {
+  const match = await ctx.db.get(w.matchId!);
+  if (!match || match.status !== "active") return true;
+  const st = match.state as GolfState;
+  if (st.hole !== w.hole) return true;
+  const active = activeSeats(st, match.players.length).map((i) => match.players[i].userId as string);
+  // Everyone's done, in the settled world: nothing can change that now.
+  const done = settled.done ?? [];
+  if (active.every((id) => done.some((d) => d.id === id))) {
+    await endHole(ctx, match, st, course, settled);
+    return true;
+  }
+  if (!isTurns(match)) return false;
+  const s = await stateNow(ctx, w, course, settled, now);
+  const turnBall = s.balls.find((b) => b.id === match.turn);
+  // The turn's over once its ball has gone (in, or picked up) or has shot and everything's stopped.
+  const over = !turnBall || ((turnBall.turnShots ?? 0) > 0 && quiet(s, course));
+  if (!over || !match.turn) return false;
+  await knockPushes(ctx, match, st, s);
+  await giveTurn(ctx, w, match, st, course, s, now);
+  return false;
+}
+
+// Anyone the last turn moved, a ball or an item knocking them off where they sat, hears who did it.
+async function knockPushes(ctx: MutationCtx, match: Doc<"matches">, st: GolfState, s: WorldState) {
+  if (!match.turn) return;
+  const by = await nameOf(ctx, match.turn);
+  for (const [id, [x, y]] of Object.entries(st.spots)) {
+    if (id === match.turn) continue;
+    const b = s.balls.find((o) => o.id === id);
+    const sunk = s.done?.find((d) => d.id === id && d.how === "sunk" && d.tick >= st.turnTick);
+    if (sunk) await notifyMatch(ctx, id as Id<"users">, match, { title: `${by} knocked you in`, body: "Lucky. That counts." });
+    else if (b && Math.hypot(b.x - x, b.y - y) > 1.5) await notifyMatch(ctx, id as Id<"users">, match, { title: `${by} knocked your ball`, body: "It's not where you left it." });
+  }
+}
+
+// Whoever's away gets the turn: a "turn" command for every phone, a push and their clock. Someone the
+// caddie's been playing for (IDLE_OUT turns in a row) just gets their shot taken for them.
+async function giveTurn(ctx: MutationCtx, w: Doc<"golfWorlds">, match: Doc<"matches">, st: GolfState, course: Course, s: WorldState, now: number) {
+  const seatOfId = (id: string) => match.players.findIndex((p) => p.userId === id);
+  const field = distanceField(course, worldOf(course));
+  const next = nextUp(s, field, seatOfId, st.order) as Id<"users"> | null;
+  if (!next) {
+    if (match.turn) await ctx.db.patch(match._id, { turn: undefined });
+    return;
+  }
+  const tick = Math.max(s.tick, tickAt(w, now));
+  await insertCmd(ctx, w, { tick, by: next, kind: "turn" });
+  const spots = Object.fromEntries(s.balls.map((b) => [b.id, [b.x, b.y] as [number, number]]));
+  const b = s.balls.find((o) => o.id === next)!;
+  const n = st.hole;
+  const shotTime = settingsOf(match.mode, match.settings).shotTime ?? 480;
+  const { match: after } = await passTurn(ctx, match, {
+    state: { ...st, turnTick: tick, spots },
+    turn: next,
+    by: null,
+    push: { title: "Your shot", body: b.strokes === 0 ? `Hole ${n + 1}, par ${course.par}. You're on the tee.` : `Hole ${n + 1}, par ${course.par}. You're on ${b.strokes}.` },
+    timer: { at: now + shotTime * 60_000, fn: internal.golf.shotTimeout },
+  });
+  if (st.idle[seatOfId(next)] >= IDLE_OUT) await caddie(ctx, w, after, course, s, next, tick);
+}
+
+// The caddie's shot: the best of a fan of shots, for someone who's out of time.
+async function caddie(ctx: MutationCtx, w: Doc<"golfWorlds">, match: Doc<"matches">, course: Course, s: WorldState, id: Id<"users">, tick: number) {
+  const from = unpack(pack(s));
+  applyCmd(from, course, { tick, by: id, seq: 0, kind: "turn" });
+  from.tick = tick;
+  const shot = bestShot(worldOf(course), pack(from), id, undefined, { angles: 16, powers: [0.15, 0.3, 0.5, 0.75, 1] });
+  if (!shot) return;
+  await insertCmd(ctx, w, { tick: tick + 1, by: id, kind: "shot", a: shot.a, p: shot.p });
+  const st = match.state as GolfState;
+  const seat = seatOf(match, id);
+  await ctx.db.patch(match._id, { state: { ...st, idle: st.idle.map((n, k) => (k === seat ? n + 1 : n)) } });
+}
+
+export const shotTimeout = internalMutation({
+  args: { id: v.id("matches"), moveCount: v.number() },
+  handler: async (ctx, { id, moveCount }) => {
+    const match = await ctx.db.get(id);
+    if (!match || match.status !== "active" || match.moveCount !== moveCount || !match.turn) return;
+    const st = match.state as GolfState;
+    const w = st.worldId ? await ctx.db.get(st.worldId as Id<"golfWorlds">) : null;
+    const course = w && (await courseFor(ctx, w));
+    if (!w || !course) return;
+    const snap = await snapshotOf(ctx, w._id);
+    if (!snap) return;
+    const s = await stateNow(ctx, w, course, unpack(snap.state as Packed), Date.now());
+    const b = s.balls.find((o) => o.id === match.turn);
+    // Already shot and still rolling: the turn's about to pass anyway.
+    if (!b || (b.turnShots ?? 0) > 0) return;
+    await caddie(ctx, w, match, course, s, match.turn, Math.max(s.tick, tickAt(w, Date.now())));
+    await notifyMatch(ctx, match.turn, match, { title: "Your caddie took your shot", body: "You ran out of time, so they had a go for you." });
+  },
+});
+
+// A live hole's clock running out: everyone still out there picks up.
+export const holeClock = internalMutation({
+  args: { id: v.id("matches"), hole: v.number() },
+  handler: async (ctx, { id, hole }) => {
+    const match = await ctx.db.get(id);
+    const st = match?.state as GolfState | undefined;
+    if (!match || match.status !== "active" || !st || st.hole !== hole || !st.worldId) return;
+    const w = await ctx.db.get(st.worldId as Id<"golfWorlds">);
+    const course = w && (await courseFor(ctx, w));
+    const snap = w && (await snapshotOf(ctx, w._id));
+    if (!w || !course || !snap) return;
+    const s = await stateNow(ctx, w, course, unpack(snap.state as Packed), Date.now());
+    const tick = Math.max(s.tick, tickAt(w, Date.now()));
+    for (const b of s.balls) await insertCmd(ctx, w, { tick, by: b.id as Id<"users">, kind: "pickup" });
+  },
+});
+
+// Every ball's done: the scores go on the card, and on to the next hole or the end of the round.
+async function endHole(ctx: MutationCtx, match: Doc<"matches">, st: GolfState, course: Course, s: WorldState) {
+  const n = st.hole;
+  const seats = match.players.length;
+  const row: (number | null)[] = Array.from({ length: seats }, () => null);
+  const sunk: boolean[] = Array.from({ length: seats }, () => false);
+  const bags = st.bags.map((b) => [...b]);
+  for (const d of s.done ?? []) {
+    const seat = match.players.findIndex((p) => p.userId === d.id);
+    if (seat < 0 || st.out.includes(seat)) continue;
+    row[seat] = d.strokes;
+    sunk[seat] = d.how === "sunk";
+    bags[seat] = d.bag;
+  }
+  const scores = [...st.scores];
+  scores[n] = row;
+  const sunks = [...st.sunk];
+  sunks[n] = sunk;
+  const best = Math.min(...row.filter((x): x is number => x !== null));
+  const leaders = row.map((x, i) => (x === best ? i : -1)).filter((i) => i >= 0);
+  const last = `Hole ${n + 1}: ${(await Promise.all(leaders.map((i) => nameOf(ctx, match.players[i].userId)))).join(" and ")} ${best}`;
+  const next: GolfState = { ...st, scores, sunk: sunks, bags, spots: {}, last, waiting: false, clockAt: undefined };
+  if (n + 1 >= st.total) {
+    await ctx.db.patch(match._id, { state: next, turn: undefined, lastActivityAt: Date.now() });
+    await finishBySeats(ctx, { ...match, state: next }, standings(next, seats), "holes");
+    return;
+  }
+  const ready = !!next.holes[n + 1];
+  const live = !isTurns(match);
+  await ctx.db.patch(match._id, { state: { ...next, waiting: !ready, nextAt: live && ready ? Date.now() + NEXT_HOLE_MS : undefined }, turn: undefined, lastActivityAt: Date.now() });
+  // Live games get a moment to see the scores before everyone's off again.
+  if (ready && live) await ctx.scheduler.runAfter(NEXT_HOLE_MS, internal.golf.nextHole, { id: match._id, hole: n + 1 });
+  else if (ready) await startHole(ctx, (await ctx.db.get(match._id))!, n + 1);
+}
+const NEXT_HOLE_MS = 6000;
+
+export const nextHole = internalMutation({
+  args: { id: v.id("matches"), hole: v.number() },
+  handler: async (ctx, { id, hole }) => {
+    const match = await ctx.db.get(id);
+    const st = match?.state as GolfState | undefined;
+    if (!match || match.status !== "active" || !st || st.hole !== hole - 1 || !st.holes[hole]) return;
+    await startHole(ctx, match, hole);
+  },
+});
+
+// A hole starts: its world, with everyone's ball on the tee holding what they carried over, then the
+// first turn (or the clock).
+async function startHole(ctx: MutationCtx, match: Doc<"matches">, n: number) {
+  const st = match.state as GolfState;
+  const settings = settingsOf(match.mode, match.settings);
+  const row = await ctx.db
+    .query("golfCourses")
+    .withIndex("by_match", (q) => q.eq("matchId", match._id).eq("n", n))
+    .unique();
+  if (!row) return;
+  const course = row.course as Course;
+  const now = Date.now();
+  const collide = settings.collide !== 0;
+  const turns = isTurns(match);
+  const rules: Rules = { cap: capOf(course.par), turns, knockFree: true, markR: collide && settings.mark !== 0 ? MARK_R : 0 };
+  const key = holeKey(match._id, n);
+  const worldId = await ctx.db.insert("golfWorlds", { key, startAt: now, awake: false, collide, matchId: match._id, hole: n });
+  const order = honors(st, n, match.players.length);
+  const s = newWorld(course, { collide, rules, seed: (now % 100000) + n });
+  order.forEach((seat, k) => {
+    const p = match.players[seat];
+    applyCmd(s, course, { tick: 0, by: p.userId, seq: k, kind: "join", i: seat, bag: st.bags[seat] ?? [] });
+    // Every ball's in the world from the start, whether its phone's looking or not.
+  });
+  await ctx.db.insert("golfSnapshots", { worldId, tick: 0, state: pack(s) });
+  for (const seat of order) await ctx.db.insert("golfPlayers", { worldId, userId: match.players[seat].userId, joinedAt: now });
+  const w = (await ctx.db.get(worldId))!;
+  const next: GolfState = { ...st, hole: n, worldId, order, turnTick: 0, spots: {}, waiting: false, nextAt: undefined };
+  if (turns) {
+    await ctx.db.patch(match._id, { state: next });
+    await giveTurn(ctx, w, { ...match, state: next }, next, course, s, now);
+  } else {
+    const minutes = settings.holeTime ?? 3;
+    await ctx.db.patch(match._id, { state: { ...next, clockAt: now + minutes * 60_000 }, lastActivityAt: now });
+    await ctx.scheduler.runAfter(minutes * 60_000, internal.golf.holeClock, { id: match._id, hole: n });
+    if (n > 0) for (const seat of order) await notifyMatch(ctx, match.players[seat].userId, match, { title: `Hole ${n + 1} is on`, body: `${course.name}, par ${course.par}. Go.` });
+  }
+}
+
+// Builds the game's holes, first to last, each going in as soon as it's ready: the first hole can start
+// while the rest are still being made.
+export const build = internalAction({
+  args: { id: v.id("matches") },
+  handler: async (ctx, { id }) => {
+    const info = await ctx.runQuery(internal.golf.buildInfo, { id });
+    if (!info) return;
+    for (let n = info.built; n < info.total; n++) {
+      const course = buildHole(info.settings, n, holeKey(id, n));
+      if (!(await ctx.runMutation(internal.golf.addHole, { id, n, course }))) return;
+    }
+  },
+});
+
+export const buildInfo = internalQuery({
+  args: { id: v.id("matches") },
+  handler: async (ctx, { id }) => {
+    const match = await ctx.db.get(id);
+    if (!match || match.status !== "active") return null;
+    const st = match.state as GolfState;
+    return { settings: settingsOf(match.mode, match.settings), total: st.total, built: st.holes.filter(Boolean).length };
+  },
+});
+
+// One hole built. Returns whether to keep going (the game might have ended meanwhile).
+export const addHole = internalMutation({
+  args: { id: v.id("matches"), n: v.number(), course: v.any() },
+  handler: async (ctx, { id, n, course }) => {
+    const match = await ctx.db.get(id);
+    if (!match || match.status !== "active") return false;
+    const st = match.state as GolfState;
+    if (st.holes[n]) return true;
+    const c = course as Course;
+    await ctx.db.insert("golfCourses", { matchId: id, n, course: c });
+    const holes = [...st.holes];
+    holes[n] = { name: c.name, par: c.par, theme: c.theme, open: !!c.greens.every((g) => g.rim === false) };
+    const next = { ...st, holes };
+    await ctx.db.patch(id, { state: next });
+    const updated = { ...match, state: next };
+    if (n === 0 && st.hole < 0) await startHole(ctx, updated, 0);
+    // The hole before finished while this one was still being built.
+    else if (st.waiting && st.hole === n - 1) {
+      if (isTurns(match)) await startHole(ctx, updated, n);
+      else {
+        await ctx.db.patch(id, { state: { ...next, nextAt: Date.now() + NEXT_HOLE_MS } });
+        await ctx.scheduler.runAfter(NEXT_HOLE_MS, internal.golf.nextHole, { id, hole: n });
+      }
+    }
+    return true;
+  },
+});
+
+// A game's holes, built so far: what phones draw and play on. Never changes once a hole's in.
+export const holes = query({
+  args: { matchId: v.id("matches") },
+  handler: async (ctx, { matchId }) => {
+    if ((await getAuthUserId(ctx)) === null) return [];
+    const rows = await ctx.db
+      .query("golfCourses")
+      .withIndex("by_match", (q) => q.eq("matchId", matchId))
+      .collect();
+    return rows.map((r) => r.course as Course);
+  },
+});
+
+export const golfHooks: GameHooks = {
+  seats: (_mode, n) => SEAT_COLORS.slice(0, n),
+  start: async (ctx, match) => {
+    const settings = settingsOf(match.mode as ModeKey, match.settings);
+    const st = newRound(holeCount(settings), match.players.length);
+    await ctx.db.patch(match._id, { state: st, turn: undefined });
+    await ctx.scheduler.runAfter(0, internal.golf.build, { id: match._id });
+  },
+  // Your ball comes off the hole and you place last; everyone else plays on.
+  resign: async (ctx, match, userId) => {
+    const st = match.state as GolfState;
+    const seat = seatOf(match, userId);
+    if (seat < 0 || st.out.includes(seat)) return;
+    const next: GolfState = { ...st, out: [...st.out, seat] };
+    const left = activeSeats(next, match.players.length);
+    const w = st.worldId ? await ctx.db.get(st.worldId as Id<"golfWorlds">) : null;
+    if (left.length <= 1) {
+      await ctx.db.patch(match._id, { state: next });
+      const updated = { ...match, state: next };
+      if (left.length === 1 && match.players.length === 2) await finish(ctx, updated, { winners: [match.players[left[0]].userId], draw: false, reason: "resign" });
+      else await finishBySeats(ctx, updated, standings(next, match.players.length), left.length === 1 ? "last_player" : "resign");
+      return;
+    }
+    await ctx.db.patch(match._id, { state: next, ...(match.turn === userId ? { turn: undefined } : {}) });
+    if (w) {
+      await insertCmd(ctx, w, { tick: tickAt(w, Date.now()), by: userId, kind: "leave" });
+      // It was their turn: the next one goes to whoever's away now.
+      if (match.turn === userId && isTurns(match)) {
+        const course = await courseFor(ctx, w);
+        const snap = await snapshotOf(ctx, w._id);
+        if (course && snap) {
+          const s = await stateNow(ctx, w, course, unpack(snap.state as Packed), Date.now());
+          s.balls = s.balls.filter((b) => b.id !== userId);
+          await giveTurn(ctx, w, { ...match, state: next, turn: userId }, next, course, s, Date.now());
+        }
+      }
+    }
+  },
+  // Not used: a turn-based game's clock is its own (shotTimeout), and the caddie takes the shot.
+  timeout: async () => {},
+  timeoutWarning: "or your caddie takes the shot",
+};

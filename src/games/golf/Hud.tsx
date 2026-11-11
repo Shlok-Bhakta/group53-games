@@ -1,6 +1,6 @@
 import type { Ref } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { CaretLeftIcon, CornersInIcon, CornersOutIcon, FlagPennantIcon, GolfIcon, XIcon } from "@phosphor-icons/react";
+import { CaretLeftIcon, CornersInIcon, CornersOutIcon, FlagPennantIcon, GolfIcon, ListIcon, XIcon } from "@phosphor-icons/react";
 import { BAG_SIZE, type Course, type Power } from "../../../convex/golf/engine";
 import type { Ball } from "../../../convex/golf/world";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { FloatButton, FloatingTopBar, FloatPill } from "@/components/game/floati
 import { cn } from "@/lib/utils";
 import { ITEMS } from "./items";
 import type { Target } from "./useGolfLoop";
+import type { Round } from "./GolfWorld";
 
 // What floats over a golf world: the bar on top, the hint while placing a targeted item, and the dock with
 // the bag.
@@ -42,6 +43,27 @@ export function TopBar({ ref, course, hole, others, hud, onBack }: { ref: Ref<HT
           </span>
         )}
       </FloatPill>
+    </FloatingTopBar>
+  );
+}
+
+// A game's top bar: back, the hole with whose turn it is (the game says what, `round.bar`), my strokes, and the
+// menu with the card and the rules.
+export function RoundBar({ ref, course, round, hud, onBack }: { ref: Ref<HTMLDivElement>; course: Course; round: Round; hud: Hud; onBack: () => void }) {
+  return (
+    <FloatingTopBar ref={ref}>
+      <FloatButton aria-label="Back" onClick={onBack}>
+        <CaretLeftIcon size={22} weight="bold" />
+      </FloatButton>
+      <FloatPill onClick={round.onMenu} aria-label="Scorecard" className="flex-1 py-1 pl-1.5 pr-1.5">
+        {round.bar}
+        <span className="flex h-9 min-w-9 shrink-0 flex-col items-center justify-center rounded-full bg-primary px-2.5 font-display leading-none text-primary-foreground" aria-label={`Hole ${round.number}, par ${course.par}, ${hud.strokes} strokes`}>
+          <span className="text-callout">{hud.strokes}</span>
+        </span>
+      </FloatPill>
+      <FloatButton aria-label="Menu" onClick={round.onMenu}>
+        <ListIcon size={22} weight="bold" />
+      </FloatButton>
     </FloatingTopBar>
   );
 }
@@ -80,6 +102,8 @@ export function Dock({
   hud,
   target,
   hole,
+  game,
+  myTurn,
   big,
   overview,
   onItem,
@@ -91,6 +115,8 @@ export function Dock({
   hud: Hud;
   target: Target | null;
   hole: boolean;
+  game: boolean; // in a game: no starting again
+  myTurn: boolean;
   big: boolean;
   overview: boolean;
   onItem: (i: number) => void;
@@ -109,7 +135,7 @@ export function Dock({
           return (
             <FloatButton
               key={`${i}-${p ?? "empty"}`}
-              disabled={!p || hud.mode !== "aim"}
+              disabled={!p || hud.mode !== "aim" || !myTurn}
               onClick={() => onItem(i)}
               aria-label={item ? `Use ${item.name}` : "Empty slot"}
               className={cn("size-14 rounded-lg disabled:opacity-60", !p && "bg-card/50 shadow-none", on && "bg-primary text-primary-foreground")}
@@ -140,9 +166,11 @@ export function Dock({
               {overview ? <CornersInIcon size={24} weight="bold" /> : <CornersOutIcon size={24} weight="bold" />}
             </FloatButton>
           )}
-          <FloatButton aria-label={hole ? "Start the hole again" : "Back to a tee"} disabled={hud.mode !== "aim"} onClick={onReset} className="size-14 disabled:opacity-60">
-            <GolfIcon size={24} weight="bold" />
-          </FloatButton>
+          {!game && (
+            <FloatButton aria-label={hole ? "Start the hole again" : "Back to a tee"} disabled={hud.mode !== "aim"} onClick={onReset} className="size-14 disabled:opacity-60">
+              <GolfIcon size={24} weight="bold" />
+            </FloatButton>
+          )}
         </>
       )}
     </div>

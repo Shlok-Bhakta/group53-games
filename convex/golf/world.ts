@@ -28,14 +28,27 @@ export const ELEPHANT = { range: 16, hit: 30, stun: 2, recoil: 16 }; // Elephant
 export const STORM = { r: 5, life: 7, every: 0.8, bolt: 1.8, hit: 15, stun: 1.5 }; // Thunderstorm
 export const FREEZE_R = 4.2;
 
-export type CmdKind = "join" | "leave" | "shot" | "use" | "fire" | "hop" | "brake" | "reset";
+// "turn" (from the server, in a turn-based game): it's `by`'s turn now. "pickup": `by` is picked up off the
+// hole (a live game's hole clock ran out).
+export type CmdKind = "join" | "leave" | "shot" | "use" | "fire" | "hop" | "brake" | "reset" | "turn" | "pickup";
 // `bag`, on a join: what the player's carrying from the last hole of their run.
 export type Cmd = { tick: number; by: string; seq: number; kind: CmdKind; a?: number; p?: number; i?: number; x?: number; y?: number; bag?: Power[] };
 
 export type Mine = { x: number; y: number; live: boolean; fixed: boolean; back: number };
 // `startBag`: what they came onto this hole with, what a retry goes back to. `carry`: what they held
-// when they last sank it, what goes on to the next hole.
-export type Ball = Sim & { id: string; holes: number; color: number; startBag: Power[]; carry: Power[] | null };
+// when they last sank it, what goes on to the next hole. `turnShots`: shots taken this turn, in a
+// turn-based game.
+export type Ball = Sim & { id: string; holes: number; color: number; startBag: Power[]; carry: Power[] | null; turnShots?: number };
+// A hole in a game (convex/golf.ts) rather than a world anyone wanders into: a ball that's sunk is done
+// rather than back on a tee, and so is one that's taken `cap` strokes. `turns`: one ball at a time, the
+// server saying whose (a "turn" command), and what lasts a few seconds lasts until someone's next turn.
+// `knockFree`: knocked into a hazard costs nothing. `markR`: balls sitting this close to the cup are
+// marked, and other balls roll through them.
+export type Rules = { cap: number; turns: boolean; knockFree: boolean; markR: number };
+// A ball that's finished the hole: how many it took, what it was holding, and whether it went in.
+export type Done = { id: string; strokes: number; bag: Power[]; how: "sunk" | "picked"; tick: number };
+// Statuses that last until someone's next turn, in a turn-based game: a time nothing reaches.
+export const UNTIL_NEXT_TURN = 1e9;
 export type Missile = { x: number; y: number; vx: number; vy: number; target: string; by: string; until: number };
 export type Storm = { x: number; y: number; r: number; until: number; next: number };
 export type WorldState = {
@@ -52,14 +65,18 @@ export type WorldState = {
   patches: Patch[]; // ice and honey players put down
   missiles: Missile[];
   storms: Storm[];
+  rules?: Rules;
+  turn?: string | null; // whose turn it is, in a turn-based game
+  done?: Done[];
   // What happened this run, for sounds and effects. Never stored.
   events: WorldEvent[];
 };
 // `strokes`: on a sink, how many it took.
 export type WorldEvent = { tick: number; id: string; ev: Ev; strokes?: number };
 
-export function newWorld(course: Course, opts: { seed?: number; collide?: boolean } = {}): WorldState {
+export function newWorld(course: Course, opts: { seed?: number; collide?: boolean; rules?: Rules } = {}): WorldState {
   return {
+    ...(opts.rules ? { rules: opts.rules, turn: null, done: [] } : {}),
     tick: 0,
     seed: opts.seed ?? 53,
     collide: opts.collide ?? true,
@@ -153,14 +170,24 @@ export function applyCmd(s: WorldState, c: Course, cmd: Cmd) {
   if (cmd.kind === "join") {
     if (b) return;
     const sim = newSim(c, idSeed(cmd.by) % 100000) as Ball;
-    // The first color nobody's using: on a hole, people come and go.
-    let color = 0;
-    while (s.balls.some((o) => o.color === color)) color++;
+    // A game gives each ball its seat's color (`i`). Otherwise the first color nobody's using: on a hole,
+    // people come and go.
+    let color = cmd.i ?? 0;
+    if (cmd.i === undefined) while (s.balls.some((o) => o.color === color)) color++;
     b = Object.assign(sim, { id: cmd.by, holes: 0, color, startBag: [...(cmd.bag ?? [])], carry: null, bag: [...(cmd.bag ?? [])] });
+    if (s.rules) {
+      b.knockFree = s.rules.knockFree;
+      b.turnShots = 0;
+    }
     link(s, b);
     place(b, freeTee(s, c, s.balls.length));
     b.t = s.tick * DT;
     s.balls.push(b);
+    return;
+  }
+  if (cmd.kind === "turn") {
+    s.turn = cmd.by;
+    if (b) startTurn(s, b);
     return;
   }
   if (!b) return;
@@ -168,11 +195,28 @@ export function applyCmd(s: WorldState, c: Course, cmd: Cmd) {
     s.balls.splice(s.balls.indexOf(b), 1);
     return;
   }
+  if (cmd.kind === "pickup") {
+    if (s.rules) finishBall(s, b, "picked", Math.min(s.rules.cap, b.strokes + 2));
+    return;
+  }
+  // A turn-based game: only the player whose turn it is, and only one shot (Coffee's putt while it's
+  // still rolling aside), with any items before it.
+  const turns = !!s.rules?.turns;
+  if (turns && (cmd.kind === "shot" || cmd.kind === "use" || cmd.kind === "fire")) {
+    if (s.turn !== cmd.by) return;
+    if (b.mode === "aim" && (b.turnShots ?? 0) > 0) return;
+  }
   b.t = s.tick * DT;
   switch (cmd.kind) {
     case "shot": {
       if (!Number.isFinite(cmd.a) || !Number.isFinite(cmd.p)) return;
+      const before = b.strokes;
       shoot(b, cmd.a!, cmd.p!);
+      if (b.strokes !== before) {
+        b.turnShots = (b.turnShots ?? 0) + 1;
+        // A Flash Camera's blindness, in a turn-based game, lasts the one shot.
+        if (turns && b.blindUntil >= UNTIL_NEXT_TURN) b.blindUntil = 0;
+      }
       break;
     }
     case "use": {
@@ -194,10 +238,14 @@ export function applyCmd(s: WorldState, c: Course, cmd: Cmd) {
         for (const o of s.balls) {
           if (o === b || !inPlay(o) || shielded(o, t) || hyp(o.x - b.x, o.y - b.y) > REACH) continue;
           if (item === "horn") o.rattled = true;
-          else o.blindUntil = t + BLIND_S;
+          else o.blindUntil = turns ? UNTIL_NEXT_TURN : t + BLIND_S;
         }
         s.events.push({ tick: s.tick, id: b.id, ev: { type: item, x: b.x, y: b.y, power: 1 } });
-      } else activate(b, i);
+      } else {
+        activate(b, i);
+        // An Electromagnet, in a turn-based game, keeps you safe until your next turn.
+        if (turns && item === "shield" && b.shieldUntil > t) b.shieldUntil = UNTIL_NEXT_TURN;
+      }
       break;
     }
     case "fire": {
@@ -211,8 +259,13 @@ export function applyCmd(s: WorldState, c: Course, cmd: Cmd) {
       const t = T(s);
       const dx0 = at.x - from.x, dy0 = at.y - from.y, d0 = hyp(dx0, dy0) || 1;
       const dir = { x: dx0 / d0, y: dy0 / d0 };
+      // Ice and honey, in a turn-based game, last until the next time it's your turn.
+      if (turns && (item === "freeze" || item === "honey")) {
+        const p = s.patches[s.patches.length - 1];
+        if (p) Object.assign(p, { until: UNTIL_NEXT_TURN, by: b.id });
+      }
       if (item === "freeze") {
-        for (const o of s.balls) if (inPlay(o) && !shielded(o, t) && hyp(o.x - at.x, o.y - at.y) < FREEZE_R) o.frozenUntil = t + FREEZE_S;
+        for (const o of s.balls) if (inPlay(o) && !shielded(o, t) && hyp(o.x - at.x, o.y - at.y) < FREEZE_R) o.frozenUntil = turns ? UNTIL_NEXT_TURN : t + FREEZE_S;
       } else if (item === "storm") {
         s.storms.push({ x: at.x, y: at.y, r: STORM.r, until: t + STORM.life, next: t + 0.5 });
       } else if (item === "pistol" || item === "elephant") {
@@ -258,14 +311,30 @@ export function applyCmd(s: WorldState, c: Course, cmd: Cmd) {
       brake(b);
       break;
     case "reset":
-      // Not out of an ice cube or a stun, though.
-      if ((b.mode === "aim" || b.mode === "roll") && b.t >= b.frozenUntil && b.t >= b.stunUntil) {
+      // Not in a game, and not out of an ice cube or a stun.
+      if (!s.rules && (b.mode === "aim" || b.mode === "roll") && b.t >= b.frozenUntil && b.t >= b.stunUntil) {
         place(b, freeTee(s, c, b.color));
         if (!c.open) startOver(b);
       }
       break;
   }
   drain(s, b);
+}
+
+// A turn starting: the shot count goes back to nothing, and what's lasted until now wears off: their ice
+// and honey, their Electromagnet, and the ice cube or stun anyone put them in.
+function startTurn(s: WorldState, b: Ball) {
+  b.turnShots = 0;
+  for (let i = 0; i < s.patches.length; i++) if (s.patches[i].by === b.id) s.patches.splice(i--, 1);
+  if (b.shieldUntil >= UNTIL_NEXT_TURN) b.shieldUntil = 0;
+  if (b.frozenUntil >= UNTIL_NEXT_TURN) b.frozenUntil = 0;
+  if (b.stunUntil >= UNTIL_NEXT_TURN) b.stunUntil = 0;
+}
+
+// Off the hole for good: in a game, a ball that's in (or picked up) is done.
+function finishBall(s: WorldState, b: Ball, how: Done["how"], strokes: number) {
+  s.done!.push({ id: b.id, strokes, bag: holding(b), how, tick: s.tick });
+  s.balls.splice(s.balls.indexOf(b), 1);
 }
 
 // What a ball's holding, including anything armed for its next shot.
@@ -342,8 +411,11 @@ function timers(s: WorldState) {
 
 // Two balls meeting: they push apart and trade speed along the line between them, heavier (bigger)
 // balls giving less. A ball sitting still gets knocked into a roll.
-function collideBalls(s: WorldState) {
+function collideBalls(s: WorldState, c: Course) {
   const bs = s.balls;
+  const markR = s.rules?.markR ?? 0;
+  // Marked: sitting still near the cup, in a game that marks them. Other balls roll through.
+  const marked = (o: Ball) => markR > 0 && o.mode === "aim" && hyp(o.x - c.cup.x, o.y - c.cup.y) < markR;
   for (let i = 0; i < bs.length; i++) {
     const a = bs[i];
     if (a.mode !== "aim" && a.mode !== "roll") continue;
@@ -351,6 +423,7 @@ function collideBalls(s: WorldState) {
       const b = bs[j];
       if (b.mode !== "aim" && b.mode !== "roll") continue;
       if (!moving(a) && !moving(b)) continue;
+      if (marked(a) || marked(b)) continue;
       if (Math.abs(a.z - b.z) > 0.6) continue;
       const dx = b.x - a.x, dy = b.y - a.y;
       const d = hyp(dx, dy);
@@ -374,6 +447,7 @@ function collideBalls(s: WorldState) {
       for (const o of [a, b]) {
         if (o.mode === "aim") {
           o.rest = { x: o.x, y: o.y };
+          o.knocked = true;
           setMode(o, "roll");
         }
       }
@@ -394,10 +468,16 @@ export function stepWorld(s: WorldState, w: World) {
     stepBall(b, w, DT);
     if (b.mode === "aim") b.modeT = 0;
   }
-  if (s.collide) collideBalls(s);
+  if (s.collide) collideBalls(s, c);
   s.tick++;
-  for (const b of s.balls) {
+  for (const b of [...s.balls]) {
     drain(s, b);
+    if (s.rules) {
+      // In a game: in the cup (once it's had time to drop) or out of strokes, and that's the hole done.
+      if (b.mode === "sunk" && b.modeT > SINK_RESPAWN) finishBall(s, b, "sunk", b.strokes);
+      else if (b.mode === "aim" && b.strokes >= s.rules.cap) finishBall(s, b, "picked", s.rules.cap);
+      continue;
+    }
     if (b.mode === "sunk" && b.modeT > SINK_RESPAWN) {
       b.holes++;
       b.strokes = 0;
@@ -496,6 +576,7 @@ export function pack(s: WorldState): Packed {
     patches: s.patches.map((m) => ({ ...m })),
     missiles: s.missiles.map((m) => ({ ...m })),
     storms: s.storms.map((m) => ({ ...m })),
+    ...(s.rules ? { rules: { ...s.rules }, turn: s.turn ?? null, done: (s.done ?? []).map((d) => ({ ...d, bag: [...d.bag] })) } : {}),
     balls: s.balls.map(({ boxes: _b, gone: _g, mines: _m, strikes: _s, patches: _p, events: _e, ...rest }) => structuredClone(rest)),
   };
 }
@@ -514,6 +595,7 @@ export function unpack(p: Packed): WorldState {
     patches: (p.patches ?? []).map((m) => ({ ...m })),
     missiles: (p.missiles ?? []).map((m) => ({ ...m })),
     storms: (p.storms ?? []).map((m) => ({ ...m })),
+    ...(p.rules ? { rules: { ...p.rules }, turn: p.turn ?? null, done: (p.done ?? []).map((d) => ({ ...d, bag: [...d.bag] })) } : {}),
     balls: [],
     events: [],
   };
@@ -528,6 +610,8 @@ export function unpack(p: Packed): WorldState {
     b.rattled ??= false;
     b.startBag ??= [];
     b.carry ??= null;
+    b.knocked ??= false;
+    b.knockFree ??= false;
     link(s, b);
     s.balls.push(b);
   }
@@ -564,6 +648,7 @@ export function fingerprint(s: WorldState) {
   for (const x of s.boxes) mix(x ? 1 : 0);
   for (const x of s.gone) mix(x ? 1 : 0);
   for (const m of s.mines) mix(m.live ? m.x : -m.x);
+  for (const d of s.done ?? []) for (const n of [d.strokes, d.tick, d.bag.length]) mix(n);
   return h >>> 0;
 }
 

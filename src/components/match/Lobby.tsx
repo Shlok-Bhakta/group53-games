@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { MatchView } from "../../../convex/matches";
-import { MODES, acceptPath, flexibleSeats, settingsOf, settingsSummary, type ModeKey } from "../../../convex/modes";
+import { MODES, acceptPath, flexibleSeats, seedSummary, settingsOf, settingsSummary, type ModeKey } from "../../../convex/modes";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { Button } from "@/components/ui/button";
 import { ConfirmButton } from "@/components/ConfirmButton";
@@ -140,7 +140,8 @@ function LobbySettings({ match, editable }: { match: MatchView; editable: boolea
   const configure = useMutation(api.matches.configure);
   const mode = match.mode as ModeKey;
   const value = settingsOf(mode, match.settings);
-  const summary = settingsSummary(mode, match.settings);
+  const seed = seedSummary(mode, match.settings);
+  const summary = [...settingsSummary(mode, match.settings), ...(seed ? [seed] : [])];
   if ((MODES[mode].settings as readonly unknown[]).length === 0) return null;
   if (!editable) {
     if (summary.length === 0) return null;

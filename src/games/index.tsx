@@ -1,4 +1,4 @@
-import type { ComponentType, ReactNode } from "react";
+import { lazy, Suspense, type ComponentType, type ReactNode } from "react";
 import type { Id } from "../../convex/_generated/dataModel";
 import type { MatchView } from "../../convex/matches";
 import { GAMES, type GameKey, type ModeKey, type Settings } from "../../convex/modes";
@@ -11,6 +11,9 @@ import { ScrabbleBanner, ScrabbleModeArt } from "./scrabble/art";
 import { ScrabbleGame } from "./scrabble/ScrabbleGame";
 import { scrabbleRules } from "./scrabble/rules";
 import { GolfBanner } from "./golf/GolfBanner";
+import { GolfModeArt } from "./golf/ModeArt";
+import { GolfPractice } from "./golf/Practice";
+import { golfRules } from "./golf/rules";
 import { MereddiaBanner } from "./mereddia/card";
 import { StonksBanner } from "./stonks/StonksBanner";
 import { prefetchStonks } from "./stonks/load";
@@ -33,7 +36,19 @@ export type GameUI = {
   Game: ComponentType<{ match: MatchView; meId: Id<"users"> | undefined }>;
   // Games that draw their own top bar and take the whole screen while they're on.
   fullscreen?: (match: MatchView) => boolean;
+  // More on the game's page, under the modes (golf's practice holes).
+  extra?: () => ReactNode;
 };
+
+// Golf's screen is big (the physics, the drawing, the sound), so it's only downloaded once a game's opened.
+const GolfScreen = lazy(() => import("./golf/GolfGame"));
+function GolfGame(props: { match: MatchView; meId: Id<"users"> | undefined }) {
+  return (
+    <Suspense fallback={<div className="h-[100dvh]" aria-busy="true" />}>
+      <GolfScreen {...props} />
+    </Suspense>
+  );
+}
 
 export const GAME_UI: Record<GameKey, GameUI> = {
   chess: {
@@ -67,6 +82,18 @@ export const GAME_UI: Record<GameKey, GameUI> = {
     rules: pokerRules,
     Game: PokerGame,
   },
+  golf: {
+    key: "golf",
+    path: GAMES.golf.path,
+    name: GAMES.golf.name,
+    blurb: "Up to 8 of you on handmade or generated courses. Grab items, knock each other into the water, keep what you hold for the next hole.",
+    banner: () => <GolfBanner />,
+    modeArt: (mode) => <GolfModeArt mode={mode} />,
+    rules: golfRules,
+    Game: GolfGame,
+    fullscreen: (m) => m.status === "active",
+    extra: () => <GolfPractice />,
+  },
 };
 
 // Cards on the Games tab: every game, then the ones still being built.
@@ -78,14 +105,6 @@ export type GameCard = {
   wip?: boolean;
   // Called when the card is on screen and when Play is touched: start loading what Play opens.
   prefetch?: (convex: ConvexReactClient) => void;
-};
-// Golf: eighteen holes and an open world, all live, while its modes are being built: no lobby yet, Play
-// opens the courses (src/games/golf/GolfHub.tsx).
-const GOLF: GameCard = {
-  path: "/golf",
-  name: "Golf",
-  blurb: "Eighteen holes on grass and ice, with whoever's on them. Grab items, blow up bumpers, knock each other in the water.",
-  banner: () => <GolfBanner />,
 };
 // Stonks: the S&P 500's biggest companies, live, ranked by their share of the index. No lobby yet either;
 // Play opens the board (src/games/stonks/Stonks.tsx).
@@ -113,4 +132,4 @@ const SOON: GameCard[] = [
     wip: true,
   },
 ];
-export const games: GameCard[] = [...Object.values(GAME_UI), GOLF, STONKS, MEREDDIA, ...SOON];
+export const games: GameCard[] = [...Object.values(GAME_UI), STONKS, MEREDDIA, ...SOON];

@@ -32,7 +32,8 @@ export type Net = {
   seq: number;
 };
 
-export function useGolfNet(COURSE: Course) {
+// `minTick`, in a game: the earliest tick a command can count from (just after the turn started).
+export function useGolfNet(COURSE: Course, minTick?: { current: number }) {
   const key = COURSE.id;
   const me = useQuery(api.users.me);
   const meId = me?._id;
@@ -85,7 +86,7 @@ export function useGolfNet(COURSE: Course) {
   const send = (kind: CmdKind, extra: CmdArgs = {}) => {
     const n = net.current;
     if (!worldId || !meRef.current) return;
-    const tick = tickNow(), seq = ++n.seq;
+    const tick = Math.max(tickNow(), minTick?.current ?? 0), seq = ++n.seq;
     // It plays from here, right now. The server's copy replaces it when that turns up.
     const mine: Pending = { tick, by: meRef.current, seq, kind, at: performance.now(), ...extra };
     n.pending.push(mine);

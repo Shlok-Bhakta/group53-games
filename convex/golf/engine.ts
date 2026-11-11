@@ -50,7 +50,8 @@ export type Zone =
 
 // Something a player put down for a while: ice where a Freeze Bomb hit water (you can roll across it),
 // or a puddle of Honey (you can't, quickly).
-export type Patch = { kind: "ice" | "honey"; x: number; y: number; r: number; until: number };
+// `by`: who put it down, in a turn-based game, where it lasts until their next turn.
+export type Patch = { kind: "ice" | "honey"; x: number; y: number; r: number; until: number; by?: string };
 
 export type WallStyle = "rim" | "wood" | "stone" | "hedge" | "adobe" | "ice" | "obsidian" | "neon" | "metal" | "rack" | "timber" | "fence" | "rail";
 export type Wall = { pts: Vec[]; w: number; h: number; style: WallStyle; bounce?: number; closed?: boolean };
@@ -95,6 +96,7 @@ export type Course = {
   lamps: Vec[];
   boxes: Vec[]; // mystery boxes: roll through one for a random power-up
   mines?: Vec[]; // landmines: roll over one and it throws the ball
+  powers?: Power[]; // what the boxes give, if not every item (a game's settings)
 };
 
 export const BALL_R = 0.38;
@@ -195,6 +197,10 @@ export type Sim = {
   coffeeUntil: number; // can putt again while still rolling
   rattled: boolean; // an Air Horn went off: the next putt overshoots and pulls
   patches: Patch[]; // shared, like `mines`
+  // Moved while it sat still, by another ball or someone's item. With `knockFree` (a game's rules) a ball
+  // knocked into a hazard goes back where it sat without a penalty stroke.
+  knocked: boolean;
+  knockFree: boolean;
 };
 
 // --- Geometry ---
@@ -370,6 +376,8 @@ export function newSim(course: Course, seed = 53): Sim {
     coffeeUntil: 0,
     rattled: false,
     patches: [],
+    knocked: false,
+    knockFree: false,
     gone: course.bumpers.map(() => false),
     mines: (course.mines ?? []).map((m) => ({ ...m, live: true })),
     strikes: [],
@@ -413,6 +421,7 @@ export function shoot(sim: Sim, angle: number, power: number) {
   if (sim.shot === "cart") sim.cartT = 1.6;
   if (sim.shot === "jumbo") sim.r = BALL_R * JUMBO;
   sim.strokes++;
+  sim.knocked = false;
   sim.rest = { x: sim.x, y: sim.y };
   setMode(sim, "roll");
   sim.events.push({ type: "hit", x: sim.x, y: sim.y, power });
@@ -461,7 +470,10 @@ export function blast(sim: Sim, x: number, y: number, speed: number) {
   sim.vy = (d < 0.05 ? dsin(a) : dy / d) * speed;
   sim.vz = 8;
   sim.z = 0.02;
-  if (sim.mode === "aim") setMode(sim, "roll");
+  if (sim.mode === "aim") {
+    sim.knocked = true;
+    setMode(sim, "roll");
+  }
 }
 
 // Targeted items: an Orbital Laser lands on a spot a moment later, a Landmine is dropped on one, and a
@@ -549,7 +561,7 @@ function hazard(sim: Sim, g: Ground) {
   sim.outGround = g;
   sim.r = BALL_R;
   sim.cartT = 0;
-  sim.strokes++;
+  if (!(sim.knockFree && sim.knocked)) sim.strokes++;
   sim.vx = sim.vy = sim.vz = 0;
   setMode(sim, "out");
   sim.events.push({ type: "splash", x: sim.x, y: sim.y, power: 1 });
@@ -821,7 +833,7 @@ export function stepBall(sim: Sim, world: World, dt = DT) {
     if (sim.bag.length >= BAG_SIZE) return;
     sim.boxes[i] = true;
     const r = rng(sim.seed * 977 + i * 131 + sim.strokes * 7 + Math.round(sim.t * 240))();
-    const pool = sim.multi ? POWERS : SOLO_POWERS;
+    const pool = c.powers?.length ? c.powers : sim.multi ? POWERS : SOLO_POWERS;
     const item = pool[Math.floor(r * pool.length)];
     sim.bag.push(item);
     sim.events.push({ type: "box", x: b.x, y: b.y, power: 1, item });

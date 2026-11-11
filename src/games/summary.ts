@@ -5,6 +5,7 @@ import type { ScrabbleState } from "../../convex/scrabble/engine";
 import type { MatchView } from "../../convex/matches";
 import type { PokerState } from "../../convex/poker/engine";
 import { actionLabel } from "../../convex/poker/text";
+import { totals, type GolfState } from "../../convex/golf/round";
 
 // Small per-game facts the shared screens show, without pulling in any game's components.
 
@@ -23,6 +24,10 @@ export function lastMove(match: MatchView): string | null {
     if (!s) return null;
     return e ? `${actionLabel(e)}${e.amount && e.kind !== "draw" ? ` ${e.amount}` : ""}` : `Hand ${s.hand}`;
   }
+  if (match.mode.startsWith("golf:")) {
+    const s = match.state as GolfState | null;
+    return s && s.hole >= 0 ? `Hole ${s.hole + 1} of ${s.total}` : null;
+  }
   return null;
 }
 
@@ -36,8 +41,9 @@ export function pointsOf(match: MatchView, userId: Id<"users">): number | null {
   }
   if (match.mode.startsWith("scrabble:")) return (match.state as ScrabbleState).scores[seat] ?? null;
   if (match.mode.startsWith("poker:")) return (match.state as PokerState).stacks[seat] ?? null;
+  if (match.mode.startsWith("golf:")) return totals(match.state as GolfState, match.players.length)[seat] ?? null;
   return null;
 }
 
-// What a game's points are called in the standings: chips in poker, points everywhere else.
-export const pointsUnit = (match: MatchView) => (match.mode.startsWith("poker:") ? "chips" : "pts");
+// What a game's points are called in the standings: chips in poker, strokes in golf, points everywhere else.
+export const pointsUnit = (match: MatchView) => (match.mode.startsWith("poker:") ? "chips" : match.mode.startsWith("golf:") ? "strokes" : "pts");
