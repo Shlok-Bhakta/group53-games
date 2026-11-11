@@ -653,21 +653,12 @@ const GRASS_A = ["Maple", "Heron", "Willow", "Clover", "Foxglove", "Bramble", "T
 const GRASS_B = ["Bend", "Run", "Crossing", "Hollow", "Rise", "Dell", "Green", "Glen", "Reach", "Turn", "Brook", "Way", "Knoll", "Corner", "Lane", "Links"];
 const ICE_A = ["Frost", "Glacier", "Sleet", "Rime", "Polar", "Tundra", "Icicle", "Blizzard", "Floe", "Snowdrift", "Permafrost", "Hoarfrost", "Igloo", "Yeti", "Penguin", "Fjord"];
 const ICE_B = ["Bend", "Run", "Slide", "Shelf", "Pass", "Field", "Drop", "Sheet", "Ridge", "Spill", "Rink", "Trail"];
-const KIND: Record<string, string[]> = {
-  straight: ["Straight", "Runway", "Hello", "Main Street"],
-  dogleg: ["Elbow", "Dogleg", "Corner"],
-  zbend: ["Zed", "Detour", "Switch"],
-  hairpin: ["Hairpin", "U-Turn", "Uturn", "Boomerang"],
-  snake: ["Snake", "Wiggle", "Ribbon", "Squiggle"],
-  crown: ["Crown", "Castle", "Moat", "Fortress"],
-  table: ["Tilt", "Pinball", "Arcade", "Flipper"],
-  islands: ["Island Hop", "Archipelago", "Leap", "Gap Year"],
-  zigzag: ["Zigzag", "Lightning", "Stairs"],
-  fairway: ["Links", "Fairway", "Long Drive", "The Course"],
-};
-function nameOf(rand: Rand, kind: string, ice: boolean) {
-  if (rand.chance(0.2)) return rand.pick(KIND[kind] ?? KIND.straight);
-  return `${rand.pick(ice ? ICE_A : GRASS_A)} ${rand.pick(ice ? ICE_B : GRASS_B)}`;
+// Every hole in a course gets its own name: the nth step through every first-and-last pair, from a start
+// the seed picks, by a stride that never lands on the same pair twice in a course.
+function nameOf(o: GenOpts, ice: boolean) {
+  const A = ice ? ICE_A : GRASS_A, B = ice ? ICE_B : GRASS_B;
+  const k = (mix(o.seed, 99) + o.n * 37) % (A.length * B.length);
+  return `${A[k % A.length]} ${B[Math.floor(k / A.length) % B.length]}`;
 }
 
 // --- Putting it together ---
@@ -769,7 +760,7 @@ function candidate(seed: number, o: GenOpts, kindIndex: number): { c: Course; ra
   const thin = !lay.noObstacles && made + (lay.bumpers?.length ? 1 : 0) + (lay.ramps ? 1 : 0) < floor;
   const course: Course = {
     id: `gen-${seed}`,
-    name: nameOf(rand, kind, ice),
+    name: nameOf(o, ice),
     course: "Generated",
     theme: THEME(ice),
     ...(ice ? { surface: "packed" as Ground } : {}),
@@ -1021,7 +1012,7 @@ function fairwayHole(rand: Rand, o: GenOpts, len: number, ice: boolean, budget: 
   const off: Ground = rand.chance(0.65) ? "water" : "oob";
   const course: Course = {
     id: `gen-${o.seed}-${o.n}`,
-    name: nameOf(rand, "fairway", ice),
+    name: nameOf(o, ice),
     course: "Generated",
     theme: THEME(ice),
     surface: ice ? "snow" : "rough",
@@ -1142,7 +1133,14 @@ function judge(c: Course): number | null {
   }
   const avg = runs.reduce((a, b) => a + b, 0) / runs.length;
   if (avg < 1.34) return null; // in one nearly every time: not a hole
-  return Math.max(2, Math.min(c.surface === "rough" || c.surface === "snow" ? 7 : 6, Math.round(avg)));
+  // Par has to make sense for the length too: about a stroke per 9 units on a mini hole (a putt there is
+  // rarely a long one), one per 60 on a fairway. A hole the bot needs far more than that for is a slog,
+  // not a test, and gets made again.
+  const fair = c.surface === "rough" || c.surface === "snow";
+  const length = distanceField(c, w)(c.tee.x, c.tee.y);
+  const most = fair ? Math.ceil(length / 60) + 3 : Math.ceil(length / 9) + 1;
+  if (avg > most + 1.5) return null;
+  return Math.max(2, Math.min(fair ? 7 : 6, most, Math.round(avg)));
 }
 
 // Hole `n` from the seed: candidates until one passes, the nth of a shuffled list of shapes so a course
