@@ -23,7 +23,7 @@ export function FourGame({ match, meId, overlay, below, dock }: { match: MatchVi
   const [selected, setSelected] = useState<Sq | null>(null);
   const position = useMemo(() => `${match._id}:${match.status}:${JSON.stringify(state)}`, [match._id, match.status, state]);
   const [draft, setDraft] = useMoveDraft<{ from: Sq; to: Sq }>(position);
-  const [sending, send] = useSendMove();
+  const [sending, send] = useSendMove(state.moves.length);
   // The position after the waiting move, shown on the board until it's confirmed.
   const preview = useMemo(() => (draft && myTurn ? move4(state, draft.from, draft.to) : null), [state, draft, myTurn]);
   const history = useHistory(match._id, state.moves.length);
