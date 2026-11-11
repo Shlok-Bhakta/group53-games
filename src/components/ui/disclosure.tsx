@@ -6,8 +6,14 @@ import { cn } from "@/lib/utils";
 // A row that folds something away: its icon and title, maybe a summary at the end, and a caret. Height
 // animates on a bare wrapper (padding lives inside it) so it closes all the way down instead of snapping shut
 // at the end.
-export function Disclosure({ icon, title, trailing, defaultOpen = false, label, children }: { icon: ReactNode; title: string; trailing?: ReactNode; defaultOpen?: boolean; label?: string; children: ReactNode }) {
-  const [open, setOpen] = useState(defaultOpen);
+// `onOpenChange` hears it open and close, for whatever outside it depends on that.
+export function Disclosure({ icon, title, trailing, defaultOpen = false, label, onOpenChange, children }: { icon: ReactNode; title: string; trailing?: ReactNode; defaultOpen?: boolean; label?: string; onOpenChange?: (open: boolean) => void; children: ReactNode }) {
+  const [open, setOpenState] = useState(defaultOpen);
+  const setOpen = (f: (o: boolean) => boolean) => {
+    const next = f(open);
+    setOpenState(next);
+    onOpenChange?.(next);
+  };
   return (
     <section aria-label={label}>
       <button
