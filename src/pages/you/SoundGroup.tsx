@@ -1,38 +1,43 @@
 import { useState } from "react";
-import { BellSlashIcon, CheckIcon, MusicNotesIcon, SpeakerHighIcon } from "@phosphor-icons/react";
+import { BellSlashIcon, CheckIcon, MusicNotesIcon, SpeakerHighIcon, SpeakerSimpleHighIcon, SpeakerSimpleLowIcon } from "@phosphor-icons/react";
 import { motion } from "motion/react";
 import { Section } from "@/components/parts";
+import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import { MUSIC_GROUPS, MUSIC_TRACKS, SFX_PACKS, setSound, sfx, useSoundSettings, type MusicTrack, type SfxPack } from "@/sound";
+import { MUSIC_TRACKS, SFX_PACKS, setSound, sfx, useSoundSettings, type MusicTrack, type SfxPack } from "@/sound";
 import { cn } from "@/lib/utils";
 import { PickSheet } from "./PickSheet";
 import { SettingsRow, TINT } from "./SettingsRow";
 
-// Music plays all over the app; effects play as you place and play tiles. Picking a track switches to
-// it right away, and picking a pack plays a little game in it.
+// Music plays all over the app; effects play as you place and play tiles. The volume follows your finger,
+// and picking a pack plays a little game in it.
 export function SoundGroup() {
   const sound = useSoundSettings();
   const [sheet, setSheet] = useState<"music" | "sfx" | null>(null);
   return (
     <Section title="Sound" footer={sound.onSilent ? "Plays with your ringer off. Other audio, like Spotify, pauses while you play." : "Goes quiet when your ringer is off, and plays alongside other audio."}>
       <SettingsRow icon={MusicNotesIcon} tint={TINT.purple} label="Music" value={MUSIC_TRACKS.find((t) => t.value === sound.music)?.label} onClick={() => setSheet("music")} />
+      {sound.music !== "off" && (
+        <div className="flex min-h-[52px] items-center gap-3 px-4 py-1">
+          <span className="grid size-[30px] shrink-0 place-items-center rounded-sm text-white" style={{ background: TINT.purple }}>
+            <SpeakerSimpleLowIcon size={18} weight="fill" />
+          </span>
+          <Slider label="Music volume" className="flex-1" min={0} max={1} step={0.01} value={[sound.volume]} onValueChange={([v]) => setSound({ volume: v })} />
+          <SpeakerSimpleHighIcon size={20} weight="fill" className="shrink-0 text-muted-foreground" />
+        </div>
+      )}
       <SettingsRow icon={SpeakerHighIcon} tint={TINT.orange} label="Sound effects" value={SFX_PACKS.find((p) => p.value === sound.sfx)?.label} onClick={() => setSheet("sfx")} />
       <SettingsRow icon={BellSlashIcon} tint={TINT.gray} label="Play on silent" htmlFor="silent-switch">
         <Switch id="silent-switch" checked={sound.onSilent} onCheckedChange={(v) => setSound({ onSilent: v })} />
       </SettingsRow>
 
       <PickSheet open={sheet === "music"} onClose={() => setSheet(null)} title="Music">
-        <div className="flex flex-col gap-5">
-          {MUSIC_GROUPS.map((g) => (
-            <section key={g.value} className="flex flex-col gap-2" aria-labelledby={`music-${g.value}`}>
-              <h3 id={`music-${g.value}`} className="font-display text-heading">
-                {g.label}
-              </h3>
-              <Choices label={g.label} options={MUSIC_TRACKS.filter((t) => "group" in t && t.group === g.value)} value={sound.music} onPick={(v) => setSound({ music: v as MusicTrack })} />
-            </section>
-          ))}
-          <Choices label="No music" options={MUSIC_TRACKS.filter((t) => !("group" in t))} value={sound.music} onPick={(v) => setSound({ music: v as MusicTrack })} />
-        </div>
+        <section className="flex flex-col gap-2" aria-labelledby="music-human">
+          <h3 id="music-human" className="font-display text-heading">
+            Made by a human
+          </h3>
+          <Choices label="Made by a human" options={MUSIC_TRACKS} value={sound.music} onPick={(v) => setSound({ music: v as MusicTrack })} />
+        </section>
       </PickSheet>
       <PickSheet open={sheet === "sfx"} onClose={() => setSheet(null)} title="Sound effects">
         <Choices

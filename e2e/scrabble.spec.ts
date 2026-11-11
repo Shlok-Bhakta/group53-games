@@ -210,54 +210,65 @@ test.describe("Scrabble", () => {
     await expect(sfxRow).toContainText("Wood");
     // On by default, so the game makes noise with the ringer off.
     await expect(page.getByRole("switch", { name: "Play on silent" })).toBeChecked();
-    // Music plays everywhere, not just in games, once you've tapped; picking a track switches to it.
+    // Music plays everywhere, not just in games, once you've tapped.
+    type Audio = { musicGain: () => number };
+    const gain = () => page.evaluate(() => (window as unknown as { __audio: Audio }).__audio.musicGain());
     await musicRow.click();
     await expect.poll(() => page.evaluate(() => (window as unknown as { __music?: string }).__music)).toBe("53_1");
-    // Alex's track first, the generated ones in their own section.
-    await expect(page.getByRole("dialog").getByRole("radiogroup", { name: "Made by a human" }).getByRole("radio")).toHaveText([/53_1.*By Alex/]);
-    await page.getByRole("dialog").getByRole("radiogroup", { name: "AI slop" }).getByRole("radio", { name: /Late night/ }).click();
-    await expect.poll(() => page.evaluate(() => (window as unknown as { __music?: string }).__music)).toBe("nightcap");
+    // Alex's track is the only one, then Off. Off hides the volume; back on, it's there again.
+    await expect(page.getByRole("dialog").getByRole("radiogroup", { name: "Made by a human" }).getByRole("radio")).toHaveText([/53_1.*By Alex/, /Off/]);
+    await page.getByRole("dialog").getByRole("radio", { name: /Off/ }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __music?: string }).__music)).toBe("off");
     await page.keyboard.press("Escape");
+    await expect(page.getByRole("slider", { name: "Music volume" })).toHaveCount(0);
+    await musicRow.click();
+    await page.getByRole("dialog").getByRole("radio", { name: /53_1/ }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __music?: string }).__music)).toBe("53_1");
+    await page.keyboard.press("Escape");
+    // The volume slider turns the music down live.
+    const volume = page.getByRole("slider", { name: "Music volume" });
+    await expect(volume).toHaveAttribute("aria-valuenow", "0.6");
+    await expect.poll(gain).toBeGreaterThan(0.1);
+    const before = await gain();
+    await volume.focus();
+    for (let i = 0; i < 30; i++) await page.keyboard.press("ArrowLeft");
+    await expect(volume).toHaveAttribute("aria-valuenow", "0.3");
+    await expect.poll(gain).toBeLessThan(before * 0.3);
     await sfxRow.click();
     await page.getByRole("dialog").getByRole("radio", { name: /Thock/ }).click();
     expect(await sounds(page)).toContain("preview");
     await page.keyboard.press("Escape");
     await page.reload();
-    await expect(page.getByRole("button", { name: /^Music/ })).toContainText("Late night");
+    await expect(page.getByRole("button", { name: /^Music/ })).toContainText("53_1");
+    await expect(page.getByRole("slider", { name: "Music volume" })).toHaveAttribute("aria-valuenow", "0.3");
     await expect(page.getByRole("button", { name: /^Sound effects/ })).toContainText("Thock");
     await page.getByRole("switch", { name: "Play on silent" }).click();
-    expect(JSON.parse((await page.evaluate(() => localStorage.getItem("sound")))!)).toMatchObject({ music: "nightcap", sfx: "keys", onSilent: false });
+    expect(JSON.parse((await page.evaluate(() => localStorage.getItem("sound")))!)).toMatchObject({ music: "53_1", volume: 0.3, sfx: "keys", onSilent: false });
     expect(errors).toEqual([]);
   });
 
-  test("phones that saved Lo-fi move to 53_1 once, and music that was off stays off", async ({ phones }) => {
+  test("phones that saved a generated track get 53_1, and music that was off stays off", async ({ phones }) => {
     const me = await createPlayer("Shlok");
     const page = await phones.open({ player: me, notifications: "granted" });
     await page.goto("/you");
-    const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem("sound")!));
-    await page.evaluate(() => localStorage.setItem("sound", JSON.stringify({ sfx: "keys", music: "lofi", lastMusic: "lofi", onSilent: true })));
+    await page.evaluate(() => localStorage.setItem("sound", JSON.stringify({ sfx: "keys", music: "nightcap", lastMusic: "nightcap", onSilent: true })));
     await page.reload();
     await expect(page.getByRole("button", { name: /^Music/ })).toContainText("53_1");
     await expect(page.getByRole("button", { name: /^Sound effects/ })).toContainText("Thock");
-    // Picking Lo-fi again after that sticks.
-    await page.getByRole("button", { name: /^Music/ }).click();
-    await page.getByRole("dialog").getByRole("radio", { name: /Lo-fi/ }).click();
-    await page.reload();
-    await expect(page.getByRole("button", { name: /^Music/ })).toContainText("Lo-fi");
-    expect(await stored()).toMatchObject({ music: "lofi", tune: 2 });
-    await page.evaluate(() => localStorage.setItem("sound", JSON.stringify({ sfx: "wood", music: "off", lastMusic: "lofi", onSilent: true })));
+    await expect(page.getByRole("slider", { name: "Music volume" })).toHaveAttribute("aria-valuenow", "0.6");
+    await page.evaluate(() => localStorage.setItem("sound", JSON.stringify({ sfx: "wood", music: "off", onSilent: true })));
     await page.reload();
     await expect(page.getByRole("button", { name: /^Music/ })).toContainText("Off");
   });
 
-  test("53_1 decodes to its exact length and loops sample for sample, a little under Lo-fi's level", async ({ phones }) => {
+  test("53_1 decodes to its exact length, loops sample for sample, and sits under the game at any volume", async ({ phones }) => {
     const me = await createPlayer("Shlok");
     const page = await phones.open({ player: me });
     await page.goto("/you");
-    type Lab = { loop: (id: string) => Promise<{ length: number; loopStart: number; loopEnd: number; seconds: number; seam: number; nearby: number }>; music: (t: string, s: number) => Promise<{ peak: number; rms: number }> };
-    const { loop, song, lofi } = await page.evaluate(async () => {
+    type Lab = { loop: (id: string) => Promise<{ length: number; loopStart: number; loopEnd: number; seconds: number; seam: number; nearby: number }>; music: (t: string, s: number, v?: number) => Promise<{ peak: number; rms: number }> };
+    const { loop, song, loud, quiet } = await page.evaluate(async () => {
       const lab = (window as unknown as { __soundLab: Lab }).__soundLab;
-      return { loop: await lab.loop("53_1"), song: await lab.music("53_1", 20), lofi: await lab.music("lofi", 20) };
+      return { loop: await lab.loop("53_1"), song: await lab.music("53_1", 20), loud: await lab.music("53_1", 20, 1), quiet: await lab.music("53_1", 20, 0.3) };
     });
     // The loop is the whole track as bounced, the encoder delay trimmed, and past its end the file carries
     // on with the track's start, so the seam lines up sample for sample.
@@ -265,9 +276,13 @@ test.describe("Scrabble", () => {
     expect(loop.length).toBeGreaterThan(Math.round(loop.loopEnd * 44100) + 1024);
     expect(loop.seam).toBeLessThan(0.01);
     expect(loop.seam).toBeLessThan(loop.nearby);
+    // The default is where the old Lo-fi sat (about 0.015 RMS); the slider's ends are quieter and louder, and
+    // the top still doesn't clip.
     expect(song.peak).toBeGreaterThan(0.01);
-    expect(song.peak).toBeLessThan(0.99);
-    expect(song.rms).toBeLessThanOrEqual(lofi.rms * 1.1);
+    expect(song.rms).toBeLessThan(0.02);
+    expect(quiet.rms).toBeLessThan(song.rms * 0.4);
+    expect(loud.rms).toBeGreaterThan(song.rms * 2);
+    expect(loud.peak).toBeLessThan(0.99);
   });
 
   test("sound survives leaving the app and coming straight back", async ({ phones }) => {
