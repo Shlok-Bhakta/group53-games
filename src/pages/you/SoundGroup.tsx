@@ -3,7 +3,7 @@ import { BellSlashIcon, CheckIcon, MusicNotesIcon, SpeakerHighIcon } from "@phos
 import { motion } from "motion/react";
 import { Section } from "@/components/parts";
 import { Switch } from "@/components/ui/switch";
-import { MUSIC_TRACKS, SFX_PACKS, setSound, sfx, useSoundSettings, type MusicTrack, type SfxPack } from "@/sound";
+import { MUSIC_GROUPS, MUSIC_TRACKS, SFX_PACKS, setSound, sfx, useSoundSettings, type MusicTrack, type SfxPack } from "@/sound";
 import { cn } from "@/lib/utils";
 import { PickSheet } from "./PickSheet";
 import { SettingsRow, TINT } from "./SettingsRow";
@@ -22,7 +22,17 @@ export function SoundGroup() {
       </SettingsRow>
 
       <PickSheet open={sheet === "music"} onClose={() => setSheet(null)} title="Music">
-        <Choices options={MUSIC_TRACKS} value={sound.music} onPick={(v) => setSound({ music: v as MusicTrack })} />
+        <div className="flex flex-col gap-5">
+          {MUSIC_GROUPS.map((g) => (
+            <section key={g.value} className="flex flex-col gap-2" aria-labelledby={`music-${g.value}`}>
+              <h3 id={`music-${g.value}`} className="font-display text-heading">
+                {g.label}
+              </h3>
+              <Choices label={g.label} options={MUSIC_TRACKS.filter((t) => "group" in t && t.group === g.value)} value={sound.music} onPick={(v) => setSound({ music: v as MusicTrack })} />
+            </section>
+          ))}
+          <Choices label="No music" options={MUSIC_TRACKS.filter((t) => !("group" in t))} value={sound.music} onPick={(v) => setSound({ music: v as MusicTrack })} />
+        </div>
       </PickSheet>
       <PickSheet open={sheet === "sfx"} onClose={() => setSheet(null)} title="Sound effects">
         <Choices
@@ -39,9 +49,9 @@ export function SoundGroup() {
 }
 
 // A list to pick one from, each with a line about what it is. Tapping the chosen one again plays it again.
-function Choices({ options, value, onPick }: { options: readonly { value: string; label: string; about: string }[]; value: string; onPick: (v: string) => void }) {
+function Choices({ label, options, value, onPick }: { label?: string; options: readonly { value: string; label: string; about: string }[]; value: string; onPick: (v: string) => void }) {
   return (
-    <div className="flex flex-col gap-2" role="radiogroup">
+    <div className="flex flex-col gap-2" role="radiogroup" aria-label={label}>
       {options.map((o) => (
         <motion.button
           key={o.value}

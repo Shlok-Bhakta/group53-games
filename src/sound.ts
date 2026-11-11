@@ -1,12 +1,14 @@
 import { useSyncExternalStore } from "react";
+import song531 from "@/assets/music/53_1.m4a";
 
-// Sound effects and background music, all synthesized with Web Audio: no files to load or license.
+// Sound effects and background music, played with Web Audio.
 //
 // Effects come in packs that share one vocabulary (`sfx("place")`), so swapping packs changes how the
 // whole game sounds. Every pack is three voices (a click, a note, a thump) and every sound is built from
-// them. Music tracks are generative: chords and patterns scheduled a moment ahead, looping for as long as
-// the app is open. Both run through a little room reverb, which is most of what makes synthesized sound
-// feel warm instead of thin. Both are chosen on the You tab and remembered on the phone.
+// them, all synthesized. The music is a real track, 53_1 by Alex, looped; the old generative tracks are
+// still there in their own section: chords and patterns scheduled a moment ahead, looping for as long as
+// the app is open. Everything synthesized runs through a little room reverb, which is most of what makes
+// it feel warm instead of thin. Both are chosen on the You tab and remembered on the phone.
 //
 // iOS: audio only starts from a tap (a whole tap: touchend or click, not the touch going down), so the
 // context unlocks on the first one, and again after iOS interrupts it (a call, leaving the app). With
@@ -25,31 +27,47 @@ export const SFX_PACKS = [
   { value: "arcade", label: "Arcade", about: "Square-wave blips" },
   { value: "off", label: "Off", about: "No sound effects" },
 ] as const;
+// Grouped on the You tab: what people made, then what a script made.
+export const MUSIC_GROUPS = [
+  { value: "human", label: "Made by a human" },
+  { value: "ai", label: "AI slop" },
+] as const;
 export const MUSIC_TRACKS = [
-  { value: "lofi", label: "Lo-fi", about: "Dusty keys, a lazy beat and vinyl crackle" },
-  { value: "nightcap", label: "Late night", about: "Slow minor lo-fi with a soft rimshot" },
-  { value: "sunday", label: "Sunday", about: "Jazzy lo-fi with a walking bass and brushes" },
-  { value: "coffee", label: "Coffee shop", about: "Easy bossa nova guitar and shaker" },
-  { value: "rain", label: "Rain", about: "Slow pads and piano, rain on the window" },
-  { value: "drift", label: "Drift", about: "Ambient, no beat, just floating" },
-  { value: "musicbox", label: "Music box", about: "A soft lullaby" },
-  { value: "arcade", label: "Arcade", about: "Gentle chiptune" },
+  { value: "53_1", label: "53_1", about: "By Alex", group: "human" },
+  { value: "lofi", label: "Lo-fi", about: "Dusty keys, a lazy beat and vinyl crackle", group: "ai" },
+  { value: "nightcap", label: "Late night", about: "Slow minor lo-fi with a soft rimshot", group: "ai" },
+  { value: "sunday", label: "Sunday", about: "Jazzy lo-fi with a walking bass and brushes", group: "ai" },
+  { value: "coffee", label: "Coffee shop", about: "Easy bossa nova guitar and shaker", group: "ai" },
+  { value: "rain", label: "Rain", about: "Slow pads and piano, rain on the window", group: "ai" },
+  { value: "drift", label: "Drift", about: "Ambient, no beat, just floating", group: "ai" },
+  { value: "musicbox", label: "Music box", about: "A soft lullaby", group: "ai" },
+  { value: "arcade", label: "Arcade", about: "Gentle chiptune", group: "ai" },
   { value: "off", label: "Off", about: "No music" },
 ] as const;
 export type SfxPack = (typeof SFX_PACKS)[number]["value"];
 export type MusicTrack = (typeof MUSIC_TRACKS)[number]["value"];
-type SoundSettings = { sfx: SfxPack; music: MusicTrack; lastMusic: Exclude<MusicTrack, "off">; onSilent: boolean };
+type Song = Exclude<MusicTrack, "off">;
+// `tune` is which music default the phone has been given, so a new default reaches phones that saved
+// settings before it existed.
+type SoundSettings = { sfx: SfxPack; music: MusicTrack; lastMusic: Song; onSilent: boolean; tune?: number };
 
 // --- Settings store ---
 
 const KEY = "sound";
-const DEFAULTS: SoundSettings = { sfx: "wood", music: "lofi", lastMusic: "lofi", onSilent: true };
+const TUNE = 2;
+const DEFAULTS: SoundSettings = { sfx: "wood", music: "53_1", lastMusic: "53_1", onSilent: true, tune: TUNE };
 let settings: SoundSettings = (() => {
   try {
-    const saved = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) ?? "{}") } as SoundSettings;
+    const raw = JSON.parse(localStorage.getItem(KEY) ?? "{}") as Partial<SoundSettings>;
+    const saved = { ...DEFAULTS, ...raw } as SoundSettings;
     // A pack or track that's since been removed falls back to the default.
     if (!SFX_PACKS.some((p) => p.value === saved.sfx)) saved.sfx = DEFAULTS.sfx;
     if (!MUSIC_TRACKS.some((t) => t.value === saved.music)) saved.music = DEFAULTS.music;
+    // 53_1 took over from Lo-fi: everyone gets it once, unless they'd turned music off.
+    if ((raw.tune ?? 1) < TUNE) {
+      if (saved.music !== "off") saved.music = saved.lastMusic = "53_1";
+      saved.tune = TUNE;
+    }
     return saved;
   } catch {
     return DEFAULTS;
@@ -542,6 +560,60 @@ export function sfx(name: SfxName, opts: SfxOpts = {}) {
 
 // --- Music ---
 
+// A recorded track, looped sample for sample. `seconds` is the loop's exact length, as bounced. The file
+// has `WRAP` samples more on each side: the track's end before its start, and its start again after its
+// end. So both sides of the seam are well inside the file, away from the first frame (where AAC is
+// roughest) and from wherever a decoder decides the file ends (Chrome cuts it 34 samples short).
+type Recording = { src: string; seconds: number; volume: number };
+const WRAP = 2048;
+const RECORDINGS = {
+  // 53_1 by Alex, from the crew. Bounced from FL Studio to loop: its end runs straight into its start.
+  "53_1": { src: song531, seconds: 4948363 / 44100, volume: 0.3 },
+} satisfies Partial<Record<Song, Recording>>;
+type Recorded = keyof typeof RECORDINGS;
+const recorded = (id: Song): id is Recorded => id in RECORDINGS;
+
+// Each file is downloaded once and decoded once per context (a rebuilt context decodes it again).
+const fetched = new Map<string, Promise<ArrayBuffer>>();
+const decoded = new WeakMap<Ctx, Map<string, Promise<AudioBuffer>>>();
+function loadRecording(c: Ctx, src: string) {
+  let bytes = fetched.get(src);
+  if (!bytes) {
+    bytes = fetch(src).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`${r.status} for ${src}`))));
+    fetched.set(src, bytes);
+    bytes.catch(() => fetched.delete(src));
+  }
+  let mine = decoded.get(c);
+  if (!mine) decoded.set(c, (mine = new Map()));
+  let buf = mine.get(src);
+  if (!buf) {
+    // decodeAudioData takes the bytes over, so each context gets its own copy.
+    buf = bytes.then((b) => c.decodeAudioData(b.slice(0)));
+    mine.set(src, buf);
+    buf.catch(() => mine.delete(src));
+  }
+  return buf;
+}
+// Starts a recording looping from `at`. AAC opens with 1024 frames of encoder delay, which browsers trim
+// (the file's edit list says to); one that's left it in decodes over a frame longer than the file, and
+// the loop starts after it.
+function playRecording(c: Ctx, rec: Recording, buf: AudioBuffer, out: AudioNode, at: number, fadeIn = 0) {
+  const s = c.createBufferSource();
+  s.buffer = buf;
+  s.loop = true;
+  const untrimmed = buf.duration - (rec.seconds + (2 * WRAP) / 44100) > 512 / 44100;
+  s.loopStart = (WRAP + (untrimmed ? 1024 : 0)) / 44100;
+  s.loopEnd = s.loopStart + rec.seconds;
+  const fade = c.createGain();
+  if (fadeIn > 0) {
+    fade.gain.setValueAtTime(0, at);
+    fade.gain.setTargetAtTime(1, at, fadeIn / 3);
+  }
+  s.connect(fade).connect(out);
+  s.start(at, s.loopStart);
+  return s;
+}
+
 type Step = (c: Ctx, at: number, bar: number, step: number, out: AudioNode) => void;
 type Track = { bpm: number; steps: number; swing?: number; wet: number; volume: number; play: Step; bed?: (c: Ctx, out: AudioNode) => AudioScheduledSourceNode };
 
@@ -672,7 +744,7 @@ const ARCADE_CHORDS = [
   [55, 59, 62],
 ];
 
-const TRACKS: Record<Exclude<MusicTrack, "off">, Track> = {
+const TRACKS: Record<Exclude<Song, Recorded>, Track> = {
   // Dusty keys, a lazy beat and vinyl crackle.
   lofi: {
     bpm: 74,
@@ -824,9 +896,12 @@ const music = (() => {
   let next = 0;
   let bar = 0;
   let step = 0;
+  // Bumped whenever what's playing changes, so a recording that finishes loading too late is dropped.
+  let gen = 0;
 
   // The context it was playing on is gone: forget it without touching the old graph.
   function reset() {
+    gen++;
     clearInterval(timer);
     const old = bed;
     bed = null;
@@ -839,6 +914,7 @@ const music = (() => {
   }
   function stop() {
     if (!ctx || playing === "off") return;
+    gen++;
     const g = graphFor(ctx).music.gain;
     g.cancelScheduledValues(ctx.currentTime);
     g.setTargetAtTime(0, ctx.currentTime, 0.3);
@@ -848,10 +924,11 @@ const music = (() => {
     clearInterval(timer);
     playing = "off";
   }
-  function start(id: Exclude<MusicTrack, "off">) {
+  function start(id: Song) {
     const c = audio();
     if (!c || c.state !== "running") return;
     stop();
+    if (recorded(id)) return startRecording(c, id);
     const track = TRACKS[id];
     const g = graphFor(c);
     const out = input(c, "music", id, track.wet);
@@ -881,6 +958,25 @@ const music = (() => {
       }
     }, 50);
   }
+  // Fades in once the file's ready. If it can't load (no signal), the next refresh tries again.
+  function startRecording(c: AudioContext, id: Recorded) {
+    const rec: Recording = RECORDINGS[id];
+    const g = graphFor(c);
+    const out = input(c, "music", id, 0);
+    playing = id;
+    g.music.gain.cancelScheduledValues(c.currentTime);
+    g.music.gain.setTargetAtTime(0.5 * rec.volume, c.currentTime, 0.12);
+    const mine = ++gen;
+    loadRecording(c, rec.src).then(
+      (buf) => {
+        if (mine !== gen || c !== ctx) return;
+        bed = playRecording(c, rec, buf, out, c.currentTime + 0.05, 2.5);
+      },
+      () => {
+        if (mine === gen) playing = "off";
+      },
+    );
+  }
   function refresh() {
     const target = wanted ? settings.music : "off";
     if (target !== playing) {
@@ -904,9 +1000,9 @@ export const wantMusic = (on: boolean) => music.want(on);
 
 // For tests: render a sound or a stretch of a track offline and measure it, so every pack and track is
 // checked for silence and clipping without anyone listening.
-async function measure(seconds: number, draw: (c: OfflineAudioContext) => void) {
+async function measure(seconds: number, draw: (c: OfflineAudioContext) => void | Promise<void>) {
   const c = new OfflineAudioContext(2, Math.ceil(44100 * seconds), 44100);
-  draw(c);
+  await draw(c);
   const buf = await c.startRendering();
   let peak = 0;
   let sum = 0;
@@ -923,8 +1019,33 @@ if (typeof window !== "undefined") {
     packs: SFX_PACKS.filter((p) => p.value !== "off").map((p) => p.value),
     tracks: MUSIC_TRACKS.filter((t) => t.value !== "off").map((t) => t.value),
     sfx: (pack: Exclude<SfxPack, "off">, name: SfxName) => measure(2.5, (c) => render(c, pack, name, { count: 4, score: 30 }, 0.05)),
-    music: (id: Exclude<MusicTrack, "off">, seconds = 12) =>
-      measure(seconds, (c) => {
+    // Where a recording loops, as decoded here.
+    loop: async (id: Recorded) => {
+      const c = new OfflineAudioContext(2, 44100, 44100);
+      const rec: Recording = RECORDINGS[id];
+      const s = playRecording(c, rec, await loadRecording(c, rec.src), c.destination, 0);
+      // How far what follows the loop's end strays from its start: tiny if the seam is in the right place.
+      const d = s.buffer!.getChannelData(0);
+      const a = Math.round(s.loopStart * 44100);
+      const b = Math.round(s.loopEnd * 44100);
+      const stray = (k: number) => {
+        let m = 0;
+        for (let i = -512; i < 512; i++) m = Math.max(m, Math.abs(d[a + i] - d[b + k + i]));
+        return m;
+      };
+      // And the same a few samples either way, which should be worse.
+      let nearby = Infinity;
+      for (let k = -40; k <= 40; k++) if (k) nearby = Math.min(nearby, stray(k));
+      return { length: s.buffer!.length, loopStart: s.loopStart, loopEnd: s.loopEnd, seconds: rec.seconds, seam: stray(0), nearby };
+    },
+    music: (id: Song, seconds = 12) =>
+      measure(seconds, async (c) => {
+        if (recorded(id)) {
+          const rec: Recording = RECORDINGS[id];
+          graphFor(c).music.gain.value = 0.5 * rec.volume;
+          playRecording(c, rec, await loadRecording(c, rec.src), input(c, "music", id, 0), 0);
+          return;
+        }
         const track = TRACKS[id];
         const g = graphFor(c);
         g.music.gain.value = 0.5 * track.volume;
