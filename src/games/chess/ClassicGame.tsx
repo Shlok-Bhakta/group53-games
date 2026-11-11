@@ -53,7 +53,7 @@ export function ClassicGame({ match, meId, above, below, dock }: { match: MatchV
   const myTurn = match.status === "active" && !!me && chess.turn() === myColor;
   const [selected, setSelected] = useState<Sq | null>(null);
   const [draft, setDraft] = useMoveDraft<Draft & { choosing?: boolean }>(`${match._id}:${match.status}:${state.fen}`);
-  const [sending, send] = useSendMove();
+  const [sending, send] = useSendMove(state.moves.length);
   // The position after the waiting move, shown on the board until it's confirmed.
   const preview = useMemo(() => {
     if (!draft || draft.choosing || !myTurn) return null;

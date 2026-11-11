@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { CheckIcon, SpinnerGapIcon, XIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
-import { usePending } from "@/components/AsyncButton";
+import { toast } from "sonner";
+import { errorText } from "@/lib/errors";
 import { same, type Sq } from "./geometry";
 
 export type Dock = (confirm?: ReactNode) => ReactNode;
@@ -31,20 +32,24 @@ export function draftTargets(draft: { from: Sq; to: Sq } | null, from: Sq, legal
 // swaps back.
 const HOLD_MS = 400;
 
-// Sends a confirmed move. `sending` names it until the server has it.
-export function useSendMove() {
-  const [sending, setSending] = useState<string | null>(null);
-  const [, run] = usePending();
-  const send = (move: string, action: () => Promise<unknown>) =>
-    run(async () => {
-      setSending(move);
-      try {
-        await Promise.all([action(), new Promise((r) => setTimeout(r, HOLD_MS))]);
-      } finally {
-        setSending(null);
-      }
-    });
-  return [sending, send] as const;
+// Sends a confirmed move. `sending` names it until the server has it, or until another move lands after it
+// (`moves` is how many have been played): by then the reply's on the board and it's your move again, so the
+// board has to take your taps even if the hold, or the round trip, hasn't finished.
+export function useSendMove(moves: number) {
+  const [sending, setSending] = useState<{ move: string; moves: number; id: number } | null>(null);
+  const seq = useRef(0);
+  const send = async (move: string, action: () => Promise<unknown>) => {
+    const id = ++seq.current;
+    setSending({ move, moves, id });
+    try {
+      await Promise.all([action(), new Promise((r) => setTimeout(r, HOLD_MS))]);
+    } catch (err) {
+      toast.error(errorText(err));
+    } finally {
+      setSending((s) => (s?.id === id ? null : s));
+    }
+  };
+  return [sending && moves <= sending.moves + 1 ? sending.move : null, send] as const;
 }
 
 // Takes the place of the draw and resign buttons while a move waits.
