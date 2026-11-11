@@ -91,6 +91,10 @@ for (const scheme of ["dark", "light"] as const) {
     await a.getByRole("textbox", { name: "Seed" }).fill(seed);
     await a.getByRole("textbox", { name: "Seed" }).press("Enter");
     await shot("mode", a, true);
+    // The holes for that seed, once they're all made.
+    await expect(a.getByRole("list", { name: "The holes" }).getByRole("button", { name: /^Hole \d+, / })).toHaveCount(6, { timeout: 120_000 });
+    await a.getByRole("list", { name: "The holes" }).scrollIntoViewIfNeeded();
+    await shot("mode-holes");
     await a.getByRole("button", { name: "Open a game" }).click();
     await a.getByRole("heading", { name: "Waiting for players" }).waitFor();
     await fillLobby(a, [b, c]);

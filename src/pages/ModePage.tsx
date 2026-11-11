@@ -106,6 +106,8 @@ function ModeScreen({ game, mode }: { game: GameUI; mode: ModeKey }) {
           ))}
         </Section>
       )}
+
+      {!mine && game.setup?.({ mode, settings, onChange: setSettings })}
     </div>
   );
 }

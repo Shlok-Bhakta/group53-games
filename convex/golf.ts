@@ -8,12 +8,13 @@ import { courseOf, holeOf, worldOf } from "./golf/holes";
 import { SANDBOX } from "./golf/sandbox";
 import type { Course, Power } from "./golf/engine";
 import { advance, applyCmd, carryOf, cmdOrder, newWorld, pack, quiet, TPS, unpack, type Cmd, type Packed, type Rules, type WorldState } from "./golf/world";
-import { buildHole, holeCount, holeKey } from "./golf/build";
+import { buildHole, genKey, genOpts, holeCount, holeKey } from "./golf/build";
+import { generateHole } from "./golf/gen";
 import { bestShot } from "./golf/bot";
 import { distanceField } from "./golf/distance";
 import { activeSeats, capOf, honors, IDLE_OUT, MARK_R, newRound, nextUp, standings, type GolfState } from "./golf/round";
 import { ONLINE_WINDOW_MS } from "./presenceConfig";
-import { settingsOf, type ModeKey } from "./modes";
+import { isMode, settingsOf, type ModeKey } from "./modes";
 import type { GameHooks } from "./games";
 import { finish, finishBySeats } from "./matches";
 import { notifyMatch } from "./notify";
@@ -649,7 +650,9 @@ export const build = internalAction({
     const info = await ctx.runQuery(internal.golf.buildInfo, { id });
     if (!info) return;
     for (let n = info.built; n < info.total; n++) {
-      const course = buildHole(info.settings, n, holeKey(id, n));
+      // A hole already made for the mode page's preview is used as it is.
+      const made = info.settings.course === 0 ? ((await ctx.runQuery(internal.golf.previewHole, { key: genKey(info.settings), n })) ?? undefined) : undefined;
+      const course = buildHole(info.settings, n, holeKey(id, n), made);
       if (!(await ctx.runMutation(internal.golf.addHole, { id, n, course }))) return;
     }
   },
@@ -750,3 +753,98 @@ export const golfHooks: GameHooks = {
   timeout: async () => {},
   timeoutWarning: "or your caddie takes the shot",
 };
+
+// --- Previews: a course's holes on the mode page, before anyone starts a game ---
+//
+// A course made by hand is drawn straight from its holes. A generated one is made on the server, a hole at
+// a time (it takes a few seconds each), into golfPreviews: the phone asks for it (`requestPreview`), watches
+// the holes arrive (`preview`), and a game started on that seed uses them rather than making them again.
+
+const PREVIEW_KEEP_MS = 2 * 24 * 60 * 60 * 1000;
+const golfSettings = (mode: string, raw: Record<string, number>) => (isMode(mode) && mode.startsWith("golf:") ? settingsOf(mode, raw) : null);
+
+export const preview = query({
+  args: { mode: v.string(), settings: v.record(v.string(), v.number()) },
+  handler: async (ctx, { mode, settings }) => {
+    if ((await getAuthUserId(ctx)) === null) return null;
+    const s = golfSettings(mode, settings);
+    if (!s) return null;
+    const total = holeCount(s);
+    if (s.course !== 0) return { total, holes: Array.from({ length: total }, (_, n) => buildHole(s, n, `preview-${s.course}-${n}`)) };
+    if (!s.seed) return { total, holes: Array.from({ length: total }, () => null) };
+    const key = genKey(s);
+    const rows = await ctx.db
+      .query("golfPreviews")
+      .withIndex("by_key", (q) => q.eq("key", key))
+      .collect();
+    const made = new Map(rows.map((r) => [r.n, r.course as Course]));
+    return { total, holes: Array.from({ length: total }, (_, n) => (made.has(n) ? buildHole(s, n, `preview-${key}-${n}`, made.get(n)) : null)) };
+  },
+});
+
+export const requestPreview = mutation({
+  args: { mode: v.string(), settings: v.record(v.string(), v.number()) },
+  handler: async (ctx, { mode, settings }) => {
+    await requireUser(ctx);
+    const s = golfSettings(mode, settings);
+    if (!s || s.course !== 0 || !s.seed) return;
+    const key = genKey(s);
+    const total = holeCount(s);
+    const now = Date.now();
+    const job = await ctx.db
+      .query("golfPreviewJobs")
+      .withIndex("by_key", (q) => q.eq("key", key))
+      .unique();
+    // Already being made (or made) this far: nothing to do. A job that's gone quiet is started again.
+    if (job && job.total >= total && now - job.at < 3 * 60_000) return;
+    if (job) await ctx.db.patch(job._id, { total: Math.max(total, job.total), at: now });
+    else await ctx.db.insert("golfPreviewJobs", { key, total, at: now });
+    await ctx.scheduler.runAfter(0, internal.golf.makePreview, { key, total, ...genOpts(s, 0) });
+  },
+});
+
+export const makePreview = internalAction({
+  args: { key: v.string(), total: v.number(), seed: v.number(), n: v.number(), terrain: v.number(), style: v.number(), hazards: v.number() },
+  handler: async (ctx, { key, total, seed, terrain, style, hazards }) => {
+    for (let n = 0; n < total; n++) {
+      if (await ctx.runQuery(internal.golf.previewHole, { key, n })) continue;
+      const course = generateHole({ seed, n, terrain, style, hazards });
+      await ctx.runMutation(internal.golf.savePreview, { key, n, course });
+    }
+  },
+});
+
+export const previewHole = internalQuery({
+  args: { key: v.string(), n: v.number() },
+  handler: async (ctx, { key, n }) => {
+    const row = await ctx.db
+      .query("golfPreviews")
+      .withIndex("by_key", (q) => q.eq("key", key).eq("n", n))
+      .unique();
+    return (row?.course as Course | undefined) ?? null;
+  },
+});
+
+export const savePreview = internalMutation({
+  args: { key: v.string(), n: v.number(), course: v.any() },
+  handler: async (ctx, { key, n, course }) => {
+    const now = Date.now();
+    const had = await ctx.db
+      .query("golfPreviews")
+      .withIndex("by_key", (q) => q.eq("key", key).eq("n", n))
+      .unique();
+    if (!had) await ctx.db.insert("golfPreviews", { key, n, course, at: now });
+    const job = await ctx.db
+      .query("golfPreviewJobs")
+      .withIndex("by_key", (q) => q.eq("key", key))
+      .unique();
+    if (job) await ctx.db.patch(job._id, { at: now });
+    // Old previews go, found through their jobs (small rows) so the holes themselves are never read.
+    if (n === 0)
+      for (const j of await ctx.db.query("golfPreviewJobs").collect()) {
+        if (now - j.at < PREVIEW_KEEP_MS) continue;
+        for (const r of await ctx.db.query("golfPreviews").withIndex("by_key", (q) => q.eq("key", j.key)).collect()) await ctx.db.delete(r._id);
+        await ctx.db.delete(j._id);
+      }
+  },
+});

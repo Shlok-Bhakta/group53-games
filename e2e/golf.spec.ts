@@ -345,3 +345,20 @@ test("a generated course shows its seed, and the same seed plays the same holes"
   await pa.getByRole("button", { name: "Menu" }).click();
   await expect(pa.getByRole("button", { name: "Copy seed 4242" })).toBeVisible();
 });
+
+test("the mode page shows the holes the next game will be played on", async ({ phones }) => {
+  test.setTimeout(120_000);
+  const [pa] = await twoPhones(phones);
+  await pa.goto("/golf/mode/turns");
+  const holes = pa.getByRole("list", { name: "The holes" });
+  // Generated: a real seed straight away, and the holes fill in as they're made.
+  await expect(pa.getByRole("button", { name: /^Seed \d+, roll another$/ })).toBeVisible();
+  await expect(holes.getByRole("button", { name: /^Hole 1, / })).toBeVisible({ timeout: 60_000 });
+  await expect(holes.getByRole("button", { name: /^Hole \d+, / })).toHaveCount(6, { timeout: 90_000 });
+  // A course made by hand: its holes at once.
+  await pa.getByRole("button", { name: "Settings" }).click();
+  await pa.getByRole("radiogroup", { name: "Course" }).getByRole("radio", { name: "Bumper Plains" }).click();
+  await expect(holes.getByRole("button", { name: "Hole 1, Hello, par 2" })).toBeVisible();
+  await holes.getByRole("button", { name: "Hole 2, Elbow, par 4" }).click();
+  await expect(pa.getByRole("dialog", { name: "2. Elbow" })).toBeVisible();
+});

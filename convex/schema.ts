@@ -103,6 +103,11 @@ export default defineSchema({
     .index("by_match", ["matchId"]),
   // A game's holes, built from its settings when it starts (convex/golf/build.ts), the first one first.
   golfCourses: defineTable({ matchId: v.id("matches"), n: v.number(), course: v.any() }).index("by_match", ["matchId", "n"]),
+  // Generated holes, made ahead for the mode page's preview (`key` is the seed and what shapes the holes,
+  // convex/golf/build.ts genKey) and used again when a game starts on them. Cleared after a couple of days.
+  golfPreviews: defineTable({ key: v.string(), n: v.number(), course: v.any(), at: v.number() }).index("by_key", ["key", "n"]),
+  // A preview being made, so asking twice doesn't make it twice.
+  golfPreviewJobs: defineTable({ key: v.string(), total: v.number(), at: v.number() }).index("by_key", ["key"]),
   // Everyone who's played in a world, for names and colors.
   golfPlayers: defineTable({ worldId: v.id("golfWorlds"), userId: v.id("users"), joinedAt: v.number() }).index("by_world", ["worldId"]),
   // Everything anyone does, one row each, stamped with the tick they did it on. Acting only ever inserts

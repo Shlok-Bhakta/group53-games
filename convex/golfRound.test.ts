@@ -259,3 +259,32 @@ describe("seeds", () => {
     }
   }, 120_000);
 });
+
+describe("previews", () => {
+  test("a course made by hand shows its holes straight away", async () => {
+    const t = setup();
+    const me = await signedIn(t);
+    const p = await me.as.query(api.golf.preview, { mode: "golf:turns", settings: { course: 2, holes: 3 } });
+    expect(p!.holes.map((h) => h?.name)).toEqual(["Thin Ice", "Zamboni", "Snowplow"]);
+  });
+
+  test("a generated one fills in, and a game on that seed plays exactly those holes", async () => {
+    const t = setup();
+    const me = await signedIn(t);
+    const settings = { holes: 3, seed: 777 };
+    expect((await me.as.query(api.golf.preview, { mode: "golf:turns", settings }))!.holes).toEqual([null, null, null]);
+    await me.as.mutation(api.golf.requestPreview, { mode: "golf:turns", settings });
+    // Asking twice makes it once.
+    await me.as.mutation(api.golf.requestPreview, { mode: "golf:turns", settings });
+    const jobs = await t.run((ctx) => ctx.db.query("golfPreviewJobs").collect());
+    expect(jobs).toHaveLength(1);
+    await t.action(internal.golf.makePreview, { key: jobs[0].key, total: 3, seed: 777, n: 0, terrain: 0, style: 2, hazards: 1 });
+    const shown = (await me.as.query(api.golf.preview, { mode: "golf:turns", settings }))!.holes;
+    expect(shown.every((h) => h !== null)).toBe(true);
+    const { id } = await game(t, 2, "golf:turns", settings);
+    for (let n = 0; n < 3; n++) {
+      const played = await courseOfHole(t, id, n);
+      expect({ ...played, id: "" }).toEqual({ ...shown[n]!, id: "" });
+    }
+  }, 120_000);
+});

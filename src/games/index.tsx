@@ -13,6 +13,7 @@ import { scrabbleRules } from "./scrabble/rules";
 import { GolfBanner } from "./golf/GolfBanner";
 import { GolfModeArt } from "./golf/ModeArt";
 import { GolfPractice } from "./golf/Practice";
+import { GolfHoles } from "./golf/HolesPreview";
 import { golfRules } from "./golf/rules";
 import { MereddiaBanner } from "./mereddia/card";
 import { StonksBanner } from "./stonks/StonksBanner";
@@ -38,6 +39,8 @@ export type GameUI = {
   fullscreen?: (match: MatchView) => boolean;
   // More on the game's page, under the modes (golf's practice holes).
   extra?: () => ReactNode;
+  // At the bottom of a mode page, with the settings for the next game: golf's holes for those settings.
+  setup?: (p: { mode: ModeKey; settings: Settings; onChange: (next: Settings) => void }) => ReactNode;
 };
 
 // Golf's screen is big (the physics, the drawing, the sound), so it's only downloaded once a game's opened.
@@ -93,6 +96,7 @@ export const GAME_UI: Record<GameKey, GameUI> = {
     Game: GolfGame,
     fullscreen: (m) => m.status === "active",
     extra: () => <GolfPractice />,
+    setup: (p) => <GolfHoles {...p} />,
   },
 };
 

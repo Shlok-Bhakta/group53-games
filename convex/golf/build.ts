@@ -54,10 +54,18 @@ function boxesFor(c: Course, level: number, seed: number): Vec[] {
   return [...c.boxes, ...extra];
 }
 
-// Hole `n` of a game.
-export function buildHole(s: Settings, n: number, key: string): Course {
+// What the generator's output depends on: the same key always builds the same holes, so they can be
+// generated once (a preview on the mode page) and used again when the game starts.
+export const genOpts = (s: Settings, n: number) => ({ seed: s.seed ?? 1, n, terrain: s.terrain ?? 0, style: s.style ?? 2, hazards: s.hazards ?? 1 });
+export const genKey = (s: Settings) => {
+  const o = genOpts(s, 0);
+  return `${o.seed}:${o.terrain}:${o.style}:${o.hazards}`;
+};
+
+// Hole `n` of a game. `made`: the generated hole, if it's already been made (a preview).
+export function buildHole(s: Settings, n: number, key: string, made?: Course): Course {
   const seed = s.seed ?? 1;
-  const base = s.course === 0 ? generateHole({ seed, n, terrain: s.terrain ?? 0, style: s.style ?? 2, hazards: s.hazards ?? 1 }) : handmade(s, n);
+  const base = s.course === 0 ? (made ?? generateHole(genOpts(s, n))) : handmade(s, n);
   const powers = powersOf(s);
   // The id goes first: the hole's compiled walls and distances are kept by it.
   const out: Course = { ...base, id: key, boxes: boxesFor(base, s.boxes ?? 2, seed * 31 + n), ...(powers ? { powers } : {}) };
