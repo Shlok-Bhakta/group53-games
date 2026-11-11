@@ -486,9 +486,11 @@ export const caddieShoot = internalMutation({
     const b = s.balls.find((o) => o.id === match.turn);
     // The shot was worked out for the ball where it sat; if they've played since, or it's moved, leave it.
     if (!b || b.mode !== "aim" || (b.turnShots ?? 0) > 0 || Math.hypot(b.x - x, b.y - y) > 0.01) return;
+    const seat = seatOf(match, match.turn);
+    // They came back while the caddie was thinking: it's theirs to take.
+    if (why === "away" && st.idle[seat] < IDLE_OUT) return;
     const tick = Math.max(s.tick, tickAt(w, Date.now()), st.turnTick + 1);
     await insertCmd(ctx, w, { tick, by: match.turn, kind: "shot", a, p });
-    const seat = seatOf(match, match.turn);
     await ctx.db.patch(match._id, { state: { ...st, idle: st.idle.map((n, k) => (k === seat ? n + 1 : n)) } });
     if (why === "timeout") await notifyMatch(ctx, match.turn, match, { title: "Your caddie took your shot", body: "You ran out of time, so they had a go for you." });
   },
@@ -500,8 +502,12 @@ export const shotTimeout = internalMutation({
     const match = await ctx.db.get(id);
     if (!match || match.status !== "active" || match.moveCount !== moveCount || !match.turn) return;
     await callCaddie(ctx, match, "timeout");
+    // If the caddie can't take it (it failed, or the ball was moving), try again in a while: a turn never
+    // waits forever on someone who isn't there.
+    await ctx.scheduler.runAfter(RETRY_MS, internal.golf.shotTimeout, { id, moveCount });
   },
 });
+const RETRY_MS = 10 * 60_000;
 
 // The player's opened the game: the caddie stands down, and a course that stopped being built (a restart
 // mid-build) starts again.
@@ -514,6 +520,13 @@ export const here = mutation({
     const st = match.state as GolfState;
     const seat = seatOf(match, userId);
     if (seat >= 0 && st.idle[seat] > 0) await ctx.db.patch(id, { state: { ...st, idle: st.idle.map((n, k) => (k === seat ? 0 : n)) } });
+    // A hole whose world says it's awake but hasn't settled anything in a good while has lost its ticks (a
+    // tick that failed): start them again.
+    const w = st.worldId ? await ctx.db.get(st.worldId as Id<"golfWorlds">) : null;
+    if (w?.awake) {
+      const snap = await snapshotOf(ctx, w._id);
+      if (!snap || tickAt(w, Date.now()) - snap.tick > STALE_TICKS) await ctx.scheduler.runAfter(0, internal.golf.tick, { worldId: w._id });
+    }
     const built = st.holes.filter(Boolean).length;
     const stalled = built < st.total && Date.now() - (st.builtAt ?? match.startedAt ?? 0) > BUILD_STALL_MS;
     if (stalled) {
@@ -523,6 +536,8 @@ export const here = mutation({
   },
 });
 const BUILD_STALL_MS = 90_000;
+// Well past how far behind a busy world's snapshot ever gets (it's rewritten every few seconds).
+const STALE_TICKS = SNAPSHOT_EVERY + MAX_LAG + 10 * TPS;
 
 // A live hole's clock running out: everyone still out there picks up.
 export const holeClock = internalMutation({
