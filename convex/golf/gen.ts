@@ -78,7 +78,7 @@ const capsule = (a: Vec, b: Vec, ra: number, rb: number): { bb: [number, number,
 };
 
 // The outline of the field's inside as closed loops (marching squares), tidied.
-function trace(F: Field): Vec[][] {
+function trace(F: Field, minArea = 4): Vec[][] {
   const { nx, ny, a } = F;
   const val = (i: number, j: number) => a[j * nx + i];
   const H = (i: number, j: number) => j * nx + i, V = (i: number, j: number) => nx * ny + j * nx + i;
@@ -137,7 +137,7 @@ function trace(F: Field): Vec[][] {
     if (loop.length >= 6) loops.push(simplify(loop, 0.04));
   }
   // Specks too small to stand on aren't worth a rail.
-  return loops.filter((l) => Math.abs(area(l)) > 4);
+  return loops.filter((l) => Math.abs(area(l)) > minArea);
 }
 function area(p: Vec[]) {
   let s = 0;
@@ -312,21 +312,28 @@ const L = {
   // A stem up to a round green, with a ring of bumpers round the cup whose gap faces away from you.
   crown: ({ R, r }: Rand, len: number): Layout => {
     const stem = R(2.8, 3.5), Lh = 12 + len * 10, rad = R(7.5, 9.5), c = v(0, -Lh - rad + 1.5);
-    const ring = rad * R(0.42, 0.5), n = 8, gapAt = Math.PI / 2 + (r() - 0.5) * 1.2; // the gap: round the back
+    // A ring of bumpers round the cup, its gap somewhere round the back; how many, how big and how wide the
+    // gap all vary, and sometimes it's only half a ring, or a second pair sits further out.
+    const ring = rad * R(0.38, 0.52), n = [6, 7, 8, 9][Math.floor(r() * 4)], gapAt = Math.PI / 2 + (r() - 0.5) * 1.6, gap = R(0.45, 0.9);
+    const half = r() < 0.25, br = R(0.65, 0.9);
     const bumpers: Bumper[] = [];
     for (let k = 0; k < n; k++) {
-      const a = -Math.PI / 2 + (k * Math.PI * 2) / n;
+      const a = -Math.PI / 2 + (k * Math.PI * 2) / n + (half ? 0 : R(-0.08, 0.08));
       const da = Math.abs(((a - (-gapAt) + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
-      if (da < 0.5) continue;
-      bumpers.push({ at: v(c.x + dcos(a) * ring, c.y + dsin(a) * ring), r: 0.8, kick: 5 });
+      if (da < gap || (half && da > Math.PI * 0.62)) continue;
+      bumpers.push({ at: v(c.x + dcos(a) * ring, c.y + dsin(a) * ring), r: br, kick: 5 });
     }
+    if (r() < 0.4)
+      for (const side of [-1, 1]) {
+        const a = Math.PI / 2 + side * R(0.5, 0.9);
+        bumpers.push({ at: v(c.x + dcos(a) * (rad - 2.4), c.y + dsin(a) * (rad - 2.4)), r: 0.75, kick: 5 });
+      }
     return {
       kind: "crown",
       path: along([{ x: 0, y: 0, hw: stem }, { x: 0, y: -Lh, hw: stem }, { ...c, hw: 3 }]),
       legs: [{ a: v(0, 0), b: v(0, -Lh + 2), hw: stem }],
       rooms: [],
       bumpers,
-      noObstacles: true,
       draw: (F) => {
         const s = box(v(0, 0), v(0, -Lh), stem, 2.8, 2, 0.8);
         F.apply(s.bb, s.f);
@@ -573,7 +580,7 @@ const OBSTACLES: Record<string, (b: Build) => boolean> = {
     let n = 0;
     for (let k = 0; k < 12 && n < 3; k++) {
       const { p } = onPath(b, b.rand.R(0.25, 0.8), b.rand.R(-0.8, 0.8));
-      if (!free(b, p, 1.6)) continue;
+      if (!free(b, p, 1.6) || onPatch(b, p)) continue;
       b.mines.push(p);
       take(b, p, 1.3);
       n++;
@@ -593,16 +600,27 @@ function fairway(rand: Rand, len: number, ice: boolean, hazards: number) {
   const { R, pick, chance } = rand;
   // A full putt rolls about 70 on the fairway: two or three of those makes a par 4 or 5.
   const Lh = 75 + len * 85, hw = R(3.6, 5);
-  const bends = chance(0.3) ? 0 : chance(0.6) ? 1 : 2;
-  const ctl: (Vec & { hw: number })[] = [{ x: 0, y: 0, hw }];
-  let side = pick([-1, 1]);
-  for (let k = 1; k <= bends + 1; k++) {
-    const y = (-Lh * k) / (bends + 1);
-    const x = k === bends + 1 ? ctl[ctl.length - 1].x + side * R(0, 6) : side * R(6, 14);
-    ctl.push({ x, y, hw: k === bends + 1 ? hw + 0.5 : hw });
-    side = -side;
-  }
-  const pts = curve(ctl, 8);
+  // Mostly a dogleg (straight out to where a drive lands, then a real turn toward the green), sometimes an
+  // S, now and then dead straight.
+  const shape = chance(0.15) ? "straight" : chance(0.65) ? "dogleg" : "s";
+  const side = pick([-1, 1]);
+  const ctl: (Vec & { hw: number })[] =
+    shape === "straight" ? [{ x: 0, y: 0, hw }, { x: 0, y: -Lh * 0.5, hw }, { x: R(-4, 4), y: -Lh, hw: hw + 0.5 }]
+    : shape === "dogleg"
+      ? (() => {
+          const a = Lh * R(0.5, 0.65), b = R(18, 32), c = R(6, 16);
+          return [{ x: 0, y: 0, hw }, { x: 0, y: -a * 0.55, hw }, { x: side * 2, y: -a, hw }, { x: side * b * 0.55, y: -a - c * 0.7, hw: hw * 0.9 }, { x: side * b, y: -a - c, hw: hw + 0.5 }];
+        })()
+      : [{ x: 0, y: 0, hw }, { x: 0, y: -Lh * 0.28, hw }, { x: side * R(12, 20), y: -Lh * 0.55, hw: hw * 0.9 }, { x: side * R(-2, 6), y: -Lh * 0.82, hw }, { x: side * R(-4, 4), y: -Lh, hw: hw + 0.5 }];
+  const bends = shape === "straight" ? 0 : shape === "dogleg" ? 1 : 2;
+  const raw = curve(ctl, 8);
+  // Wider where a drive lands, about 60 out.
+  let run = 0;
+  const widen = R(1.5, 3);
+  const pts = raw.map((p, i) => {
+    if (i) run += hyp(p.x - raw[i - 1].x, p.y - raw[i - 1].y);
+    return { ...p, hw: p.hw + widen * Math.max(0, 1 - Math.abs(run - 60) / 15) };
+  });
   const path = along(pts);
   const cup = path[path.length - 1];
   const tee = path[0];
@@ -616,6 +634,17 @@ function fairway(rand: Rand, len: number, ice: boolean, hazards: number) {
     }
   };
   return { path, pts, rough, zones, tee, cup, fw, Lh, hazards, bends };
+}
+
+// Where the fairway turns hardest, and which way (+1 left, -1 right, as seen going along it).
+function sharpest(path: Sample[]) {
+  let best: { i: number; turn: number; k: number } | null = null;
+  for (let i = 6; i < path.length - 6; i++) {
+    const a = path[i - 6], b = path[i + 6];
+    const cross = a.dx * b.dy - a.dy * b.dx;
+    if (!best || Math.abs(cross) > best.k) best = { i, turn: Math.sign(cross) || 1, k: Math.abs(cross) };
+  }
+  return best && best.k > 0.25 ? best : null;
 }
 
 // --- Names ---
@@ -637,7 +666,7 @@ const KIND: Record<string, string[]> = {
   fairway: ["Links", "Fairway", "Long Drive", "The Course"],
 };
 function nameOf(rand: Rand, kind: string, ice: boolean) {
-  if (rand.chance(0.4)) return rand.pick(KIND[kind] ?? KIND.straight);
+  if (rand.chance(0.2)) return rand.pick(KIND[kind] ?? KIND.straight);
   return `${rand.pick(ice ? ICE_A : GRASS_A)} ${rand.pick(ice ? ICE_B : GRASS_B)}`;
 }
 
@@ -666,7 +695,7 @@ function shift(c: Course, dx: number, dy: number): Course {
 }
 
 // One candidate: a board, things on it, and boxes. Not checked yet.
-function candidate(seed: number, o: GenOpts, kindIndex: number): { c: Course; ramps: boolean; kind: string } {
+function candidate(seed: number, o: GenOpts, kindIndex: number): { c: Course; ramps: boolean; kind: string; thin?: boolean } {
   const rand = randOf(seed);
   const ice = o.terrain === 1 || (o.terrain === 2 && rand.chance(0.5));
   const open = o.style === 1 || (o.style === 2 && rand.chance(0.35));
@@ -715,12 +744,14 @@ function candidate(seed: number, o: GenOpts, kindIndex: number): { c: Course; ra
     boxes: [],
     taken: [{ c: tee, r: 3.2 }, { c: cup, r: 2.6 }, ...(lay.bumpers ?? []).map((x) => ({ c: x.at, r: x.r + 0.6 })), ...(lay.zones ?? []).map((z) => ({ c: v(z.poly[0].x + 1.4, z.poly[0].y + 1.4), r: 2.2 }))],
   };
+  let made = 0;
   if (!lay.noObstacles) {
     const menu = ice ? MENU_ICE : MENU_MINI;
     const used = new Set<string>();
     // A table's the pinball one: it always gets its bumpers.
     if (kind === "table") for (let k = 0; k < 6 && !used.has("cluster"); k++) if (OBSTACLES.cluster(b)) used.add("cluster");
-    for (let k = 0, made = 0; k < 40 && made < budget; k++) {
+    const want = kind === "crown" ? Math.min(1, budget) : budget;
+    for (let k = 0; k < 90 && made < want; k++) {
       const what = rand.pick(menu);
       // Mines only when the hazards are up; never the same big thing twice.
       if (what === "mines" && o.hazards < 2) continue;
@@ -732,6 +763,10 @@ function candidate(seed: number, o: GenOpts, kindIndex: number): { c: Course; ra
     }
   }
   placeBoxes(b, len);
+  // A hole with next to nothing on it isn't worth playing: at least two things in the way (one with few
+  // hazards), counting what the shape brings (a crown's ring, an island's ramps).
+  const floor = o.hazards === 0 ? 1 : 2;
+  const thin = !lay.noObstacles && made + (lay.bumpers?.length ? 1 : 0) + (lay.ramps ? 1 : 0) < floor;
   const course: Course = {
     id: `gen-${seed}`,
     name: nameOf(rand, kind, ice),
@@ -757,18 +792,60 @@ function candidate(seed: number, o: GenOpts, kindIndex: number): { c: Course; ra
     boxes: b.boxes,
     mines: b.mines,
   };
-  return { c: framed(course), ramps: !!lay.ramps, kind };
+  return { c: framed(clipZones(course)), ramps: !!lay.ramps, kind, thin };
 }
+
+// On ice, sand or water, or a slope: not somewhere for a box or a mine.
+const onPatch = (b: Build, p: Vec) => b.zones.some((z) => z.kind !== "boost" && z.kind !== "ramp" && z.kind !== "mound" && z.kind !== "wind" && inPoly(p, z.poly));
 
 // Boxes along the way, a little off the line: one or two a hole, three on a long one.
 function placeBoxes(b: Build, len: number) {
   const want = 1 + (b.rand.chance(0.5) ? 1 : 0) + (len > 0.65 ? 1 : 0);
-  for (let k = 0; k < 30 && b.boxes.length < want; k++) {
+  for (let k = 0; k < 40 && b.boxes.length < want; k++) {
     const { p } = onPath(b, b.rand.R(0.2, 0.85), b.rand.pick([-0.65, 0.65]));
-    if (!free(b, p, 1.4)) continue;
+    if (!free(b, p, 1.4) || onPatch(b, p)) continue;
     b.boxes.push(p);
     take(b, p, 1.4);
   }
+}
+
+// Distance to a polygon's edge, positive inside (even-odd, for boards with holes).
+function polySdf(polys: Vec[][], x: number, y: number) {
+  let inside = false, d = Infinity;
+  const p = v(x, y);
+  for (const poly of polys) {
+    if (inPoly(p, poly)) inside = !inside;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const q = closest(p, poly[j], poly[i]);
+      d = Math.min(d, hyp(p.x - q.x, p.y - q.y));
+    }
+  }
+  return inside ? d : -d;
+}
+
+// Every zone cut to the board, so nothing hangs off into the void. It matters for more than looks: the ground
+// under a ball is the zone's before the board's, so a slope or a sheet of ice hanging out past the rail would
+// be ground to land on out there.
+function clipZones(c: Course): Course {
+  const boards = c.greens.map((g) => g.poly);
+  const zones: Zone[] = [];
+  for (const z of c.zones) {
+    // Pads are placed clear of the edge; a bridge is cut to the land like the rest.
+    if (z.kind === "boost" || z.kind === "ramp") {
+      zones.push(z);
+      continue;
+    }
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const q of z.poly) (x0 = Math.min(x0, q.x)), (y0 = Math.min(y0, q.y)), (x1 = Math.max(x1, q.x)), (y1 = Math.max(y1, q.y));
+    const F = new Field(x0 - 1, y0 - 1, Math.ceil((x1 - x0 + 2) / G) + 1, Math.ceil((y1 - y0 + 2) / G) + 1);
+    for (let j = 0; j < F.ny; j++)
+      for (let i = 0; i < F.nx; i++) {
+        const x = F.x0 + i * G, y = F.y0 + j * G;
+        F.a[j * F.nx + i] = Math.min(polySdf([z.poly], x, y), polySdf(boards, x, y));
+      }
+    for (const poly of trace(F, 1.5)) zones.push({ ...z, poly } as Zone);
+  }
+  return { ...c, zones };
 }
 
 // Sized to the board, with a margin all round, everything moved to match.
@@ -846,7 +923,46 @@ function fairwayHole(rand: Rand, o: GenOpts, len: number, ice: boolean, budget: 
       made++;
     }
   }
-  // Ponds off to the side, biting into the fairway's edge.
+  // First the ones that make you choose: a bunker on the outside of the bend where a drive lands, a pond
+  // on the inside of it (cut the corner and risk it), and bunkers guarding the green.
+  const bend = sharpest(path);
+  if (bend && o.hazards > 0) {
+    const s = path[bend.i];
+    const outside = -bend.turn; // which way's the outside of the bend
+    const c = v(s.x - s.dy * outside * (s.hw + rand.R(0.2, 1.4)), s.y + s.dx * outside * (s.hw + rand.R(0.2, 1.4)));
+    const poly = blob(c.x, c.y, rand.R(1.8, 2.8), rand.R(1.2, 1.8), Math.floor(rand.R(1, 99)), 0.15, 20);
+    if (clear(c, 2.2) && poly.every(inLand)) {
+      sand.push(poly);
+      taken.push({ c, r: 2.6 });
+      made++;
+    }
+    if (rand.chance(0.6)) {
+      const ci = v(s.x - s.dy * -outside * (s.hw + f.rough * 0.6), s.y + s.dx * -outside * (s.hw + f.rough * 0.6));
+      const pp = blob(ci.x, ci.y, rand.R(2.5, 4), rand.R(2, 3), Math.floor(rand.R(1, 99)), 0.12, 24);
+      if (clear(ci, 3) && !overlapsAny(pp, sand, 1.2) && !inPoly(tee, pp) && !inPoly(cup, pp)) {
+        water.push(pp);
+        taken.push({ c: ci, r: 3.5 });
+        made++;
+      }
+    }
+  }
+  for (let g = 0; g < (o.hazards === 0 ? 1 : 2); g++) {
+    const end = path[path.length - 1], back = path[Math.max(0, path.length - 6)];
+    const fx = end.x - back.x, fy = end.y - back.y, fl = hyp(fx, fy) || 1;
+    const side = g === 0 ? rand.pick([-1, 1]) : 0;
+    // Front left or right of the green, or (the second) behind it.
+    const ang = side ? side * rand.R(0.9, 1.5) : Math.PI + rand.R(-0.4, 0.4);
+    const ux = -fx / fl, uy = -fy / fl;
+    const dx = ux * dcos(ang) - uy * dsin(ang), dy = ux * dsin(ang) + uy * dcos(ang);
+    const off = rand.R(4.3, 5.4);
+    const c = v(end.x + dx * off, end.y + dy * off);
+    const poly = blob(c.x, c.y, rand.R(1.3, 2.2), rand.R(1, 1.6), Math.floor(rand.R(1, 99)), 0.15, 20);
+    if (!clear(c, 1.8) || overlapsAny(poly, water, 1.2) || !poly.every(inLand)) continue;
+    sand.push(poly);
+    taken.push({ c, r: 2.1 });
+    made++;
+  }
+  // Then whatever else there's room for: ponds biting into the edge, more bunkers, a hump, a gust.
   for (let k = 0; k < 12 && made < budget; k++) {
     const what = rand.pick(["pond", "bunker", "bunker", "green-bunker", "pond", "mound", "wind"]);
     if (what === "pond") {
@@ -929,7 +1045,7 @@ function fairwayHole(rand: Rand, o: GenOpts, len: number, ice: boolean, budget: 
     mines: [],
   };
   void inFair;
-  return { c: framed(course), ramps: false };
+  return { c: framed(clipZones(course)), ramps: false };
 }
 
 // --- Checks ---
@@ -963,6 +1079,8 @@ export function problems(c: Course, ramps = false): string | null {
   const waters = c.zones.filter((z) => z.kind === "water");
   for (const s of sands) for (const p of s.poly) if (waters.some((wz) => inPoly(p, wz.poly))) return "sand in the water";
   for (const wz of waters) for (const p of wz.poly) if (sands.some((s) => inPoly(p, s.poly))) return "water in the sand";
+  // (Corners alone can miss two shapes crossing edge to edge.)
+  for (const sz of sands) for (const wz of waters) if (edgesCross(sz.poly, wz.poly)) return "sand across the water";
   // Bridges land on something you can stand on at both ends.
   for (const z of c.zones)
     if (z.kind === "bridge") {
@@ -982,7 +1100,9 @@ export function problems(c: Course, ramps = false): string | null {
       if (g2 > 0.05 && g2 < 0.95) return "a ball could wedge between bumpers";
     }
   }
-  for (const m of c.mines ?? []) if (!onBoard(m) || !playable(ground(m))) return "mine off the board";
+  for (const m of c.mines ?? []) if (!onBoard(m) || !playable(ground(m)) || ground(m) === "ice") return "mine off the board, or on ice";
+  // On a mini hole a box sits on the board itself, not out on the ice.
+  for (const b of c.boxes) if (ground(b) === "ice" && c.surface !== "snow") return "box on the ice";
   for (const b of c.boxes) {
     const g = ground(b);
     // (Deep snow's the rough on an ice fairway; a drift on a mini hole is a hazard.)
@@ -998,20 +1118,31 @@ export function problems(c: Course, ramps = false): string | null {
   return null;
 }
 
-// How the bot does: three goes with shaky hands. Par from how many it takes; null if it can't do it.
+function edgesCross(a: Vec[], b: Vec[]) {
+  const side = (p: Vec, q: Vec, r: Vec) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+  for (const [p1, p2] of edges(a))
+    for (const [q1, q2] of edges(b)) {
+      const d1 = side(q1, q2, p1), d2 = side(q1, q2, p2), d3 = side(p1, p2, q1), d4 = side(p1, p2, q2);
+      if (d1 * d2 < 0 && d3 * d4 < 0) return true;
+    }
+  return false;
+}
+
+// How the bot does: four goes with shaky hands. Par from how many it takes on average (which matched the
+// pars set by hand on the hand-made holes best); null if it can't do it.
 function judge(c: Course): number | null {
   const w = compile(c);
   const runs: number[] = [];
-  for (const sd of [1, 2, 3]) {
+  for (const sd of [1, 2, 3, 4]) {
     const r = rng(sd * 7919 + c.tee.x * 13);
     const n = playHole(c, w, { limit: 9, shaky: () => r() * 2 - 1, angles: 24, powers: [0.14, 0.24, 0.36, 0.5, 0.66, 0.84, 1] });
     // Either of the first two going wrong is enough: don't spend longer on a hole that's a slog.
-    if (n === null && sd < 3) return null;
+    if (n === null && sd < 4) return null;
     runs.push(n ?? 11);
   }
   const avg = runs.reduce((a, b) => a + b, 0) / runs.length;
   if (avg < 1.34) return null; // in one nearly every time: not a hole
-  return Math.max(2, Math.min(7, Math.round(avg + 0.3)));
+  return Math.max(2, Math.min(c.surface === "rough" || c.surface === "snow" ? 7 : 6, Math.round(avg)));
 }
 
 // Hole `n` from the seed: candidates until one passes, the nth of a shuffled list of shapes so a course
@@ -1027,7 +1158,11 @@ export function generateHole(o: GenOpts, debug?: (msg: string) => void): Course 
   for (let attempt = 0; attempt < 14; attempt++) {
     const seed = mix(o.seed, o.n, attempt);
     const kindIndex = MINI.indexOf(order[(o.n + Math.floor(attempt / 3)) % order.length]);
-    const { c: raw, ramps, kind } = candidate(seed, o, kindIndex);
+    const { c: raw, ramps, kind, thin } = candidate(seed, o, kindIndex);
+    if (thin) {
+      debug?.(`${raw.name}: too empty`);
+      continue;
+    }
     // An id unique to everything that shaped it: compiled walls and distances are cached by id.
     const c = withTees({ ...raw, id: `${idOf(o)}-${attempt}` });
     const why = problems(c, ramps);

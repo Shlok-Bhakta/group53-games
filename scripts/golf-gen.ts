@@ -95,5 +95,5 @@ for (const seed of seeds) {
   const png = new Resvg(svg, { fitTo: { mode: "original" }, font: { loadSystemFonts: true } }).render().asPng();
   fs.writeFileSync(path.join(out, `seed-${seed}-t${terrain}-s${style}-h${hazards}.png`), png);
 }
-fs.writeFileSync(path.join(out, "holes.json"), JSON.stringify(all));
+fs.writeFileSync(path.join(out, `holes-t${terrain}-s${style}-h${hazards}-${seeds.join("_")}.json`), JSON.stringify(all));
 console.log(`wrote ${out}`);
