@@ -52,7 +52,7 @@ export function MatchScreen({ game }: { game: GameUI }) {
       <NavBar title={mode.name} back="/" action={<MenuButton onClick={() => setMenu(true)} />} />
       <GameMenu open={menu} onOpenChange={setMenu} match={match} title={mode.name} rules={game.rules(match.mode as ModeKey, settingsOf(match.mode, match.settings))} />
       {match.status === "waiting" || match.status === "cancelled" ? (
-        <Lobby match={match} meId={me?._id} onLeave={() => navigate("/", { replace: true })} />
+        <Lobby match={match} meId={me?._id} onLeave={() => navigate("/", { replace: true })} setup={game.setup} />
       ) : (
         <GameCrash>
           <Game match={match} meId={me?._id} />

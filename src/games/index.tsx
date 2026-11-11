@@ -40,7 +40,8 @@ export type GameUI = {
   // More on the game's page, under the modes (golf's practice holes).
   extra?: () => ReactNode;
   // At the bottom of a mode page, with the settings for the next game: golf's holes for those settings.
-  setup?: (p: { mode: ModeKey; settings: Settings; onChange: (next: Settings) => void }) => ReactNode;
+  // In a lobby too, where only the host can change them (`editable`).
+  setup?: (p: { mode: ModeKey; settings: Settings; onChange: (next: Settings) => void; editable?: boolean }) => ReactNode;
 };
 
 // Golf's screen is big (the physics, the drawing, the sound), so it's only downloaded once a game's opened.

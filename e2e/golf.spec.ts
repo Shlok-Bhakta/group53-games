@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { anyApi } from "convex/server";
 import { SOLUTIONS } from "../convex/golf/solutions";
-import { admin, createPlayer, expect, fillLobby, getMatch, openLobby, test, type Phones } from "./fixtures";
+import { admin, createPlayer, expect, fillLobby, getMatch, matchIdOf, openLobby, test, type Phones } from "./fixtures";
 
 // Golf's open world on two phones: both in, a shot on one, and the ball ending up in exactly the same
 // place on both (every phone runs the same physics from the same commands).
@@ -340,7 +340,12 @@ test("a generated course shows its seed, and the same seed plays the same holes"
   await pa.getByRole("textbox", { name: "Seed" }).press("Enter");
   await pa.getByRole("button", { name: "Open a game" }).click();
   await expect(pa.getByRole("heading", { name: "Waiting for players" })).toBeVisible();
-  await fillLobby(pa, [pb]);
+  // The lobby shows the holes too: the host under the seed, a guest under the settings.
+  await expect(pa.getByRole("list", { name: "The holes" }).getByRole("button", { name: /^Hole 1, / })).toBeVisible({ timeout: 60_000 });
+  await pb.goto(`/golf/${matchIdOf(pa)}?accept=1`);
+  await expect(pb.getByRole("list", { name: "The holes" }).getByRole("button", { name: /^Hole 1, / })).toBeVisible({ timeout: 60_000 });
+  await expect(pb.getByText("Seed 4242").first()).toBeVisible();
+  await pa.getByRole("button", { name: "Start with 2" }).click();
   await expect(pa.getByLabel(/hole 1 of 3/)).toBeVisible({ timeout: 60_000 });
   await pa.getByRole("button", { name: "Menu" }).click();
   await expect(pa.getByRole("button", { name: "Copy seed 4242" })).toBeVisible();

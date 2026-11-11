@@ -2,12 +2,26 @@ import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router";
 import { useMutation } from "convex/react";
 import { motion } from "motion/react";
-import { PlayIcon, ShareNetworkIcon, UserPlusIcon } from "@phosphor-icons/react";
+import {
+  PlayIcon,
+  ShareNetworkIcon,
+  UserPlusIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { MatchView } from "../../../convex/matches";
-import { MODES, acceptPath, flexibleSeats, seedSummary, settingsOf, settingsSummary, type ModeKey } from "../../../convex/modes";
+import {
+  MODES,
+  acceptPath,
+  flexibleSeats,
+  seedSummary,
+  settingsOf,
+  settingsSummary,
+  type ModeKey,
+  type Settings,
+} from "../../../convex/modes";
+import type { GameUI } from "@/games";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { Button } from "@/components/ui/button";
 import { ConfirmButton } from "@/components/ConfirmButton";
@@ -18,7 +32,18 @@ import { errorText } from "@/lib/errors";
 import { Tiles } from "@/Tiles";
 
 // Waiting for players: who's in, the settings, then the actions at the bottom of the screen.
-export function Lobby({ match, meId, onLeave }: { match: MatchView; meId: Id<"users"> | undefined; onLeave: () => void }) {
+// `setup`: what the game shows of its settings (golf's holes), under them.
+export function Lobby({
+  match,
+  meId,
+  onLeave,
+  setup,
+}: {
+  match: MatchView;
+  meId: Id<"users"> | undefined;
+  onLeave: () => void;
+  setup?: GameUI["setup"];
+}) {
   const join = useMutation(api.matches.join);
   const cancel = useMutation(api.matches.cancel);
   const decline = useMutation(api.matches.decline);
@@ -27,7 +52,8 @@ export function Lobby({ match, meId, onLeave }: { match: MatchView; meId: Id<"us
   const [params, setParams] = useSearchParams();
   const mode = MODES[match.mode as ModeKey];
   const flexible = flexibleSeats(match.mode);
-  const host = match.players.find((p) => p.userId === match.createdBy) ?? match.players[0];
+  const host =
+    match.players.find((p) => p.userId === match.createdBy) ?? match.players[0];
   const isHost = match.createdBy === meId;
   const joined = match.players.some((p) => p.userId === meId);
   const invitedMe = !!meId && match.invited.includes(meId) && !joined;
@@ -42,26 +68,60 @@ export function Lobby({ match, meId, onLeave }: { match: MatchView; meId: Id<"us
   const autoJoin = params.get("accept") === "1";
   const tried = useRef(false);
   useEffect(() => {
-    if (!autoJoin || tried.current || !meId || match.status !== "waiting") return;
+    if (!autoJoin || tried.current || !meId || match.status !== "waiting")
+      return;
     tried.current = true;
-    setParams((p) => {
-      p.delete("accept");
-      return p;
-    }, { replace: true });
+    setParams(
+      (p) => {
+        p.delete("accept");
+        return p;
+      },
+      { replace: true },
+    );
     if (!canJoin) return;
     join({ id: match._id })
-      .then(() => toast.success(flexible ? "You're in" : needed > 1 ? `You're in. Waiting for ${needed - 1} more.` : "You're in"))
+      .then(() =>
+        toast.success(
+          flexible
+            ? "You're in"
+            : needed > 1
+              ? `You're in. Waiting for ${needed - 1} more.`
+              : "You're in",
+        ),
+      )
       .catch((err) => toast.error(errorText(err)));
-  }, [autoJoin, meId, match.status, match._id, canJoin, join, needed, setParams, flexible]);
+  }, [
+    autoJoin,
+    meId,
+    match.status,
+    match._id,
+    canJoin,
+    join,
+    needed,
+    setParams,
+    flexible,
+  ]);
 
   if (match.status === "cancelled") {
     return (
       <div className="flex flex-1 flex-col">
         <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
-          <Tiles word="OFF" states={["gray", "gray", "hit"]} size="lg" label="Off" />
-          <h2 className="mt-3 font-display text-title">This game was called off</h2>
+          <Tiles
+            word="OFF"
+            states={["gray", "gray", "hit"]}
+            size="lg"
+            label="Off"
+          />
+          <h2 className="mt-3 font-display text-title">
+            This game was called off
+          </h2>
         </div>
-        <Button size="xl" variant="secondary" className="w-full" onClick={onLeave}>
+        <Button
+          size="xl"
+          variant="secondary"
+          className="w-full"
+          onClick={onLeave}
+        >
           Back home
         </Button>
       </div>
@@ -70,17 +130,38 @@ export function Lobby({ match, meId, onLeave }: { match: MatchView; meId: Id<"us
 
   const title = flexible
     ? isHost
-      ? enough ? `${match.players.length} in` : pendingInvites.length ? "Challenge sent" : "Waiting for players"
-      : joined ? `Waiting for ${host.name} to start` : invitedMe ? `${host.name} challenged you` : `${host.name} wants a game`
+      ? enough
+        ? `${match.players.length} in`
+        : pendingInvites.length
+          ? "Challenge sent"
+          : "Waiting for players"
+      : joined
+        ? `Waiting for ${host.name} to start`
+        : invitedMe
+          ? `${host.name} challenged you`
+          : `${host.name} wants a game`
     : isHost
-      ? match.invited.length > 0 && !open && match.players.length === 1 ? "Challenge sent" : mode.players === 2 ? "Looking for an opponent" : `Waiting for ${needed} more`
+      ? match.invited.length > 0 && !open && match.players.length === 1
+        ? "Challenge sent"
+        : mode.players === 2
+          ? "Looking for an opponent"
+          : `Waiting for ${needed} more`
       : joined
         ? `You're in. Waiting for ${needed} more`
         : invitedMe
           ? `${host.name} challenged you`
           : `${host.name} wants a game`;
   const share = (
-    <Button size="xl" variant={flexible ? "secondary" : "default"} onClick={() => void shareLink(acceptPath(match), `${mode.title[0].toUpperCase()}${mode.title.slice(1)}, come play:`)}>
+    <Button
+      size="xl"
+      variant={flexible ? "secondary" : "default"}
+      onClick={() =>
+        void shareLink(
+          acceptPath(match),
+          `${mode.title[0].toUpperCase()}${mode.title.slice(1)}, come play:`,
+        )
+      }
+    >
       <ShareNetworkIcon weight="bold" /> Share invite link
     </Button>
   );
@@ -88,15 +169,26 @@ export function Lobby({ match, meId, onLeave }: { match: MatchView; meId: Id<"us
   return (
     <div className="flex flex-1 flex-col">
       <div className="flex flex-1 flex-col items-center justify-center gap-5 py-6 text-center">
-        {mode.players > 2 ? <Seats match={match} /> : <PlayerAvatar player={host} badge={host.badge} size={96} />}
+        {mode.players > 2 ? (
+          <Seats match={match} />
+        ) : (
+          <PlayerAvatar player={host} badge={host.badge} size={96} />
+        )}
         <h2 className="font-display text-title">{title}</h2>
       </div>
-      <LobbySettings match={match} editable={isHost} />
+      <LobbySettings match={match} editable={isHost} setup={setup} />
       {isHost ? (
         <div className="grid w-full gap-2">
           {flexible && (
-            <AsyncButton size="xl" disabled={!enough} icon={<PlayIcon weight="fill" />} onClick={() => startGame({ id: match._id })}>
-              {enough ? `Start with ${match.players.length}` : `Needs ${mode.minPlayers} to start`}
+            <AsyncButton
+              size="xl"
+              disabled={!enough}
+              icon={<PlayIcon weight="fill" />}
+              onClick={() => startGame({ id: match._id })}
+            >
+              {enough
+                ? `Start with ${match.players.length}`
+                : `Needs ${mode.minPlayers} to start`}
             </AsyncButton>
           )}
           {share}
@@ -107,14 +199,23 @@ export function Lobby({ match, meId, onLeave }: { match: MatchView; meId: Id<"us
               </Button>
             }
             title="Cancel this game?"
-            detail={match.players.length > 1 ? "Everyone who's joined is sent back." : "The invite stops working."}
+            detail={
+              match.players.length > 1
+                ? "Everyone who's joined is sent back."
+                : "The invite stops working."
+            }
             keep="Keep it"
             confirm="Cancel game"
             onConfirm={() => cancel({ id: match._id }).then(onLeave)}
           />
         </div>
       ) : joined ? (
-        <AsyncButton size="xl" variant="ghost" className="w-full" onClick={() => leave({ id: match._id }).then(onLeave)}>
+        <AsyncButton
+          size="xl"
+          variant="ghost"
+          className="w-full"
+          onClick={() => leave({ id: match._id }).then(onLeave)}
+        >
           Leave
         </AsyncButton>
       ) : canJoin ? (
@@ -123,36 +224,80 @@ export function Lobby({ match, meId, onLeave }: { match: MatchView; meId: Id<"us
             {invitedMe ? "Accept" : "Join game"}
           </AsyncButton>
           {invitedMe && (
-            <AsyncButton size="xl" variant="ghost" onClick={() => decline({ id: match._id }).then(onLeave)}>
+            <AsyncButton
+              size="xl"
+              variant="ghost"
+              onClick={() => decline({ id: match._id }).then(onLeave)}
+            >
               Decline
             </AsyncButton>
           )}
         </div>
       ) : (
-        <p className="py-3 text-center text-callout text-muted-foreground">{open ? "Every seat is taken." : "This is a private challenge."}</p>
+        <p className="py-3 text-center text-callout text-muted-foreground">
+          {open ? "Every seat is taken." : "This is a private challenge."}
+        </p>
       )}
     </div>
   );
 }
 
 // The game's settings in the lobby. The host can still change them, and everyone else watches them change.
-function LobbySettings({ match, editable }: { match: MatchView; editable: boolean }) {
+function LobbySettings({
+  match,
+  editable,
+  setup,
+}: {
+  match: MatchView;
+  editable: boolean;
+  setup?: GameUI["setup"];
+}) {
   const configure = useMutation(api.matches.configure);
   const mode = match.mode as ModeKey;
   const value = settingsOf(mode, match.settings);
+  // Only what changed, so two quick taps can't undo each other.
+  const change = (next: Settings) =>
+    void configure({
+      id: match._id,
+      settings: Object.fromEntries(
+        Object.entries(next).filter(([k, v]) => value[k] !== v),
+      ),
+    }).catch((e) => toast.error(errorText(e)));
+  const preview = setup?.({
+    mode,
+    settings: value,
+    onChange: editable ? change : () => {},
+    editable,
+  });
   const seed = seedSummary(mode, match.settings);
-  const summary = [...settingsSummary(mode, match.settings), ...(seed ? [seed] : [])];
+  const summary = [
+    ...settingsSummary(mode, match.settings),
+    ...(seed ? [seed] : []),
+  ];
   if ((MODES[mode].settings as readonly unknown[]).length === 0) return null;
   if (!editable) {
-    if (summary.length === 0) return null;
+    if (summary.length === 0)
+      return preview ? <div className="mb-5">{preview}</div> : null;
     return (
-      <ul className="mb-5 flex flex-wrap justify-center gap-2" aria-label="Settings">
-        {summary.map((s) => (
-          <motion.li key={s} layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="rounded-full bg-card px-3 py-1.5 text-footnote font-semibold">
-            {s}
-          </motion.li>
-        ))}
-      </ul>
+      <>
+        <ul
+          className="mb-5 flex flex-wrap justify-center gap-2"
+          aria-label="Settings"
+        >
+          {summary.map((s) => (
+            <motion.li
+              key={s}
+              layout
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="rounded-full bg-card px-3 py-1.5 text-footnote font-semibold"
+            >
+              {s}
+            </motion.li>
+          ))}
+        </ul>
+        {preview && <div className="mb-5">{preview}</div>}
+      </>
     );
   }
   return (
@@ -160,8 +305,8 @@ function LobbySettings({ match, editable }: { match: MatchView; editable: boolea
       <SettingsSection
         mode={mode}
         value={value}
-        // Only what changed, so two quick taps can't undo each other.
-        onChange={(next) => void configure({ id: match._id, settings: Object.fromEntries(Object.entries(next).filter(([k, v]) => value[k] !== v)) }).catch((e) => toast.error(errorText(e)))}
+        onChange={change}
+        preview={preview}
       />
     </div>
   );
@@ -172,22 +317,40 @@ function LobbySettings({ match, editable }: { match: MatchView; editable: boolea
 function Seats({ match }: { match: MatchView }) {
   const mode = MODES[match.mode as ModeKey];
   const pending = match.invitedPeople.filter((p) => !p.joined);
-  const free = Math.max(0, mode.players - match.players.length - pending.length);
+  const free = Math.max(
+    0,
+    mode.players - match.players.length - pending.length,
+  );
   const open = flexibleSeats(match.mode) ? Math.min(1, free) : free;
   return (
     <ul className="grid w-full grid-cols-4 gap-x-2 gap-y-4" aria-label="Seats">
       {match.players.map((p) => (
-        <motion.li key={p.userId} layout initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", bounce: 0.2, duration: 0.4 }} className="flex min-w-0 flex-col items-center gap-1.5">
+        <motion.li
+          key={p.userId}
+          layout
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", bounce: 0.2, duration: 0.4 }}
+          className="flex min-w-0 flex-col items-center gap-1.5"
+        >
           <PlayerAvatar player={p} size={60} />
-          <span className="w-full truncate text-footnote font-semibold">{p.name}</span>
+          <span className="w-full truncate text-footnote font-semibold">
+            {p.name}
+          </span>
         </motion.li>
       ))}
       {pending.map((p) => (
-        <li key={p.userId} className="flex min-w-0 flex-col items-center gap-1.5">
+        <li
+          key={p.userId}
+          className="flex min-w-0 flex-col items-center gap-1.5"
+        >
           <span className="block opacity-45">
             <PlayerAvatar name={p.name} image={p.image} size={60} />
           </span>
-          <span className="w-full truncate text-footnote text-muted-foreground" aria-label={`Asked ${p.name}`}>
+          <span
+            className="w-full truncate text-footnote text-muted-foreground"
+            aria-label={`Asked ${p.name}`}
+          >
             {p.name}
           </span>
         </li>

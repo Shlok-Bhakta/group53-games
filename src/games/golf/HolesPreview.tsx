@@ -12,13 +12,13 @@ import { refreshTheme, still } from "./toy";
 // The holes the next game will be played on, at the bottom of a golf mode page: a course made by hand
 // straight away, a generated one as the server makes each hole for the seed (convex/golf.ts, `preview`).
 // Spot a goofy one, roll another seed; a game started on this seed plays exactly these, already made.
-export function GolfHoles({ mode, settings, onChange }: { mode: ModeKey; settings: Settings; onChange: (next: Settings) => void }) {
+export function GolfHoles({ mode, settings, onChange, editable = true }: { mode: ModeKey; settings: Settings; onChange: (next: Settings) => void; editable?: boolean }) {
   const s = settingsOf(mode, settings);
   const generated = s.course === 0;
   // A generated course always has a seed here, so there's something to look at. (The phone never remembers
   // it: every visit rolls a new one.)
   useEffect(() => {
-    if (generated && !s.seed) onChange({ ...settings, seed: rollSeed() });
+    if (generated && !s.seed && editable) onChange({ ...settings, seed: rollSeed() });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generated, s.seed]);
   // Only what changes the holes, so ticking items on and off doesn't ask again.
@@ -42,7 +42,9 @@ export function GolfHoles({ mode, settings, onChange }: { mode: ModeKey; setting
       title="Holes"
       bare
       action={
-        generated && s.seed ? (
+        generated && s.seed && !editable ? (
+          <span className="font-display text-callout text-muted-foreground">Seed {s.seed}</span>
+        ) : generated && s.seed ? (
           <button
             type="button"
             onClick={() => onChange({ ...settings, seed: rollSeed() })}
