@@ -21,13 +21,15 @@ function read<T extends string>(key: string, allowed: readonly T[], fallback: T)
   return allowed.includes(saved as T) ? (saved as T) : fallback;
 }
 
-// iOS reads theme-color for the status bar, and may not parse oklch, so convert through a canvas.
+// iOS reads theme-color for the status bar, and may not parse oklch, so convert through a canvas. Null while
+// the page has no color of its own (the stylesheet hasn't loaded).
 function toHex(color: string) {
   const ctx = document.createElement("canvas").getContext("2d");
   if (!ctx) return color;
   ctx.fillStyle = color;
   ctx.fillRect(0, 0, 1, 1);
-  const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+  const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+  if (a === 0) return null;
   return `#${[r, g, b].map((n) => n.toString(16).padStart(2, "0")).join("")}`;
 }
 
@@ -50,8 +52,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     root.dataset.palette = palette;
     root.dataset.font = font;
     const bg = toHex(getComputedStyle(document.body).backgroundColor);
+    if (!bg) return;
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", bg);
-    localStorage.setItem("theme-color", bg);
+    // index.html paints the page this color before the stylesheet loads, next time the app opens.
+    root.style.colorScheme = resolved;
+    root.style.backgroundColor = bg;
+    localStorage.setItem(`bg-${resolved}`, bg);
   }, [resolved, palette, font]);
 
   function persist<T extends string>(key: string, set: (v: T) => void) {

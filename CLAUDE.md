@@ -91,6 +91,7 @@ Adding a game means: its entry in `GAMES` and its modes in `convex/modes.ts`, it
 ## Look and feel
 
 - Wordle-style letter tiles are the motif (`src/Tiles.tsx`). A crooked red "hit" tile marks a PvP attack.
+- Opening the app never flashes white: when iOS reopens it from cold, the page paints before the stylesheet arrives, so `index.html`'s first script sets the theme, `color-scheme` and the page's color itself, from the color `src/theme.tsx` saved for that mode (`bg-dark`, `bg-light`).
 - Themes live in `src/style.css` and are listed in `src/themes.ts`. Each theme defines light and dark tokens plus tile colors. Use tokens like `bg-card`, `text-muted-foreground` and `var(--tile-green)`, never raw colors, so every theme works.
 - Body text is the phone's own font (SF Pro on iOS, Roboto on Android). The heading font can be changed on the You tab (Oxanium by default) and applies to `.font-display`: titles, headings, numbers, and tiles.
 - iOS 26 blurs a band about 30pt deep under the status bar in standalone web apps (the scroll edge effect), and there's no way to turn it off. Chromium tests can't see it. `TopEdge` covers that band with a solid strip; keep all text below `TOP_CLEAR` (headers start at `safe-area-inset-top + 34px` or more), and never make text `sticky` or `fixed` at the top. An e2e test checks the header.

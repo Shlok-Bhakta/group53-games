@@ -369,6 +369,20 @@ test.describe("signed in", () => {
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-palette", "nord");
     await expect(page.locator("html")).toHaveClass(/dark/);
+    // The body's color as plain rgb (Chromium reports oklch as is), through a canvas.
+    const bg = await page.evaluate(() => {
+      const ctx = document.createElement("canvas").getContext("2d")!;
+      ctx.fillStyle = getComputedStyle(document.body).backgroundColor;
+      ctx.fillRect(0, 0, 1, 1);
+      const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+      return `rgb(${r}, ${g}, ${b})`;
+    });
+    // Reopened from cold, the page is Nord's dark before the stylesheet arrives, never a white flash.
+    // Only index.html's own script runs: no stylesheet, no app.
+    await page.route(/\.(css|js|tsx?)(\?|$)/, (r) => r.abort());
+    await page.reload({ waitUntil: "domcontentloaded" });
+    const early = await page.evaluate(() => ({ bg: getComputedStyle(document.documentElement).backgroundColor, scheme: getComputedStyle(document.documentElement).colorScheme }));
+    expect(early).toEqual({ bg, scheme: "dark" });
   });
 
   test("signing out asks first", async ({ phones }) => {
