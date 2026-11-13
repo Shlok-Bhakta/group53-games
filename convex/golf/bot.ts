@@ -32,8 +32,9 @@ export function tryShot(w: World, from: Packed, id: string, a: number, p: number
   return { s, sunk };
 }
 
-// The best of a fan of shots. `angles` round the full circle, plus a few straight at the cup.
-export function bestShot(w: World, from: Packed, id: string, field: Field = distanceField(w.course, w), opts: { angles?: number; powers?: number[] } = {}): Try | null {
+// The best of a fan of shots. `angles` round the full circle, plus a few straight at the cup. With `sinkWithin`,
+// it only goes for the cup from that close: from further out, a shot that would drop is left alone.
+export function bestShot(w: World, from: Packed, id: string, field: Field = distanceField(w.course, w), opts: { angles?: number; powers?: number[]; sinkWithin?: number } = {}): Try | null {
   const c = w.course;
   const me = from.balls.find((b) => b.id === id);
   if (!me) return null;
@@ -44,9 +45,11 @@ export function bestShot(w: World, from: Packed, id: string, field: Field = dist
   // Straight at the cup, at about the power that would get there on flat carpet.
   const d = hyp(c.cup.x - me.x, c.cup.y - me.y);
   const near = Math.min(1, Math.sqrt(d / 60) + 0.05);
+  const mayHole = opts.sinkWithin === undefined || d <= opts.sinkWithin;
   let best = null as Try | null;
   const consider = (a: number, p: number) => {
     const { s, sunk } = tryShot(w, from, id, a, p);
+    if (sunk && !mayHole) return false;
     const b = s.balls.find((x) => x.id === id);
     const penalty = b ? Math.max(0, b.strokes - me.strokes - 1) * 6 : 0;
     const score = sunk ? -1 : b ? field(b.x, b.y) + penalty : 1e9;

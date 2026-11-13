@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { anyApi } from "convex/server";
 import { SOLUTIONS } from "../convex/golf/solutions";
-import { admin, createPlayer, expect, fillLobby, getMatch, matchIdOf, openLobby, test, type Phones } from "./fixtures";
+import { admin, createPlayer, expect, fillLobby, getMatch, matchIdOf, openLobby, resign, test, type Phones } from "./fixtures";
 
 // Golf's open world on two phones: both in, a shot on one, and the ball ending up in exactly the same
 // place on both (every phone runs the same physics from the same commands).
@@ -333,6 +333,57 @@ test("a turn-based game: the lobby, then one shot at a time, and the card", asyn
   await expect(mine.getByRole("region", { name: "Scorecard" })).toBeVisible();
   await expect(mine.getByRole("region", { name: "Scorecard" })).toContainText("Hello");
   await expect(mine.getByRole("region", { name: "Scorecard" })).toContainText("Elbow");
+});
+
+// Coming back to a game: what you missed plays out, shot by shot, before it's live again.
+test("opening a turn-based game again plays back the shots you missed, then goes live", async ({ phones }) => {
+  test.setTimeout(150_000);
+  const [pa, pb] = await twoPhones(phones);
+  const id = await openLobby(pa, "golf", "turns", { Course: "Bumper Plains", Holes: "3" });
+  await fillLobby(pa, [pb]);
+  for (const p of [pa, pb]) await expect(p.getByText("Teeing up")).toHaveCount(0, { timeout: 30_000 });
+  const m = await getMatch(id);
+  const [mine, theirs] = (await meOn(pa)) === (m.turn as string) ? [pa, pb] : [pb, pa];
+  const name = mine === pa ? "Shlok" : "Chris";
+  // The other phone watches long enough to remember where it's up to, then leaves.
+  await expect.poll(() => theirs.evaluate((k) => localStorage.getItem(k), `golf-seen:${id}`), { timeout: 15_000 }).not.toBeNull();
+  const url = theirs.url();
+  await theirs.goto("/");
+  await shoot(mine, -Math.PI / 2, 0.35);
+  await expect.poll(async () => (await getMatch(id)).turn, { timeout: 30_000 }).not.toBe(m.turn);
+  // Back in: the shot plays again with whoever took it up top, then it's live.
+  await theirs.goto(url);
+  await expect(theirs.getByRole("status").filter({ hasText: "Catching up" })).toBeVisible({ timeout: 20_000 });
+  await expect(theirs.getByRole("button", { name: "Scorecard" })).toContainText(`${name}'s shot`);
+  await expect(theirs.getByRole("status").filter({ hasText: "Catching up" })).toHaveCount(0, { timeout: 30_000 });
+  await expect(theirs.getByLabel(/hole 1 of 3/)).toHaveAttribute("data-turn", "mine");
+  const strip = (b: BallView[]) => b.map(({ t: _t, ...x }) => x).sort((p, q) => p.id.localeCompare(q.id));
+  await expect.poll(async () => JSON.stringify(strip(await balls(theirs))) === JSON.stringify(strip(await balls(mine))), { timeout: 10_000 }).toBe(true);
+  // Nothing new since: opening it again goes straight to live, and Skip is there for a long one.
+  await theirs.goto("/");
+  await theirs.goto(url);
+  await expect(theirs.getByLabel(/hole 1 of 3/)).toHaveAttribute("data-turn", "mine", { timeout: 20_000 });
+  await expect(theirs.getByRole("status").filter({ hasText: "Catching up" })).toHaveCount(0);
+  // A game that ends while you're away still plays out before the result: they tee off and leave, the other
+  // player shoots and resigns.
+  await shoot(theirs, -Math.PI / 2, 0.35);
+  await expect(theirs.getByLabel(/hole 1 of 3/)).toHaveAttribute("data-turn", "theirs", { timeout: 30_000 });
+  const seenNow = () => theirs.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? "null")?.tick ?? -1, `golf-seen:${id}`);
+  const after = await seenNow();
+  await expect.poll(seenNow, { timeout: 10_000 }).toBeGreaterThan(after);
+  await theirs.goto("/");
+  await expect(mine.getByLabel(/hole 1 of 3/)).toHaveAttribute("data-turn", "mine", { timeout: 30_000 });
+  const moves = (await getMatch(id)).moveCount;
+  await shoot(mine, -Math.PI / 2, 0.2);
+  // The turn's handed out again once the ball stops (it may well come back to them: farthest goes next).
+  await expect.poll(async () => (await getMatch(id)).moveCount, { timeout: 30_000 }).toBeGreaterThan(moves);
+  await mine.getByRole("button", { name: "Menu" }).click();
+  await resign(mine);
+  await expect.poll(async () => (await getMatch(id)).status, { timeout: 15_000 }).toBe("finished");
+  await theirs.goto(url);
+  await expect(theirs.getByRole("status").filter({ hasText: "Catching up" })).toBeVisible({ timeout: 20_000 });
+  await expect(theirs.getByRole("button", { name: "Scorecard" })).toContainText(`${name}'s shot`);
+  await expect(theirs.getByRole("region", { name: "Result" })).toBeVisible({ timeout: 30_000 });
 });
 
 test("a generated course shows its seed, and the same seed plays the same holes", async ({ phones }) => {

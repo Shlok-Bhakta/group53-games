@@ -3,9 +3,9 @@ import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { Course } from "./golf/engine";
 import { bestShot } from "./golf/bot";
-import { worldOf } from "./golf/holes";
+import { courseOf, worldOf } from "./golf/holes";
 import type { GolfState } from "./golf/round";
-import { advance, TPS, unpack, type Packed } from "./golf/world";
+import { advance, applyCmd, newWorld, pack, TPS, unpack, type Packed } from "./golf/world";
 import { setup, signedIn } from "./test.setup";
 
 // A round of golf as a game: the lobby, the holes being built, turns going to whoever's farthest away,
@@ -143,6 +143,25 @@ describe("a turn-based round", () => {
     if ((m.state as GolfState).hole === 0) expect(m.turn).toBe(seats[1].userId);
   });
 
+  test("with no limit (the default), nobody's shot is ever taken for them", async () => {
+    const t = setup();
+    const { id } = await game(t, 2, "golf:turns", { course: 1, holes: 3 });
+    expect((await get(t, id)).turn).toBeTruthy();
+    const timeouts = await t.run(async (ctx) => (await ctx.db.system.query("_scheduled_functions").collect()).filter((s) => s.name === "golf:shotTimeout"));
+    expect(timeouts).toHaveLength(0);
+  });
+
+  test("the caddie never goes for a hole in one", () => {
+    // The first hole of Bumper Plains can be aced from the tee, and a perfect bot finds it.
+    const c = courseOf("plains-1")!;
+    const w = worldOf(c);
+    const s = newWorld(c, { collide: true });
+    applyCmd(s, c, { tick: 0, by: "me", seq: 0, kind: "join", i: 0, bag: [] });
+    const opts = { angles: 24, powers: [0.15, 0.3, 0.45, 0.6, 0.8, 1] };
+    expect(bestShot(w, pack(s), "me", undefined, opts)!.sunk).toBe(true);
+    expect(bestShot(w, pack(s), "me", undefined, { ...opts, sinkWithin: 4 })!.sunk).toBe(false);
+  });
+
   test("the caddie shoots for someone whose time runs out", async () => {
     const t = setup();
     const { id, seats } = await game(t, 2, "golf:turns", { course: 1, holes: 3, shotTime: 60 });
@@ -171,6 +190,8 @@ describe("a turn-based round", () => {
     vi.advanceTimersByTime(15_000);
     await t.mutation(internal.golf.tick, { worldId: w._id });
     expect((await get(t, id)).turn).toBe(seats[1].userId);
+    // No "Your shot" for a turn the caddie takes before they could tap it.
+    expect((await pushes(t)).some((p) => p.userId === seats[1].userId && p.title === "Your shot")).toBe(false);
     // The caddie's called straight away (an action, as the scheduler would run it).
     await t.action(internal.golf.caddie, { id, moveCount: (await get(t, id)).moveCount, why: "away" });
     // The caddie's shot is in, and the world stayed awake to play it out.
@@ -183,6 +204,34 @@ describe("a turn-based round", () => {
     const m = await get(t, id);
     expect(m.turn === seats[0].userId || (m.state as GolfState).hole > 0).toBe(true);
     void players;
+  }, 60_000);
+
+  test("the third shot in a row the caddie takes says it'll keep playing till you're back", async () => {
+    const t = setup();
+    const { id } = await game(t, 2, "golf:turns", { course: 1, holes: 3, shotTime: 60 });
+    await t.run(async (ctx) => {
+      const m = (await ctx.db.get(id))!;
+      await ctx.db.patch(id, { state: { ...(m.state as GolfState), idle: [2, 0] } });
+    });
+    const m = await get(t, id);
+    vi.advanceTimersByTime(60 * 60_000);
+    await t.action(internal.golf.caddie, { id, moveCount: m.moveCount, why: "timeout" });
+    expect((await stateOf(t, id)).idle[0]).toBe(3);
+    expect((await pushes(t)).find((p) => p.title === "Your caddie took your shot")?.body).toMatch(/3 in a row/);
+  });
+
+  test("a hole plays back from its start to exactly where it is now", async () => {
+    const t = setup();
+    const { id, players, seats } = await game(t, 2, "golf:turns", { course: 1, holes: 3 });
+    await playTurn(t, id, players);
+    await playTurn(t, id, players);
+    const { w, c, s } = await worldNow(t, id);
+    const h = (await seats[0].as.query(api.golf.history, { key: w.key }))!;
+    const back = unpack(h.start);
+    expect(back.tick).toBe(0);
+    expect(back.balls.every((b) => b.strokes === 0)).toBe(true);
+    advance(back, worldOf(c), s.tick, h.cmds);
+    expect(back.balls.map((b) => [b.id, b.x, b.y, b.strokes])).toEqual(s.balls.map((b) => [b.id, b.x, b.y, b.strokes]));
   }, 60_000);
 
   test("opening the game stands the caddie down", async () => {

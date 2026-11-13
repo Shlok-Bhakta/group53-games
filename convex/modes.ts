@@ -284,7 +284,7 @@ export const MODES = {
     settings: [
       // Six holes and four hours a shot, so a round of one shot at a time fits in about a day.
       ...golf(6),
-      { key: "shotTime", label: "Time to shoot", short: "{} to shoot", options: [{ value: 60, label: "1 hour" }, { value: 240, label: "4 hours" }, { value: 480, label: "8 hours" }, { value: 1440, label: "1 day" }], default: 240 },
+      { key: "shotTime", label: "Time to shoot", short: "{} to shoot", options: [{ value: 0, label: "No limit" }, { value: 60, label: "1 hour" }, { value: 240, label: "4 hours" }, { value: 480, label: "8 hours" }, { value: 1440, label: "1 day" }], default: 0 },
     ],
   },
   "golf:live": {

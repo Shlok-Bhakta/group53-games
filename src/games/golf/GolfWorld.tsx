@@ -12,7 +12,7 @@ import * as sound from "./audio";
 import type { Camera } from "./toy";
 import { Dock, RoundBar, TargetHint, TopBar, type Hud } from "./Hud";
 import { HoleResult } from "./HoleResult";
-import { useGolfLoop, type Aim, type Box, type Target } from "./useGolfLoop";
+import { useGolfLoop, type Aim, type Box, type History, type Target } from "./useGolfLoop";
 import { useGolfNet } from "./useGolfNet";
 
 // A live golf world: the open one, or a hole with whoever's on it right now. Every phone runs the same
@@ -36,6 +36,11 @@ export type Round = {
   bar: ReactNode; // what the top bar says: whose turn, the clock
   onMenu: () => void;
   onSunk: (strokes: number) => void;
+  // Coming back to the game: play this hole from tick `from` to now (or its end), shot by shot, then go live.
+  // `onSeen` saves how far it's played back, so leaving partway picks up from there.
+  catchUp?: { from: number; onStart: () => void; onShot: (by: string) => void; onDone: () => void; onSeen: (tick: number) => void };
+  banner?: ReactNode; // under the top bar: what's catching up, and Skip
+  onSeen?: (tick: number) => void; // where this phone has watched up to, about once a second
 };
 
 export default function GolfWorld({ course: COURSE, hole, round }: { course: Course; hole?: HoleInfo; round?: Round }) {
@@ -51,6 +56,8 @@ export default function GolfWorld({ course: COURSE, hole, round }: { course: Cou
   const { pathname } = useLocation();
   const playing = usePlayingIn(pathname);
   const scores = useQuery(api.golf.scores, hole && !round ? {} : "skip");
+  const history = useRef<History | null | undefined>(undefined);
+  history.current = useQuery(api.golf.history, round?.catchUp ? { key: COURSE.id } : "skip");
   // What I just shot, for the result sheet.
   const [result, setResult] = useState<{ strokes: number } | null>(null);
   // The board's own bounds: a small hole shows whole and stays put; a big one follows the ball.
@@ -129,7 +136,7 @@ export default function GolfWorld({ course: COURSE, hole, round }: { course: Cou
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [overview]);
 
-  useGolfLoop({ course: COURSE, world: WORLD, hole, round: roundRef, net: golfNet, scene: { cv, cam, box, overview: overviewRef, aim, blind, target: targetRef, targetAt }, setHud, setResult });
+  useGolfLoop({ course: COURSE, world: WORLD, hole, round: roundRef, net: golfNet, history, scene: { cv, cam, box, overview: overviewRef, aim, blind, target: targetRef, targetAt }, setHud, setResult });
   // A sink in a game goes on the card; the game shows the hole's scores once everyone's done.
   useEffect(() => {
     if (round && result) {
@@ -267,6 +274,7 @@ export default function GolfWorld({ course: COURSE, hole, round }: { course: Cou
 
       {round ? <RoundBar ref={top} course={COURSE} round={round} hud={hud} onBack={goBack} /> : <TopBar ref={top} course={COURSE} hole={hole} others={others} hud={hud} onBack={goBack} />}
       <TargetHint target={target} onCancel={() => setTarget(null)} />
+      {round?.banner && <div className="absolute inset-x-0 top-[calc(env(safe-area-inset-top)+92px)] z-20 flex justify-center">{round.banner}</div>}
       <Dock
         ref={dock}
         hud={hud}

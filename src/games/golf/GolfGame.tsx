@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { motion } from "motion/react";
 import { CaretLeftIcon, ListIcon } from "@phosphor-icons/react";
@@ -26,11 +26,27 @@ import { Scorecard } from "./Scorecard";
 // A game of golf (convex/golf.ts): the hole being played takes the whole screen, with whose turn it is up top
 // and the card in the menu. Between holes the last one's scores come up over the next. Once it's over, the
 // result and the card.
+//
+// Coming back to a turn-based game catches you up: every shot since this phone last looked plays out, one after
+// another as it happened (the waits skipped), hole by hole with each finished hole's scores, then it's live.
+
+// Where this phone last watched the game up to: a hole, and a tick in it.
+type Seen = { hole: number; tick: number };
+const seenKey = (id: string) => `golf-seen:${id}`;
+function readSeen(id: string): Seen | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(seenKey(id)) ?? "null");
+    return v && typeof v.hole === "number" && typeof v.tick === "number" ? v : null;
+  } catch {
+    return null;
+  }
+}
 
 export function GolfGame({ match, meId }: { match: MatchView; meId: Id<"users"> | undefined }) {
   const st = match.state as GolfState | null;
   const holes = useQuery(api.golf.holes, { matchId: match._id });
   const [menu, setMenu] = useState(false);
+  const [card, setCard] = useState<number | null>(null);
   const seat = match.players.findIndex((p) => p.userId === meId);
   const playing = seat >= 0 && !!st && !st.out.includes(seat);
   // Opening the game (or coming back to it) stands the caddie down, and restarts a course that stopped building.
@@ -44,21 +60,82 @@ export function GolfGame({ match, meId }: { match: MatchView; meId: Id<"users"> 
     return () => document.removeEventListener("visibilitychange", ping);
   }, [active, seat, match._id, here]);
 
-  if (match.status === "finished" && st) return <Finished match={match} st={st} meId={meId} />;
+  // Catching up: which hole's playing back, and from where. Starts on opening and on coming back to the app.
+  const [catchUp, setCatchUp] = useState<{ hole: number; from: number } | null>(null);
+  const [shooter, setShooter] = useState<string | null>(null);
+  const [replaying, setReplaying] = useState(false); // there's something to play back, and it's playing
+  const hole = st?.hole ?? -1;
+  const holeRef = useRef(hole);
+  holeRef.current = hole;
+  // A game that finished while you were away plays out too, then shows the result.
+  const finished = match.status === "finished";
+  const canCatchUp = match.mode === "golf:turns" && (active || finished) && hole >= 0;
+  const pending = useRef(false); // a catch-up's been decided on and hasn't finished yet
+  useEffect(() => {
+    if (!canCatchUp) return;
+    const begin = () => {
+      if (document.visibilityState !== "visible") return;
+      const seen = readSeen(match._id);
+      if (seen ? seen.hole > holeRef.current : finished) return;
+      pending.current = true;
+      setCatchUp((c) => c ?? (seen ? { hole: seen.hole, from: seen.tick } : { hole: holeRef.current, from: 0 }));
+    };
+    begin();
+    document.addEventListener("visibilitychange", begin);
+    return () => document.removeEventListener("visibilitychange", begin);
+  }, [canCatchUp, finished, match._id]);
+  const caughtUp = useCallback((h: number) => {
+    setShooter(null);
+    setReplaying(false);
+    // A finished hole: its scores come up while the next one plays back.
+    if (h < holeRef.current) {
+      setCard(h);
+      setCatchUp({ hole: h + 1, from: 0 });
+    } else {
+      pending.current = false;
+      setCatchUp(null);
+    }
+  }, []);
+  const onSeen = useCallback((tick: number) => localStorage.setItem(seenKey(match._id), JSON.stringify({ hole: holeRef.current, tick })), [match._id]);
+  // Once the result's on screen (not just about to catch up first) there's nothing left to catch up on.
+  const total = st?.total ?? 0;
+  useEffect(() => {
+    if (finished && !catchUp && !pending.current) localStorage.setItem(seenKey(match._id), JSON.stringify({ hole: total, tick: 0 }));
+  }, [finished, catchUp, total, match._id]);
+
+  if (finished && st && !catchUp) return <Finished match={match} st={st} meId={meId} />;
   if (!st) return null;
-  const course = holes?.[st.hole];
+  const shown = catchUp?.hole ?? st.hole;
+  const course = holes?.[shown];
   return (
     <>
-      {course && st.hole >= 0 ? <Hole key={course.id} match={match} st={st} meId={meId} course={course} onMenu={() => setMenu(true)} /> : <Building st={st} onMenu={() => setMenu(true)} />}
-      <HoleCard match={match} st={st} meId={meId} />
+      {course && st.hole >= 0 ? (
+        <Hole
+          key={course.id}
+          match={match}
+          st={st}
+          meId={meId}
+          course={course}
+          n={shown}
+          catchUp={catchUp && { from: catchUp.from, shooter, replaying, onStart: () => setReplaying(true), onShot: setShooter, onSeen: (tick) => localStorage.setItem(seenKey(match._id), JSON.stringify({ hole: catchUp.hole, tick })), onDone: () => caughtUp(catchUp.hole), onSkip: () => caughtUp(holeRef.current) }}
+          onSeen={catchUp ? undefined : onSeen}
+          onMenu={() => setMenu(true)}
+        />
+      ) : (
+        <Building st={st} onMenu={() => setMenu(true)} />
+      )}
+      <HoleCard match={match} st={st} meId={meId} show={card} setShow={setCard} />
       <GolfMenu open={menu} onOpenChange={setMenu} match={match} st={st} meId={meId} playing={playing && match.status === "active"} />
     </>
   );
 }
 
-function Hole({ match, st, meId, course, onMenu }: { match: MatchView; st: GolfState; meId: Id<"users"> | undefined; course: Course; onMenu: () => void }) {
+type CatchUp = { from: number; shooter: string | null; replaying: boolean; onStart: () => void; onSeen: (tick: number) => void; onShot: (by: string) => void; onDone: () => void; onSkip: () => void };
+
+function Hole({ match, st, meId, course, n, catchUp, onSeen, onMenu }: { match: MatchView; st: GolfState; meId: Id<"users"> | undefined; course: Course; n: number; catchUp: CatchUp | null; onSeen?: (tick: number) => void; onMenu: () => void }) {
   const turns = match.mode === "golf:turns";
-  const turn = (match.turn as string | undefined) ?? null;
+  // While catching up nobody's on turn here: it's a replay.
+  const turn = catchUp ? null : ((match.turn as string | undefined) ?? null);
   const myTurn = turns && turn === meId;
   // A ding when the turn comes round to me.
   const was = useRef(myTurn);
@@ -70,15 +147,41 @@ function Hole({ match, st, meId, course, onMenu }: { match: MatchView; st: GolfS
   const round: Round = {
     turns,
     turn,
-    number: st.hole + 1,
+    number: n + 1,
     total: st.total,
     minTick: st.turnTick + 1,
     colorOf: (id) => colors.get(id),
-    bar: <TurnBar match={match} st={st} meId={meId} par={course.par} />,
+    bar: catchUp?.replaying ? <ReplayBar match={match} meId={meId} shooter={catchUp.shooter} n={n} total={st.total} par={course.par} /> : <TurnBar match={match} st={st} meId={meId} par={course.par} />,
     onMenu,
     onSunk: (strokes) => toast.success(`${scoreName(strokes, course.par)}`, { description: `${strokes} on a par ${course.par}. Watch the rest come in.` }),
+    catchUp: catchUp ? { from: catchUp.from, onStart: catchUp.onStart, onShot: catchUp.onShot, onDone: catchUp.onDone, onSeen: catchUp.onSeen } : undefined,
+    banner: catchUp?.replaying ? (
+      <FloatPill className="py-1 pl-4 pr-1 font-display text-callout" role="status">
+        Catching up
+        <button type="button" onClick={catchUp.onSkip} className="min-h-11 rounded-full bg-primary px-4 text-primary-foreground active:scale-[0.97]">
+          Skip
+        </button>
+      </FloatPill>
+    ) : undefined,
+    onSeen,
   };
   return <GolfWorld course={course} round={round} />;
+}
+
+// The top bar while catching up: whose shot is playing back, and which hole.
+function ReplayBar({ match, meId, shooter, n, total, par }: { match: MatchView; meId: Id<"users"> | undefined; shooter: string | null; n: number; total: number; par: number }) {
+  const p = match.players.find((x) => x.userId === shooter);
+  return (
+    <>
+      {p ? <PlayerAvatar player={p} size={32} seat={seatColor(p)} className="m-1" /> : null}
+      <span className="min-w-0 flex-1 pl-1">
+        <span className="block truncate font-display text-callout leading-tight">{p ? `${p.userId === meId ? "Your" : `${p.name}'s`} shot` : "What you missed"}</span>
+        <span className="block truncate text-caption text-muted-foreground">
+          Hole {n + 1} of {total}, par {par}
+        </span>
+      </span>
+    </>
+  );
 }
 
 // Inside the top bar's pill: whose turn it is (or the hole clock), and the hole.
@@ -138,9 +241,8 @@ function Building({ st, onMenu }: { st: GolfState; onMenu: () => void }) {
 
 // A hole's just finished: everyone's score on it, best first, with the running totals, in a sheet over the
 // next hole. Goes on a swipe or the X, or by itself after a while.
-function HoleCard({ match, st, meId }: { match: MatchView; st: GolfState; meId: Id<"users"> | undefined }) {
+function HoleCard({ match, st, meId, show, setShow }: { match: MatchView; st: GolfState; meId: Id<"users"> | undefined; show: number | null; setShow: (n: number | null) => void }) {
   const seen = useRef(st.scores.length);
-  const [show, setShow] = useState<number | null>(null);
   useEffect(() => {
     if (st.scores.length > seen.current) {
       seen.current = st.scores.length;

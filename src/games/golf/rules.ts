@@ -20,6 +20,6 @@ export function golfRules(mode: ModeKey, s: Settings): string[] {
     hits
       ? `Balls knock into each other. Getting knocked never costs you a stroke: knocked into the water, you go back where you were.${s.mark !== 0 ? " Balls sitting close to the cup are marked, so nobody can knock them away (items still can)." : ""}`
       : "Balls roll straight through each other this game. Items still reach other players.",
-    ...(live ? [] : [`We ping you when it's your shot. Leave it ${hours(s.shotTime ?? 480)} and your caddie putts for you; three in a row and they keep at it till you open the game again.`]),
+    ...(live ? [] : [s.shotTime ? `We ping you when it's your shot. Leave it ${hours(s.shotTime)} and your caddie has a go for you (never better than a putt for the cup); three in a row and they keep at it till you open the game again.` : "We ping you when it's your shot, and it waits for you, however long you take."]),
   ];
 }

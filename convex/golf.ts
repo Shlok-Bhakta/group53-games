@@ -120,6 +120,19 @@ export const commands = query({
   },
 });
 
+// A game's hole from the start: how it began and every command since, so a phone coming back can play
+// what it missed. Null for a hole from before starts were kept.
+export const history = query({
+  args: { key: v.string() },
+  handler: async (ctx, { key }) => {
+    if ((await getAuthUserId(ctx)) === null) return null;
+    const w = await worldByKey(ctx, key);
+    const start = w && (await ctx.db.query("golfStarts").withIndex("by_world", (q) => q.eq("worldId", w._id)).unique());
+    if (!w || !start) return null;
+    return { start: start.state as Packed, cmds: await commandsFrom(ctx, w._id, 0) };
+  },
+});
+
 // Into a world: a ball on a free tee. Makes the world the first time anyone plays it. Coming back to a
 // ball you're still on (the app reloaded) changes nothing: joining with a ball is ignored.
 export const join = mutation({
@@ -416,17 +429,19 @@ async function giveTurn(ctx: MutationCtx, w: Doc<"golfWorlds">, match: Doc<"matc
   const spots = Object.fromEntries(s.balls.map((b) => [b.id, [b.x, b.y] as [number, number]]));
   const b = s.balls.find((o) => o.id === next)!;
   const n = st.hole;
-  const shotTime = settingsOf(match.mode, match.settings).shotTime ?? 480;
+  // No limit (the default): the turn waits as long as it takes, with the usual reminders, and no caddie.
+  const shotTime = settingsOf(match.mode, match.settings).shotTime ?? 0;
+  // Someone who's been away a while: the caddie plays for them straight off, unless they're looking at the
+  // game right now. Then there's no "Your shot" push: it'd be gone before they could tap it.
+  const away = st.idle[seatOfId(next)] >= IDLE_OUT && !(await onGame(ctx, next, match));
   const { match: after } = await passTurn(ctx, match, {
     state: { ...st, turnTick: tick, spots },
     turn: next,
     by: null,
-    push: { title: "Your shot", body: b.strokes === 0 ? `Hole ${n + 1}, par ${course.par}. You're on the tee.` : `Hole ${n + 1}, par ${course.par}. You're on ${b.strokes}.` },
-    timer: { at: now + shotTime * 60_000, fn: internal.golf.shotTimeout },
+    push: away ? undefined : { title: "Your shot", body: b.strokes === 0 ? `Hole ${n + 1}, par ${course.par}. You're on the tee.` : `Hole ${n + 1}, par ${course.par}. You're on ${b.strokes}.` },
+    timer: shotTime > 0 ? { at: now + shotTime * 60_000, fn: internal.golf.shotTimeout } : undefined,
   });
-  // Someone who's been away a while: the caddie plays for them straight off, unless they're looking at the
-  // game right now.
-  if (st.idle[seatOfId(next)] >= IDLE_OUT && !(await onGame(ctx, next, after))) await callCaddie(ctx, after, "away");
+  if (away) await callCaddie(ctx, after, "away");
 }
 
 async function onGame(ctx: QueryCtx, userId: Id<"users">, match: Doc<"matches">) {
@@ -467,9 +482,12 @@ export const caddie = internalAction({
     const b = s.balls.find((o) => o.id === info.turn);
     // Already shot (still rolling, or about to pass the turn), or off the hole: nothing to do.
     if (!b || b.mode !== "aim" || (b.turnShots ?? 0) > 0) return;
-    const shot = bestShot(w, pack(s), info.turn, undefined, { angles: 24, powers: [0.15, 0.3, 0.45, 0.6, 0.8, 1] });
+    // Sitting out must never pay: the caddie only goes for the cup from a short putt away (so never a hole in
+    // one), and its hands shake like anyone's.
+    const shot = bestShot(w, pack(s), info.turn, undefined, { angles: 24, powers: [0.15, 0.3, 0.45, 0.6, 0.8, 1], sinkWithin: CADDIE_SINK });
     if (!shot) return;
-    await ctx.runMutation(internal.golf.caddieShoot, { id, moveCount, a: shot.a, p: shot.p, x: b.x, y: b.y, why });
+    const a = shot.a + (Math.random() - 0.5) * 0.12, p = Math.min(1, Math.max(0.05, shot.p * (1 + (Math.random() - 0.5) * 0.16)));
+    await ctx.runMutation(internal.golf.caddieShoot, { id, moveCount, a, p, x: b.x, y: b.y, why });
   },
 });
 
@@ -493,7 +511,11 @@ export const caddieShoot = internalMutation({
     const tick = Math.max(s.tick, tickAt(w, Date.now()), st.turnTick + 1);
     await insertCmd(ctx, w, { tick, by: match.turn, kind: "shot", a, p });
     await ctx.db.patch(match._id, { state: { ...st, idle: st.idle.map((n, k) => (k === seat ? n + 1 : n)) } });
-    if (why === "timeout") await notifyMatch(ctx, match.turn, match, { title: "Your caddie took your shot", body: "You ran out of time, so they had a go for you." });
+    if (why === "timeout")
+      await notifyMatch(ctx, match.turn, match, {
+        title: "Your caddie took your shot",
+        body: st.idle[seat] + 1 >= IDLE_OUT ? `That's ${IDLE_OUT} in a row, so they'll play for you till you open the game.` : "You ran out of time, so they had a go for you.",
+      });
   },
 });
 
@@ -509,6 +531,8 @@ export const shotTimeout = internalMutation({
   },
 });
 const RETRY_MS = 10 * 60_000;
+// How close to the cup the caddie has to be before it tries to hole out.
+const CADDIE_SINK = 4;
 
 // The player's opened the game: the caddie stands down, and a course that stopped being built (a restart
 // mid-build) starts again.
@@ -628,6 +652,7 @@ async function startHole(ctx: MutationCtx, match: Doc<"matches">, n: number) {
     // Every ball's in the world from the start, whether its phone's looking or not.
   });
   await ctx.db.insert("golfSnapshots", { worldId, tick: 0, state: pack(s) });
+  await ctx.db.insert("golfStarts", { worldId, state: pack(s) });
   for (const seat of order) await ctx.db.insert("golfPlayers", { worldId, userId: match.players[seat].userId, joinedAt: now });
   const w = (await ctx.db.get(worldId))!;
   const next: GolfState = { ...st, hole: n, worldId, order, turnTick: 0, spots: {}, waiting: false, nextAt: undefined };

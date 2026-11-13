@@ -138,6 +138,8 @@ export default defineSchema({
   }).index("by_world_tick", ["worldId", "tick"]),
   // The settled world (convex/golf/world.ts, packed), advanced by golf:tick, so phones replay from near now.
   golfSnapshots: defineTable({ worldId: v.id("golfWorlds"), tick: v.number(), state: v.any() }).index("by_world", ["worldId"]),
+  // A game's hole as it started, with every ball on the tee: with its commands, the whole hole can be played back.
+  golfStarts: defineTable({ worldId: v.id("golfWorlds"), state: v.any() }).index("by_world", ["worldId"]),
   // What a player's carrying to the next golf hole of their run on a course.
   golfBags: defineTable({ course: v.string(), userId: v.id("users"), bag: v.array(v.string()), at: v.number() }).index("by_course_user", ["course", "userId"]),
   // Each player's score on each golf hole, from the server's own run of the world, so it can't be faked.
