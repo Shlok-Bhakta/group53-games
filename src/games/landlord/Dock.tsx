@@ -57,7 +57,11 @@ export function Dock({
       </Button>
       <Button variant="secondary" className="relative h-11" onClick={onTrade}>
         <HandshakeIcon weight="bold" /> Trade
-        {offers > 0 && <span className="absolute -right-1 -top-1 grid size-5 place-items-center rounded-full bg-primary text-caption font-bold text-primary-foreground">{offers}</span>}
+        {offers > 0 && (
+          <span className="absolute -right-1 -top-1 grid size-5 place-items-center rounded-full bg-primary text-caption font-bold text-primary-foreground">
+            {offers}
+          </span>
+        )}
       </Button>
     </div>
   );
@@ -91,7 +95,17 @@ export function Dock({
 }
 
 // Everyone, in turn order: face, cash (money changing hands floats off it), and who's up.
-function Players({ match, state, floats, onPlayer }: { match: MatchView; state: MonoState; floats: Float[]; onPlayer: (seat: number) => void }) {
+function Players({
+  match,
+  state,
+  floats,
+  onPlayer,
+}: {
+  match: MatchView;
+  state: MonoState;
+  floats: Float[];
+  onPlayer: (seat: number) => void;
+}) {
   const up = state.phase.k === "over" ? -1 : actor(state);
   return (
     <div className="-mx-3 flex gap-1.5 overflow-x-auto px-3 pt-4" aria-label="Players">
@@ -102,7 +116,11 @@ function Players({ match, state, floats, onPlayer }: { match: MatchView; state: 
             key={seat}
             type="button"
             onClick={() => onPlayer(seat)}
-            className={cn("relative flex min-h-11 shrink-0 touch-manipulation items-center gap-1.5 rounded-full py-1 pl-1 pr-3 transition-colors", seat === up ? "bg-primary/15" : "bg-muted/60", p.out && "opacity-45")}
+            className={cn(
+              "relative flex min-h-11 shrink-0 touch-manipulation items-center gap-1.5 rounded-full py-1 pl-1 pr-3 transition-colors",
+              seat === up ? "bg-primary/15" : "bg-muted/60",
+              p.out && "opacity-45",
+            )}
             aria-label={`${player.name}: ${p.out ? "bankrupt" : money(p.cash)}`}
             data-seat={seat}
           >
@@ -114,7 +132,10 @@ function Players({ match, state, floats, onPlayer }: { match: MatchView; state: 
                 .map((f) => (
                   <motion.span
                     key={f.key}
-                    className={cn("pointer-events-none absolute -top-3 right-2 font-display text-callout font-bold tabular-nums", f.amount > 0 ? "text-[var(--up)]" : "text-[var(--down)]")}
+                    className={cn(
+                      "pointer-events-none absolute -top-3 right-2 font-display text-callout font-bold tabular-nums",
+                      f.amount > 0 ? "text-[var(--up)]" : "text-[var(--down)]",
+                    )}
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: -6 }}
                     exit={{ opacity: 0, y: -16 }}
@@ -153,7 +174,9 @@ function Actions({ match, state, seat, onHoldings }: { match: MatchView; state: 
         {short > 0 ? (
           <Button size="xl" onClick={onHoldings} className="flex-col gap-0 leading-tight">
             <span>Raise {money(short)}</span>
-            <span className="text-footnote font-normal opacity-80">You owe {to} {money(ph.amount)}</span>
+            <span className="text-footnote font-normal opacity-80">
+              You owe {to} {money(ph.amount)}
+            </span>
           </Button>
         ) : (
           <AsyncButton size="xl" onClick={() => act({ k: "pay" })}>
@@ -193,14 +216,28 @@ function Actions({ match, state, seat, onHoldings }: { match: MatchView; state: 
               <Button size="xl" variant="secondary" className="max-w-[28%]" onClick={() => setBidOpen(true)} disabled={p.cash <= ph.high}>
                 Bid…
               </Button>
-              <AsyncButton size="xl" disabled={p.cash < next} onClick={() => act({ k: "bid", amount: next })} className="flex-col gap-0 leading-tight">
+              <AsyncButton
+                size="xl"
+                disabled={p.cash < next}
+                onClick={() => act({ k: "bid", amount: next })}
+                className="flex-col gap-0 leading-tight"
+              >
                 <span>Bid {money(next)}</span>
-                <span className="text-footnote font-normal opacity-80">{ph.leader >= 0 ? `${name(ph.leader)} has ${money(ph.high)}` : squareName(ph.pos)}</span>
+                <span className="text-footnote font-normal opacity-80">
+                  {ph.leader >= 0 ? `${name(ph.leader)} has ${money(ph.high)}` : squareName(ph.pos)}
+                </span>
               </AsyncButton>
             </>
           )}
         </Row>
-        <BidSheet open={bidOpen} onClose={() => setBidOpen(false)} pos={ph.pos} high={ph.high} cash={p.cash} onBid={(amount) => act({ k: "bid", amount })} />
+        <BidSheet
+          open={bidOpen}
+          onClose={() => setBidOpen(false)}
+          pos={ph.pos}
+          high={ph.high}
+          cash={p.cash}
+          onBid={(amount) => act({ k: "bid", amount })}
+        />
       </>
     );
   }
@@ -270,14 +307,31 @@ function Actions({ match, state, seat, onHoldings }: { match: MatchView; state: 
   if (mine && ph.k === "pick") return <DockNote className="text-foreground">Triples! Tap any square to go there.</DockNote>;
   const who = waitingOn >= 0 ? name(waitingOn) : "";
   const doing =
-    ph.k === "auction" ? `Auction for ${squareName(ph.pos)}: waiting on ${who}`
-    : ph.k === "debt" ? `${who} is raising ${money(ph.amount)}`
-    : ph.k === "buy" ? `${who} is deciding on ${squareName(ph.pos)}`
-    : `${who}'s turn`;
+    ph.k === "auction"
+      ? `Auction for ${squareName(ph.pos)}: waiting on ${who}`
+      : ph.k === "debt"
+        ? `${who} is raising ${money(ph.amount)}`
+        : ph.k === "buy"
+          ? `${who} is deciding on ${squareName(ph.pos)}`
+          : `${who}'s turn`;
   return <DockNote>{doing}</DockNote>;
 }
 
-function BidSheet({ open, onClose, pos, high, cash, onBid }: { open: boolean; onClose: () => void; pos: number; high: number; cash: number; onBid: (amount: number) => Promise<unknown> }) {
+function BidSheet({
+  open,
+  onClose,
+  pos,
+  high,
+  cash,
+  onBid,
+}: {
+  open: boolean;
+  onClose: () => void;
+  pos: number;
+  high: number;
+  cash: number;
+  onBid: (amount: number) => Promise<unknown>;
+}) {
   const min = high + 1;
   const [value, setValue] = useState(Math.min(cash, Math.max(min, priceOf(pos))));
   const v = Math.min(cash, Math.max(min, value));

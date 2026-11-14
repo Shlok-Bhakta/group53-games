@@ -5,7 +5,17 @@ import type { MatchView } from "../../../../convex/matches";
 import { listNames } from "@/lib/text";
 
 // Over the board before play starts: who it's waiting for, then the countdown.
-export function Overlay({ match, state, meId, countdown }: { match: MatchView; state: RealtimeState; meId: Id<"users"> | undefined; countdown: number | null }) {
+export function Overlay({
+  match,
+  state,
+  meId,
+  countdown,
+}: {
+  match: MatchView;
+  state: RealtimeState;
+  meId: Id<"users"> | undefined;
+  countdown: number | null;
+}) {
   const waitingFor = match.players.filter((p) => !state.ready.includes(p.userId) && p.userId !== meId);
   const show = match.status === "active" && (state.startAt === null || countdown !== null);
   return (

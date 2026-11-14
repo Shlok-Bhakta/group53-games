@@ -103,7 +103,8 @@ export const GAME_UI: Record<GameKey, GameUI> = {
     key: "golf",
     path: GAMES.golf.path,
     name: GAMES.golf.name,
-    blurb: "Up to 8 of you on handmade or generated courses. Grab items, knock each other into the water, keep what you hold for the next hole.",
+    blurb:
+      "Up to 8 of you on handmade or generated courses. Grab items, knock each other into the water, keep what you hold for the next hole.",
     banner: () => <GolfBanner />,
     modeArt: (mode) => <GolfModeArt mode={mode} />,
     rules: golfRules,
@@ -116,7 +117,8 @@ export const GAME_UI: Record<GameKey, GameUI> = {
     key: "landlord",
     path: GAMES.landlord.path,
     name: GAMES.landlord.name,
-    blurb: "Buy streets, build hotels, trade and bankrupt each other, 2 to 8 of you over a few days. Every official rule, the common house rules, and the speed die.",
+    blurb:
+      "Buy streets, build hotels, trade and bankrupt each other, 2 to 8 of you over a few days. Every official rule, the common house rules, and the speed die.",
     banner: () => <LandlordBanner />,
     modeArt: () => <LandlordModeArt />,
     rules: landlordRules,
@@ -140,7 +142,8 @@ export type GameCard = {
 const STONKS: GameCard = {
   path: "/stonks",
   name: "Stonks",
-  blurb: "$10,000 of fake money and everything on Yahoo Finance to lose it on: stocks anywhere, crypto, forex, futures. Beat the crew, live.",
+  blurb:
+    "$10,000 of fake money and everything on Yahoo Finance to lose it on: stocks anywhere, crypto, forex, futures. Beat the crew, live.",
   banner: () => <StonksBanner />,
   prefetch: prefetchStonks,
 };

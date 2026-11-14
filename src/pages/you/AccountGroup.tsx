@@ -10,7 +10,15 @@ export function AccountGroup() {
     <Section title="Account">
       <ConfirmButton
         // The dialog's trigger hands the row its own onClick.
-        trigger={<ListRow size="sm" className="text-destructive" leading={<SignOutIcon size={22} weight="bold" />} title="Sign out" onClick={() => {}} />}
+        trigger={
+          <ListRow
+            size="sm"
+            className="text-destructive"
+            leading={<SignOutIcon size={22} weight="bold" />}
+            title="Sign out"
+            onClick={() => {}}
+          />
+        }
         title="Sign out?"
         detail="You'll need to sign in with Discord again to play."
         keep="Stay signed in"

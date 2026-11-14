@@ -13,17 +13,43 @@ test("stonks crew screens", async ({ browser }) => {
   test.setTimeout(240_000);
   const { url } = JSON.parse(readFileSync("e2e/.state/backend.json", "utf8"));
   const a = admin();
-  await a.mutation(anyApi.stonks.holdings, { asOf: "2026-10-29", holdings: Object.entries(STOCKS).map(([symbol, base], i) => ({ symbol, name: symbol, weight: 8 - i, base })), indexBase: 6000 });
+  await a.mutation(anyApi.stonks.holdings, {
+    asOf: "2026-10-29",
+    holdings: Object.entries(STOCKS).map(([symbol, base], i) => ({ symbol, name: symbol, weight: 8 - i, base })),
+    indexBase: 6000,
+  });
   const prices = { ...STOCKS, "^GSPC": 6000 } as Record<string, number>;
   const tick = async () => {
     const now = Date.now() + 1000;
-    await a.mutation(anyApi.stonks.ingest, { ticks: Object.entries(prices).map(([symbol, price]) => ({ symbol, price: +price.toFixed(2), time: now, recv: now, source: "yahoo", session: "regular" })) });
+    await a.mutation(anyApi.stonks.ingest, {
+      ticks: Object.entries(prices).map(([symbol, price]) => ({
+        symbol,
+        price: +price.toFixed(2),
+        time: now,
+        recv: now,
+        source: "yahoo",
+        session: "regular",
+      })),
+    });
   };
   await tick();
   const player = await createPlayer("Shlok");
   const orders: [string, [string, string, number][]][] = [
-    ["chrisis14", [["AAPL", "buy", 5000], ["MSFT", "buy", 2000], ["TSLA", "short", 1500]]],
-    ["samwise", [["TSLA", "short", 4000], ["META", "buy", 3000]]],
+    [
+      "chrisis14",
+      [
+        ["AAPL", "buy", 5000],
+        ["MSFT", "buy", 2000],
+        ["TSLA", "short", 1500],
+      ],
+    ],
+    [
+      "samwise",
+      [
+        ["TSLA", "short", 4000],
+        ["META", "buy", 3000],
+      ],
+    ],
     ["alex_dev", [["NVDA", "buy", 9000]]],
     ["bytes", [["GOOGL", "buy", 1000]]],
   ];
@@ -37,7 +63,16 @@ test("stonks crew screens", async ({ browser }) => {
   }
   const me = new ConvexHttpClient(url);
   me.setAuth(player.token);
-  for (const [symbol, side, dollars] of [["NVDA", "buy", 3000], ["AAPL", "buy", 1500], ["MSFT", "short", 1000], ["TSLA", "buy", 800], ["AMZN", "buy", 1200], ["META", "buy", 600], ["GOOGL", "short", 400]] as const) await me.mutation(anyApi.stonks.order, { symbol, side, dollars });
+  for (const [symbol, side, dollars] of [
+    ["NVDA", "buy", 3000],
+    ["AAPL", "buy", 1500],
+    ["MSFT", "short", 1000],
+    ["TSLA", "buy", 800],
+    ["AMZN", "buy", 1200],
+    ["META", "buy", 600],
+    ["GOOGL", "short", 400],
+  ] as const)
+    await me.mutation(anyApi.stonks.order, { symbol, side, dollars });
   await new Promise((r) => setTimeout(r, 1200));
   await tick();
   // A week of swings, a net worth row after each.
@@ -49,7 +84,14 @@ test("stonks crew screens", async ({ browser }) => {
     await new Promise((r) => setTimeout(r, 120));
   }
   // Cards with something on them, since a profile wears its owner's card.
-  await me.mutation(anyApi.profiles.update, { frame: "neon", frameColor: "#a855f7", glow: true, effect: "foil", badge: "🦀", tagline: "buy high, sell never" });
+  await me.mutation(anyApi.profiles.update, {
+    frame: "neon",
+    frameColor: "#a855f7",
+    glow: true,
+    effect: "foil",
+    badge: "🦀",
+    tagline: "buy high, sell never",
+  });
   await clients[1].mutation(anyApi.profiles.update, { frame: "gold", effect: "crt", tagline: "rm -rf portfolio" });
   // Something waiting, for the profile to show.
   await me.mutation(anyApi.stonks.order, { symbol: "AMZN", side: "buy", dollars: 250 });

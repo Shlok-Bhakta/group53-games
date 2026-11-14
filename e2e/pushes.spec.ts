@@ -24,7 +24,11 @@ test.describe("pushes", () => {
     const id = matchIdOf(a);
 
     // The challenge reaches Chris with the link that takes the seat, tagged to the game, and counts on the icon.
-    await expect.poll(() => pushesOf(chris)).toEqual([expect.objectContaining({ url: `/chess/${id}?accept=1`, tag: `match:${id}`, badge: 1, title: expect.stringContaining("Shlok") })]);
+    await expect
+      .poll(() => pushesOf(chris))
+      .toEqual([
+        expect.objectContaining({ url: `/chess/${id}?accept=1`, tag: `match:${id}`, badge: 1, title: expect.stringContaining("Shlok") }),
+      ]);
     expect(await pushesOf(shlok)).toEqual([]);
 
     await b.goto(`/chess/${id}?accept=1`);
@@ -41,7 +45,9 @@ test.describe("pushes", () => {
     await expect(white.getByText("Black, here now")).toHaveCount(0);
     const blackBefore = (await pushesOf(blackPlayer)).length;
     await classicMove(white, "e2", "e4");
-    await expect.poll(async () => (await pushesOf(blackPlayer)).slice(blackBefore)).toEqual([expect.objectContaining({ url: `/chess/${id}`, tag: `match:${id}`, badge: 1 })]);
+    await expect
+      .poll(async () => (await pushesOf(blackPlayer)).slice(blackBefore))
+      .toEqual([expect.objectContaining({ url: `/chess/${id}`, tag: `match:${id}`, badge: 1 })]);
 
     // Black answers while white is still looking at the game: white sees it land live, and gets no push.
     const whiteBefore = (await pushesOf(whitePlayer)).length;

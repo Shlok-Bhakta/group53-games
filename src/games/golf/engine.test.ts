@@ -1,6 +1,24 @@
 import { describe, expect, test } from "vitest";
 import { GREEN_HILLS } from "./courses";
-import { BALL_R, CUP_R, DT, HAZARDS, activate, closest, compile, groundAt, newSim, poseOf, shoot, step, v, type Course, type Ground, type Sim, type World } from "./engine";
+import {
+  BALL_R,
+  CUP_R,
+  DT,
+  HAZARDS,
+  activate,
+  closest,
+  compile,
+  groundAt,
+  newSim,
+  poseOf,
+  shoot,
+  step,
+  v,
+  type Course,
+  type Ground,
+  type Sim,
+  type World,
+} from "./engine";
 import { MAX_ROLL, generate, powerFor } from "./gen";
 
 const settle = (sim: Sim, world: World, seconds = 40) => {
@@ -12,17 +30,35 @@ const box = (x0: number, y0: number, x1: number, y1: number) => [v(x0, y0), v(x1
 // A plain walled green, 20 by 60, with whatever's added on top.
 function plain(extra: Partial<Course> = {}): Course {
   return {
-    id: "test", name: "Test", course: "Test", theme: "hills", par: 3, w: 30, h: 70,
-    tee: v(15, 60), cup: v(15, 10), off: "oob",
+    id: "test",
+    name: "Test",
+    course: "Test",
+    theme: "hills",
+    par: 3,
+    w: 30,
+    h: 70,
+    tee: v(15, 60),
+    cup: v(15, 10),
+    off: "oob",
     greens: [{ poly: box(5, 5, 25, 65) }],
-    zones: [], walls: [], blocks: [], props: [], bumpers: [], movers: [], portals: [], wells: [], lamps: [], boxes: [],
+    zones: [],
+    walls: [],
+    blocks: [],
+    props: [],
+    bumpers: [],
+    movers: [],
+    portals: [],
+    wells: [],
+    lamps: [],
+    boxes: [],
     ...extra,
   };
 }
 
 describe("golf generator", () => {
   test("the same seed always makes the same hole", () => {
-    const a = generate(GREEN_HILLS[0])!, b = generate(GREEN_HILLS[0])!;
+    const a = generate(GREEN_HILLS[0])!,
+      b = generate(GREEN_HILLS[0])!;
     expect(a).not.toBeNull();
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
@@ -94,7 +130,12 @@ describe("golf physics", () => {
   });
 
   test("a ramp throws the ball over a stream; landing outside the walls is out of bounds", () => {
-    const c = plain({ zones: [{ kind: "water", poly: box(5, 38, 25, 42) }, { kind: "ramp", poly: box(13.7, 48, 16.3, 51), dir: v(0, -1), lift: 0.62 }] });
+    const c = plain({
+      zones: [
+        { kind: "water", poly: box(5, 38, 25, 42) },
+        { kind: "ramp", poly: box(13.7, 48, 16.3, 51), dir: v(0, -1), lift: 0.62 },
+      ],
+    });
     const world = compile(c);
     const sim = newSim(c);
     let flew = 0;
@@ -155,7 +196,15 @@ describe("golf physics", () => {
   });
 
   test("windmill blades open and close", () => {
-    const mill = { kind: "windmill" as const, hub: v(0, 0), L: 3, arms: 4, omega: 1.3, mouth: [v(-1, 0), v(1, 0)] as [typeof v extends (...a: never[]) => infer R ? R : never, ReturnType<typeof v>], height: 2.7 };
+    const mill = {
+      kind: "windmill" as const,
+      hub: v(0, 0),
+      L: 3,
+      arms: 4,
+      omega: 1.3,
+      mouth: [v(-1, 0), v(1, 0)] as [typeof v extends (...a: never[]) => infer R ? R : never, ReturnType<typeof v>],
+      height: 2.7,
+    };
     const states = new Set<boolean>();
     for (let t = 0; t < 6; t += 0.05) {
       const pose = poseOf(mill, t);

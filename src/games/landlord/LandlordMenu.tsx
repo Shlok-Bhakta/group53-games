@@ -15,7 +15,21 @@ import { landlordRules } from "./rules";
 
 // The menu: everyone with their cash, what they're worth and what they own, what's happened while you've been
 // here, then what every game's menu has, and resigning at the very bottom.
-export function LandlordMenu({ open, onOpenChange, match, state, mySeat, feed }: { open: boolean; onOpenChange: (o: boolean) => void; match: MatchView; state: MonoState; mySeat: number; feed: { key: number; text: string }[] }) {
+export function LandlordMenu({
+  open,
+  onOpenChange,
+  match,
+  state,
+  mySeat,
+  feed,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  match: MatchView;
+  state: MonoState;
+  mySeat: number;
+  feed: { key: number; text: string }[];
+}) {
   const playing = mySeat >= 0 && !state.players[mySeat]?.out && match.status === "active";
   return (
     <GameMenu
@@ -24,7 +38,15 @@ export function LandlordMenu({ open, onOpenChange, match, state, mySeat, feed }:
       match={match}
       title="Players"
       rules={landlordRules(match.mode as ModeKey, settingsOf(match.mode, match.settings))}
-      footer={playing && <ResignButton match={match} className="h-14 w-full rounded-lg" detail="You go bankrupt to the bank: your properties are auctioned off and the others play on. You place last." />}
+      footer={
+        playing && (
+          <ResignButton
+            match={match}
+            className="h-14 w-full rounded-lg"
+            detail="You go bankrupt to the bank: your properties are auctioned off and the others play on. You place last."
+          />
+        )
+      }
     >
       <ol className="flex flex-col gap-1.5" aria-label="Standings">
         {state.players
@@ -74,14 +96,37 @@ function Owned({ state, seat }: { state: MonoState; seat: number }) {
     <div className="flex flex-wrap gap-0.5 pt-1" aria-label={`${props.length} properties`}>
       {props.map((i) => {
         const sq = BOARD[i];
-        return <span key={i} className={cn("ll-swatch h-3 w-2 rounded-[2px]", state.props[i]!.mortgaged && "opacity-35")} data-group={sq.kind === "street" ? sq.group : undefined} style={sq.kind === "street" ? undefined : { background: "var(--muted-foreground)" }} />;
+        return (
+          <span
+            key={i}
+            className={cn("ll-swatch h-3 w-2 rounded-[2px]", state.props[i]!.mortgaged && "opacity-35")}
+            data-group={sq.kind === "street" ? sq.group : undefined}
+            style={sq.kind === "street" ? undefined : { background: "var(--muted-foreground)" }}
+          />
+        );
       })}
     </div>
   );
 }
 
 // A player, tapped from the dock: what they've got, and a trade with them.
-export function PlayerSheet({ seat, onClose, match, state, mySeat, onDeed, onTrade }: { seat: number | null; onClose: () => void; match: MatchView; state: MonoState; mySeat: number; onDeed: (pos: number) => void; onTrade: (seat: number) => void }) {
+export function PlayerSheet({
+  seat,
+  onClose,
+  match,
+  state,
+  mySeat,
+  onDeed,
+  onTrade,
+}: {
+  seat: number | null;
+  onClose: () => void;
+  match: MatchView;
+  state: MonoState;
+  mySeat: number;
+  onDeed: (pos: number) => void;
+  onTrade: (seat: number) => void;
+}) {
   const p = seat === null ? null : state.players[seat];
   const player = seat === null ? null : match.players[seat];
   const props = seat === null ? [] : BUYABLE.filter((i) => state.props[i]!.owner === seat);
@@ -105,10 +150,21 @@ export function PlayerSheet({ seat, onClose, match, state, mySeat, onDeed, onTra
               const sq = BOARD[i];
               const prop = state.props[i]!;
               return (
-                <button key={i} type="button" onClick={() => onDeed(i)} className="flex min-h-11 touch-manipulation items-center gap-2 rounded-md bg-muted/60 px-2 text-left">
-                  <span className="ll-swatch size-4 shrink-0 rounded-[3px]" data-group={sq.kind === "street" ? sq.group : undefined} style={sq.kind === "street" ? undefined : { background: "var(--muted-foreground)" }} />
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => onDeed(i)}
+                  className="flex min-h-11 touch-manipulation items-center gap-2 rounded-md bg-muted/60 px-2 text-left"
+                >
+                  <span
+                    className="ll-swatch size-4 shrink-0 rounded-[3px]"
+                    data-group={sq.kind === "street" ? sq.group : undefined}
+                    style={sq.kind === "street" ? undefined : { background: "var(--muted-foreground)" }}
+                  />
                   <span className="min-w-0 flex-1 truncate text-callout">{sq.name}</span>
-                  <span className="text-footnote text-muted-foreground">{prop.mortgaged ? "M" : prop.houses === 5 ? "H" : prop.houses || ""}</span>
+                  <span className="text-footnote text-muted-foreground">
+                    {prop.mortgaged ? "M" : prop.houses === 5 ? "H" : prop.houses || ""}
+                  </span>
                 </button>
               );
             })}

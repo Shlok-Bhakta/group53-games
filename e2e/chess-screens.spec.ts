@@ -29,7 +29,13 @@ test("chess screens", async ({ browser }) => {
   const shlok = await createPlayer("WashableBowl700", { image: AV.shlok, frame: "holo", badge: "🐐" });
   const chris = await createPlayer("chrisis14", { image: AV.chris, frame: "comet", frameColor: "#3b82f6" });
   const mk = async (p: typeof shlok, scheme: "dark" | "light" = "dark") => {
-    const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: scheme });
+    const ctx = await browser.newContext({
+      viewport: { width: 393, height: 852 },
+      deviceScaleFactor: 3,
+      isMobile: true,
+      hasTouch: true,
+      colorScheme: scheme,
+    });
     return phone(ctx, { player: p, notifications: "granted" });
   };
   const a = await mk(shlok);
@@ -57,10 +63,18 @@ test("chess screens", async ({ browser }) => {
   const m = await admin().query(anyApi.testing.getMatch, { id });
   const white = m.players.find((p: { color: string }) => p.color === "w").userId === shlok.userId ? a : b;
   const black = white === a ? b : a;
-  for (const [pg, f, t] of [[white, "e2", "e4"], [black, "e7", "e5"], [white, "g1", "f3"], [black, "b8", "c6"], [white, "f1", "c4"]] as const) {
+  for (const [pg, f, t] of [
+    [white, "e2", "e4"],
+    [black, "e7", "e5"],
+    [white, "g1", "f3"],
+    [black, "b8", "c6"],
+    [white, "f1", "c4"],
+  ] as const) {
     await tap(pg, f, t);
     await pg.getByRole("button", { name: /^Confirm/ }).click();
-    await expect(pg === white ? black.getByLabel("Moves") : white.getByLabel("Moves")).toContainText(f === "g1" ? "Nf3" : f === "b8" ? "Nc6" : f === "f1" ? "Bc4" : t);
+    await expect(pg === white ? black.getByLabel("Moves") : white.getByLabel("Moves")).toContainText(
+      f === "g1" ? "Nf3" : f === "b8" ? "Nc6" : f === "f1" ? "Bc4" : t,
+    );
   }
   await black.locator("[data-square=g8]").click();
   await shot(black, "classic-selected");
@@ -114,7 +128,13 @@ test("four-player screens", async ({ browser }) => {
     createPlayer("alex_dev"),
   ]);
   const mk = async (p: (typeof people)[number], scheme: "dark" | "light" = "dark") => {
-    const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: scheme });
+    const ctx = await browser.newContext({
+      viewport: { width: 393, height: 852 },
+      deviceScaleFactor: 3,
+      isMobile: true,
+      hasTouch: true,
+      colorScheme: scheme,
+    });
     return phone(ctx, { player: p, notifications: "granted" });
   };
   const pages = [await mk(people[0]), await mk(people[1], "light"), await mk(people[2]), await mk(people[3])];
@@ -137,7 +157,14 @@ test("four-player screens", async ({ browser }) => {
   // A game in progress, from each side.
   const id = await admin().action(anyApi.testing.startFour, { mode: "chess:four", players: people.map((p) => p.userId) });
   for (const p of pages) await p.goto(`/chess/${id}`);
-  const moves: [number, string, string][] = [[0, "e2", "e4"], [1, "b5", "d5"], [2, "f13", "f11"], [3, "m10", "k10"], [0, "e1", "f3"], [1, "a5", "c6"]];
+  const moves: [number, string, string][] = [
+    [0, "e2", "e4"],
+    [1, "b5", "d5"],
+    [2, "f13", "f11"],
+    [3, "m10", "k10"],
+    [0, "e1", "f3"],
+    [1, "a5", "c6"],
+  ];
   for (const [i, f, t] of moves) {
     await tap(pages[i], f, t);
     await pages[i].getByRole("button", { name: /^Confirm/ }).click();

@@ -50,7 +50,13 @@ export const list = query({
     const taps = new Map((await ctx.db.query("taps").collect()).map((t) => [t.userId, t]));
     return rows.map((r) => {
       const t = taps.get(r.userId);
-      return { userId: r.userId, online: r.online, lastSeen: r.lastSeen, path: r.path, tap: t ? { x: t.x, y: t.y, path: t.path, seq: t.seq } : null };
+      return {
+        userId: r.userId,
+        online: r.online,
+        lastSeen: r.lastSeen,
+        path: r.path,
+        tap: t ? { x: t.x, y: t.y, path: t.path, seq: t.seq } : null,
+      };
     });
   },
 });

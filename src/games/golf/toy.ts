@@ -1,4 +1,18 @@
-import { BALL_R, CUP_R, LASER_R, inPoly, newSim, poseOf, rng, sliderRect, type Course, type Mover, type Patch, type Sim, type Vec } from "./engine";
+import {
+  BALL_R,
+  CUP_R,
+  LASER_R,
+  inPoly,
+  newSim,
+  poseOf,
+  rng,
+  sliderRect,
+  type Course,
+  type Mover,
+  type Patch,
+  type Sim,
+  type Vec,
+} from "./engine";
 import type { Missile, Storm } from "../../../convex/golf/world";
 
 // The look: flat and straight down, in fixed natural golf colors, on a dot grid in the app theme's
@@ -84,7 +98,10 @@ export function refreshTheme() {
 function themeColors() {
   if (!theme) {
     const cs = typeof document !== "undefined" ? getComputedStyle(document.documentElement) : null;
-    theme = { bg: cs?.getPropertyValue("--background").trim() || "#1c2620", dot: cs?.getPropertyValue("--border").trim() || "rgba(255,255,255,0.08)" };
+    theme = {
+      bg: cs?.getPropertyValue("--background").trim() || "#1c2620",
+      dot: cs?.getPropertyValue("--border").trim() || "rgba(255,255,255,0.08)",
+    };
   }
   return theme;
 }
@@ -121,7 +138,8 @@ function glyph(text: string, fill: string, stroke?: string) {
   const h = Math.ceil(m.actualBoundingBoxAscent + m.actualBoundingBoxDescent + pad * 2);
   img.width = w;
   img.height = h;
-  const ox = pad + m.actualBoundingBoxLeft, oy = pad + m.actualBoundingBoxAscent;
+  const ox = pad + m.actualBoundingBoxLeft,
+    oy = pad + m.actualBoundingBoxAscent;
   g2.font = font;
   g2.textBaseline = "alphabetic";
   if (stroke) {
@@ -157,7 +175,13 @@ const ease = (k: number) => 1 - (1 - Math.max(0, Math.min(1, k))) ** 3;
 // --- The parts ---
 
 // `plain`: the land is rough (or deep snow) and the fairway's drawn over it as zones, so no stripes here.
-export function drawBoard(ctx: Ctx, boards: Vec[][], cup: Vec | Vec[] | null, view: { x0: number; y0: number; x1: number; y1: number }, plain = false) {
+export function drawBoard(
+  ctx: Ctx,
+  boards: Vec[][],
+  cup: Vec | Vec[] | null,
+  view: { x0: number; y0: number; x1: number; y1: number },
+  plain = false,
+) {
   const cups = cup === null ? [] : Array.isArray(cup) ? cup : [cup];
   if (plain) {
     ctx.beginPath();
@@ -211,7 +235,9 @@ export function drawWater(ctx: Ctx, poly: Vec[], t: number, view: { x0: number; 
   for (let gx = Math.floor(view.x0 / gap) - 1; gx * gap < view.x1 + gap; gx++)
     for (let gy = Math.floor(view.y0 / gap) - 1; gy * gap < view.y1 + gap; gy++) {
       const r = rng(gx * 7919 + gy * 104729);
-      const px = gx * gap + r() * gap, py = gy * gap + r() * gap, ph = r() * 6.28;
+      const px = gx * gap + r() * gap,
+        py = gy * gap + r() * gap,
+        ph = r() * 6.28;
       // Each wavelet drifts a little and breathes in and out.
       const k = 0.5 + 0.5 * Math.sin(t * 0.9 + ph);
       const x = px + Math.sin(t * 0.35 + ph) * 0.5;
@@ -251,8 +277,11 @@ function drawBridge(ctx: Ctx, poly: Vec[]) {
   path(ctx, poly);
   ctx.fillStyle = C.wood;
   ctx.fill();
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const p of poly) (x0 = Math.min(x0, p.x)), (y0 = Math.min(y0, p.y)), (x1 = Math.max(x1, p.x)), (y1 = Math.max(y1, p.y));
+  let x0 = Infinity,
+    y0 = Infinity,
+    x1 = -Infinity,
+    y1 = -Infinity;
+  for (const p of poly) ((x0 = Math.min(x0, p.x)), (y0 = Math.min(y0, p.y)), (x1 = Math.max(x1, p.x)), (y1 = Math.max(y1, p.y)));
   ctx.save();
   path(ctx, poly);
   ctx.clip();
@@ -261,8 +290,8 @@ function drawBridge(ctx: Ctx, poly: Vec[]) {
   const across = x1 - x0 > y1 - y0;
   ctx.beginPath();
   for (let k = across ? x0 : y0; k < (across ? x1 : y1); k += 0.7) {
-    if (across) ctx.moveTo(k, y0), ctx.lineTo(k, y1);
-    else ctx.moveTo(x0, k), ctx.lineTo(x1, k);
+    if (across) (ctx.moveTo(k, y0), ctx.lineTo(k, y1));
+    else (ctx.moveTo(x0, k), ctx.lineTo(x1, k));
   }
   ctx.stroke();
   ctx.restore();
@@ -275,15 +304,21 @@ export function drawIce(ctx: Ctx, poly: Vec[], seed = 1) {
   ctx.fill();
   ctx.save();
   ctx.clip();
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const p of poly) (x0 = Math.min(x0, p.x)), (y0 = Math.min(y0, p.y)), (x1 = Math.max(x1, p.x)), (y1 = Math.max(y1, p.y));
+  let x0 = Infinity,
+    y0 = Infinity,
+    x1 = -Infinity,
+    y1 = -Infinity;
+  for (const p of poly) ((x0 = Math.min(x0, p.x)), (y0 = Math.min(y0, p.y)), (x1 = Math.max(x1, p.x)), (y1 = Math.max(y1, p.y)));
   const r = rng(seed);
   ctx.strokeStyle = C.iceLine;
   ctx.lineWidth = 0.07;
   ctx.lineCap = "round";
   const n = Math.max(3, Math.round(((x1 - x0) * (y1 - y0)) / 9));
   for (let k = 0; k < n; k++) {
-    const cx = x0 + r() * (x1 - x0), cy = y0 + r() * (y1 - y0), rad = 1 + r() * 2.5, a = r() * 6.28;
+    const cx = x0 + r() * (x1 - x0),
+      cy = y0 + r() * (y1 - y0),
+      rad = 1 + r() * 2.5,
+      a = r() * 6.28;
     ctx.beginPath();
     ctx.arc(cx, cy, rad, a, a + 0.6 + r() * 0.8);
     ctx.stroke();
@@ -312,7 +347,8 @@ export function drawWind(ctx: Ctx, poly: Vec[], dir: Vec, t: number) {
   const span = 6;
   for (let row = -R; row <= R; row += 1.7) {
     const r = rng(Math.round(row * 10) + 977);
-    const off = r() * span, speed = 5 + r() * 3;
+    const off = r() * span,
+      speed = 5 + r() * 3;
     for (let x = -R - span; x <= R; x += span) {
       const px = x + ((off + t * speed * gust) % span);
       const k = Math.max(0, 1 - Math.abs(px) / R);
@@ -375,7 +411,8 @@ export function drawPatch(ctx: Ctx, p: Patch, now: number) {
     const r = rng(Math.round(p.x * 13 + p.y * 7));
     ctx.fillStyle = C.honey;
     for (let k = 0; k < 4; k++) {
-      const a = r() * 6.28, d = k === 0 ? 0 : p.r * 0.45;
+      const a = r() * 6.28,
+        d = k === 0 ? 0 : p.r * 0.45;
       circ(ctx, p.x + Math.cos(a) * d, p.y + Math.sin(a) * d, p.r * (k === 0 ? 0.8 : 0.55));
       ctx.fill();
     }
@@ -423,9 +460,12 @@ export function drawStorm(ctx: Ctx, st: { x: number; y: number; r: number; until
   ctx.lineWidth = 0.06;
   const r = rng(Math.round(st.x * 31 + st.y));
   for (let i = 0; i < 26; i++) {
-    const a = r() * 6.28, d = Math.sqrt(r()) * st.r, ph = r();
+    const a = r() * 6.28,
+      d = Math.sqrt(r()) * st.r,
+      ph = r();
     const fall = ((t * 1.6 + ph) % 1) * 1.4;
-    const x = st.x + Math.cos(a) * d, y = st.y + Math.sin(a) * d - 0.7 + fall;
+    const x = st.x + Math.cos(a) * d,
+      y = st.y + Math.sin(a) * d - 0.7 + fall;
     ctx.beginPath();
     ctx.moveTo(x, y);
     ctx.lineTo(x - 0.12, y + 0.5);
@@ -435,7 +475,8 @@ export function drawStorm(ctx: Ctx, st: { x: number; y: number; r: number; until
   ctx.globalAlpha = base * 0.5 * k;
   const r2 = rng(Math.round(st.x * 7 + st.y * 3));
   for (let i = 0; i < 7; i++) {
-    const a = r2() * 6.28, d = r2() * st.r * 0.6;
+    const a = r2() * 6.28,
+      d = r2() * st.r * 0.6;
     circ(ctx, st.x + Math.cos(a) * d + Math.sin(t * 0.7 + i) * 0.2, st.y - 1 + Math.sin(a) * d, st.r * (0.35 + r2() * 0.2));
     ctx.fill();
   }
@@ -451,9 +492,14 @@ export function drawFlame(ctx: Ctx, x: number, y: number, r: number, dir: number
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(dir + Math.PI);
-  const layers: [string, number, number][] = [["#d9602a", 1, 0.95], ["#f19a35", 0.68, 0.72], ["#fff0b8", 0.36, 0.46]];
+  const layers: [string, number, number][] = [
+    ["#d9602a", 1, 0.95],
+    ["#f19a35", 0.68, 0.72],
+    ["#fff0b8", 0.36, 0.46],
+  ];
   for (const [color, len, wide] of layers) {
-    const l = L * len, w = r * wide;
+    const l = L * len,
+      w = r * wide;
     ctx.beginPath();
     ctx.moveTo(r * 0.2, -w);
     ctx.quadraticCurveTo(l * 0.55, -w * 0.9 + Math.sin(t * 31) * 0.05, l + r * 0.2, Math.sin(t * 23) * 0.08);
@@ -469,7 +515,8 @@ const flameK = (b: Sim) => (b.shot === "rocket" && b.mode === "roll" ? Math.min(
 // What's happening to a ball: frozen in an ice cube, stunned (stars round it), shielded (a bubble),
 // on Coffee (steam), or rattled by an Air Horn (sound waves).
 export function drawStatus(ctx: Ctx, b: Sim, at: Vec, t: number) {
-  const now = b.t, r = b.r;
+  const now = b.t,
+    r = b.r;
   if (now < b.frozenUntil) {
     ctx.beginPath();
     ctx.roundRect(at.x - r * 1.7, at.y - r * 1.7, r * 3.4, r * 3.4, r * 0.5);
@@ -488,10 +535,12 @@ export function drawStatus(ctx: Ctx, b: Sim, at: Vec, t: number) {
     ctx.fillStyle = C.stun;
     for (let k = 0; k < 3; k++) {
       const a = t * 5 + (k * Math.PI * 2) / 3;
-      const x = at.x + Math.cos(a) * r * 1.9, y = at.y - r * 1.4 + Math.sin(a) * r * 0.7;
+      const x = at.x + Math.cos(a) * r * 1.9,
+        y = at.y - r * 1.4 + Math.sin(a) * r * 0.7;
       ctx.beginPath();
       for (let j = 0; j < 8; j++) {
-        const rr = j % 2 ? 0.07 : 0.17, aa = (j * Math.PI) / 4 + t * 3;
+        const rr = j % 2 ? 0.07 : 0.17,
+          aa = (j * Math.PI) / 4 + t * 3;
         ctx.lineTo(x + Math.cos(aa) * rr, y + Math.sin(aa) * rr);
       }
       ctx.closePath();
@@ -522,7 +571,8 @@ export function drawStatus(ctx: Ctx, b: Sim, at: Vec, t: number) {
     for (let k = 0; k < 2; k++) {
       const ph = (t * 0.9 + k * 0.5) % 1;
       ctx.globalAlpha = base * 0.7 * Math.sin(ph * Math.PI);
-      const x = at.x + (k ? 0.18 : -0.18), y = at.y - r - 0.15 - ph * 0.9;
+      const x = at.x + (k ? 0.18 : -0.18),
+        y = at.y - r - 0.15 - ph * 0.9;
       ctx.beginPath();
       ctx.moveTo(x, y + 0.4);
       ctx.quadraticCurveTo(x + 0.2, y + 0.2, x, y);
@@ -541,7 +591,8 @@ export function drawStatus(ctx: Ctx, b: Sim, at: Vec, t: number) {
     ctx.stroke();
     ctx.globalAlpha = base;
     for (let k = 0; k < 5; k++) {
-      const ph = (t * 1.4 + k * 0.21) % 1, a = k * 1.257 + 0.4;
+      const ph = (t * 1.4 + k * 0.21) % 1,
+        a = k * 1.257 + 0.4;
       ctx.globalAlpha = base * (1 - ph);
       ctx.fillStyle = k % 2 ? "#f19a35" : "#fff0b8";
       circ(ctx, at.x + Math.cos(a) * r * (1.3 + ph), at.y + Math.sin(a) * r * (1.3 + ph) - ph * 0.3, 0.07 * (1 - ph * 0.6));
@@ -670,7 +721,13 @@ export function drawFlag(ctx: Ctx, at: Vec, t: number, alpha = 1, out = 0) {
 
 // The ball. `stretch` runs along its direction of travel (above 1 when it's fast), `squash` flattens
 // it against whatever it just hit (normal `n`), `scale` is for popping in and dropping out.
-export function drawBall(ctx: Ctx, x: number, y: number, r: number, o: { dir?: number; stretch?: number; squash?: number; n?: number; scale?: number; alpha?: number; ring?: string } = {}) {
+export function drawBall(
+  ctx: Ctx,
+  x: number,
+  y: number,
+  r: number,
+  o: { dir?: number; stretch?: number; squash?: number; n?: number; scale?: number; alpha?: number; ring?: string } = {},
+) {
   const s = o.scale ?? 1;
   if (s <= 0.01) return;
   ctx.save();
@@ -680,7 +737,8 @@ export function drawBall(ctx: Ctx, x: number, y: number, r: number, o: { dir?: n
   // so the shape never snaps when one fades out; squash can go negative for a jelly wobble back.
   const sq = Math.max(-0.5, Math.min(1, o.squash ?? 0));
   const st = Math.max(1, o.stretch ?? 1);
-  const dir = o.dir ?? 0, n = o.n ?? dir;
+  const dir = o.dir ?? 0,
+    n = o.n ?? dir;
   ctx.scale(s, s);
   ctx.rotate(dir);
   ctx.scale(st, 1 / Math.sqrt(st));
@@ -712,7 +770,10 @@ export function drawBall(ctx: Ctx, x: number, y: number, r: number, o: { dir?: n
 // Someone else's ball: the same ball in their color, with their name over it.
 function drawOther(ctx: Ctx, c: Course, o: Other, t: number) {
   const b = o.sim;
-  let x = o.at.x, y = o.at.y, scale = 1, alpha = 1;
+  let x = o.at.x,
+    y = o.at.y,
+    scale = 1,
+    alpha = 1;
   if (b.mode === "sunk") {
     const cup = nearestCup(c, b);
     const k = Math.min(1, b.modeT / 0.45);
@@ -736,7 +797,13 @@ function drawOther(ctx: Ctx, c: Course, o: Other, t: number) {
   }
   const speed = Math.hypot(b.vx, b.vy);
   drawFlame(ctx, x, y - lift, b.r, Math.atan2(b.vy, b.vx), t, flameK(b));
-  drawBall(ctx, x, y - lift, b.r * (1 + b.z * 0.18), { dir: Math.atan2(b.vy, b.vx), stretch: b.mode === "roll" ? 1 + Math.min(0.35, speed / 70) : 1, scale, alpha, ring: o.color });
+  drawBall(ctx, x, y - lift, b.r * (1 + b.z * 0.18), {
+    dir: Math.atan2(b.vy, b.vx),
+    stretch: b.mode === "roll" ? 1 + Math.min(0.35, speed / 70) : 1,
+    scale,
+    alpha,
+    ring: o.color,
+  });
   const base = ctx.globalAlpha;
   ctx.globalAlpha = base * alpha;
   if (b.mode === "aim" || b.mode === "roll") drawStatus(ctx, b, { x, y: y - lift }, t);
@@ -772,7 +839,9 @@ export function drawPad(ctx: Ctx, poly: Vec[], dir: Vec, kind: "boost" | "ramp",
   if (kind === "boost") {
     // Chevrons on a belt: evenly spaced, always moving, fading in at the back and out at the front,
     // so nothing ever jumps.
-    const gap = 0.75, half = 1.05, speed = 1.4;
+    const gap = 0.75,
+      half = 1.05,
+      speed = 1.4;
     const shift = (t * speed) % gap;
     const base = ctx.globalAlpha;
     for (let o = -half - gap + shift; o <= half + gap; o += gap) {
@@ -821,8 +890,26 @@ export function drawMine(ctx: Ctx, at: Vec, t: number) {
 
 export type Camera = { x: number; y: number; s: number; ox: number; oy: number }; // screen = (world - xy) * s + o
 export type Fx =
-  | { kind: "ring" | "splash" | "puff" | "spark" | "confetti" | "boom"; x: number; y: number; t: number; color?: string; seed: number; big?: number }
-  | { kind: "rail" | "tracer" | "bolt"; x: number; y: number; x2: number; y2: number; t: number; color?: string; seed: number; big?: number }
+  | {
+      kind: "ring" | "splash" | "puff" | "spark" | "confetti" | "boom";
+      x: number;
+      y: number;
+      t: number;
+      color?: string;
+      seed: number;
+      big?: number;
+    }
+  | {
+      kind: "rail" | "tracer" | "bolt";
+      x: number;
+      y: number;
+      x2: number;
+      y2: number;
+      t: number;
+      color?: string;
+      seed: number;
+      big?: number;
+    }
   | { kind: "horn" | "flash" | "frost"; x: number; y: number; t: number; color?: string; seed: number; big?: number }
   | { kind: "label"; x: number; y: number; t: number; text: string; color?: string; seed: number }
   | { kind: "boxpop"; x: number; y: number; t: number; color?: string; seed: number };
@@ -861,7 +948,8 @@ export type Frame = {
 };
 export type Other = { sim: Sim; at: Vec; color: string; name: string; below?: boolean };
 export const allCups = (c: Course) => [c.cup, ...(c.cups ?? [])];
-const nearestCup = (c: Course, p: Vec) => allCups(c).reduce((a, k) => (Math.hypot(k.x - p.x, k.y - p.y) < Math.hypot(a.x - p.x, a.y - p.y) ? k : a));
+const nearestCup = (c: Course, p: Vec) =>
+  allCups(c).reduce((a, k) => (Math.hypot(k.x - p.x, k.y - p.y) < Math.hypot(a.x - p.x, a.y - p.y) ? k : a));
 
 export function drawFrame(ctx: Ctx, f: Frame) {
   C = f.c.theme === "ice" ? ICE_PALETTE : PALETTE;
@@ -872,9 +960,11 @@ export function drawFrame(ctx: Ctx, f: Frame) {
 function drawScene(ctx: Ctx, f: Frame) {
   const { c, sim, cam, dpr, t } = f;
   const J = f.juice ?? { start: -9, spawn: -9, impact: null };
-  const W = ctx.canvas.width, H = ctx.canvas.height;
+  const W = ctx.canvas.width,
+    H = ctx.canvas.height;
   const T = () => ctx.setTransform(cam.s * dpr, 0, 0, cam.s * dpr, (cam.ox - cam.x * cam.s) * dpr, (cam.oy - cam.y * cam.s) * dpr);
-  const vx0 = cam.x - cam.ox / cam.s, vy0 = cam.y - cam.oy / cam.s;
+  const vx0 = cam.x - cam.ox / cam.s,
+    vy0 = cam.y - cam.oy / cam.s;
   const view = { x0: vx0, y0: vy0, x1: vx0 + W / dpr / cam.s, y1: vy0 + H / dpr / cam.s };
 
   // The void, and a dot grid that moves with the board.
@@ -897,13 +987,30 @@ function drawScene(ctx: Ctx, f: Frame) {
   // without a rail.
   if (c.off === "water") {
     const { x0, y0, x1, y1 } = view;
-    drawWater(ctx, [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }], t, view, false);
+    drawWater(
+      ctx,
+      [
+        { x: x0, y: y0 },
+        { x: x1, y: y0 },
+        { x: x1, y: y1 },
+        { x: x0, y: y1 },
+      ],
+      t,
+      view,
+      false,
+    );
     for (const g of c.greens) if (g.rim === false) drawShore(ctx, g.poly, t);
     ctx.globalAlpha = intro;
   }
   // Fairway holes: rough (or deep snow) everywhere, the fairway and green painted on as zones.
   const rough = c.surface === "rough" || c.surface === "snow";
-  drawBoard(ctx, c.greens.map((g) => g.poly), allCups(c), view, rough);
+  drawBoard(
+    ctx,
+    c.greens.map((g) => g.poly),
+    allCups(c),
+    view,
+    rough,
+  );
   // On a hole, what's painted on the ground stops at the edge of the board. (The open world's beaches
   // run out past the grass on purpose.)
   if (!c.open) {
@@ -918,7 +1025,12 @@ function drawScene(ctx: Ctx, f: Frame) {
   for (const z of c.zones) {
     if (rough && (z.kind === "green" || z.kind === "packed" || z.kind === "fringe")) {
       ctx.save();
-      drawBoard(ctx, [z.poly], allCups(c).filter((k) => inPoly(k, z.poly)), view);
+      drawBoard(
+        ctx,
+        [z.poly],
+        allCups(c).filter((k) => inPoly(k, z.poly)),
+        view,
+      );
       ctx.restore();
     } else if (z.kind === "sand" || z.kind === "snow") {
       path(ctx, z.poly);
@@ -949,8 +1061,10 @@ function drawScene(ctx: Ctx, f: Frame) {
       ctx.fill();
     }
   } else {
-    const x0 = Math.min(...teeSpots.map((p) => p.x)) - 1.1, x1 = Math.max(...teeSpots.map((p) => p.x)) + 1.1;
-    const y0 = Math.min(...teeSpots.map((p) => p.y)) - 1.1, y1 = Math.max(...teeSpots.map((p) => p.y)) + 1.1;
+    const x0 = Math.min(...teeSpots.map((p) => p.x)) - 1.1,
+      x1 = Math.max(...teeSpots.map((p) => p.x)) + 1.1;
+    const y0 = Math.min(...teeSpots.map((p) => p.y)) - 1.1,
+      y1 = Math.max(...teeSpots.map((p) => p.y)) + 1.1;
     ctx.beginPath();
     ctx.roundRect(x0, y0, x1 - x0, y1 - y0, 0.5);
     ctx.fill();
@@ -963,7 +1077,8 @@ function drawScene(ctx: Ctx, f: Frame) {
   for (const z of c.zones) if (z.kind === "wind") drawWind(ctx, z.poly, z.dir, t);
   ctx.globalAlpha = 1;
 
-  const bx = f.ball?.x ?? sim.x, by = f.ball?.y ?? sim.y;
+  const bx = f.ball?.x ?? sim.x,
+    by = f.ball?.y ?? sim.y;
   // The ball's trail: a streak that thins out behind it, and fades away once the ball stops.
   const ta = f.trailAlpha ?? (sim.mode === "roll" ? 1 : 0);
   if (f.trail.length > 1 && ta > 0)
@@ -975,7 +1090,10 @@ function drawScene(ctx: Ctx, f: Frame) {
       ctx.lineCap = "butt"; // round caps overlap at every joint and bead the streak
       ctx.beginPath();
       ctx.moveTo(f.trail[i - 1].x, f.trail[i - 1].y);
-      ctx.lineTo(i === f.trail.length - 1 && sim.mode === "roll" ? bx : f.trail[i].x, i === f.trail.length - 1 && sim.mode === "roll" ? by : f.trail[i].y);
+      ctx.lineTo(
+        i === f.trail.length - 1 && sim.mode === "roll" ? bx : f.trail[i].x,
+        i === f.trail.length - 1 && sim.mode === "roll" ? by : f.trail[i].y,
+      );
       ctx.stroke();
     }
 
@@ -988,10 +1106,15 @@ function drawScene(ctx: Ctx, f: Frame) {
     // From wherever it dropped in, round the rim and down.
     const cup = nearestCup(c, sim);
     const k = Math.min(1, sim.modeT / 0.45);
-    const ox = sim.x - cup.x, oy = sim.y - cup.y;
+    const ox = sim.x - cup.x,
+      oy = sim.y - cup.y;
     const a = Math.atan2(oy, ox) + ease(k) * Math.PI * 1.5;
     const rr = Math.hypot(ox, oy) * (1 - ease(k));
-    drawBall(ctx, cup.x + Math.cos(a) * rr, cup.y + Math.sin(a) * rr, sim.r, { scale: 1 - ease(k) * 0.55, alpha: 1 - Math.max(0, k - 0.6) / 0.4, ring: f.myColor });
+    drawBall(ctx, cup.x + Math.cos(a) * rr, cup.y + Math.sin(a) * rr, sim.r, {
+      scale: 1 - ease(k) * 0.55,
+      alpha: 1 - Math.max(0, k - 0.6) / 0.4,
+      ring: f.myColor,
+    });
   } else if (sim.mode === "out") {
     // Off the edge: it keeps drifting, shrinks and fades.
     const k = Math.min(1, sim.modeT / 0.5);
@@ -1133,7 +1256,9 @@ function drawScene(ctx: Ctx, f: Frame) {
     ctx.lineWidth = 0.14;
     ctx.setLineDash([0.4, 0.3]);
     if (kind === "line") {
-      const dx = at.x - sim.x, dy = at.y - sim.y, d = Math.hypot(dx, dy) || 1;
+      const dx = at.x - sim.x,
+        dy = at.y - sim.y,
+        d = Math.hypot(dx, dy) || 1;
       const L = f.target.range ?? 80;
       ctx.beginPath();
       ctx.moveTo(sim.x, sim.y);
@@ -1153,16 +1278,24 @@ function drawScene(ctx: Ctx, f: Frame) {
 function holeArrow(ctx: Ctx, f: Frame) {
   const { c, sim, cam, dpr } = f;
   if (sim.mode === "sunk") return;
-  const sw = ctx.canvas.width / dpr, sh = ctx.canvas.height / dpr;
+  const sw = ctx.canvas.width / dpr,
+    sh = ctx.canvas.height / dpr;
   const pad = 30;
   const box = { x0: pad, y0: f.inset!.top + pad, x1: sw - pad, y1: sh - f.inset!.bottom - pad };
   const cup = nearestCup(c, sim);
-  const sx = (cup.x - cam.x) * cam.s + cam.ox, sy = (cup.y - cam.y) * cam.s + cam.oy;
+  const sx = (cup.x - cam.x) * cam.s + cam.ox,
+    sy = (cup.y - cam.y) * cam.s + cam.oy;
   if (sx > box.x0 && sx < box.x1 && sy > box.y0 && sy < box.y1) return;
-  const cx = (box.x0 + box.x1) / 2, cy = (box.y0 + box.y1) / 2;
-  const dx = sx - cx, dy = sy - cy;
-  const k = Math.min(Math.abs((dx > 0 ? box.x1 - cx : box.x0 - cx) / (dx || 1e-9)), Math.abs((dy > 0 ? box.y1 - cy : box.y0 - cy) / (dy || 1e-9)));
-  const x = cx + dx * k, y = cy + dy * k;
+  const cx = (box.x0 + box.x1) / 2,
+    cy = (box.y0 + box.y1) / 2;
+  const dx = sx - cx,
+    dy = sy - cy;
+  const k = Math.min(
+    Math.abs((dx > 0 ? box.x1 - cx : box.x0 - cx) / (dx || 1e-9)),
+    Math.abs((dy > 0 ? box.y1 - cy : box.y0 - cy) / (dy || 1e-9)),
+  );
+  const x = cx + dx * k,
+    y = cy + dy * k;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   circ(ctx, x, y, 17);
   ctx.fillStyle = C.flag;
@@ -1341,8 +1474,10 @@ export function drawFx(ctx: Ctx, fx: Fx[], t: number, ground: boolean) {
       ctx.globalAlpha = base * (conf ? 1 - Math.max(0, k - 0.55) / 0.45 : (1 - k) ** 1.5);
       const n = conf ? 34 : 12;
       for (let i = 0; i < n; i++) {
-        const a = r() * Math.PI * 2, sp = 1.5 + r() * 2.5;
-        const spin = (r() - 0.5) * 16, ph = r() * 6;
+        const a = r() * Math.PI * 2,
+          sp = 1.5 + r() * 2.5;
+        const spin = (r() - 0.5) * 16,
+          ph = r() * 6;
         const flutter = conf ? Math.sin(age * 7 + ph) * 0.25 * k : 0;
         ctx.save();
         ctx.translate(e.x + Math.cos(a) * sp * ease(k) + flutter, e.y + Math.sin(a) * sp * ease(k) + (conf ? k * k * 2.5 : 0));

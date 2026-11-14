@@ -66,20 +66,30 @@ export function ribbon(spec: [number, number, number][], samples = 8): Vec[] {
   const pts: [number, number, number][] = [];
   const at = (i: number) => spec[Math.max(0, Math.min(spec.length - 1, i))];
   for (let i = 0; i < spec.length - 1; i++) {
-    const p0 = at(i - 1), p1 = at(i), p2 = at(i + 1), p3 = at(i + 2);
+    const p0 = at(i - 1),
+      p1 = at(i),
+      p2 = at(i + 1),
+      p3 = at(i + 2);
     for (let k = 0; k < samples; k++) {
-      const t = k / samples, t2 = t * t, t3 = t2 * t;
-      const cr = (a: number, b: number, c: number, d: number) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+      const t = k / samples,
+        t2 = t * t,
+        t3 = t2 * t;
+      const cr = (a: number, b: number, c: number, d: number) =>
+        0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
       pts.push([cr(p0[0], p1[0], p2[0], p3[0]), cr(p0[1], p1[1], p2[1], p3[1]), p1[2] + (p2[2] - p1[2]) * t]);
     }
   }
   pts.push(spec[spec.length - 1]);
-  const left: Vec[] = [], right: Vec[] = [];
+  const left: Vec[] = [],
+    right: Vec[] = [];
   pts.forEach((p, i) => {
-    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
-    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const a = pts[Math.max(0, i - 1)],
+      b = pts[Math.min(pts.length - 1, i + 1)];
+    const dx = b[0] - a[0],
+      dy = b[1] - a[1];
     const l = hyp(dx, dy) || 1;
-    const nx = -dy / l, ny = dx / l;
+    const nx = -dy / l,
+      ny = dx / l;
     left.push(v(p[0] + nx * p[2], p[1] + ny * p[2]));
     right.push(v(p[0] - nx * p[2], p[1] - ny * p[2]));
   });
@@ -97,7 +107,8 @@ export function polyDist(p: Vec, poly: Vec[]) {
 }
 
 export function centroid(poly: Vec[]): Vec {
-  let x = 0, y = 0;
+  let x = 0,
+    y = 0;
   for (const p of poly) {
     x += p.x;
     y += p.y;
@@ -106,7 +117,10 @@ export function centroid(poly: Vec[]): Vec {
 }
 
 export function bbox(poly: Vec[]) {
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  let x0 = Infinity,
+    y0 = Infinity,
+    x1 = -Infinity,
+    y1 = -Infinity;
   for (const p of poly) {
     x0 = Math.min(x0, p.x);
     y0 = Math.min(y0, p.y);
@@ -120,14 +134,22 @@ export function bbox(poly: Vec[]) {
 export function scalePoly(poly: Vec[], k: number, by = 0): Vec[] {
   const c = centroid(poly);
   return poly.map((p) => {
-    const dx = p.x - c.x, dy = p.y - c.y;
+    const dx = p.x - c.x,
+      dy = p.y - c.y;
     const l = hyp(dx, dy) || 1;
     return v(c.x + dx * k - (dx / l) * by, c.y + dy * k - (dy / l) * by);
   });
 }
 
 // Random points that keep clear of everything `blocked` says no to, and of each other.
-export function scatter(seed: number, count: number, area: [number, number, number, number], gap: number, blocked: (p: Vec) => boolean, tries = 30): Vec[] {
+export function scatter(
+  seed: number,
+  count: number,
+  area: [number, number, number, number],
+  gap: number,
+  blocked: (p: Vec) => boolean,
+  tries = 30,
+): Vec[] {
   const r = rng(seed);
   const out: Vec[] = [];
   for (let i = 0; i < count * tries && out.length < count; i++) {

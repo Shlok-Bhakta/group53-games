@@ -20,7 +20,21 @@ import { useLandlordMove } from "./Deed";
 const empty = (): Side => ({ cash: 0, props: [], free: [] });
 export type TradeStart = { with?: number; want?: number; counter?: Trade };
 
-export function TradeSheet({ open, start, onClose, match, state, seat }: { open: boolean; start: TradeStart; onClose: () => void; match: MatchView; state: MonoState; seat: number }) {
+export function TradeSheet({
+  open,
+  start,
+  onClose,
+  match,
+  state,
+  seat,
+}: {
+  open: boolean;
+  start: TradeStart;
+  onClose: () => void;
+  match: MatchView;
+  state: MonoState;
+  seat: number;
+}) {
   const act = useLandlordMove(match._id);
   const others = state.players.flatMap((p, i) => (i !== seat && !p.out ? [i] : []));
   const [partner, setPartner] = useState<number>(others[0] ?? -1);
@@ -50,11 +64,18 @@ export function TradeSheet({ open, start, onClose, match, state, seat }: { open:
   return (
     <Sheet open={open} onClose={onClose} title="Trade" closable>
       {toMe.map((t) => (
-        <Offer key={t.id} t={t} state={state} match={match} mine={false} onCounter={() => {
-          setPartner(t.from);
-          setGive({ ...t.get });
-          setGet({ ...t.give });
-        }} />
+        <Offer
+          key={t.id}
+          t={t}
+          state={state}
+          match={match}
+          mine={false}
+          onCounter={() => {
+            setPartner(t.from);
+            setGive({ ...t.get });
+            setGet({ ...t.give });
+          }}
+        />
       ))}
       {fromMe.map((t) => (
         <Offer key={t.id} t={t} state={state} match={match} mine />
@@ -73,7 +94,10 @@ export function TradeSheet({ open, start, onClose, match, state, seat }: { open:
                   setPartner(i);
                   setGet(empty());
                 }}
-                className={cn("flex min-h-11 shrink-0 touch-manipulation items-center gap-2 rounded-full py-1 pl-1 pr-3 transition-colors", partner === i ? "bg-primary text-primary-foreground" : "bg-muted")}
+                className={cn(
+                  "flex min-h-11 shrink-0 touch-manipulation items-center gap-2 rounded-full py-1 pl-1 pr-3 transition-colors",
+                  partner === i ? "bg-primary text-primary-foreground" : "bg-muted",
+                )}
               >
                 <PlayerAvatar player={match.players[i]} size={32} seat={seatColor(match.players[i])} />
                 <span className="font-semibold">{name(i)}</span>
@@ -98,7 +122,9 @@ export function TradeSheet({ open, start, onClose, match, state, seat }: { open:
               >
                 Send to {name(partner)}
               </AsyncButton>
-              {why && (give.cash || give.props.length || get.cash || get.props.length) ? <p className="text-center text-footnote text-muted-foreground">{why}</p> : null}
+              {why && (give.cash || give.props.length || get.cash || get.props.length) ? (
+                <p className="text-center text-footnote text-muted-foreground">{why}</p>
+              ) : null}
             </>
           )}
         </>
@@ -108,13 +134,28 @@ export function TradeSheet({ open, start, onClose, match, state, seat }: { open:
 }
 
 // An offer: what goes each way, and its answers.
-export function Offer({ t, state, match, mine, onCounter }: { t: Trade; state: MonoState; match: MatchView; mine: boolean; onCounter?: () => void }) {
+export function Offer({
+  t,
+  state,
+  match,
+  mine,
+  onCounter,
+}: {
+  t: Trade;
+  state: MonoState;
+  match: MatchView;
+  mine: boolean;
+  onCounter?: () => void;
+}) {
   const act = useLandlordMove(match._id);
   const them = match.players[mine ? t.to : t.from];
   const [lift, setLift] = useState<number[]>([]);
   const why = mine ? null : cantAccept(state, t, lift);
   return (
-    <section className="flex flex-col gap-3 rounded-lg bg-card p-3" aria-label={mine ? `Your offer to ${them.name}` : `${them.name}'s offer`}>
+    <section
+      className="flex flex-col gap-3 rounded-lg bg-card p-3"
+      aria-label={mine ? `Your offer to ${them.name}` : `${them.name}'s offer`}
+    >
       <div className="flex items-center gap-2">
         <PlayerAvatar player={them} size={32} seat={seatColor(them)} />
         <span className="font-semibold">{mine ? `You offered ${them.name}` : `${them.name} offers`}</span>
@@ -161,11 +202,19 @@ function Lifts({ state, props, lift, onChange }: { state: MonoState; props: numb
       {mortgaged.map((i) => {
         const on = lift.includes(i);
         return (
-          <button key={i} type="button" aria-pressed={on} onClick={() => onChange(on ? lift.filter((x) => x !== i) : [...lift, i])} className="flex min-h-11 touch-manipulation items-center gap-3 rounded-md bg-muted/60 px-3 text-left text-callout">
+          <button
+            key={i}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onChange(on ? lift.filter((x) => x !== i) : [...lift, i])}
+            className="flex min-h-11 touch-manipulation items-center gap-3 rounded-md bg-muted/60 px-3 text-left text-callout"
+          >
             <span className="min-w-0 flex-1">
               Lift {BOARD[i].name}'s mortgage now ({money(unmortgageOf(i))})
             </span>
-            <span className={cn("grid size-6 place-items-center rounded-full", on ? "bg-primary text-primary-foreground" : "bg-card")}>{on && <CheckIcon weight="bold" size={14} />}</span>
+            <span className={cn("grid size-6 place-items-center rounded-full", on ? "bg-primary text-primary-foreground" : "bg-card")}>
+              {on && <CheckIcon weight="bold" size={14} />}
+            </span>
           </button>
         );
       })}
@@ -175,11 +224,24 @@ function Lifts({ state, props, lift, onChange }: { state: MonoState; props: numb
 }
 
 // One side of an offer being made: their tradable properties to tick, cash, and get-out-of-jail cards.
-function Stuff({ title, state, seat, side, onChange }: { title: string; state: MonoState; seat: number; side: Side; onChange: (s: Side) => void }) {
+function Stuff({
+  title,
+  state,
+  seat,
+  side,
+  onChange,
+}: {
+  title: string;
+  state: MonoState;
+  seat: number;
+  side: Side;
+  onChange: (s: Side) => void;
+}) {
   const p = state.players[seat];
   const props = BUYABLE.filter((i) => state.props[i]!.owner === seat);
   const built = (i: number) => groupOf(i).some((j) => state.props[j]!.houses > 0);
-  const toggle = (i: number) => onChange({ ...side, props: side.props.includes(i) ? side.props.filter((x) => x !== i) : [...side.props, i] });
+  const toggle = (i: number) =>
+    onChange({ ...side, props: side.props.includes(i) ? side.props.filter((x) => x !== i) : [...side.props, i] });
   const cards = (["chance", "chest"] as Deck[]).flatMap((d) => p.free.filter((x) => x === d));
   return (
     <section className="flex flex-col gap-2" aria-label={title}>
@@ -192,14 +254,27 @@ function Stuff({ title, state, seat, side, onChange }: { title: string; state: M
           const sq = BOARD[i];
           const on = side.props.includes(i);
           return (
-            <button key={i} type="button" disabled={built(i)} aria-pressed={on} onClick={() => toggle(i)} className="flex min-h-12 w-full touch-manipulation items-center gap-3 px-3 text-left disabled:opacity-50">
-              <span className="ll-swatch size-6 shrink-0 rounded-sm" data-group={sq.kind === "street" ? sq.group : undefined} style={sq.kind === "street" ? undefined : { background: "var(--muted)" }} />
+            <button
+              key={i}
+              type="button"
+              disabled={built(i)}
+              aria-pressed={on}
+              onClick={() => toggle(i)}
+              className="flex min-h-12 w-full touch-manipulation items-center gap-3 px-3 text-left disabled:opacity-50"
+            >
+              <span
+                className="ll-swatch size-6 shrink-0 rounded-sm"
+                data-group={sq.kind === "street" ? sq.group : undefined}
+                style={sq.kind === "street" ? undefined : { background: "var(--muted)" }}
+              />
               <span className="min-w-0 flex-1 truncate">
                 {sq.name}
                 {state.props[i]!.mortgaged && <span className="text-muted-foreground"> · mortgaged</span>}
                 {built(i) && <span className="text-muted-foreground"> · sell the buildings first</span>}
               </span>
-              <span className={cn("grid size-6 place-items-center rounded-full", on ? "bg-primary text-primary-foreground" : "bg-muted")}>{on && <CheckIcon weight="bold" size={14} />}</span>
+              <span className={cn("grid size-6 place-items-center rounded-full", on ? "bg-primary text-primary-foreground" : "bg-muted")}>
+                {on && <CheckIcon weight="bold" size={14} />}
+              </span>
             </button>
           );
         })}
@@ -214,7 +289,9 @@ function Stuff({ title, state, seat, side, onChange }: { title: string; state: M
               className="flex min-h-12 w-full touch-manipulation items-center gap-3 px-3 text-left"
             >
               <span className="min-w-0 flex-1">Get-out-of-jail card</span>
-              <span className={cn("grid size-6 place-items-center rounded-full", on ? "bg-primary text-primary-foreground" : "bg-muted")}>{on && <CheckIcon weight="bold" size={14} />}</span>
+              <span className={cn("grid size-6 place-items-center rounded-full", on ? "bg-primary text-primary-foreground" : "bg-muted")}>
+                {on && <CheckIcon weight="bold" size={14} />}
+              </span>
             </button>
           );
         })}

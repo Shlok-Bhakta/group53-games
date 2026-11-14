@@ -2,7 +2,17 @@ import type { ReactNode } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { BOARD, groupOf, houseCostOf, mortgageOf, unmortgageOf, type Square } from "../../../convex/landlord/board";
-import { cantBuild, cantMortgage, cantSell, cantUnmortgage, hotelAt, ownsGroup, rentOf, type Action, type MonoState } from "../../../convex/landlord/engine";
+import {
+  cantBuild,
+  cantMortgage,
+  cantSell,
+  cantUnmortgage,
+  hotelAt,
+  ownsGroup,
+  rentOf,
+  type Action,
+  type MonoState,
+} from "../../../convex/landlord/engine";
 import { money } from "../../../convex/landlord/text";
 import type { MatchView } from "../../../convex/matches";
 import { AsyncButton } from "@/components/AsyncButton";
@@ -22,7 +32,23 @@ export function useLandlordMove(id: MatchView["_id"]) {
   return (action: Exclude<Action, { k: "resign" }>) => move({ id, action });
 }
 
-export function DeedSheet({ pos, onClose, match, state, mySeat, busy, onTrade }: { pos: number | null; onClose: () => void; match: MatchView; state: MonoState; mySeat: number; busy: boolean; onTrade: (seat: number, pos: number) => void }) {
+export function DeedSheet({
+  pos,
+  onClose,
+  match,
+  state,
+  mySeat,
+  busy,
+  onTrade,
+}: {
+  pos: number | null;
+  onClose: () => void;
+  match: MatchView;
+  state: MonoState;
+  mySeat: number;
+  busy: boolean;
+  onTrade: (seat: number, pos: number) => void;
+}) {
   const sq = pos === null ? null : BOARD[pos];
   return (
     <Sheet open={pos !== null} onClose={onClose} title={sq?.name ?? ""} closable>
@@ -31,7 +57,23 @@ export function DeedSheet({ pos, onClose, match, state, mySeat, busy, onTrade }:
   );
 }
 
-function DeedBody({ pos, sq, match, state, mySeat, busy, onTrade }: { pos: number; sq: Square; match: MatchView; state: MonoState; mySeat: number; busy: boolean; onTrade: (seat: number, pos: number) => void }) {
+function DeedBody({
+  pos,
+  sq,
+  match,
+  state,
+  mySeat,
+  busy,
+  onTrade,
+}: {
+  pos: number;
+  sq: Square;
+  match: MatchView;
+  state: MonoState;
+  mySeat: number;
+  busy: boolean;
+  onTrade: (seat: number, pos: number) => void;
+}) {
   const act = useLandlordMove(match._id);
   const prop = state.props[pos];
   const owner = prop && prop.owner >= 0 ? match.players[prop.owner] : undefined;
@@ -40,7 +82,14 @@ function DeedBody({ pos, sq, match, state, mySeat, busy, onTrade }: { pos: numbe
   const rows = rentRows(sq, state, pos);
   const top = hotelAt(state.rules);
   // Only asked of your own: a spectator's seat (-1) is the bank's too.
-  const why = mine ? { build: cantBuild(state, mySeat, pos), sell: cantSell(state, mySeat, pos), mortgage: cantMortgage(state, mySeat, pos), lift: cantUnmortgage(state, mySeat, pos) } : null;
+  const why = mine
+    ? {
+        build: cantBuild(state, mySeat, pos),
+        sell: cantSell(state, mySeat, pos),
+        mortgage: cantMortgage(state, mySeat, pos),
+        lift: cantUnmortgage(state, mySeat, pos),
+      }
+    : null;
   return (
     <>
       <div className="flex items-center gap-3">
@@ -62,7 +111,13 @@ function DeedBody({ pos, sq, match, state, mySeat, busy, onTrade }: { pos: numbe
       </div>
       <ol className="flex flex-col overflow-hidden rounded-lg bg-muted/50" aria-label="Rent">
         {rows.map((r) => (
-          <li key={r.label} className={cn("flex min-h-11 items-center justify-between px-3 text-callout", r.now && "bg-primary/12 font-semibold text-primary")}>
+          <li
+            key={r.label}
+            className={cn(
+              "flex min-h-11 items-center justify-between px-3 text-callout",
+              r.now && "bg-primary/12 font-semibold text-primary",
+            )}
+          >
             <span>{r.label}</span>
             <span className="tabular-nums">{r.value}</span>
           </li>
@@ -72,12 +127,29 @@ function DeedBody({ pos, sq, match, state, mySeat, busy, onTrade }: { pos: numbe
         <div className="grid grid-cols-2 gap-2">
           {sq.kind === "street" && (
             <>
-              <Act label={prop.houses === top ? `Hotel ${money(houseCostOf(pos))}` : `House ${money(houseCostOf(pos))}`} why={why!.build} disabled={busy} onClick={() => act({ k: "build", pos })} />
-              <Act label={`Sell one +${money(houseCostOf(pos) / 2)}`} why={why!.sell} disabled={busy} onClick={() => act({ k: "sell", pos })} secondary />
+              <Act
+                label={prop.houses === top ? `Hotel ${money(houseCostOf(pos))}` : `House ${money(houseCostOf(pos))}`}
+                why={why!.build}
+                disabled={busy}
+                onClick={() => act({ k: "build", pos })}
+              />
+              <Act
+                label={`Sell one +${money(houseCostOf(pos) / 2)}`}
+                why={why!.sell}
+                disabled={busy}
+                onClick={() => act({ k: "sell", pos })}
+                secondary
+              />
             </>
           )}
           {prop.mortgaged ? (
-            <Act label={`Lift mortgage ${money(unmortgageOf(pos))}`} why={why!.lift} disabled={busy} onClick={() => act({ k: "unmortgage", pos })} wide />
+            <Act
+              label={`Lift mortgage ${money(unmortgageOf(pos))}`}
+              why={why!.lift}
+              disabled={busy}
+              onClick={() => act({ k: "unmortgage", pos })}
+              wide
+            />
           ) : (
             <div className="col-span-2 flex flex-col gap-1">
               <ConfirmMortgage
@@ -118,10 +190,30 @@ export function ConfirmMortgage({ pos, trigger, onConfirm }: { pos: number; trig
   );
 }
 
-function Act({ label, why, onClick, disabled, secondary, wide }: { label: string; why: string | null; onClick: () => Promise<unknown>; disabled?: boolean; secondary?: boolean; wide?: boolean }) {
+function Act({
+  label,
+  why,
+  onClick,
+  disabled,
+  secondary,
+  wide,
+}: {
+  label: string;
+  why: string | null;
+  onClick: () => Promise<unknown>;
+  disabled?: boolean;
+  secondary?: boolean;
+  wide?: boolean;
+}) {
   return (
     <div className={cn("flex flex-col gap-1", wide && "col-span-2")}>
-      <AsyncButton size="xl" variant={secondary ? "secondary" : "default"} className="w-full" disabled={!!why || disabled} onClick={onClick}>
+      <AsyncButton
+        size="xl"
+        variant={secondary ? "secondary" : "default"}
+        className="w-full"
+        disabled={!!why || disabled}
+        onClick={onClick}
+      >
         {label}
       </AsyncButton>
       {why && <p className="px-1 text-footnote text-muted-foreground">{why}</p>}
@@ -139,12 +231,14 @@ function rentRows(sq: Square, state: MonoState, pos: number) {
       { label: "Rent", value: money(sq.rent[0]), now: live && h === 0 && !full },
       { label: "With the whole group", value: money(sq.rent[0] * 2), now: full && h === 0 },
     ];
-    for (let i = 1; i <= hotelAt(state.rules); i++) rows.push({ label: `${i} house${i > 1 ? "s" : ""}`, value: money(sq.rent[i]), now: live && h === i });
+    for (let i = 1; i <= hotelAt(state.rules); i++)
+      rows.push({ label: `${i} house${i > 1 ? "s" : ""}`, value: money(sq.rent[i]), now: live && h === i });
     rows.push({ label: "Hotel", value: money(sq.rent[5]), now: live && h === 5 });
     return rows;
   }
   const n = prop.owner >= 0 ? groupOf(pos).filter((i) => state.props[i]!.owner === prop.owner).length : 0;
-  if (sq.kind === "rail") return [1, 2, 3, 4].map((k) => ({ label: `${k} railroad${k > 1 ? "s" : ""}`, value: money(25 * 2 ** (k - 1)), now: live && n === k }));
+  if (sq.kind === "rail")
+    return [1, 2, 3, 4].map((k) => ({ label: `${k} railroad${k > 1 ? "s" : ""}`, value: money(25 * 2 ** (k - 1)), now: live && n === k }));
   return [
     { label: "1 utility", value: "4 × the roll", now: live && n === 1 },
     { label: "Both", value: "10 × the roll", now: live && n === 2 },

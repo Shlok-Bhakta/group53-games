@@ -16,7 +16,15 @@ export function lastMove(match: MatchView): string | null {
   if (match.mode.startsWith("scrabble:")) {
     const m = (match.state as ScrabbleState | null)?.moves.at(-1);
     if (!m) return null;
-    return m.kind === "play" ? `${m.words![0].word} ${m.score}` : m.kind === "swap" ? "swapped" : m.kind === "pass" ? "passed" : m.kind === "timeout" ? "ran out of time" : "resigned";
+    return m.kind === "play"
+      ? `${m.words![0].word} ${m.score}`
+      : m.kind === "swap"
+        ? "swapped"
+        : m.kind === "pass"
+          ? "passed"
+          : m.kind === "timeout"
+            ? "ran out of time"
+            : "resigned";
   }
   if (match.mode.startsWith("poker:")) {
     const s = match.state as PokerState | null;
@@ -46,4 +54,5 @@ export function pointsOf(match: MatchView, userId: Id<"users">): number | null {
 }
 
 // What a game's points are called in the standings: chips in poker, strokes in golf, points everywhere else.
-export const pointsUnit = (match: MatchView) => (match.mode.startsWith("poker:") ? "chips" : match.mode.startsWith("golf:") ? "strokes" : "pts");
+export const pointsUnit = (match: MatchView) =>
+  match.mode.startsWith("poker:") ? "chips" : match.mode.startsWith("golf:") ? "strokes" : "pts";

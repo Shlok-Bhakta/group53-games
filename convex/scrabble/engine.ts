@@ -42,16 +42,43 @@ const LAYOUT_15: string[] = (() => {
 // eight ways.
 const OCTANT_21: Record<Exclude<Premium, ".">, [number, number][]> = {
   "*": [[0, 0]],
-  T: [[10, 10], [10, 0]],
-  D: [[3, 3], [4, 4], [5, 5], [6, 6], [7, 7], [8, 8]],
-  t: [[2, 2], [6, 2], [9, 9], [10, 5]],
-  d: [[1, 1], [4, 0], [5, 1], [7, 3], [10, 7], [9, 2]],
+  T: [
+    [10, 10],
+    [10, 0],
+  ],
+  D: [
+    [3, 3],
+    [4, 4],
+    [5, 5],
+    [6, 6],
+    [7, 7],
+    [8, 8],
+  ],
+  t: [
+    [2, 2],
+    [6, 2],
+    [9, 9],
+    [10, 5],
+  ],
+  d: [
+    [1, 1],
+    [4, 0],
+    [5, 1],
+    [7, 3],
+    [10, 7],
+    [9, 2],
+  ],
 };
 const LAYOUT_21: string[] = (() => {
   const c = 10;
   const grid = Array.from({ length: 21 }, () => Array<Premium>(21).fill("."));
   for (const [kind, cells] of Object.entries(OCTANT_21) as [Premium, [number, number][]][]) {
-    for (const [a, b] of cells) for (const [dx, dy] of [[a, b], [b, a]]) for (const sx of [-1, 1]) for (const sy of [-1, 1]) grid[c + sy * dy][c + sx * dx] = kind;
+    for (const [a, b] of cells)
+      for (const [dx, dy] of [
+        [a, b],
+        [b, a],
+      ])
+        for (const sx of [-1, 1]) for (const sy of [-1, 1]) grid[c + sy * dy][c + sx * dx] = kind;
   }
   return grid.map((r) => r.join(""));
 })();
@@ -65,7 +92,9 @@ export const centre = (size: number) => (layout(size).length - 1) / 2;
 // Our layouts in the engine's terms.
 function engineLayout(size: number) {
   const rows = layout(size);
-  const premiums = rows.flatMap((row, y) => [...row].flatMap((c, x) => (c === "." ? [] : [{ row: y, col: x, kind: ENGINE_KIND[c as keyof typeof ENGINE_KIND] }])));
+  const premiums = rows.flatMap((row, y) =>
+    [...row].flatMap((c, x) => (c === "." ? [] : [{ row: y, col: x, kind: ENGINE_KIND[c as keyof typeof ENGINE_KIND] }])),
+  );
   const c = centre(size);
   return { size: rows.length, premiums, centerStart: { row: c, col: c } };
 }
@@ -80,7 +109,11 @@ export type Placement = { id: number; x: number; y: number; letter?: string };
 // Settings that change the rules. A bingo is always using the whole rack. `league` plays by Letter League's
 // rules instead of Scrabble's.
 export type Rules = { size: number; rack: number; league: boolean };
-export const rulesOf = (settings: Record<string, number>): Rules => ({ size: settings.board ?? 15, rack: settings.rack ?? SCRABBLE_CLASSIC_RULES.rackSize, league: settings.rules === 1 });
+export const rulesOf = (settings: Record<string, number>): Rules => ({
+  size: settings.board ?? 15,
+  rack: settings.rack ?? SCRABBLE_CLASSIC_RULES.rackSize,
+  league: settings.rules === 1,
+});
 
 // What Letter League does differently from official Scrabble. Everything else is the same engine, board and
 // word list.
@@ -94,7 +127,12 @@ function engineFor(rules: Rules) {
   const k = `${rules.size}:${rules.rack}`;
   let e = engines.get(k);
   if (!e) {
-    e = createBingoEngine({ alphabet: A, layout: engineLayout(rules.size), rules: { ...SCRABBLE_CLASSIC_RULES, rackSize: rules.rack, bingoSize: rules.rack }, dictionary: anyWord });
+    e = createBingoEngine({
+      alphabet: A,
+      layout: engineLayout(rules.size),
+      rules: { ...SCRABBLE_CLASSIC_RULES, rackSize: rules.rack, bingoSize: rules.rack },
+      dictionary: anyWord,
+    });
     engines.set(k, e);
   }
   return e;
@@ -173,7 +211,8 @@ export function evaluate(board: Placed[], placement: Placement[], rack: Tile[], 
   for (const p of placement) {
     const tile = byId.get(p.id);
     if (!tile) return { ok: false, error: REASONS["rack-mismatch"] };
-    if (!Number.isInteger(p.x) || !Number.isInteger(p.y) || p.x < 0 || p.y < 0 || p.x >= size || p.y >= size) return { ok: false, error: REASONS["out-of-bounds"] };
+    if (!Number.isInteger(p.x) || !Number.isInteger(p.y) || p.x < 0 || p.y < 0 || p.x >= size || p.y >= size)
+      return { ok: false, error: REASONS["out-of-bounds"] };
     if (map.has(key(p.x, p.y)) || fresh.has(key(p.x, p.y))) return { ok: false, error: REASONS["overlaps-existing-different-letter"] };
     const blank = tile.letter === "?";
     const letter = blank ? (p.letter ?? "").toUpperCase() : tile.letter;
@@ -197,7 +236,12 @@ export function evaluate(board: Placed[], placement: Placement[], rack: Tile[], 
     if (!t) return { ok: false, error: REASONS["has-gap"] };
     tiles.push({ letter: t.letter.toLowerCase(), isBlank: !!t.blank });
   }
-  const play: EnginePlacement = { startRow: horizontal ? p0.y : from, startCol: horizontal ? from : p0.x, direction: horizontal ? "horizontal" : "vertical", tiles };
+  const play: EnginePlacement = {
+    startRow: horizontal ? p0.y : from,
+    startCol: horizontal ? from : p0.x,
+    direction: horizontal ? "horizontal" : "vertical",
+    tiles,
+  };
   const engine = engineFor(rules);
   const before = engineBoard(board, size);
   const rackTiles = placement.map((p) => ({ tileId: byId.get(p.id)!.letter === "?" ? 0 : idOf(byId.get(p.id)!.letter) }));
@@ -206,7 +250,11 @@ export function evaluate(board: Placed[], placement: Placement[], rack: Tile[], 
   const scored = engine.scorePlacement(before, play);
   const words = scored.words
     .filter((w) => w.word.length > 1)
-    .map((w) => ({ word: w.word.toUpperCase(), score: rules.league && LEAGUE.stickyBonuses ? stickyScore(size, w.cells) : w.score, cells: w.cells.map((c) => [c.col, c.row] as [number, number]) }));
+    .map((w) => ({
+      word: w.word.toUpperCase(),
+      score: rules.league && LEAGUE.stickyBonuses ? stickyScore(size, w.cells) : w.score,
+      cells: w.cells.map((c) => [c.col, c.row] as [number, number]),
+    }));
   if (words.length === 0) return { ok: false, error: "Words need at least two letters." };
   // The main word (the one through every new tile) first.
   const main = words.findIndex((w) => placement.every((p) => w.cells.some(([x, y]) => x === p.x && y === p.y)));

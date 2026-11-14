@@ -54,7 +54,9 @@ export type Pre = { kind: "checkfold" | "check" | "call"; amount: number; hand: 
 
 async function load(ctx: QueryCtx, match: Doc<"matches">): Promise<Table> {
   const shoe = await readSecret<Shoe>(ctx, match._id, undefined, { deck: [], muck: [] });
-  const holes = await Promise.all(match.players.map(async (p) => (await readSecret<Hand | null>(ctx, match._id, p.userId, null))?.cards ?? []));
+  const holes = await Promise.all(
+    match.players.map(async (p) => (await readSecret<Hand | null>(ctx, match._id, p.userId, null))?.cards ?? []),
+  );
   return { state: match.state as PokerState, hidden: { deck: shoe.deck, muck: shoe.muck, holes } };
 }
 
@@ -109,7 +111,8 @@ export const pokerHooks: GameHooks = {
       null,
       "timeout",
     );
-    if (gone) await notifyMatch(ctx, userId, match, { title: "You've left the table", body: `Your time ran out on ${IDLE_OUT} moves in a row.` });
+    if (gone)
+      await notifyMatch(ctx, userId, match, { title: "You've left the table", body: `Your time ran out on ${IDLE_OUT} moves in a row.` });
   },
   timeoutWarning: "or we check or fold for you",
 };
@@ -133,7 +136,11 @@ async function proceed(ctx: MutationCtx, match: Doc<"matches">, before: Table, a
       if (t.state.last && t.state.last.hand === t.state.hand && !results.includes(t.state.last)) results.push(t.state.last);
       const left = alive(t.state);
       // Someone leaving can end it: a resignation reads better than "last one standing" heads-up.
-      if (left.length < 2) ended = why && t.state.out.some((o) => o.reason === "resign" && o.hand === t.state.hand) && match.players.length === 2 ? why : "last_player";
+      if (left.length < 2)
+        ended =
+          why && t.state.out.some((o) => o.reason === "resign" && o.hand === t.state.hand) && match.players.length === 2
+            ? why
+            : "last_player";
       else if (s.hands > 0 && t.state.hand >= s.hands) ended = "hands";
       if (ended) break;
       // Blinds never come down: a game from when they scaled with the stacks stays where it's got to.
@@ -167,7 +174,15 @@ async function proceed(ctx: MutationCtx, match: Doc<"matches">, before: Table, a
 // Pushes: whoever has to act now hears what just happened (notify skips anyone already looking at the game),
 // winners of a showdown hear they won, and anyone knocked out hears it. One push each, the most useful.
 // Unless `fresh`, the player to act is the one they were before and has heard already.
-async function tell(ctx: MutationCtx, match: Doc<"matches">, s: PokerState, results: HandResult[], by: Id<"users"> | null, first: boolean, fresh: boolean) {
+async function tell(
+  ctx: MutationCtx,
+  match: Doc<"matches">,
+  s: PokerState,
+  results: HandResult[],
+  by: Id<"users"> | null,
+  first: boolean,
+  fresh: boolean,
+) {
   const names = await Promise.all(match.players.map((p) => displayName(ctx, p.userId)));
   const game = MODES[match.mode as ModeKey].title;
   const seat = s.turn;
@@ -175,12 +190,18 @@ async function tell(ctx: MutationCtx, match: Doc<"matches">, s: PokerState, resu
   const owe = toCall(s, seat);
   const pot = potOf(s) + s.bets.reduce((a, b) => a + b, 0);
   const ask =
-    streetOf(s).kind === "draw" ? "Pick the cards to swap."
-    : owe > 0 ? `${owe} to call, ${pot} in the pot.`
-    : raiseBounds(s, seat) ? `Check or bet. ${pot} in the pot.`
-    : "Your move.";
+    streetOf(s).kind === "draw"
+      ? "Pick the cards to swap."
+      : owe > 0
+        ? `${owe} to call, ${pot} in the pot.`
+        : raiseBounds(s, seat)
+          ? `Check or bet. ${pot} in the pot.`
+          : "Your move.";
   if (first) {
-    await startPushes(ctx, match, (p) => ({ title: `${game} is on`, body: p.userId === up ? `You're first to act. ${ask}` : `${names[seat]} is first to act.` }));
+    await startPushes(ctx, match, (p) => ({
+      title: `${game} is on`,
+      body: p.userId === up ? `You're first to act. ${ask}` : `${names[seat]} is first to act.`,
+    }));
     return;
   }
   const pushes = new Map<Id<"users">, { title: string; body: string }>();
@@ -190,7 +211,10 @@ async function tell(ctx: MutationCtx, match: Doc<"matches">, s: PokerState, resu
       if (exit) pushes.set(p.userId, { title: "You're out", body: `Knocked out in hand ${r.hand}. Stick around to see who wins.` });
       else if (r.showdown && r.won[seat] > 0 && r.net[seat] > 0) {
         const name = r.names[seat];
-        pushes.set(p.userId, { title: `You won ${r.won[seat]}`, body: name ? `With ${handInSentence(name)} in hand ${r.hand}.` : `Hand ${r.hand}.` });
+        pushes.set(p.userId, {
+          title: `You won ${r.won[seat]}`,
+          body: name ? `With ${handInSentence(name)} in hand ${r.hand}.` : `Hand ${r.hand}.`,
+        });
       }
     }
   }

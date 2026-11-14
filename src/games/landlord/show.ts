@@ -40,7 +40,13 @@ const readSeen = (id: string) => {
 
 type Item = { ev: Ev; end?: number; by: number };
 
-const clone = (s: MonoState): MonoState => ({ ...s, players: s.players.map((p) => ({ ...p, free: [...p.free] })), props: s.props.map((p) => (p ? { ...p } : p)), bank: { ...s.bank }, trades: [...s.trades] });
+const clone = (s: MonoState): MonoState => ({
+  ...s,
+  players: s.players.map((p) => ({ ...p, free: [...p.free] })),
+  props: s.props.map((p) => (p ? { ...p } : p)),
+  bank: { ...s.bank },
+  trades: [...s.trades],
+});
 
 // What an event changes on screen, outright.
 function apply(s0: MonoState, e: Ev): MonoState {
@@ -212,7 +218,8 @@ export function useShow({
             setTimeout(() => setFloats((x) => x.filter((y) => !f.includes(y))), 1600);
           }
           if (e.why === "pot") sfx("payout", { live });
-          else if (e.why === "rent" || e.why === "buy" || e.why === "auction" || e.why === "card" || e.why === "tax") sfx("chips", { live });
+          else if (e.why === "rent" || e.why === "buy" || e.why === "auction" || e.why === "card" || e.why === "tax")
+            sfx("chips", { live });
           say_(e);
           await hold(e.why === "go" ? 450 : e.why === "build" || e.why === "sell" ? 150 : 650);
           return;
@@ -222,7 +229,13 @@ export function useShow({
           setHighlight(null);
           setDice(null);
           lookRef.current(s.players[e.seat].pos, true);
-          setLine(e.seat === mySeat ? (e.again ? "Doubles: roll again" : "Your turn") : `${nameRef.current(e.seat)}'s ${e.again ? "roll again" : "turn"}`);
+          setLine(
+            e.seat === mySeat
+              ? e.again
+                ? "Doubles: roll again"
+                : "Your turn"
+              : `${nameRef.current(e.seat)}'s ${e.again ? "roll again" : "turn"}`,
+          );
           if (e.seat === mySeat && live) sfx("turn", { live: true });
           await hold(e.again ? 400 : 300);
           return;
@@ -358,7 +371,13 @@ export function useShow({
 
   // For tests: what's on screen and what's real.
   useEffect(() => {
-    (window as unknown as { __landlord?: unknown }).__landlord = { view: () => viewRef.current, real: () => realRef.current, queued: () => queue.current.length, running: () => running.current, playedTo: () => playedTo.current };
+    (window as unknown as { __landlord?: unknown }).__landlord = {
+      view: () => viewRef.current,
+      real: () => realRef.current,
+      queued: () => queue.current.length,
+      running: () => running.current,
+      playedTo: () => playedTo.current,
+    };
   }, []);
 
   const skip = useCallback(() => {

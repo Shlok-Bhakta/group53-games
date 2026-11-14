@@ -18,10 +18,12 @@ type T = ReturnType<typeof setup>;
 type Player = Awaited<ReturnType<typeof signedIn>>;
 
 const scheduled = (t: T) => t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
-const pending = async (t: T, name: string) => (await scheduled(t)).filter((s) => s.name === name && s.state.kind === "pending").map((s) => s.args[0] as Record<string, unknown>);
+const pending = async (t: T, name: string) =>
+  (await scheduled(t)).filter((s) => s.name === name && s.state.kind === "pending").map((s) => s.args[0] as Record<string, unknown>);
 const clearPushes = (t: T) =>
   t.run(async (ctx) => {
-    for (const s of await ctx.db.system.query("_scheduled_functions").collect()) if (s.name === "push:sendToUser" && s.state.kind === "pending") await ctx.scheduler.cancel(s._id);
+    for (const s of await ctx.db.system.query("_scheduled_functions").collect())
+      if (s.name === "push:sendToUser" && s.state.kind === "pending") await ctx.scheduler.cancel(s._id);
   });
 const get = (t: T, id: Id<"matches">) => t.run((ctx) => ctx.db.get(id));
 
@@ -111,7 +113,9 @@ describe("someone else resigning leaves the player to move on their clock", () =
     expect(next.hand).toBe(2);
     expect(after.turn).toBe(mid.turn);
     expect(after.moveCount).toBe(mid.moveCount + 1);
-    expect((await pending(t, "matches:remind")).filter((r) => r.moveCount === after.moveCount)).toEqual([expect.objectContaining({ strikes: 0 })]);
+    expect((await pending(t, "matches:remind")).filter((r) => r.moveCount === after.moveCount)).toEqual([
+      expect.objectContaining({ strikes: 0 }),
+    ]);
     expect((await pending(t, "push:sendToUser")).filter((p) => p.userId === after.turn)).toHaveLength(1);
   });
 
@@ -145,15 +149,30 @@ test("challenge no longer takes rematchOf", async () => {
   const t = setup();
   const [a, b] = await crew(t, 2);
   const args = { mode: "chess:classic", opponent: b.userId, rematchOf: undefined } as Record<string, unknown>;
-  args.rematchOf = await t.run((ctx) => ctx.db.insert("matches", { mode: "chess:classic", status: "finished", createdBy: a.userId, players: [{ userId: a.userId }], invited: [], state: null, moveCount: 0, lastActivityAt: 0 }));
+  args.rematchOf = await t.run((ctx) =>
+    ctx.db.insert("matches", {
+      mode: "chess:classic",
+      status: "finished",
+      createdBy: a.userId,
+      players: [{ userId: a.userId }],
+      invited: [],
+      state: null,
+      moveCount: 0,
+      lastActivityAt: 0,
+    }),
+  );
   await expect(a.as.mutation(api.matches.challenge, args as never)).rejects.toThrow();
 });
 
 test("Scrabble plans only touch Scrabble games", async () => {
   const t = setup();
   const { id, seats } = await game(t, "chess:classic", 2);
-  await expect(seats[0].as.mutation(api.scrabble.saveDraft, { id, placed: [{ id: 0, x: 7, y: 7 }], order: [] })).rejects.toThrow("Wrong kind of game");
-  await t.run((ctx) => ctx.db.insert("drafts", { matchId: id, userId: seats[1].userId, data: { placed: [{ id: 0, x: 1, y: 1 }] }, count: 1, at: 0 }));
+  await expect(seats[0].as.mutation(api.scrabble.saveDraft, { id, placed: [{ id: 0, x: 7, y: 7 }], order: [] })).rejects.toThrow(
+    "Wrong kind of game",
+  );
+  await t.run((ctx) =>
+    ctx.db.insert("drafts", { matchId: id, userId: seats[1].userId, data: { placed: [{ id: 0, x: 1, y: 1 }] }, count: 1, at: 0 }),
+  );
   expect(await seats[0].as.query(api.scrabble.planning, { id })).toEqual([]);
 });
 
@@ -181,12 +200,20 @@ describe("per-game tables", () => {
     const preview = (id: string) => t.query(internal.previews.match, { id });
     expect(await preview(chess.id)).toMatchObject({ mode: "chess:classic", status: "active", seats: 2, toMove: "w", result: null });
     expect(((await preview(chess.id)) as unknown as { board: string[][] }).board[0][4]).toBe("bK");
-    expect(await preview(scrabble.id)).toMatchObject({ mode: "scrabble:classic", seats: 2, toMove: "red", scrabble: { size: 15, tiles: [], scores: [0, 0] } });
+    expect(await preview(scrabble.id)).toMatchObject({
+      mode: "scrabble:classic",
+      seats: 2,
+      toMove: "red",
+      scrabble: { size: 15, tiles: [], scores: [0, 0] },
+    });
     expect(await preview(poker.id)).toMatchObject({ mode: "poker:holdem", seats: 2, poker: { hand: 1, pot: 30 } });
     expect(await preview("nope")).toBeNull();
     // A finished game's preview carries the phrase for "Chris won ...", from the game's own endings.
     await chess.seats[1].as.mutation(api.matches.resign, { id: chess.id });
     const winner = (await t.run((ctx) => ctx.db.get(chess.seats[0].userId)))!.name;
-    expect(await preview(chess.id)).toMatchObject({ status: "finished", result: { draw: false, reason: "resign", how: "by resignation", winner } });
+    expect(await preview(chess.id)).toMatchObject({
+      status: "finished",
+      result: { draw: false, reason: "resign", how: "by resignation", winner },
+    });
   });
 });

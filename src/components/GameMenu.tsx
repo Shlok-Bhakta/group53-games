@@ -53,7 +53,9 @@ export function GameMenu({
           <Button
             variant="secondary"
             className="mt-2 h-14 w-full rounded-lg"
-            onClick={() => void shareLink(matchPath(match), `${mode?.name ?? ""} ${GAMES[gameOf(match.mode)].name.toLowerCase()} on Group 53:`)}
+            onClick={() =>
+              void shareLink(matchPath(match), `${mode?.name ?? ""} ${GAMES[gameOf(match.mode)].name.toLowerCase()} on Group 53:`)
+            }
           >
             <ShareNetworkIcon weight="bold" /> Share this game
           </Button>
@@ -77,7 +79,9 @@ function MatchSettings({ match }: { match: MatchView }) {
         {defs.map((s) => (
           <div key={s.key} className="flex min-h-12 items-center gap-3 px-3 py-2">
             <span className="min-w-0 flex-1 text-callout text-muted-foreground">{s.label}</span>
-            <span className={cn("shrink-0 text-callout font-semibold", value[s.key] !== s.default && s.kind !== "seed" && "text-primary")}>{settingLabel(match.mode, s.key, value[s.key])}</span>
+            <span className={cn("shrink-0 text-callout font-semibold", value[s.key] !== s.default && s.kind !== "seed" && "text-primary")}>
+              {settingLabel(match.mode, s.key, value[s.key])}
+            </span>
           </div>
         ))}
       </Group>

@@ -16,10 +16,13 @@ type Mode = "poker:holdem" | "poker:omaha" | "poker:short" | "poker:draw";
 
 const scheduled = (t: T) => t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
 const pushes = async (t: T) =>
-  (await scheduled(t)).filter((s) => s.name === "push:sendToUser" && s.state.kind === "pending").map((s) => s.args[0] as { userId: Id<"users">; title: string; body: string; url: string });
+  (await scheduled(t))
+    .filter((s) => s.name === "push:sendToUser" && s.state.kind === "pending")
+    .map((s) => s.args[0] as { userId: Id<"users">; title: string; body: string; url: string });
 const clearPushes = (t: T) =>
   t.run(async (ctx) => {
-    for (const s of await ctx.db.system.query("_scheduled_functions").collect()) if (s.name === "push:sendToUser" && s.state.kind === "pending") await ctx.scheduler.cancel(s._id);
+    for (const s of await ctx.db.system.query("_scheduled_functions").collect())
+      if (s.name === "push:sendToUser" && s.state.kind === "pending") await ctx.scheduler.cancel(s._id);
   });
 const get = (t: T, id: Id<"matches">) => t.run((ctx) => ctx.db.get(id));
 const stateOf = async (t: T, id: Id<"matches">) => (await get(t, id))!.state as PokerState;
@@ -40,7 +43,12 @@ async function game(t: T, n = 2, mode: Mode = "poker:holdem", settings?: Record<
 async function up(t: T, id: Id<"matches">, seats: Player[]) {
   const s = await stateOf(t, id);
   const p = seats[s.turn];
-  return { s, p, move: (kind: "fold" | "check" | "call" | "raise" | "draw", extra: { to?: number; discard?: number[] } = {}) => p.as.mutation(api.poker.move, { id, hand: s.hand, street: s.street, kind, ...extra }) };
+  return {
+    s,
+    p,
+    move: (kind: "fold" | "check" | "call" | "raise" | "draw", extra: { to?: number; discard?: number[] } = {}) =>
+      p.as.mutation(api.poker.move, { id, hand: s.hand, street: s.street, kind, ...extra }),
+  };
 }
 
 describe("starting", () => {
@@ -51,12 +59,28 @@ describe("starting", () => {
     expect(m.status).toBe("active");
     expect(m.players.map((p) => p.color)).toEqual(["red", "blue", "yellow"]);
     const s = m.state as PokerState;
-    expect(s).toMatchObject({ kind: "poker", variant: "holdem", limit: "nl", hand: 1, button: 0, sb: 10, bb: 20, bets: [0, 10, 20], turn: 0, board: [] });
+    expect(s).toMatchObject({
+      kind: "poker",
+      variant: "holdem",
+      limit: "nl",
+      hand: 1,
+      button: 0,
+      sb: 10,
+      bb: 20,
+      bets: [0, 10, 20],
+      turn: 0,
+      board: [],
+    });
     expect(m.turn).toBe(seats[0].userId);
     // Nothing hidden in the public state.
     expect(JSON.stringify(s)).not.toMatch(/"[2-9TJQKA][shdc]"/);
     // Each player gets exactly their own cards: the ones the server dealt to them, and nobody else's.
-    const rows = await t.run((ctx) => ctx.db.query("secrets").withIndex("by_match_user", (q) => q.eq("matchId", id)).collect());
+    const rows = await t.run((ctx) =>
+      ctx.db
+        .query("secrets")
+        .withIndex("by_match_user", (q) => q.eq("matchId", id))
+        .collect(),
+    );
     const dealt = new Map(rows.filter((r) => r.userId).map((r) => [r.userId!, (r.data as { cards: string[] }).cards]));
     const hands = [];
     for (const p of seats) {
@@ -73,7 +97,11 @@ describe("starting", () => {
     expect((await pushes(t)).map((p) => [p.userId, p.title, p.body])).toEqual(
       expect.arrayContaining([
         [seats[0].userId, "Texas Hold'em is on", "You're first to act. 20 to call, 30 in the pot."],
-        [seats[1].userId, "Texas Hold'em is on", `${await t.run(async (ctx) => (await ctx.db.get(seats[0].userId))!.name)} is first to act.`],
+        [
+          seats[1].userId,
+          "Texas Hold'em is on",
+          `${await t.run(async (ctx) => (await ctx.db.get(seats[0].userId))!.name)} is first to act.`,
+        ],
       ]),
     );
   });
@@ -127,7 +155,13 @@ describe("playing", () => {
     let u = await up(t, id, seats);
     await expect(seats[1].as.mutation(api.poker.move, { id, hand: 1, street: 0, kind: "check" })).rejects.toThrow("not your turn");
     await u.move("raise", { to: 60 });
-    expect((await pushes(t)).map((p) => [p.userId, p.title, p.body])).toEqual([[seats[1].userId, `${await t.run(async (ctx) => (await ctx.db.get(seats[0].userId))!.name)} raised to 60`, "40 to call, 80 in the pot."]]);
+    expect((await pushes(t)).map((p) => [p.userId, p.title, p.body])).toEqual([
+      [
+        seats[1].userId,
+        `${await t.run(async (ctx) => (await ctx.db.get(seats[0].userId))!.name)} raised to 60`,
+        "40 to call, 80 in the pot.",
+      ],
+    ]);
     u = await up(t, id, seats);
     await u.move("call");
     const s = await stateOf(t, id);
@@ -166,7 +200,13 @@ describe("playing", () => {
     const s = await stateOf(t, id);
     expect(s.folded).toEqual([false, true, false]);
     expect(s.street).toBe(1);
-    expect(s.log.map((e) => [e.seat, e.kind])).toEqual([[1, "blind"], [2, "blind"], [0, "call"], [1, "fold"], [2, "check"]]);
+    expect(s.log.map((e) => [e.seat, e.kind])).toEqual([
+      [1, "blind"],
+      [2, "blind"],
+      [0, "call"],
+      [1, "fold"],
+      [2, "check"],
+    ]);
     expect(await seats[1].as.query(api.poker.myPlan, { id })).toBeNull();
   });
 

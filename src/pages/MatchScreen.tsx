@@ -50,7 +50,13 @@ export function MatchScreen({ game }: { game: GameUI }) {
   return (
     <div className="flex min-h-[calc(100svh-env(safe-area-inset-bottom)-16px)] flex-col">
       <NavBar title={mode.name} back="/" action={<MenuButton onClick={() => setMenu(true)} />} />
-      <GameMenu open={menu} onOpenChange={setMenu} match={match} title={mode.name} rules={game.rules(match.mode as ModeKey, settingsOf(match.mode, match.settings))} />
+      <GameMenu
+        open={menu}
+        onOpenChange={setMenu}
+        match={match}
+        title={mode.name}
+        rules={game.rules(match.mode as ModeKey, settingsOf(match.mode, match.settings))}
+      />
       {match.status === "waiting" || match.status === "cancelled" ? (
         <Lobby match={match} meId={me?._id} onLeave={() => navigate("/", { replace: true })} setup={game.setup} />
       ) : (

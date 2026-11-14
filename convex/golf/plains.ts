@@ -20,11 +20,26 @@ export type Hole = Pick<Course, "id" | "name" | "par" | "tee" | "cup"> & {
 };
 
 const bump = (b: [number, number, number?]): Bumper => ({ at: v(b[0], b[1]), r: b[2] ?? 0.85, kick: 5 });
-export const baffle = (x0: number, y0: number, x1: number, y1: number): Wall => ({ pts: [v(x0, y0), v(x1, y1)], w: 0.5, h: 0.6, style: "wood" });
+export const baffle = (x0: number, y0: number, x1: number, y1: number): Wall => ({
+  pts: [v(x0, y0), v(x1, y1)],
+  w: 0.5,
+  h: 0.6,
+  style: "wood",
+});
 // A speed pad or a jump ramp: a square plate centred on (x, y), facing (dx, dy).
 const plate = (x: number, y: number, size: number) => rect(x - size / 2, y - size / 2, size, size);
-export const boost = (x: number, y: number, dx: number, dy: number): Zone => ({ kind: "boost", poly: plate(x, y, 2.6), dir: v(dx, dy), strength: 45 });
-export const ramp = (x: number, y: number, dx: number, dy: number): Zone => ({ kind: "ramp", poly: plate(x, y, 3), dir: v(dx, dy), lift: 0.6 });
+export const boost = (x: number, y: number, dx: number, dy: number): Zone => ({
+  kind: "boost",
+  poly: plate(x, y, 2.6),
+  dir: v(dx, dy),
+  strength: 45,
+});
+export const ramp = (x: number, y: number, dx: number, dy: number): Zone => ({
+  kind: "ramp",
+  poly: plate(x, y, 3),
+  dir: v(dx, dy),
+  lift: 0.6,
+});
 
 // A round green on a stem that joins the bottom of the circle.
 function lollipop(cx: number, cy: number, r: number, stemHalf: number, stemTo: number): Vec[] {
@@ -60,7 +75,12 @@ const HOLES: Hole[] = [
     tee: v(7, 32),
     cup: v(16.5, 8.5),
     board: P(3, 36, 11, 36, 11, 13, 20, 13, 20, 4, 3, 4),
-    bumpers: [[7.5, 10], [14, 6.4, 0.75], [14, 10.6, 0.75], [5.2, 22, 0.8]],
+    bumpers: [
+      [7.5, 10],
+      [14, 6.4, 0.75],
+      [14, 10.6, 0.75],
+      [5.2, 22, 0.8],
+    ],
     boxes: [v(18, 11.5)],
   },
   {
@@ -71,7 +91,15 @@ const HOLES: Hole[] = [
     tee: v(11, 32),
     cup: v(11, 6.5),
     board: rrect(2, 3, 18, 32, 4),
-    bumpers: [[11, 13], [7.5, 18], [14.5, 18], [11, 23], [4.8, 24, 0.7], [17.2, 24, 0.7], [11, 9.2, 0.6]],
+    bumpers: [
+      [11, 13],
+      [7.5, 18],
+      [14.5, 18],
+      [11, 23],
+      [4.8, 24, 0.7],
+      [17.2, 24, 0.7],
+      [11, 9.2, 0.6],
+    ],
     zones: [boost(4.4, 17, 0, -1), boost(17.6, 17, 0, -1)],
     boxes: [v(4.5, 9), v(17.5, 30)],
   },
@@ -84,7 +112,11 @@ const HOLES: Hole[] = [
     cup: v(7, 5.5),
     board: rect(4, 2, 14, 35),
     walls: [baffle(4, 27, 12, 27), baffle(18, 19, 10, 19), baffle(4, 11, 12, 11)],
-    bumpers: [[15, 27, 0.8], [7, 19, 0.8], [15, 11, 0.8]],
+    bumpers: [
+      [15, 27, 0.8],
+      [7, 19, 0.8],
+      [15, 11, 0.8],
+    ],
     boxes: [v(16, 23)],
   },
   {
@@ -109,7 +141,14 @@ const HOLES: Hole[] = [
     tee: v(5.5, 34),
     cup: v(16.5, 33),
     board: P(2, 38, 9, 38, 9, 13, 13, 13, 13, 38, 20, 38, 20, 3, 2, 3),
-    bumpers: [[6, 7.5], [11, 5.8], [16, 7.5], [11, 10, 0.7], [16.5, 27, 0.8], [5.5, 20, 0.7]],
+    bumpers: [
+      [6, 7.5],
+      [11, 5.8],
+      [16, 7.5],
+      [11, 10, 0.7],
+      [16.5, 27, 0.8],
+      [5.5, 20, 0.7],
+    ],
     zones: [boost(5.5, 29, 0, -1), boost(16.5, 17, 0, 1)],
     boxes: [v(11, 8), v(7.5, 14)],
   },
@@ -117,7 +156,10 @@ const HOLES: Hole[] = [
 
 export function build(h: Hole, course: string): Course {
   const boards: Vec[][] = Array.isArray(h.board[0]) ? (h.board as Vec[][]) : [h.board as Vec[]];
-  let x0 = Infinity, y0 = Infinity, x1 = 0, y1 = 0;
+  let x0 = Infinity,
+    y0 = Infinity,
+    x1 = 0,
+    y1 = 0;
   for (const b of boards)
     for (const p of b) {
       x0 = Math.min(x0, p.x);

@@ -74,14 +74,34 @@ export async function startBackend({ build = true } = {}) {
   const url = `http://127.0.0.1:${apiPort}`;
   const siteUrl = `http://127.0.0.1:${sitePort}`;
   running = name;
-  execFileSync("docker", [
-    "run", "-d", "--rm", "--name", name,
-    "-p", `127.0.0.1:${apiPort}:3210`, "-p", `127.0.0.1:${sitePort}:3211`,
-    "-e", `INSTANCE_SECRET=${randomBytes(32).toString("hex")}`, "-e", "INSTANCE_NAME=group53-e2e",
-    "-e", `CONVEX_CLOUD_ORIGIN=${url}`, "-e", `CONVEX_SITE_ORIGIN=${siteUrl}`,
-    "-e", "DO_NOT_REQUIRE_SSL=true", "-e", "DISABLE_BEACON=true",
-    resolveImage(),
-  ], { stdio: ["ignore", "ignore", "inherit"] });
+  execFileSync(
+    "docker",
+    [
+      "run",
+      "-d",
+      "--rm",
+      "--name",
+      name,
+      "-p",
+      `127.0.0.1:${apiPort}:3210`,
+      "-p",
+      `127.0.0.1:${sitePort}:3211`,
+      "-e",
+      `INSTANCE_SECRET=${randomBytes(32).toString("hex")}`,
+      "-e",
+      "INSTANCE_NAME=group53-e2e",
+      "-e",
+      `CONVEX_CLOUD_ORIGIN=${url}`,
+      "-e",
+      `CONVEX_SITE_ORIGIN=${siteUrl}`,
+      "-e",
+      "DO_NOT_REQUIRE_SSL=true",
+      "-e",
+      "DISABLE_BEACON=true",
+      resolveImage(),
+    ],
+    { stdio: ["ignore", "ignore", "inherit"] },
+  );
   // Anything failing from here on must not leave the container holding port 3211.
   try {
     await waitFor(`${url}/version`);
@@ -91,13 +111,23 @@ export async function startBackend({ build = true } = {}) {
     const vars = { ...generateVars(), SITE_URL: "http://127.0.0.1:4573", ALLOW_TEST_HELPERS: "1" };
     // The CLI reads the self-hosted target from the environment; deploy first so env vars apply to a live deployment.
     execSync("npx convex deploy -y", { cwd: ROOT, env, stdio: "inherit" });
-    for (const [k, v] of Object.entries(vars)) execFileSync("npx", ["convex", "env", "set", "--", k, v], { cwd: ROOT, env, stdio: "ignore" });
-    if (build) execSync("npx vite build --outDir e2e/.state/dist --emptyOutDir", { cwd: ROOT, env: { ...env, VITE_CONVEX_URL: url }, stdio: "inherit" });
+    for (const [k, v] of Object.entries(vars))
+      execFileSync("npx", ["convex", "env", "set", "--", k, v], { cwd: ROOT, env, stdio: "ignore" });
+    if (build)
+      execSync("npx vite build --outDir e2e/.state/dist --emptyOutDir", {
+        cwd: ROOT,
+        env: { ...env, VITE_CONVEX_URL: url },
+        stdio: "inherit",
+      });
 
     // The backend compiles each module the first time it runs; warm them so the first test isn't slow.
     for (const fn of ["testing:reset", "testing:createPlayer"]) {
       try {
-        execFileSync("npx", ["convex", "run", fn, fn === "testing:createPlayer" ? '{"name":"warmup"}' : "{}"], { cwd: ROOT, env, stdio: "ignore" });
+        execFileSync("npx", ["convex", "run", fn, fn === "testing:createPlayer" ? '{"name":"warmup"}' : "{}"], {
+          cwd: ROOT,
+          env,
+          stdio: "ignore",
+        });
       } catch {}
     }
     execFileSync("npx", ["convex", "run", "testing:reset", "{}"], { cwd: ROOT, env, stdio: "ignore" });

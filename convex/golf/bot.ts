@@ -34,7 +34,13 @@ export function tryShot(w: World, from: Packed, id: string, a: number, p: number
 
 // The best of a fan of shots. `angles` round the full circle, plus a few straight at the cup. With `sinkWithin`,
 // it only goes for the cup from that close: from further out, a shot that would drop is left alone.
-export function bestShot(w: World, from: Packed, id: string, field: Field = distanceField(w.course, w), opts: { angles?: number; powers?: number[]; sinkWithin?: number } = {}): Try | null {
+export function bestShot(
+  w: World,
+  from: Packed,
+  id: string,
+  field: Field = distanceField(w.course, w),
+  opts: { angles?: number; powers?: number[]; sinkWithin?: number } = {},
+): Try | null {
   const c = w.course;
   const me = from.balls.find((b) => b.id === id);
   if (!me) return null;
@@ -63,7 +69,11 @@ export function bestShot(w: World, from: Packed, id: string, field: Field = dist
 
 // Plays a hole from the tee on its own, greedily, up to `limit` strokes: how many it took, or null if it
 // never went in. `shaky` misses each shot by a little, the way people do.
-export function playHole(c: Course, w: World, opts: { limit?: number; shaky?: (k: number) => number; angles?: number; powers?: number[] } = {}) {
+export function playHole(
+  c: Course,
+  w: World,
+  opts: { limit?: number; shaky?: (k: number) => number; angles?: number; powers?: number[] } = {},
+) {
   const limit = opts.limit ?? 8;
   const field = distanceField(c, w);
   const rules: Rules = { cap: 99, turns: false, knockFree: false, markR: 0 };
@@ -73,7 +83,8 @@ export function playHole(c: Course, w: World, opts: { limit?: number; shaky?: (k
     const from = pack(s);
     const shot = bestShot(w, from, "bot", field, opts);
     if (!shot) return null;
-    const a = shot.a + (opts.shaky ? opts.shaky(0) * 0.08 : 0), p = Math.min(1, Math.max(0.05, shot.p * (1 + (opts.shaky ? opts.shaky(1) * 0.08 : 0))));
+    const a = shot.a + (opts.shaky ? opts.shaky(0) * 0.08 : 0),
+      p = Math.min(1, Math.max(0.05, shot.p * (1 + (opts.shaky ? opts.shaky(1) * 0.08 : 0))));
     const r = tryShot(w, from, "bot", a, p);
     if (r.sunk) return stroke;
     s = r.s;

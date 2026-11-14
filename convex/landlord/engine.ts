@@ -58,7 +58,18 @@ export type Rules = {
   rounds: number;
 };
 
-export const DEFAULT_RULES: Rules = { cash: 1500, auctions: true, pot: 0, goDouble: false, jailRent: true, firstLap: false, speed: false, limited: true, short: false, rounds: 0 };
+export const DEFAULT_RULES: Rules = {
+  cash: 1500,
+  auctions: true,
+  pot: 0,
+  goDouble: false,
+  jailRent: true,
+  firstLap: false,
+  speed: false,
+  limited: true,
+  short: false,
+  rounds: 0,
+};
 
 export type Player = {
   cash: number;
@@ -105,7 +116,23 @@ type Step =
   // Back to the roll the game was waiting on, after something came up in between (a bankruptcy's auctions).
   | { k: "resume" };
 
-export type Why = "rent" | "tax" | "go" | "card" | "jail" | "buy" | "build" | "sell" | "mortgage" | "unmortgage" | "interest" | "auction" | "pot" | "seed" | "trade" | "bankrupt";
+export type Why =
+  | "rent"
+  | "tax"
+  | "go"
+  | "card"
+  | "jail"
+  | "buy"
+  | "build"
+  | "sell"
+  | "mortgage"
+  | "unmortgage"
+  | "interest"
+  | "auction"
+  | "pot"
+  | "seed"
+  | "trade"
+  | "bankrupt";
 
 // What happened, in order. Each carries what it changed outright (everyone's cash after a payment, the new
 // owner), so a phone can play them back from any earlier state without the rules.
@@ -256,7 +283,8 @@ export function cantBuild(s: MonoState, seat: number, pos: number): string | nul
   if (group.some((i) => s.props[i]!.mortgaged)) return "Lift the mortgages in this group first.";
   if (prop.houses >= 5) return "It already has a hotel.";
   const top = hotelAt(s.rules);
-  if (prop.houses > Math.min(...group.map((i) => Math.min(s.props[i]!.houses, top)))) return "Build evenly: the others in the group need one first.";
+  if (prop.houses > Math.min(...group.map((i) => Math.min(s.props[i]!.houses, top))))
+    return "Build evenly: the others in the group need one first.";
   if (prop.houses === top && group.some((i) => s.props[i]!.houses < top)) return "Build evenly: the others in the group need one first.";
   if (spendable(s, seat) < sq.house) return `A ${prop.houses === top ? "hotel" : "house"} costs $${sq.house}.`;
   if (s.rules.limited) {
@@ -272,7 +300,8 @@ export function cantSell(s: MonoState, seat: number, pos: number): string | null
   if (!prop || prop.owner !== seat) return "That isn't yours.";
   if (prop.houses === 0) return "There's nothing built there.";
   if (prop.houses < Math.max(...groupOf(pos).map((i) => s.props[i]!.houses))) return "Sell evenly: take one off the others first.";
-  if (prop.houses === 5 && s.rules.limited && s.bank.houses < hotelAt(s.rules)) return "The bank hasn't the houses to break the hotel down. Sell the whole group's buildings instead.";
+  if (prop.houses === 5 && s.rules.limited && s.bank.houses < hotelAt(s.rules))
+    return "The bank hasn't the houses to break the hotel down. Sell the whole group's buildings instead.";
   return null;
 }
 
@@ -326,7 +355,8 @@ export function cantTrade(s: MonoState, t: Pick<Trade, "from" | "to" | "give" | 
     [t.from, t.give],
     [t.to, t.get],
   ];
-  if (!t.give.cash && !t.give.props.length && !t.give.free.length && !t.get.cash && !t.get.props.length && !t.get.free.length) return "Put something in the trade.";
+  if (!t.give.cash && !t.give.props.length && !t.give.free.length && !t.get.cash && !t.get.props.length && !t.get.free.length)
+    return "Put something in the trade.";
   for (const [seat, side] of sides) {
     if (!Number.isInteger(side.cash) || side.cash < 0) return "Cash has to be whole dollars.";
     if (side.cash > spendable(s, seat)) return SHORT;
@@ -338,7 +368,8 @@ export function cantTrade(s: MonoState, t: Pick<Trade, "from" | "to" | "give" | 
     }
     const held = { chance: 0, chest: 0 };
     for (const d of side.free) held[d]++;
-    for (const d of ["chance", "chest"] as const) if (held[d] > s.players[seat].free.filter((x) => x === d).length) return "That get-out-of-jail card isn't there any more.";
+    for (const d of ["chance", "chest"] as const)
+      if (held[d] > s.players[seat].free.filter((x) => x === d).length) return "That get-out-of-jail card isn't there any more.";
   }
   return null;
 }
@@ -350,7 +381,8 @@ export function cantAccept(s: MonoState, t: Trade, lift: number[] = []): string 
   if (why) return why;
   const owe = [feesOn(s, t.give.props, lift).total, feesOn(s, t.get.props, t.lift ?? []).total];
   if (spendable(s, t.to) - t.get.cash + t.give.cash < owe[0]) return `You'd owe the bank $${owe[0]} on the mortgaged ones.`;
-  if (spendable(s, t.from) - t.give.cash + t.get.cash < owe[1]) return `They'd owe the bank $${owe[1]} on the mortgaged ones, and can't pay it.`;
+  if (spendable(s, t.from) - t.give.cash + t.get.cash < owe[1])
+    return `They'd owe the bank $${owe[1]} on the mortgaged ones, and can't pay it.`;
   return null;
 }
 
@@ -358,13 +390,17 @@ export function cantAccept(s: MonoState, t: Trade, lift: number[] = []): string 
 // mortgage plus 10% to lift it at once.
 export function feesOn(s: MonoState, props: number[], lift: number[]) {
   const mortgaged = props.filter((i) => s.props[i]!.mortgaged);
-  const interest = interestOn(s, mortgaged.filter((i) => !lift.includes(i)));
+  const interest = interestOn(
+    s,
+    mortgaged.filter((i) => !lift.includes(i)),
+  );
   const lifting = mortgaged.filter((i) => lift.includes(i)).reduce((a, i) => a + unmortgageOf(i), 0);
   return { interest, total: interest + lifting };
 }
 
 // The 10% a player pays on each mortgaged property they're given.
-export const interestOn = (s: MonoState, props: number[]) => props.filter((i) => s.props[i]!.mortgaged).reduce((a, i) => a + Math.ceil(mortgageOf(i) / 10), 0);
+export const interestOn = (s: MonoState, props: number[]) =>
+  props.filter((i) => s.props[i]!.mortgaged).reduce((a, i) => a + Math.ceil(mortgageOf(i) / 10), 0);
 
 // --- Setting up ---
 
@@ -373,7 +409,14 @@ export function newGame(n: number, rules: Rules, rng: Rng = Math.random): Game {
     kind: "monopoly",
     rules,
     // The speed die comes with an extra $1,000 each (its official setup).
-    players: Array.from({ length: n }, () => ({ cash: rules.cash + (rules.speed ? 1000 : 0), pos: 0, jail: -1, free: [], lapped: false, out: false })),
+    players: Array.from({ length: n }, () => ({
+      cash: rules.cash + (rules.speed ? 1000 : 0),
+      pos: 0,
+      jail: -1,
+      free: [],
+      lapped: false,
+      out: false,
+    })),
     props: BOARD.map((sq) => (isBuyable(sq) ? { owner: -1, houses: 0, mortgaged: false } : null)),
     current: 0,
     phase: { k: "roll" },
@@ -487,7 +530,11 @@ export function act(g0: Game, seat: number, a: Action, rng: Rng = Math.random): 
       if (!Number.isInteger(a.pos) || a.pos < 0 || a.pos >= SIZE) throw new Error("Pick a square on the board.");
       s.phase = { k: "idle" };
       const d = s.dice ?? [0];
-      s.todo = [...(a.pos === p.pos ? [] : [{ k: "walk", n: (a.pos - p.pos + SIZE) % SIZE } as Step]), { k: "land", dice: d.reduce((x, y) => x + y, 0) }, { k: "after" }];
+      s.todo = [
+        ...(a.pos === p.pos ? [] : [{ k: "walk", n: (a.pos - p.pos + SIZE) % SIZE } as Step]),
+        { k: "land", dice: d.reduce((x, y) => x + y, 0) },
+        { k: "after" },
+      ];
       break;
     }
     case "pay": {
@@ -591,7 +638,10 @@ export function act(g0: Game, seat: number, a: Action, rng: Rng = Math.random): 
       swap(g, trade.from, trade.to, trade.give);
       swap(g, trade.to, trade.from, trade.get);
       emit(g, { t: "traded", trade });
-      for (const [seat, fee, lift] of [[trade.to, owe[0], lifts[0]], [trade.from, owe[1], lifts[1]]] as const) {
+      for (const [seat, fee, lift] of [
+        [trade.to, owe[0], lifts[0]],
+        [trade.from, owe[1], lifts[1]],
+      ] as const) {
         if (fee.interest) pay(g, seat, BANK, fee.interest, "interest");
         for (const pos of lift) {
           if (!s.props[pos]!.mortgaged) continue;
@@ -622,7 +672,11 @@ export function act(g0: Game, seat: number, a: Action, rng: Rng = Math.random): 
   return g;
 }
 
-const cleanSide = (side: Side): Side => ({ cash: Math.max(0, Math.floor(side.cash || 0)), props: [...(side.props ?? [])], free: [...(side.free ?? [])] });
+const cleanSide = (side: Side): Side => ({
+  cash: Math.max(0, Math.floor(side.cash || 0)),
+  props: [...(side.props ?? [])],
+  free: [...(side.free ?? [])],
+});
 
 function swap(g: Game, from: number, to: number, side: Side) {
   const s = g.s;
@@ -690,7 +744,12 @@ function roll(g: Game, rng: Rng) {
       // The third miss: pay the fine and move anyway.
       p.jail = -1;
       emit(g, { t: "jail", seat, in: false, how: "third" });
-      s.todo = [{ k: "pay", from: seat, to: fineTo(s), amount: JAIL_FINE, why: "jail" }, { k: "walk", n: d1 + d2 }, { k: "land", dice: d1 + d2 }, { k: "after" }];
+      s.todo = [
+        { k: "pay", from: seat, to: fineTo(s), amount: JAIL_FINE, why: "jail" },
+        { k: "walk", n: d1 + d2 },
+        { k: "land", dice: d1 + d2 },
+        { k: "after" },
+      ];
     } else s.todo = [{ k: "after" }];
     s.phase = { k: "idle" };
     return;
@@ -918,10 +977,18 @@ function draw(g: Game, deck: Deck, rng: Rng) {
       return;
     }
     case "payEach":
-      s.todo.unshift(...alive(s).filter((x) => x !== seat).map((x): Step => ({ k: "pay", from: seat, to: x, amount: e.amount, why: "card" })));
+      s.todo.unshift(
+        ...alive(s)
+          .filter((x) => x !== seat)
+          .map((x): Step => ({ k: "pay", from: seat, to: x, amount: e.amount, why: "card" })),
+      );
       return;
     case "collectEach":
-      s.todo.unshift(...alive(s).filter((x) => x !== seat).map((x): Step => ({ k: "pay", from: x, to: seat, amount: e.amount, why: "card" })));
+      s.todo.unshift(
+        ...alive(s)
+          .filter((x) => x !== seat)
+          .map((x): Step => ({ k: "pay", from: x, to: seat, amount: e.amount, why: "card" })),
+      );
       return;
   }
 }
@@ -1019,7 +1086,11 @@ function bankrupt(g: Game, seat: number, to: number) {
       ownEv(g, i);
     }
     for (const d of p.free) g.decks[d].push(FREE_CARD[d]);
-    if (s.rules.auctions) interject(s, props.map((pos): Step => ({ k: "auction", pos })));
+    if (s.rules.auctions)
+      interject(
+        s,
+        props.map((pos): Step => ({ k: "auction", pos })),
+      );
   }
   p.free = [];
   s.todo = s.todo.filter((st) => !(st.k === "pay" && st.from === seat));

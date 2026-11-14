@@ -60,10 +60,14 @@ describe("golf's open world", () => {
     const pulled = await ann.as.mutation(api.golf.act, { worldId, kind: "shot", clientTick: now - 5000, seq: 2, a: -1.5, p: 0.5 });
     expect(pulled - (now - MAX_LAG)).toBeGreaterThanOrEqual(0);
     expect(pulled - (now - MAX_LAG)).toBeLessThanOrEqual(1);
-    expect(await ann.as.mutation(api.golf.act, { worldId, kind: "shot", clientTick: now + 5000, seq: 3, a: -1.5, p: 2 })).toBeLessThanOrEqual(now + 1 + SLACK);
+    expect(
+      await ann.as.mutation(api.golf.act, { worldId, kind: "shot", clientTick: now + 5000, seq: 3, a: -1.5, p: 2 }),
+    ).toBeLessThanOrEqual(now + 1 + SLACK);
     // Power is capped, and junk is refused.
     expect((await commands(t)).find((c) => c.seq === 3)?.p).toBe(1);
-    await expect(ann.as.mutation(api.golf.act, { worldId, kind: "shot", clientTick: now, seq: 4, a: NaN, p: 0.5 })).rejects.toThrow("number");
+    await expect(ann.as.mutation(api.golf.act, { worldId, kind: "shot", clientTick: now, seq: 4, a: NaN, p: 0.5 })).rejects.toThrow(
+      "number",
+    );
   });
 
   test("shooting only ever inserts a command, so two players at once never collide", async () => {
@@ -107,7 +111,9 @@ describe("golf's open world", () => {
     expect(ball.x).toBeGreaterThan(SANDBOX.tee.x + 4);
     // A phone starting from nothing, with every command, comes to exactly the same world.
     const phone = newWorld(SANDBOX);
-    const cmds = (await commands(t)).map(({ tick, by, seq, kind, a, p, i, x, y }) => ({ tick, by, seq, kind, a, p, i, x, y })).sort(cmdOrder);
+    const cmds = (await commands(t))
+      .map(({ tick, by, seq, kind, a, p, i, x, y }) => ({ tick, by, seq, kind, a, p, i, x, y }))
+      .sort(cmdOrder);
     advance(phone, W, snap.tick, cmds);
     phone.events.length = 0;
     expect(pack(phone)).toEqual(snap.state);
@@ -119,7 +125,10 @@ describe("golf's open world", () => {
     const worldId = await ann.as.mutation(api.golf.join, {});
     await settle(t, 3);
     expect((await world(t))!.awake).toBe(false);
-    const ticks = async () => (await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect())).filter((j) => j.name === "golf:tick" && j.state.kind === "pending").length;
+    const ticks = async () =>
+      (await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect())).filter(
+        (j) => j.name === "golf:tick" && j.state.kind === "pending",
+      ).length;
     const before = await ticks();
     await ann.as.mutation(api.golf.act, { worldId, kind: "reset", clientTick: await tickNow(t), seq: 1 });
     expect((await world(t))!.awake).toBe(true);
@@ -139,7 +148,14 @@ describe("golf's open world", () => {
     // The line the solver found, played through the real mutations.
     vi.advanceTimersByTime(500);
     const [a, p] = SOLUTIONS["plains-1"][0];
-    await ann.as.mutation(api.golf.act, { worldId, kind: "shot", clientTick: Math.floor(((Date.now() - w0.startAt) * TPS) / 1000), seq: 5, a, p });
+    await ann.as.mutation(api.golf.act, {
+      worldId,
+      kind: "shot",
+      clientTick: Math.floor(((Date.now() - w0.startAt) * TPS) / 1000),
+      seq: 5,
+      a,
+      p,
+    });
     for (let i = 0; i < 25; i++) {
       vi.advanceTimersByTime(1000);
       const w = (await t.run((ctx) => ctx.db.get(worldId)))!;
@@ -170,7 +186,14 @@ describe("golf's open world", () => {
     const w0 = (await t.run((ctx) => ctx.db.get(worldId)))!;
     vi.advanceTimersByTime(500);
     const [a, p] = SOLUTIONS["plains-2"][0];
-    await ann.as.mutation(api.golf.act, { worldId, kind: "shot", clientTick: Math.floor(((Date.now() - w0.startAt) * TPS) / 1000), seq: 5, a, p });
+    await ann.as.mutation(api.golf.act, {
+      worldId,
+      kind: "shot",
+      clientTick: Math.floor(((Date.now() - w0.startAt) * TPS) / 1000),
+      seq: 5,
+      a,
+      p,
+    });
     vi.advanceTimersByTime(9000);
     // Straight off it, sink not settled yet on the server: it still counts.
     await ann.as.mutation(api.golf.leave, { worldId });

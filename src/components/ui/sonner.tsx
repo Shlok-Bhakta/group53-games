@@ -1,30 +1,20 @@
-import { useTheme } from "@/theme"
-import { Toaster as Sonner, type ToasterProps } from "sonner"
-import { CheckCircleIcon, InfoIcon, WarningIcon, XCircleIcon, SpinnerGapIcon } from "@phosphor-icons/react"
+import { useTheme } from "@/theme";
+import { Toaster as Sonner, type ToasterProps } from "sonner";
+import { CheckCircleIcon, InfoIcon, WarningIcon, XCircleIcon, SpinnerGapIcon } from "@phosphor-icons/react";
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { resolved: theme } = useTheme()
+  const { resolved: theme } = useTheme();
 
   return (
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
       icons={{
-        success: (
-          <CheckCircleIcon className="size-4" weight="fill" />
-        ),
-        info: (
-          <InfoIcon className="size-4" weight="fill" />
-        ),
-        warning: (
-          <WarningIcon className="size-4" weight="fill" />
-        ),
-        error: (
-          <XCircleIcon className="size-4" weight="fill" />
-        ),
-        loading: (
-          <SpinnerGapIcon className="size-4 animate-spin" weight="bold" />
-        ),
+        success: <CheckCircleIcon className="size-4" weight="fill" />,
+        info: <InfoIcon className="size-4" weight="fill" />,
+        warning: <WarningIcon className="size-4" weight="fill" />,
+        error: <XCircleIcon className="size-4" weight="fill" />,
+        loading: <SpinnerGapIcon className="size-4 animate-spin" weight="bold" />,
       }}
       style={
         {
@@ -41,7 +31,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }}
       {...props}
     />
-  )
-}
+  );
+};
 
-export { Toaster }
+export { Toaster };

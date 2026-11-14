@@ -53,14 +53,29 @@ export function useSendMove(moves: number) {
 }
 
 // Takes the place of the draw and resign buttons while a move waits.
-export function ConfirmMove({ move, busy, onConfirm, onCancel }: { move: string; busy?: boolean; onConfirm?: () => void; onCancel?: () => void }) {
+export function ConfirmMove({
+  move,
+  busy,
+  onConfirm,
+  onCancel,
+}: {
+  move: string;
+  busy?: boolean;
+  onConfirm?: () => void;
+  onCancel?: () => void;
+}) {
   return (
     <div className="grid grid-cols-[1fr_2fr] gap-2.5">
       <Button variant="card" size="dock" disabled={busy} onClick={onCancel}>
         <XIcon weight="bold" /> Cancel
       </Button>
       {/* Wide, so it names the move beside its icon instead of under it, at the dock's height. */}
-      <Button className="h-[60px] gap-2.5 rounded-lg text-body [&_svg:not([class*='size-'])]:size-5" disabled={busy} aria-busy={busy} onClick={onConfirm}>
+      <Button
+        className="h-[60px] gap-2.5 rounded-lg text-body [&_svg:not([class*='size-'])]:size-5"
+        disabled={busy}
+        aria-busy={busy}
+        onClick={onConfirm}
+      >
         {busy ? <SpinnerGapIcon weight="bold" className="animate-spin" /> : <CheckIcon weight="bold" />}
         Confirm <span className="min-w-0 truncate font-display text-heading">{move}</span>
       </Button>

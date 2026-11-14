@@ -3,7 +3,23 @@ import { v } from "convex/values";
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { MODES, REALTIME_LOBBY_MS, REMINDER_MS, acceptPath, allowsDraws, changedSettings, flexibleSeats, isMode, modeDef, modePath, reasonOf, settingsOf, withSeeds, type ModeKey, type Settings } from "./modes";
+import {
+  MODES,
+  REALTIME_LOBBY_MS,
+  REMINDER_MS,
+  acceptPath,
+  allowsDraws,
+  changedSettings,
+  flexibleSeats,
+  isMode,
+  modeDef,
+  modePath,
+  reasonOf,
+  settingsOf,
+  withSeeds,
+  type ModeKey,
+  type Settings,
+} from "./modes";
 import { isTestUser, notify, notifyMatch } from "./notify";
 import { placesOf, recordResult } from "./ratings";
 import { hooksFor } from "./games";
@@ -16,7 +32,8 @@ const modeOf = (match: Doc<"matches">) => MODES[match.mode as ModeKey];
 // Anyone may take a seat: an open lobby, or a challenge with seats left over for the crew.
 const isOpen = (match: Doc<"matches">) => match.invited.length === 0 || match.openSeats === true;
 // Seats nobody has claimed: invited players who haven't answered yet keep theirs.
-const freeSeats = (match: Doc<"matches">) => modeOf(match).players - match.players.length - match.invited.filter((id) => !isPlayer(match, id)).length;
+const freeSeats = (match: Doc<"matches">) =>
+  modeOf(match).players - match.players.length - match.invited.filter((id) => !isPlayer(match, id)).length;
 const canJoin = (match: Doc<"matches">, userId: Id<"users">) =>
   !isPlayer(match, userId) && (match.invited.includes(userId) || (isOpen(match) && freeSeats(match) > 0));
 
@@ -85,7 +102,15 @@ export async function finish(ctx: MutationCtx, match: Doc<"matches">, result: No
   if (match.status !== "active") return;
   const ended = { ...match, status: "finished" as const, result, endedAt: Date.now(), drawOffer: undefined, turn: undefined };
   const ratingChanges = await recordResult(ctx, ended);
-  await ctx.db.patch(match._id, { status: "finished", result, endedAt: ended.endedAt, drawOffer: undefined, turn: undefined, ratingChanges, lastActivityAt: ended.endedAt });
+  await ctx.db.patch(match._id, {
+    status: "finished",
+    result,
+    endedAt: ended.endedAt,
+    drawOffer: undefined,
+    turn: undefined,
+    ratingChanges,
+    lastActivityAt: ended.endedAt,
+  });
   const mode = modeOf(match);
   const places = placesOf(ended);
   for (const p of match.players) {
@@ -95,10 +120,21 @@ export async function finish(ctx: MutationCtx, match: Doc<"matches">, result: No
     const place = places.findIndex((g) => g.includes(p.userId));
     const title =
       match.players.length > 2
-        ? place === 0 ? (places[0].length > 1 ? "You tied for first" : "You won") : `You placed ${ordinal(place + 1)}`
-        : result.draw ? "Draw" : result.winners.includes(p.userId) ? "You won" : "You lost";
+        ? place === 0
+          ? places[0].length > 1
+            ? "You tied for first"
+            : "You won"
+          : `You placed ${ordinal(place + 1)}`
+        : result.draw
+          ? "Draw"
+          : result.winners.includes(p.userId)
+            ? "You won"
+            : "You lost";
     const others = listNames(await namesOf(ctx, opponentsOf(match, p.userId)));
-    await notifyMatch(ctx, p.userId, match, { title: `${title}${swing}`, body: `${capitalize(mode.title)} vs ${others}: ${reasonOf(result.reason, match.mode).push}.` });
+    await notifyMatch(ctx, p.userId, match, {
+      title: `${title}${swing}`,
+      body: `${capitalize(mode.title)} vs ${others}: ${reasonOf(result.reason, match.mode).push}.`,
+    });
   }
 }
 
@@ -134,7 +170,10 @@ export const remind = internalMutation({
     }
     const others = listNames(await namesOf(ctx, opponentsOf(match, match.turn)));
     const left = limit > 0 && strikes + 2 === limit ? ` Move in the next 8 hours ${hooks.timeoutWarning}.` : "";
-    await notifyMatch(ctx, match.turn, match, { title: "Still your move", body: `${others} ${multi ? "are" : "is"} waiting on you in ${modeOf(match).title}.${left}` });
+    await notifyMatch(ctx, match.turn, match, {
+      title: "Still your move",
+      body: `${others} ${multi ? "are" : "is"} waiting on you in ${modeOf(match).title}.${left}`,
+    });
     await scheduleReminder(ctx, id, moveCount, strikes + 1);
   },
 });
@@ -149,16 +188,23 @@ export const sweep = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();
-    const waiting = await ctx.db.query("matches").withIndex("by_status", (q) => q.eq("status", "waiting")).collect();
+    const waiting = await ctx.db
+      .query("matches")
+      .withIndex("by_status", (q) => q.eq("status", "waiting"))
+      .collect();
     const seen = new Set<string>();
     for (const m of waiting.sort((a, b) => b._creationTime - a._creationTime)) {
       const key = `${m.createdBy}:${m.mode}:${[...m.invited].sort().join(",")}`;
       const duplicate = m.invited.length > 0 && seen.has(key);
       seen.add(key);
-      const stale = now - m._creationTime > DAY_MS || (MODES[m.mode as ModeKey]?.kind === "realtime" && now - m._creationTime > REALTIME_LOBBY_MS);
+      const stale =
+        now - m._creationTime > DAY_MS || (MODES[m.mode as ModeKey]?.kind === "realtime" && now - m._creationTime > REALTIME_LOBBY_MS);
       if (duplicate || stale) await ctx.db.patch(m._id, { status: "cancelled", lastActivityAt: now });
     }
-    const active = await ctx.db.query("matches").withIndex("by_status", (q) => q.eq("status", "active")).collect();
+    const active = await ctx.db
+      .query("matches")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .collect();
     for (const m of active) {
       if (!isMode(m.mode) || !hooksFor(m.mode).unstarted?.(m)) continue;
       if (now - (m.startedAt ?? m._creationTime) > UNSTARTED_MS) await ctx.db.patch(m._id, { status: "cancelled", lastActivityAt: now });
@@ -208,8 +254,14 @@ export async function addPlayer(ctx: MutationCtx, match: Doc<"matches">, userId:
     await notifyMatch(ctx, p.userId, match, {
       title: full || flexible ? `${name} joined` : `${name} joined (${players.length}/${mode.players})`,
       body: full
-        ? mode.kind === "realtime" ? `Your ${mode.title} game is ready. Tap to play.` : `Your ${mode.title} game is on.`
-        : flexible ? (host ? `${players.length} in. Start whenever you're ready.` : `${players.length} in.`) : `Waiting for ${mode.players - players.length} more.`,
+        ? mode.kind === "realtime"
+          ? `Your ${mode.title} game is ready. Tap to play.`
+          : `Your ${mode.title} game is on.`
+        : flexible
+          ? host
+            ? `${players.length} in. Start whenever you're ready.`
+            : `${players.length} in.`
+          : `Waiting for ${mode.players - players.length} more.`,
     });
   }
   if (full) await start(ctx, updated);
@@ -252,10 +304,14 @@ export const queue = mutation({
     const flexible = flexibleSeats(mode);
     const title = `${name} wants ${modeDef(mode).wants ?? m.title}`;
     const body = flexible
-      ? m.kind === "realtime" ? "Jump in now, it starts when they hit Start." : "Tap to take a seat."
+      ? m.kind === "realtime"
+        ? "Jump in now, it starts when they hit Start."
+        : "Tap to take a seat."
       : m.kind === "realtime"
         ? `Jump in now, it starts when ${m.players > 2 ? `all ${m.players}` : "you both"} get there.`
-        : m.players > 2 ? `${m.players - 1} seats open. Tap to take one.` : "Tap to take the other seat.";
+        : m.players > 2
+          ? `${m.players - 1} seats open. Tap to take one.`
+          : "Tap to take the other seat.";
     await pingCrew(ctx, (await ctx.db.get(id))!, title, body);
     return id;
   },
@@ -287,18 +343,35 @@ export const challenge = mutation({
     const m = MODES[mode];
     const flexible = flexibleSeats(mode);
     for (const who of invited) {
-      const others = await namesOf(ctx, invited.filter((x) => x !== who));
+      const others = await namesOf(
+        ctx,
+        invited.filter((x) => x !== who),
+      );
       // Games that start whenever the host likes don't count empty seats.
       const free = flexible ? 0 : m.players - 1 - invited.length;
-      const with_ = others.length ? ` with ${listNames(free > 0 ? [...others, `${free} more`] : others)}` : free > 0 ? ` with ${free} more` : "";
-      await notifyMatch(ctx, who, { _id: id, mode }, { title: `${name} challenged you`, body: `${capitalize(m.title)}${with_}. Tap to accept.`, url: acceptPath({ _id: id, mode }) });
+      const with_ = others.length
+        ? ` with ${listNames(free > 0 ? [...others, `${free} more`] : others)}`
+        : free > 0
+          ? ` with ${free} more`
+          : "";
+      await notifyMatch(
+        ctx,
+        who,
+        { _id: id, mode },
+        { title: `${name} challenged you`, body: `${capitalize(m.title)}${with_}. Tap to accept.`, url: acceptPath({ _id: id, mode }) },
+      );
     }
     const match = (await ctx.db.get(id))!;
     // Bigger games tell the crew about the seats left over. Flexible ones just leave them open: anyone who
     // spots the game can join, but nobody gets a push for it.
     if (match.openSeats && !flexible) {
       const free = m.players - 1 - invited.length;
-      await pingCrew(ctx, match, `${name} has ${free === 1 ? "a free seat" : `${free} free seats`}`, `${capitalize(m.title)} with ${listNames(await namesOf(ctx, invited))}. Tap to join.`);
+      await pingCrew(
+        ctx,
+        match,
+        `${name} has ${free === 1 ? "a free seat" : `${free} free seats`}`,
+        `${capitalize(m.title)} with ${listNames(await namesOf(ctx, invited))}. Tap to join.`,
+      );
     }
     return id;
   },
@@ -310,7 +383,8 @@ export const join = mutation({
     const userId = await requireUser(ctx);
     const match = await loadMatch(ctx, id);
     if (isPlayer(match, userId)) return;
-    if (match.status !== "waiting") throw new Error(match.status === "cancelled" ? "That game was called off." : "That game already started.");
+    if (match.status !== "waiting")
+      throw new Error(match.status === "cancelled" ? "That game was called off." : "That game already started.");
     if (!canJoin(match, userId)) throw new Error(isOpen(match) ? "That game is full." : "This game is invite-only.");
     await addPlayer(ctx, match, userId);
   },
@@ -321,12 +395,17 @@ export const decline = mutation({
   handler: async (ctx, { id }) => {
     const userId = await requireUser(ctx);
     const match = await loadMatch(ctx, id);
-    if (match.status !== "waiting" || !match.invited.includes(userId) || isPlayer(match, userId)) throw new Error("There's nothing to decline.");
+    if (match.status !== "waiting" || !match.invited.includes(userId) || isPlayer(match, userId))
+      throw new Error("There's nothing to decline.");
     const name = await displayName(ctx, userId);
     const mode = modeOf(match);
     if (mode.players === 2) {
       await ctx.db.patch(id, { status: "cancelled", lastActivityAt: Date.now() });
-      await notifyMatch(ctx, match.createdBy, match, { title: `${name} declined`, body: `Your ${mode.title} challenge was turned down.`, url: modePath(match.mode as ModeKey) });
+      await notifyMatch(ctx, match.createdBy, match, {
+        title: `${name} declined`,
+        body: `Your ${mode.title} challenge was turned down.`,
+        url: modePath(match.mode as ModeKey),
+      });
       return;
     }
     if (flexibleSeats(match.mode)) {
@@ -341,7 +420,17 @@ export const decline = mutation({
     for (const p of match.players) {
       await notifyMatch(ctx, p.userId, match, { title: `${name} declined`, body: "Their seat is open to the crew now." });
     }
-    await pingCrew(ctx, { ...updated, invited: [...invited, userId] }, `A seat opened up`, `${capitalize(mode.title)} with ${listNames(await namesOf(ctx, match.players.map((p) => p.userId)))}. Tap to join.`);
+    await pingCrew(
+      ctx,
+      { ...updated, invited: [...invited, userId] },
+      `A seat opened up`,
+      `${capitalize(mode.title)} with ${listNames(
+        await namesOf(
+          ctx,
+          match.players.map((p) => p.userId),
+        ),
+      )}. Tap to join.`,
+    );
   },
 });
 
@@ -374,7 +463,10 @@ export const cancel = mutation({
     await ctx.db.patch(id, { status: "cancelled", lastActivityAt: Date.now() });
     const name = await displayName(ctx, userId);
     for (const other of opponentsOf(match, userId)) {
-      await notifyMatch(ctx, other, match, { title: `${name} called it off`, body: `The ${modeOf(match).title} game you joined isn't happening.` });
+      await notifyMatch(ctx, other, match, {
+        title: `${name} called it off`,
+        body: `The ${modeOf(match).title} game you joined isn't happening.`,
+      });
     }
   },
 });
@@ -402,7 +494,9 @@ export const configure = mutation({
     const userId = await requireUser(ctx);
     const match = await loadMatch(ctx, id);
     if (match.status !== "waiting" || match.createdBy !== userId) throw new Error("Only the host can change the settings.");
-    await ctx.db.patch(id, { settings: changedSettings(match.mode, withSeeds(match.mode, { ...settingsOf(match.mode, match.settings), ...settings })) });
+    await ctx.db.patch(id, {
+      settings: changedSettings(match.mode, withSeeds(match.mode, { ...settingsOf(match.mode, match.settings), ...settings })),
+    });
   },
 });
 
@@ -545,7 +639,10 @@ export const recent = query({
   args: { game: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, { game, limit }) => {
     if ((await getAuthUserId(ctx)) === null) return [];
-    const finished = await ctx.db.query("matches").withIndex("by_status", (q) => q.eq("status", "finished")).collect();
+    const finished = await ctx.db
+      .query("matches")
+      .withIndex("by_status", (q) => q.eq("status", "finished"))
+      .collect();
     const mine = finished.filter((m) => MODES[m.mode as ModeKey]?.game === game).sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0));
     return Promise.all(mine.slice(0, limit ?? 10).map((m) => withPeople(ctx, m)));
   },
@@ -557,8 +654,14 @@ export const attention = query({
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) return { myTurn: 0, invites: 0 };
-    const active = await ctx.db.query("matches").withIndex("by_status", (q) => q.eq("status", "active")).collect();
-    const waiting = await ctx.db.query("matches").withIndex("by_status", (q) => q.eq("status", "waiting")).collect();
+    const active = await ctx.db
+      .query("matches")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .collect();
+    const waiting = await ctx.db
+      .query("matches")
+      .withIndex("by_status", (q) => q.eq("status", "waiting"))
+      .collect();
     return {
       myTurn: active.filter((m) => m.turn === userId).length,
       invites: waiting.filter((m) => m.invited.includes(userId) && !isPlayer(m, userId)).length,
@@ -574,9 +677,16 @@ export const inbox = query({
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) return null;
-    const active = await ctx.db.query("matches").withIndex("by_status", (q) => q.eq("status", "active")).collect();
-    const waiting = await ctx.db.query("matches").withIndex("by_status", (q) => q.eq("status", "waiting")).collect();
-    const views = async (ms: Doc<"matches">[]) => Promise.all(ms.sort((a, b) => b.lastActivityAt - a.lastActivityAt).map((m) => withPeople(ctx, m)));
+    const active = await ctx.db
+      .query("matches")
+      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .collect();
+    const waiting = await ctx.db
+      .query("matches")
+      .withIndex("by_status", (q) => q.eq("status", "waiting"))
+      .collect();
+    const views = async (ms: Doc<"matches">[]) =>
+      Promise.all(ms.sort((a, b) => b.lastActivityAt - a.lastActivityAt).map((m) => withPeople(ctx, m)));
     const mineActive = active.filter((m) => isPlayer(m, userId));
     const realtime = (m: Doc<"matches">) => modeOf(m)?.kind === "realtime";
     return {
@@ -592,4 +702,3 @@ export const inbox = query({
     };
   },
 });
-

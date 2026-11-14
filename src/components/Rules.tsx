@@ -8,7 +8,9 @@ export function Rules({ rules, defaultOpen, title = "How to play" }: { rules: st
       <ol className="flex flex-col gap-2.5 px-1 pb-2 pt-1">
         {rules.map((rule, i) => (
           <li key={i} className="flex gap-3 text-callout">
-            <span className="mt-px grid size-6 shrink-0 place-items-center rounded-sm bg-primary/12 text-footnote font-bold text-primary">{i + 1}</span>
+            <span className="mt-px grid size-6 shrink-0 place-items-center rounded-sm bg-primary/12 text-footnote font-bold text-primary">
+              {i + 1}
+            </span>
             <span>{rule}</span>
           </li>
         ))}

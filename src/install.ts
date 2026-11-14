@@ -13,8 +13,7 @@ export const platform: Platform =
 
 // In-app browsers (Discord, Instagram, and so on) can't add to the home screen.
 // On iOS they're WKWebViews without the "Safari/" token; on Android, WebViews say "; wv)".
-export const inAppBrowser =
-  (platform === "ios" && !/Safari\//.test(ua)) || (platform === "android" && /; wv\)/.test(ua));
+export const inAppBrowser = (platform === "ios" && !/Safari\//.test(ua)) || (platform === "android" && /; wv\)/.test(ua));
 
 function standaloneNow() {
   return (

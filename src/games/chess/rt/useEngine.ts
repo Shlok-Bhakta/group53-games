@@ -12,7 +12,15 @@ export function useEngine(snapshot: State | null, commands: Command[], variant: 
         c &&
         c.base === base &&
         c.commands.length <= commands.length &&
-        c.commands.every((x, i) => x === commands[i] || (x.tick === commands[i].tick && x.pieceId === commands[i].pieceId && x.toX === commands[i].toX && x.toY === commands[i].toY && x.kind === commands[i].kind));
+        c.commands.every(
+          (x, i) =>
+            x === commands[i] ||
+            (x.tick === commands[i].tick &&
+              x.pieceId === commands[i].pieceId &&
+              x.toX === commands[i].toX &&
+              x.toY === commands[i].toY &&
+              x.kind === commands[i].kind),
+        );
       const fresh = commands.slice(c?.commands.length ?? 0);
       const resume = c && prefixOk && fresh.every((x) => x.tick >= c.state.tick) && c.state.tick <= toTick;
       const state = resume ? simulate(commands, toTick, c!.state) : simulate(commands, toTick, base ?? initialState(variant, pace));

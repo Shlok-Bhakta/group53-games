@@ -7,12 +7,25 @@ export type Group = "brown" | "sky" | "pink" | "orange" | "red" | "yellow" | "gr
 // `rent` for a street: unimproved, 1 to 4 houses, a hotel.
 export type Square =
   | { kind: "go" | "jail" | "parking" | "gotojail"; name: string }
-  | { kind: "street"; name: string; group: Group; price: number; house: number; rent: readonly [number, number, number, number, number, number] }
+  | {
+      kind: "street";
+      name: string;
+      group: Group;
+      price: number;
+      house: number;
+      rent: readonly [number, number, number, number, number, number];
+    }
   | { kind: "rail" | "util"; name: string; price: number }
   | { kind: "tax"; name: string; amount: number }
   | { kind: "chance" | "chest"; name: string };
 
-const street = (name: string, group: Group, price: number, house: number, ...rent: [number, number, number, number, number, number]): Square => ({
+const street = (
+  name: string,
+  group: Group,
+  price: number,
+  house: number,
+  ...rent: [number, number, number, number, number, number]
+): Square => ({
   kind: "street",
   name,
   group,

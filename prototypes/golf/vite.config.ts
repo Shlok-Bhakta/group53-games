@@ -17,7 +17,10 @@ function inline(): Plugin {
       for (const [name, file] of Object.entries(bundle)) {
         if (file.type === "chunk") {
           const code = file.code.replace(/<\/script/gi, "<\\/script");
-          out = out.replace(new RegExp(`<script[^>]*src="[^"]*${file.fileName}"[^>]*></script>`), () => `<script type="module">${code}</script>`);
+          out = out.replace(
+            new RegExp(`<script[^>]*src="[^"]*${file.fileName}"[^>]*></script>`),
+            () => `<script type="module">${code}</script>`,
+          );
           delete bundle[name];
         } else if (file.fileName.endsWith(".css")) {
           out = out.replace(new RegExp(`<link[^>]*href="[^"]*${file.fileName}"[^>]*>`), () => `<style>${String(file.source)}</style>`);

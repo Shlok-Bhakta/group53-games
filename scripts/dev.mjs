@@ -55,9 +55,20 @@ function installIfStale(dir) {
 // The sidecar builds in a container, so nobody needs Rust, and its build is kept in a volume, so changing it is quick.
 function cargo(command) {
   return [
-    "-v", `${ROOT}/stonks:/src:ro`, "-v", "group53-dev-cargo:/usr/local/cargo/registry", "-v", "group53-dev-target:/target",
-    "-e", "CARGO_TARGET_DIR=/target", "-w", "/src", "docker.io/library/rust:1-alpine",
-    "sh", "-c", `apk add --no-cache musl-dev && cargo ${command} --locked`,
+    "-v",
+    `${ROOT}/stonks:/src:ro`,
+    "-v",
+    "group53-dev-cargo:/usr/local/cargo/registry",
+    "-v",
+    "group53-dev-target:/target",
+    "-e",
+    "CARGO_TARGET_DIR=/target",
+    "-w",
+    "/src",
+    "docker.io/library/rust:1-alpine",
+    "sh",
+    "-c",
+    `apk add --no-cache musl-dev && cargo ${command} --locked`,
   ];
 }
 
@@ -75,7 +86,10 @@ const steps = {
     mkdirSync(".dev", { recursive: true });
     writeFileSync(
       STATE,
-      JSON.stringify({ instanceSecret: randomBytes(32).toString("hex"), vars: { ...generateVars(), SITE_URL: "http://127.0.0.1:5173", DEV_AUTH: "1" } }),
+      JSON.stringify({
+        instanceSecret: randomBytes(32).toString("hex"),
+        vars: { ...generateVars(), SITE_URL: "http://127.0.0.1:5173", DEV_AUTH: "1" },
+      }),
       { mode: 0o600 },
     );
   },
@@ -84,11 +98,28 @@ const steps = {
     const { resolveImage } = await import("../e2e/backend.mjs");
     quietly("docker", ["rm", "-f", CONVEX]);
     serve("docker", [
-      "run", "--rm", "--name", CONVEX, "--stop-signal", "SIGINT",
-      "-p", "127.0.0.1:3210:3210", "-v", `${VOLUME}:/convex/data`,
-      "-e", "INSTANCE_NAME=group53-dev", "-e", `INSTANCE_SECRET=${state().instanceSecret}`,
-      "-e", `CONVEX_CLOUD_ORIGIN=${CONVEX_URL}`, "-e", `CONVEX_SITE_ORIGIN=${SITE_URL}`,
-      "-e", "DO_NOT_REQUIRE_SSL=true", "-e", "DISABLE_BEACON=true",
+      "run",
+      "--rm",
+      "--name",
+      CONVEX,
+      "--stop-signal",
+      "SIGINT",
+      "-p",
+      "127.0.0.1:3210:3210",
+      "-v",
+      `${VOLUME}:/convex/data`,
+      "-e",
+      "INSTANCE_NAME=group53-dev",
+      "-e",
+      `INSTANCE_SECRET=${state().instanceSecret}`,
+      "-e",
+      `CONVEX_CLOUD_ORIGIN=${CONVEX_URL}`,
+      "-e",
+      `CONVEX_SITE_ORIGIN=${SITE_URL}`,
+      "-e",
+      "DO_NOT_REQUIRE_SSL=true",
+      "-e",
+      "DISABLE_BEACON=true",
       resolveImage(),
     ]);
   },
@@ -110,9 +141,25 @@ const steps = {
   // In the backend's own network, so 127.0.0.1:3210 is the backend on Docker and Podman alike, on any OS.
   stonks() {
     quietly("docker", ["rm", "-f", STONKS]);
-    serve("docker", ["run", "--rm", "--name", STONKS, "--network", `container:${CONVEX}`, "-e", `CONVEX_URL=${CONVEX_URL}`, "-e", "ADMIN_KEY", ...cargo("run")], {
-      env: { ...process.env, ADMIN_KEY: readFileSync(ADMIN_KEY, "utf8").trim() },
-    });
+    serve(
+      "docker",
+      [
+        "run",
+        "--rm",
+        "--name",
+        STONKS,
+        "--network",
+        `container:${CONVEX}`,
+        "-e",
+        `CONVEX_URL=${CONVEX_URL}`,
+        "-e",
+        "ADMIN_KEY",
+        ...cargo("run"),
+      ],
+      {
+        env: { ...process.env, ADMIN_KEY: readFileSync(ADMIN_KEY, "utf8").trim() },
+      },
+    );
   },
 
   "test-sidecar"() {

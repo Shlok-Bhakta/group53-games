@@ -7,7 +7,10 @@ import { pack } from "./world";
 
 describe("the eighteen holes", () => {
   test("nine on grass and nine on ice, with stable ids", () => {
-    expect(COURSES.map((c) => [c.id, c.holes.length])).toEqual([["plains", 9], ["cold", 9]]);
+    expect(COURSES.map((c) => [c.id, c.holes.length])).toEqual([
+      ["plains", 9],
+      ["cold", 9],
+    ]);
     expect(new Set(HOLES.map((h) => h.id)).size).toBe(18);
     expect(COURSES[0].holes.every((h) => h.theme === "hills" && (h.surface ?? "green") === "green")).toBe(true);
     expect(COURSES[1].holes.every((h) => h.theme === "ice" && h.surface === "packed")).toBe(true);

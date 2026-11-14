@@ -3,10 +3,16 @@ import { useReducedMotion } from "motion/react";
 import { drawBall, drawBoard, drawBox, drawBumper, drawCup, drawFlag, popIn } from "./toy";
 
 // Golf's card art on the Games tab: a little green, and a putt that rolls in once.
-const W = 26, H = 9; // in course units
+const W = 26,
+  H = 9; // in course units
 const CUP = { x: 21, y: 4.5 };
 const START = { x: 4.5, y: 4.5 };
-const BOARD = [{ x: 1, y: 1 }, { x: W - 1, y: 1 }, { x: W - 1, y: H - 1 }, { x: 1, y: H - 1 }];
+const BOARD = [
+  { x: 1, y: 1 },
+  { x: W - 1, y: 1 },
+  { x: W - 1, y: H - 1 },
+  { x: 1, y: H - 1 },
+];
 const LENGTH = 2.4; // seconds
 
 export function GolfBanner() {

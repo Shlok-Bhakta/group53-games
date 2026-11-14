@@ -62,7 +62,10 @@ export default function GolfWorld({ course: COURSE, hole, round }: { course: Cou
   const [result, setResult] = useState<{ strokes: number } | null>(null);
   // The board's own bounds: a small hole shows whole and stays put; a big one follows the ball.
   const bounds = useMemo(() => {
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    let x0 = Infinity,
+      y0 = Infinity,
+      x1 = -Infinity,
+      y1 = -Infinity;
     for (const g of COURSE.greens)
       for (const p of g.poly) {
         x0 = Math.min(x0, p.x);
@@ -89,7 +92,18 @@ export default function GolfWorld({ course: COURSE, hole, round }: { course: Cou
   const targetRef = useRef(target);
   targetRef.current = target;
   const targetAt = useRef<Vec | null>(null);
-  const [hud, setHud] = useState<Hud>({ ready: false, mode: null, bag: [], armed: null, shot: null, holes: 0, strokes: 0, status: null, canShoot: false, slow: false });
+  const [hud, setHud] = useState<Hud>({
+    ready: false,
+    mode: null,
+    bag: [],
+    armed: null,
+    shot: null,
+    holes: 0,
+    strokes: 0,
+    status: null,
+    canShoot: false,
+    slow: false,
+  });
 
   // Golf's own sound, while a world's open. (The stage takes the screen up under the status bar.)
   useEffect(() => {
@@ -126,7 +140,8 @@ export default function GolfWorld({ course: COURSE, hole, round }: { course: Cou
   }, []);
 
   useEffect(() => {
-    const c = cam.current, b = box.current;
+    const c = cam.current,
+      b = box.current;
     if (!b.big) return;
     if (overview) {
       c.s = b.fit;
@@ -136,7 +151,17 @@ export default function GolfWorld({ course: COURSE, hole, round }: { course: Cou
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [overview]);
 
-  useGolfLoop({ course: COURSE, world: WORLD, hole, round: roundRef, net: golfNet, history, scene: { cv, cam, box, overview: overviewRef, aim, blind, target: targetRef, targetAt }, setHud, setResult });
+  useGolfLoop({
+    course: COURSE,
+    world: WORLD,
+    hole,
+    round: roundRef,
+    net: golfNet,
+    history,
+    scene: { cv, cam, box, overview: overviewRef, aim, blind, target: targetRef, targetAt },
+    setHud,
+    setResult,
+  });
   // A sink in a game goes on the card; the game shows the hole's scores once everyone's done.
   useEffect(() => {
     if (round && result) {
@@ -154,7 +179,10 @@ export default function GolfWorld({ course: COURSE, hole, round }: { course: Cou
     const r = cv.current!.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
-  const toWorld = (p: Vec) => ({ x: (p.x - cam.current.ox) / cam.current.s + cam.current.x, y: (p.y - cam.current.oy) / cam.current.s + cam.current.y });
+  const toWorld = (p: Vec) => ({
+    x: (p.x - cam.current.ox) / cam.current.s + cam.current.x,
+    y: (p.y - cam.current.oy) / cam.current.s + cam.current.y,
+  });
   const maxPull = () => Math.min(190, box.current.w * 0.46);
   const mine = () => net.current.state?.balls.find((b) => b.id === meRef.current);
 
@@ -166,7 +194,12 @@ export default function GolfWorld({ course: COURSE, hole, round }: { course: Cou
     if (pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()];
       aim.current = null;
-      gesture.current = { kind: "pinch", d0: Math.hypot(a.x - b.x, a.y - b.y), s0: cam.current.s, mid: toWorld({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }) };
+      gesture.current = {
+        kind: "pinch",
+        d0: Math.hypot(a.x - b.x, a.y - b.y),
+        s0: cam.current.s,
+        mid: toWorld({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }),
+      };
       return;
     }
     const m = mine();
@@ -197,7 +230,8 @@ export default function GolfWorld({ course: COURSE, hole, round }: { course: Cou
     if (!g) return;
     if (g.kind === "target") targetAt.current = toWorld(p);
     else if (g.kind === "aim" && g.start && m) {
-      const dx = g.start.x - p.x, dy = g.start.y - p.y;
+      const dx = g.start.x - p.x,
+        dy = g.start.y - p.y;
       const pull = Math.hypot(dx, dy);
       if (pull < 10) {
         aim.current = null;
@@ -270,11 +304,32 @@ export default function GolfWorld({ course: COURSE, hole, round }: { course: Cou
 
   return (
     <FullscreenStage ref={wrap} data-mode={hud.mode ?? ""} className="touch-none select-none">
-      <canvas ref={cv} className="absolute inset-0 size-full" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} aria-label={round ? `${COURSE.name}, hole ${round.number} of ${round.total}` : hole ? `${COURSE.name}, hole ${hole.number}` : `${COURSE.name}, an open course`} data-turn={round ? (myTurn ? "mine" : "theirs") : undefined} />
+      <canvas
+        ref={cv}
+        className="absolute inset-0 size-full"
+        onPointerDown={down}
+        onPointerMove={move}
+        onPointerUp={up}
+        onPointerCancel={up}
+        aria-label={
+          round
+            ? `${COURSE.name}, hole ${round.number} of ${round.total}`
+            : hole
+              ? `${COURSE.name}, hole ${hole.number}`
+              : `${COURSE.name}, an open course`
+        }
+        data-turn={round ? (myTurn ? "mine" : "theirs") : undefined}
+      />
 
-      {round ? <RoundBar ref={top} course={COURSE} round={round} hud={hud} onBack={goBack} /> : <TopBar ref={top} course={COURSE} hole={hole} others={others} hud={hud} onBack={goBack} />}
+      {round ? (
+        <RoundBar ref={top} course={COURSE} round={round} hud={hud} onBack={goBack} />
+      ) : (
+        <TopBar ref={top} course={COURSE} hole={hole} others={others} hud={hud} onBack={goBack} />
+      )}
       <TargetHint target={target} onCancel={() => setTarget(null)} />
-      {round?.banner && <div className="absolute inset-x-0 top-[calc(env(safe-area-inset-top)+92px)] z-20 flex justify-center">{round.banner}</div>}
+      {round?.banner && (
+        <div className="absolute inset-x-0 top-[calc(env(safe-area-inset-top)+92px)] z-20 flex justify-center">{round.banner}</div>
+      )}
       <Dock
         ref={dock}
         hud={hud}
@@ -302,7 +357,10 @@ export default function GolfWorld({ course: COURSE, hole, round }: { course: Cou
           className="pointer-events-none absolute inset-x-0 top-1/3 z-10 text-center text-white [text-shadow:0_2px_12px_rgb(0_0_0/0.55)]"
           aria-hidden
         >
-          <p className="font-display text-callout">Hole {(hole ?? round)!.number}{round ? ` of ${round.total}` : ""}</p>
+          <p className="font-display text-callout">
+            Hole {(hole ?? round)!.number}
+            {round ? ` of ${round.total}` : ""}
+          </p>
           <p className="font-display text-title-lg">{COURSE.name}</p>
           <p className="text-callout">Par {COURSE.par}</p>
         </motion.div>

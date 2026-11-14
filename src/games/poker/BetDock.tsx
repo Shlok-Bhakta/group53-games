@@ -25,7 +25,11 @@ export function BetDock({ state, seat, move }: { state: PokerState; seat: number
           Fold
         </AsyncButton>
       )}
-      <AsyncButton size="dock" icon={owe === 0 ? <HandTapIcon weight="fill" /> : <CoinsIcon weight="fill" />} onClick={() => move(owe > 0 ? { kind: "call" } : { kind: "check" })}>
+      <AsyncButton
+        size="dock"
+        icon={owe === 0 ? <HandTapIcon weight="fill" /> : <CoinsIcon weight="fill" />}
+        onClick={() => move(owe > 0 ? { kind: "call" } : { kind: "check" })}
+      >
         {owe === 0 ? "Check" : `${owe >= stack ? "All in" : "Call"} ${chips(Math.min(owe, stack))}`}
       </AsyncButton>
       {bounds && (
@@ -34,7 +38,14 @@ export function BetDock({ state, seat, move }: { state: PokerState; seat: number
             <ArrowFatUpIcon weight="bold" />
             {state.current === 0 ? "Bet" : "Raise"}
           </Button>
-          <RaiseSheet state={state} seat={seat} bounds={bounds} open={raising} onClose={() => setRaising(false)} onRaise={(to) => move({ kind: "raise", to })} />
+          <RaiseSheet
+            state={state}
+            seat={seat}
+            bounds={bounds}
+            open={raising}
+            onClose={() => setRaising(false)}
+            onRaise={(to) => move({ kind: "raise", to })}
+          />
         </>
       )}
     </div>
@@ -42,7 +53,21 @@ export function BetDock({ state, seat, move }: { state: PokerState; seat: number
 }
 
 // How much to bet or raise: a slider, the usual sizes, and fine steps of a big blind.
-function RaiseSheet({ state, seat, bounds, open, onClose, onRaise }: { state: PokerState; seat: number; bounds: { min: number; max: number }; open: boolean; onClose: () => void; onRaise: (to: number) => Promise<void> }) {
+function RaiseSheet({
+  state,
+  seat,
+  bounds,
+  open,
+  onClose,
+  onRaise,
+}: {
+  state: PokerState;
+  seat: number;
+  bounds: { min: number; max: number };
+  open: boolean;
+  onClose: () => void;
+  onRaise: (to: number) => Promise<void>;
+}) {
   const [to, setTo] = useState(bounds.min);
   useEffect(() => {
     if (open) setTo(bounds.min);

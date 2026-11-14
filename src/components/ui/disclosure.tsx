@@ -7,7 +7,23 @@ import { cn } from "@/lib/utils";
 // animates on a bare wrapper (padding lives inside it) so it closes all the way down instead of snapping shut
 // at the end.
 // `onOpenChange` hears it open and close, for whatever outside it depends on that.
-export function Disclosure({ icon, title, trailing, defaultOpen = false, label, onOpenChange, children }: { icon: ReactNode; title: string; trailing?: ReactNode; defaultOpen?: boolean; label?: string; onOpenChange?: (open: boolean) => void; children: ReactNode }) {
+export function Disclosure({
+  icon,
+  title,
+  trailing,
+  defaultOpen = false,
+  label,
+  onOpenChange,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  trailing?: ReactNode;
+  defaultOpen?: boolean;
+  label?: string;
+  onOpenChange?: (open: boolean) => void;
+  children: ReactNode;
+}) {
   const [open, setOpenState] = useState(defaultOpen);
   const setOpen = (f: (o: boolean) => boolean) => {
     const next = f(open);
@@ -25,7 +41,10 @@ export function Disclosure({ icon, title, trailing, defaultOpen = false, label, 
         {icon}
         <span className="flex-1">{title}</span>
         {trailing}
-        <CaretDownIcon weight="bold" className={cn("shrink-0 text-muted-foreground transition-transform duration-300", open && "rotate-180")} />
+        <CaretDownIcon
+          weight="bold"
+          className={cn("shrink-0 text-muted-foreground transition-transform duration-300", open && "rotate-180")}
+        />
       </button>
       <AnimatePresence initial={false}>
         {open && (

@@ -18,10 +18,12 @@ export function distanceField(c: Course, w: World): Field {
   const key = `${c.id}|${c.w}|${c.h}|${c.cup.x}|${c.cup.y}|${c.tee.x}|${c.zones.length}|${c.greens.length}|${c.walls.length}`;
   const hit = cache.get(key);
   if (hit) return hit;
-  const W = Math.ceil(c.w / S) + 1, H = Math.ceil(c.h / S) + 1;
+  const W = Math.ceil(c.w / S) + 1,
+    H = Math.ceil(c.h / S) + 1;
   const d = new Float64Array(W * H).fill(Infinity);
   const ok = new Uint8Array(W * H);
-  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) ok[j * W + i] = HAZARDS.includes(groundAt(w, { x: (i + 0.5) * S, y: (j + 0.5) * S })) ? 0 : 1;
+  for (let j = 0; j < H; j++)
+    for (let i = 0; i < W; i++) ok[j * W + i] = HAZARDS.includes(groundAt(w, { x: (i + 0.5) * S, y: (j + 0.5) * S })) ? 0 : 1;
   // A step's blocked if a wall a ball can't roll over crosses it.
   const blocked = (ax: number, ay: number, bx: number, by: number) => {
     const m = { x: (ax + bx) / 2, y: (ay + by) / 2 };
@@ -52,7 +54,8 @@ export function distanceField(c: Course, w: World): Field {
       heap[0] = last;
       let n = 0;
       for (;;) {
-        const l = n * 2 + 1, r = l + 1;
+        const l = n * 2 + 1,
+          r = l + 1;
         let m = n;
         if (l < heap.length && heap[l][0] < heap[m][0]) m = l;
         if (r < heap.length && heap[r][0] < heap[m][0]) m = r;
@@ -67,13 +70,24 @@ export function distanceField(c: Course, w: World): Field {
     d[start] = 0;
     push(0, start);
   }
-  const steps: [number, number, number][] = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2]];
+  const steps: [number, number, number][] = [
+    [1, 0, 1],
+    [-1, 0, 1],
+    [0, 1, 1],
+    [0, -1, 1],
+    [1, 1, Math.SQRT2],
+    [1, -1, Math.SQRT2],
+    [-1, 1, Math.SQRT2],
+    [-1, -1, Math.SQRT2],
+  ];
   while (heap.length) {
     const [k, i] = pop();
     if (k > d[i]) continue;
-    const x = i % W, y = (i - x) / W;
+    const x = i % W,
+      y = (i - x) / W;
     for (const [dx, dy, cost] of steps) {
-      const nx = x + dx, ny = y + dy;
+      const nx = x + dx,
+        ny = y + dy;
       if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
       const j = ny * W + nx;
       if (!ok[j]) continue;
@@ -87,7 +101,8 @@ export function distanceField(c: Course, w: World): Field {
     }
   }
   const field: Field = (x, y) => {
-    const i = Math.floor(x / S), j = Math.floor(y / S);
+    const i = Math.floor(x / S),
+      j = Math.floor(y / S);
     const v = i >= 0 && j >= 0 && i < W && j < H ? d[j * W + i] : Infinity;
     return v === Infinity ? hyp(x - c.cup.x, y - c.cup.y) + TOLL : v + hyp(x - (i + 0.5) * S, y - (j + 0.5) * S);
   };
@@ -97,4 +112,5 @@ export function distanceField(c: Course, w: World): Field {
 }
 
 // Whether the cup can be reached from `p` on the ground at all.
-export const reachable = (f: Field, c: Course, x: number, y: number) => f(x, y) < hyp(x - c.cup.x, y - c.cup.y) + TOLL - 1e-6 || hyp(x - c.cup.x, y - c.cup.y) < 1.5;
+export const reachable = (f: Field, c: Course, x: number, y: number) =>
+  f(x, y) < hyp(x - c.cup.x, y - c.cup.y) + TOLL - 1e-6 || hyp(x - c.cup.x, y - c.cup.y) < 1.5;

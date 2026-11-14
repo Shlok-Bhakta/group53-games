@@ -22,7 +22,8 @@ export function contribution(w0: number, price: number, prevClose?: number, base
 /** At most `n` points: the last price in each of n equal time buckets. Keeps the first and last point. */
 export function downsample(points: Point[], n: number): Point[] {
   if (points.length <= n) return points;
-  const t0 = points[0][0], span = points.at(-1)![0] - t0 || 1;
+  const t0 = points[0][0],
+    span = points.at(-1)![0] - t0 || 1;
   const out: Point[] = [points[0]];
   let bucket = 0;
   for (const p of points.slice(1)) {

@@ -21,7 +21,9 @@ function resultTiles(match: MatchView, meId: Id<"users"> | undefined): { word: s
     return { word, states: place === 1 ? ["yellow", "yellow", "yellow"] : ["gray", "gray", "hit"] };
   }
   if (r.draw) return { word: "DRAW", states: ["yellow", "yellow", "yellow", "yellow"] };
-  return r.winners.includes(meId) ? { word: "WON", states: ["green", "green", "green"] } : { word: "LOST", states: ["gray", "gray", "gray", "hit"] };
+  return r.winners.includes(meId)
+    ? { word: "WON", states: ["green", "green", "green"] }
+    : { word: "LOST", states: ["gray", "gray", "gray", "hit"] };
 }
 
 export function Result({ match, meId }: { match: MatchView; meId: Id<"users"> | undefined }) {
@@ -35,10 +37,23 @@ export function Result({ match, meId }: { match: MatchView; meId: Id<"users"> | 
   let title: string;
   if (four && r.standings) {
     const place = meId ? r.standings.findIndex((g) => g.includes(meId)) : -1;
-    title = place === 0 ? (r.standings[0].length > 1 ? "Shared first" : "You won") : place > 0 ? `You placed ${ordinal(place + 1)}` : `${listNames(r.standings[0].map(nameOf))} won`;
+    title =
+      place === 0
+        ? r.standings[0].length > 1
+          ? "Shared first"
+          : "You won"
+        : place > 0
+          ? `You placed ${ordinal(place + 1)}`
+          : `${listNames(r.standings[0].map(nameOf))} won`;
   } else {
     const won = !r.draw && meId && r.winners.includes(meId);
-    title = r.draw ? "Draw" : !iPlayed ? `${match.players.find((p) => r.winners.includes(p.userId))?.name} won` : won ? "You won" : "You lost";
+    title = r.draw
+      ? "Draw"
+      : !iPlayed
+        ? `${match.players.find((p) => r.winners.includes(p.userId))?.name} won`
+        : won
+          ? "You won"
+          : "You lost";
   }
   const tiles = resultTiles(match, meId);
   return (
@@ -71,7 +86,12 @@ function RatingChange({ before, after }: { before: number; after: number }) {
   return (
     <p className="mt-3 flex items-center gap-2.5">
       <motion.span className="font-display text-title tabular-nums">{shown}</motion.span>
-      <span className={cn("rounded-full px-2.5 py-1 text-footnote font-bold tabular-nums", delta >= 0 ? "bg-[var(--tile-green)] text-[var(--tile-ink)]" : "bg-destructive/15 text-destructive")}>
+      <span
+        className={cn(
+          "rounded-full px-2.5 py-1 text-footnote font-bold tabular-nums",
+          delta >= 0 ? "bg-[var(--tile-green)] text-[var(--tile-ink)]" : "bg-destructive/15 text-destructive",
+        )}
+      >
         {delta >= 0 ? "+" : ""}
         {delta}
       </span>
@@ -90,11 +110,32 @@ function Standings({ match, standings, meId }: { match: MatchView; standings: Id
           const d = c ? c.after - c.before : 0;
           return (
             <li key={id} className={cn("flex min-h-12 items-center gap-3 px-4 py-2", id === meId && "bg-primary/8")}>
-              <span className={cn("w-8 font-display text-body tabular-nums", place === 0 ? "text-[var(--tile-yellow)]" : "text-muted-foreground")}>{ordinal(place + 1)}</span>
+              <span
+                className={cn(
+                  "w-8 font-display text-body tabular-nums",
+                  place === 0 ? "text-[var(--tile-yellow)]" : "text-muted-foreground",
+                )}
+              >
+                {ordinal(place + 1)}
+              </span>
               <span className="size-2.5 shrink-0 rounded-full" style={{ background: SEAT_COLORS[p.color!] }} />
               <span className="min-w-0 flex-1 truncate font-semibold">{p.name}</span>
-              {pointsOf(match, id) !== null && <span className="text-footnote tabular-nums text-muted-foreground">{pointsOf(match, id)} {pointsUnit(match)}</span>}
-              {c && <span className={cn("w-10 text-right text-footnote font-semibold tabular-nums", d >= 0 ? "text-[var(--tile-green)]" : "text-destructive")}>{d >= 0 ? "+" : ""}{d}</span>}
+              {pointsOf(match, id) !== null && (
+                <span className="text-footnote tabular-nums text-muted-foreground">
+                  {pointsOf(match, id)} {pointsUnit(match)}
+                </span>
+              )}
+              {c && (
+                <span
+                  className={cn(
+                    "w-10 text-right text-footnote font-semibold tabular-nums",
+                    d >= 0 ? "text-[var(--tile-green)]" : "text-destructive",
+                  )}
+                >
+                  {d >= 0 ? "+" : ""}
+                  {d}
+                </span>
+              )}
             </li>
           );
         }),

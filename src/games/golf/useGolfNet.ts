@@ -66,7 +66,20 @@ export function useGolfNet(COURSE: Course, minTick?: { current: number }) {
   const clock = useServerClock();
   const act = useMutation(api.golf.act);
 
-  const net = useRef<Net>({ state: null, dirty: false, base: null, server: [], pending: [], cmds: [], startAt: 0, collide: true, prev: new Map(), off: new Map(), seen: new Map(), seq: Date.now() % 1_000_000_000 });
+  const net = useRef<Net>({
+    state: null,
+    dirty: false,
+    base: null,
+    server: [],
+    pending: [],
+    cmds: [],
+    startAt: 0,
+    collide: true,
+    prev: new Map(),
+    off: new Map(),
+    seen: new Map(),
+    seq: Date.now() % 1_000_000_000,
+  });
   useEffect(() => {
     if (!view || !cmds) return;
     const n = net.current;
@@ -86,7 +99,8 @@ export function useGolfNet(COURSE: Course, minTick?: { current: number }) {
   const send = (kind: CmdKind, extra: CmdArgs = {}) => {
     const n = net.current;
     if (!worldId || !meRef.current) return;
-    const tick = Math.max(tickNow(), minTick?.current ?? 0), seq = ++n.seq;
+    const tick = Math.max(tickNow(), minTick?.current ?? 0),
+      seq = ++n.seq;
     // It plays from here, right now. The server's copy replaces it when that turns up.
     const mine: Pending = { tick, by: meRef.current, seq, kind, at: performance.now(), ...extra };
     n.pending.push(mine);

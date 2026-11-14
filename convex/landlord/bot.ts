@@ -3,7 +3,19 @@
 // raises money by selling then mortgaging, and now and then offers a trade for the last street of a group.
 
 import { BOARD, BUYABLE, groupOf, houseCostOf, mortgageOf, priceOf, unmortgageOf } from "./board";
-import { cantAccept, cantBuild, cantMortgage, cantSell, cantTrade, cantUnmortgage, ownsGroup, type Action, type MonoState, type Rng, type Trade } from "./engine";
+import {
+  cantAccept,
+  cantBuild,
+  cantMortgage,
+  cantSell,
+  cantTrade,
+  cantUnmortgage,
+  ownsGroup,
+  type Action,
+  type MonoState,
+  type Rng,
+  type Trade,
+} from "./engine";
 
 const CUSHION = 150;
 
@@ -50,7 +62,12 @@ export function spare(s: MonoState, seat: number, rng: Rng): Action | null {
       const group = groupOf(i);
       if (group.filter((j) => s.props[j]!.owner === seat).length !== group.length - 1) continue;
       const cash = Math.min(Math.round(priceOf(i) * (1.2 + rng())), p.cash - CUSHION);
-      const offer = { from: seat, to: owner, give: { cash: Math.max(0, cash), props: [], free: [] }, get: { cash: 0, props: [i], free: [] } };
+      const offer = {
+        from: seat,
+        to: owner,
+        give: { cash: Math.max(0, cash), props: [], free: [] },
+        get: { cash: 0, props: [i], free: [] },
+      };
       if (cash > 0 && !cantTrade(s, offer)) return { k: "offer", to: owner, give: offer.give, get: offer.get };
     }
   }
@@ -64,7 +81,10 @@ export function botMove(s: MonoState, seat: number, rng: Rng): Action | null {
   if (!p || p.out || ph.k === "over") return null;
   // Every offer gets an answer: one it can't take any more (they're short of the cash now) is turned down.
   const offer = s.trades.find((t) => t.to === seat);
-  if (offer) return !cantAccept(s, offer) && tradeValue(s, seat, offer) > 0 && rng() < 0.9 ? { k: "accept", id: offer.id } : { k: "reject", id: offer.id };
+  if (offer)
+    return !cantAccept(s, offer) && tradeValue(s, seat, offer) > 0 && rng() < 0.9
+      ? { k: "accept", id: offer.id }
+      : { k: "reject", id: offer.id };
   if (ph.k === "debt" && ph.from === seat) return p.cash >= ph.amount ? { k: "pay" } : (raise(s, seat) ?? { k: "bankrupt" });
   if (ph.k === "auction" && ph.in.includes(seat) && ph.leader !== seat) {
     const value = priceOf(ph.pos) * (0.4 + rng() * 0.9);

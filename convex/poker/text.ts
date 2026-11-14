@@ -56,7 +56,10 @@ export function handInSentence(name: string) {
 // "Chris took the pot of 60" when everyone else folded. The pot counts the winner's own chips in it; Last
 // hand and the table's +chips show what each player came out ahead. `you` names the reader's own seat "You".
 export function resultText(r: HandResult, nameOf: (seat: number) => string): string {
-  const winners = r.won.map((w, seat) => ({ w, seat })).filter((x) => x.w > 0).sort((a, b) => b.w - a.w);
+  const winners = r.won
+    .map((w, seat) => ({ w, seat }))
+    .filter((x) => x.w > 0)
+    .sort((a, b) => b.w - a.w);
   if (!winners.length) return `Hand ${r.hand} is over`;
   const top = winners[0];
   if (!r.showdown) return `${nameOf(top.seat)} took the pot of ${top.w}`;

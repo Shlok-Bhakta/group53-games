@@ -2,7 +2,18 @@ import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction }
 import { toast } from "sonner";
 import { canShoot, groundUnder, newSim, type Course, type Power } from "../../../convex/golf/engine";
 import type { worldOf } from "../../../convex/golf/holes";
-import { advance, newWorld, quiet, TPS, unpack, withPending, type Ball, type Cmd, type Packed, type WorldState } from "../../../convex/golf/world";
+import {
+  advance,
+  newWorld,
+  quiet,
+  TPS,
+  unpack,
+  withPending,
+  type Ball,
+  type Cmd,
+  type Packed,
+  type WorldState,
+} from "../../../convex/golf/world";
 import { SEAT_COLORS } from "@/games/seats";
 import * as sound from "./audio";
 import { ITEMS } from "./items";
@@ -12,7 +23,16 @@ import type { GolfNet } from "./useGolfNet";
 import type { HoleInfo, Round } from "./GolfWorld";
 
 // Ball colors, in the order players first joined. Seat colors, minus the ones lost on grass.
-const BALL_COLORS = [SEAT_COLORS.yellow, SEAT_COLORS.blue, SEAT_COLORS.pink, SEAT_COLORS.orange, SEAT_COLORS.purple, SEAT_COLORS.teal, SEAT_COLORS.red, "#f4f1e8"];
+const BALL_COLORS = [
+  SEAT_COLORS.yellow,
+  SEAT_COLORS.blue,
+  SEAT_COLORS.pink,
+  SEAT_COLORS.orange,
+  SEAT_COLORS.purple,
+  SEAT_COLORS.teal,
+  SEAT_COLORS.red,
+  "#f4f1e8",
+];
 const colorOf = (b: Ball) => BALL_COLORS[b.color % BALL_COLORS.length];
 // How long a correction takes to ease out: quick for a small one, a touch longer for a long way, so a
 // ball glides onto where it really is however late the news came. Only a real teleport (sinking and
@@ -123,8 +143,27 @@ export function useGolfLoop({
     // Something to draw the shared things from (boxes, bumpers, mines) once my ball's off the hole.
     let placeholder: Ball | null = null;
     const watching = (s: WorldState): Ball => {
-      if (!placeholder) placeholder = Object.assign(newSim(COURSE), { id: "", holes: 0, color: 0, startBag: [], carry: null, mode: "sunk" as const, modeT: 99 }) as Ball;
-      Object.assign(placeholder, { boxes: s.boxes, gone: s.gone, mines: s.mines, strikes: s.strikes, patches: s.patches, t: s.tick / TPS, x: COURSE.cup.x, y: COURSE.cup.y, modeT: 99 });
+      if (!placeholder)
+        placeholder = Object.assign(newSim(COURSE), {
+          id: "",
+          holes: 0,
+          color: 0,
+          startBag: [],
+          carry: null,
+          mode: "sunk" as const,
+          modeT: 99,
+        }) as Ball;
+      Object.assign(placeholder, {
+        boxes: s.boxes,
+        gone: s.gone,
+        mines: s.mines,
+        strikes: s.strikes,
+        patches: s.patches,
+        t: s.tick / TPS,
+        x: COURSE.cup.x,
+        y: COURSE.cup.y,
+        modeT: 99,
+      });
       return placeholder;
     };
 
@@ -150,7 +189,11 @@ export function useGolfLoop({
             // A Rocket Driver goes off with a bang, not a tap.
             if (s.balls.find((b) => b.id === id)?.shot === "rocket") {
               if (near) sound.rocket();
-              fx.current.push({ kind: "boom", x: ev.x, y: ev.y, t, seed }, { kind: "ring", x: ev.x, y: ev.y, t, seed, big: 1.4, color: "#f19a35" }, { kind: "spark", x: ev.x, y: ev.y, t, seed, color: "#f19a35" });
+              fx.current.push(
+                { kind: "boom", x: ev.x, y: ev.y, t, seed },
+                { kind: "ring", x: ev.x, y: ev.y, t, seed, big: 1.4, color: "#f19a35" },
+                { kind: "spark", x: ev.x, y: ev.y, t, seed, color: "#f19a35" },
+              );
               if (isMe) shake.current = { t, power: 0.22, a: seed };
             } else if (near) sound.putt(ev.power);
             fx.current.push({ kind: "puff", x: ev.x, y: ev.y, t, seed });
@@ -181,10 +224,15 @@ export function useGolfLoop({
             break;
           case "sink": {
             if (near) sound.plunk();
-            fx.current.push({ kind: "ring", x: ev.x, y: ev.y, t, seed }, { kind: "ring", x: ev.x, y: ev.y, t: t + 0.12, seed }, { kind: "confetti", x: ev.x, y: ev.y - 1, t: t + 0.15, seed });
+            fx.current.push(
+              { kind: "ring", x: ev.x, y: ev.y, t, seed },
+              { kind: "ring", x: ev.x, y: ev.y, t: t + 0.12, seed },
+              { kind: "confetti", x: ev.x, y: ev.y - 1, t: t + 0.15, seed },
+            );
             const ci = allCups(COURSE).findIndex((k) => Math.hypot(k.x - ev.x, k.y - ev.y) < 0.01);
             if (ci >= 0 && !isMe) flagOut.current.set(ci, t);
-            if (!isMe) toast(`${namesRef.current.get(id) ?? "Someone"} sank one${strokes !== undefined && round.current ? `, ${strokes}` : ""}`);
+            if (!isMe)
+              toast(`${namesRef.current.get(id) ?? "Someone"} sank one${strokes !== undefined && round.current ? `, ${strokes}` : ""}`);
             // Long enough to watch it drop.
             else if ((hole || round.current) && strokes !== undefined) setTimeout(() => setResult({ strokes }), 1100);
             break;
@@ -212,13 +260,21 @@ export function useGolfLoop({
             break;
           case "boom":
             if (near) sound.blast(1);
-            fx.current.push({ kind: "boom", x: ev.x, y: ev.y, t, seed, color: "big" }, { kind: "ring", x: ev.x, y: ev.y, t, seed, big: 2.2 }, { kind: "spark", x: ev.x, y: ev.y, t, seed });
+            fx.current.push(
+              { kind: "boom", x: ev.x, y: ev.y, t, seed, color: "big" },
+              { kind: "ring", x: ev.x, y: ev.y, t, seed, big: 2.2 },
+              { kind: "spark", x: ev.x, y: ev.y, t, seed },
+            );
             if (near) shake.current = { t, power: 0.55, a: seed };
             break;
           case "mine":
           case "smash":
             if (near) sound.blast(ev.type === "mine" ? 0.8 : 0.5);
-            fx.current.push({ kind: "boom", x: ev.x, y: ev.y, t, seed }, { kind: "ring", x: ev.x, y: ev.y, t, seed, big: 1.3 }, { kind: "spark", x: ev.x, y: ev.y, t: t + 0.02, seed });
+            fx.current.push(
+              { kind: "boom", x: ev.x, y: ev.y, t, seed },
+              { kind: "ring", x: ev.x, y: ev.y, t, seed, big: 1.3 },
+              { kind: "spark", x: ev.x, y: ev.y, t: t + 0.02, seed },
+            );
             if (near) shake.current = { t, power: ev.type === "mine" ? 0.4 : 0.2, a: seed };
             break;
           case "rail":
@@ -241,7 +297,10 @@ export function useGolfLoop({
             break;
           case "freeze":
             if (near) sound.freeze();
-            fx.current.push({ kind: "frost", x: ev.x, y: ev.y, t, seed, big: 3.6 }, { kind: "spark", x: ev.x, y: ev.y, t, seed, color: "#dff1f7" });
+            fx.current.push(
+              { kind: "frost", x: ev.x, y: ev.y, t, seed, big: 3.6 },
+              { kind: "spark", x: ev.x, y: ev.y, t, seed, color: "#dff1f7" },
+            );
             break;
           case "honey":
             if (near) sound.honey();
@@ -259,7 +318,10 @@ export function useGolfLoop({
               sound.thunder();
               shake.current = { t, power: 0.3, a: seed };
             }
-            fx.current.push({ kind: "bolt", x: ev.x, y: ev.y, x2: ev.x + 0.6, y2: ev.y - 9, t, seed }, { kind: "ring", x: ev.x, y: ev.y, t, seed, big: 1.2 });
+            fx.current.push(
+              { kind: "bolt", x: ev.x, y: ev.y, x2: ev.x + 0.6, y2: ev.y - 9, t, seed },
+              { kind: "ring", x: ev.x, y: ev.y, t, seed, big: 1.2 },
+            );
             break;
           case "tracer":
             if (near) sound.gun(ev.power > 0.7);
@@ -377,49 +439,50 @@ export function useGolfLoop({
           cu.onSeen(r.s.tick);
         }
       } else {
-      const target = Math.max(0, Math.floor(tf));
-      frac = Math.max(0, Math.min(1, tf - target));
+        const target = Math.max(0, Math.floor(tf));
+        frac = Math.max(0, Math.min(1, tf - target));
 
-      // New commands or a new snapshot: rebuild from the snapshot, and ease every ball from where it
-      // was drawn to where it really is.
-      if (n.dirty) {
-        n.dirty = false;
-        const before = n.state ? positions(n.state) : null;
-        const sunkBefore = new Map(n.state?.balls.map((b) => [b.id, b.holes]));
-        const s = n.base ? unpack(n.base) : newWorld(COURSE, { collide: n.collide });
-        const merged = withPending(n.server, n.pending, s.tick);
-        n.pending = merged.pending;
-        n.cmds = merged.cmds;
-        advance(s, WORLD, Math.max(s.tick, target), n.cmds);
-        if (before)
-          for (const b of s.balls) {
-            const was = before.get(b.id);
-            if (!was) continue;
-            const o = n.off.get(b.id) ?? { x: 0, y: 0, tau: EASE_S };
-            const dx = was.x + o.x - b.x, dy = was.y + o.y - b.y;
-            // Sunk and back on a tee in the meantime: that's a real jump. Anything else glides.
-            if (sunkBefore.get(b.id) !== b.holes) n.off.delete(b.id);
-            else n.off.set(b.id, { x: dx, y: dy, tau: Math.hypot(dx, dy) > FAR ? EASE_FAR_S : EASE_S });
-          }
-        n.state = s;
-        n.prev = positions(s);
-        play(s, before ? "rebuilt" : "arrived");
-      }
-      s = n.state!;
-      if (target > s.tick) {
-        if (target - 1 > s.tick) advance(s, WORLD, target - 1, n.cmds);
-        n.prev = positions(s);
-        advance(s, WORLD, target, n.cmds);
-        play(s, "fresh");
-      }
-      // Where this phone has watched up to, for catching up next time it's opened: only while everything's
-      // still (a shot left halfway plays again whole), and not in the moments after coming back, which show
-      // what's out of date until the catch-up starts.
-      const onSeen = round.current?.onSeen;
-      if (onSeen && quiet(s, COURSE) && nowMs - resumedAt > 2000 && nowMs - lastSeen > 1000 && document.visibilityState === "visible") {
-        lastSeen = nowMs;
-        onSeen(s.tick);
-      }
+        // New commands or a new snapshot: rebuild from the snapshot, and ease every ball from where it
+        // was drawn to where it really is.
+        if (n.dirty) {
+          n.dirty = false;
+          const before = n.state ? positions(n.state) : null;
+          const sunkBefore = new Map(n.state?.balls.map((b) => [b.id, b.holes]));
+          const s = n.base ? unpack(n.base) : newWorld(COURSE, { collide: n.collide });
+          const merged = withPending(n.server, n.pending, s.tick);
+          n.pending = merged.pending;
+          n.cmds = merged.cmds;
+          advance(s, WORLD, Math.max(s.tick, target), n.cmds);
+          if (before)
+            for (const b of s.balls) {
+              const was = before.get(b.id);
+              if (!was) continue;
+              const o = n.off.get(b.id) ?? { x: 0, y: 0, tau: EASE_S };
+              const dx = was.x + o.x - b.x,
+                dy = was.y + o.y - b.y;
+              // Sunk and back on a tee in the meantime: that's a real jump. Anything else glides.
+              if (sunkBefore.get(b.id) !== b.holes) n.off.delete(b.id);
+              else n.off.set(b.id, { x: dx, y: dy, tau: Math.hypot(dx, dy) > FAR ? EASE_FAR_S : EASE_S });
+            }
+          n.state = s;
+          n.prev = positions(s);
+          play(s, before ? "rebuilt" : "arrived");
+        }
+        s = n.state!;
+        if (target > s.tick) {
+          if (target - 1 > s.tick) advance(s, WORLD, target - 1, n.cmds);
+          n.prev = positions(s);
+          advance(s, WORLD, target, n.cmds);
+          play(s, "fresh");
+        }
+        // Where this phone has watched up to, for catching up next time it's opened: only while everything's
+        // still (a shot left halfway plays again whole), and not in the moments after coming back, which show
+        // what's out of date until the catch-up starts.
+        const onSeen = round.current?.onSeen;
+        if (onSeen && quiet(s, COURSE) && nowMs - resumedAt > 2000 && nowMs - lastSeen > 1000 && document.visibilityState === "visible") {
+          lastSeen = nowMs;
+          onSeen(s.tick);
+        }
       }
       for (const [id, o] of n.off) {
         const k = 1 - Math.exp(-dt / o.tau);
@@ -454,7 +517,8 @@ export function useGolfLoop({
       if (rp) {
         trail.current = rp.trail;
         const lp = rp.trail[rp.trail.length - 1];
-        if (shooter?.mode === "roll" && (!lp || Math.hypot(lp.x - at.x, lp.y - at.y) > 0.25) && rp.trail.length < 1200) rp.trail.push({ ...at });
+        if (shooter?.mode === "roll" && (!lp || Math.hypot(lp.x - at.x, lp.y - at.y) > 0.25) && rp.trail.length < 1200)
+          rp.trail.push({ ...at });
       } else if (me.mode === "roll") {
         wasRolling = true;
         const tr = trail.current;
@@ -469,11 +533,19 @@ export function useGolfLoop({
 
       // The camera follows the ball that matters (mine, or whoever's shooting), leaning the way it's going
       // (or toward the nearest flag).
-      const c = cam.current, bx = box.current;
+      const c = cam.current,
+        bx = box.current;
       if (bx.big && !overviewRef.current && nowMs - bx.panned > 1500 && focus) {
-        const cup = allCups(COURSE).reduce((a, q) => (Math.hypot(q.x - focusAt.x, q.y - focusAt.y) < Math.hypot(a.x - focusAt.x, a.y - focusAt.y) ? q : a));
-        const dx = cup.x - focusAt.x, dy = cup.y - focusAt.y, d = Math.hypot(dx, dy) || 1;
-        const lean = focus.mode === "roll" ? { x: focus.vx * 0.35, y: focus.vy * 0.35 } : { x: (dx / d) * Math.min(5, d * 0.3), y: (dy / d) * Math.min(5, d * 0.3) };
+        const cup = allCups(COURSE).reduce((a, q) =>
+          Math.hypot(q.x - focusAt.x, q.y - focusAt.y) < Math.hypot(a.x - focusAt.x, a.y - focusAt.y) ? q : a,
+        );
+        const dx = cup.x - focusAt.x,
+          dy = cup.y - focusAt.y,
+          d = Math.hypot(dx, dy) || 1;
+        const lean =
+          focus.mode === "roll"
+            ? { x: focus.vx * 0.35, y: focus.vy * 0.35 }
+            : { x: (dx / d) * Math.min(5, d * 0.3), y: (dy / d) * Math.min(5, d * 0.3) };
         const kc = 1 - Math.exp(-dt * 3);
         c.x += (focusAt.x + lean.x - c.x) * kc;
         c.y += (focusAt.y + lean.y - c.y) * kc;
@@ -489,10 +561,14 @@ export function useGolfLoop({
           smoked.set(b.id, t);
           fx.current.push({ kind: "puff", x: b.x, y: b.y - b.z * 0.5, t, seed: (t * 977) | 0, color: "#9c9a92" });
         }
-      const others: Other[] = s.balls.filter((b) => b !== lead).map((b) => ({ sim: b, at: drawn(b), color: ballColor(b), name: namesRef.current.get(b.id) ?? "" }));
+      const others: Other[] = s.balls
+        .filter((b) => b !== lead)
+        .map((b) => ({ sim: b, at: drawn(b), color: ballColor(b), name: namesRef.current.get(b.id) ?? "" }));
       // Names of balls bunched together alternate above and below.
       others.forEach((o, i) => {
-        const near = [...(lead ? [at] : []), ...others.slice(0, i).map((x) => x.at)].filter((p) => Math.abs(p.x - o.at.x) < 4 && Math.abs(p.y - o.at.y) < 1.5).length;
+        const near = [...(lead ? [at] : []), ...others.slice(0, i).map((x) => x.at)].filter(
+          (p) => Math.abs(p.x - o.at.x) < 4 && Math.abs(p.y - o.at.y) < 1.5,
+        ).length;
         o.below = near % 2 === 1;
       });
       const tg = targetRef.current;
@@ -520,7 +596,8 @@ export function useGolfLoop({
 
       // The flash fading off the screen. (In a turn-based game it lasts till your shot, so it fades to a
       // haze rather than going.)
-      if (blind.current) blind.current.style.opacity = String(Math.max(0, Math.min(1, (me.blindUntil - me.t) / 1.2)) * (me.blindUntil > 1e8 ? 0.35 : 0.92));
+      if (blind.current)
+        blind.current.style.opacity = String(Math.max(0, Math.min(1, (me.blindUntil - me.t) / 1.2)) * (me.blindUntil > 1e8 ? 0.35 : 0.92));
       const r = round.current;
       const status = mine ? statusOf(mine) : null;
       const shootable = !rp && !!mine && canShoot(mine) && (!r?.turns || r.turn === mine.id);
@@ -529,13 +606,25 @@ export function useGolfLoop({
       const h = `${mode}|${mine?.bag.join()}|${mine?.armed}|${mine?.shot}|${mine?.holes}|${mine?.strokes}|${status}|${shootable}|${slow}|${focus?.id}`;
       if (h !== lastHud) {
         lastHud = h;
-        setHud({ ready: true, mode, bag: mine ? [...mine.bag] : [], armed: mine?.armed ?? null, shot: mine?.shot ?? null, holes: mine?.holes ?? 0, strokes: mine?.strokes ?? 0, status, canShoot: shootable, slow });
+        setHud({
+          ready: true,
+          mode,
+          bag: mine ? [...mine.bag] : [],
+          armed: mine?.armed ?? null,
+          shot: mine?.shot ?? null,
+          holes: mine?.holes ?? 0,
+          strokes: mine?.strokes ?? 0,
+          status,
+          canShoot: shootable,
+          slow,
+        });
       }
     };
     raf = requestAnimationFrame(frame);
     // For the e2e suite: every ball as this phone has it.
     (window as unknown as { __golf?: unknown }).__golf = {
-      balls: () => n.state?.balls.map((b) => ({ id: b.id, x: b.x, y: b.y, mode: b.mode, holes: b.holes, strokes: b.strokes, t: b.t })) ?? [],
+      balls: () =>
+        n.state?.balls.map((b) => ({ id: b.id, x: b.x, y: b.y, mode: b.mode, holes: b.holes, strokes: b.strokes, t: b.t })) ?? [],
       tick: () => n.state?.tick ?? -1,
       replaying: () => rp !== null,
       me: () => meRef.current,

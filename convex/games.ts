@@ -28,6 +28,12 @@ export type GameHooks = {
 // Looked up when called, not when this module loads: the game files import matches.ts, which
 // imports this, so the hooks may not exist yet at load time.
 export const hooksFor = (mode: string): GameHooks => {
-  const hooks: Record<GameKey, GameHooks> = { chess: chessHooks, scrabble: scrabbleHooks, poker: pokerHooks, golf: golfHooks, landlord: landlordHooks };
+  const hooks: Record<GameKey, GameHooks> = {
+    chess: chessHooks,
+    scrabble: scrabbleHooks,
+    poker: pokerHooks,
+    golf: golfHooks,
+    landlord: landlordHooks,
+  };
   return hooks[gameOf(mode)];
 };

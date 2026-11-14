@@ -24,7 +24,13 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font: 17px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", Roboto, system-ui, sans-serif;
+  font:
+    17px/1.35 -apple-system,
+    BlinkMacSystemFont,
+    "SF Pro Text",
+    Roboto,
+    system-ui,
+    sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 html[data-framed="false"],
@@ -234,7 +240,18 @@ button {
 .g-range::-webkit-slider-runnable-track {
   height: 10px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #1b2240 0%, #2b3366 20%, #f2a36b 27%, #8fc7ff 40%, #bfe3ff 50%, #8fc7ff 62%, #ff9a5a 78%, #6b4a8a 84%, #1b2240 100%);
+  background: linear-gradient(
+    90deg,
+    #1b2240 0%,
+    #2b3366 20%,
+    #f2a36b 27%,
+    #8fc7ff 40%,
+    #bfe3ff 50%,
+    #8fc7ff 62%,
+    #ff9a5a 78%,
+    #6b4a8a 84%,
+    #1b2240 100%
+  );
 }
 .g-range::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -248,7 +265,18 @@ button {
 .g-range::-moz-range-track {
   height: 10px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #1b2240 0%, #2b3366 20%, #f2a36b 27%, #8fc7ff 40%, #bfe3ff 50%, #8fc7ff 62%, #ff9a5a 78%, #6b4a8a 84%, #1b2240 100%);
+  background: linear-gradient(
+    90deg,
+    #1b2240 0%,
+    #2b3366 20%,
+    #f2a36b 27%,
+    #8fc7ff 40%,
+    #bfe3ff 50%,
+    #8fc7ff 62%,
+    #ff9a5a 78%,
+    #6b4a8a 84%,
+    #1b2240 100%
+  );
 }
 
 /* --- Playing --- */

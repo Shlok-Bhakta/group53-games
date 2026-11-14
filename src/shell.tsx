@@ -28,16 +28,29 @@ export function useNavDirection() {
 }
 
 const variants = {
-  enter: (d: number) => (d === 0 ? { x: 0, zIndex: 1 } : { x: d > 0 ? window.innerWidth : -window.innerWidth * 0.3, zIndex: d > 0 ? 2 : 0 }),
+  enter: (d: number) =>
+    d === 0 ? { x: 0, zIndex: 1 } : { x: d > 0 ? window.innerWidth : -window.innerWidth * 0.3, zIndex: d > 0 ? 2 : 0 },
   center: { x: 0, zIndex: 1, transition: SLIDE },
   exit: (d: number) =>
-    d === 0 ? { opacity: 0, transition: { duration: 0 } } : { x: d > 0 ? -window.innerWidth * 0.3 : window.innerWidth, zIndex: d > 0 ? 0 : 2, transition: SLIDE },
+    d === 0
+      ? { opacity: 0, transition: { duration: 0 } }
+      : { x: d > 0 ? -window.innerWidth * 0.3 : window.innerWidth, zIndex: d > 0 ? 0 : 2, transition: SLIDE },
 };
 
 // One screen in the stack. Pushed screens can be swiped back from the left edge. A screen on its way out
 // stays drawn while it slides, but takes no taps and leaves the accessibility tree at once, so screen
 // readers (and tests) only ever find one screen's buttons.
-export function Page({ children, direction, onBack, ref }: { children: ReactNode; direction: number; onBack: (() => void) | null; ref?: Ref<HTMLDivElement> }) {
+export function Page({
+  children,
+  direction,
+  onBack,
+  ref,
+}: {
+  children: ReactNode;
+  direction: number;
+  onBack: (() => void) | null;
+  ref?: Ref<HTMLDivElement>;
+}) {
   const x = useMotionValue(0);
   const present = useIsPresent();
   useEdgeSwipe(x, present ? onBack : null);
@@ -77,7 +90,8 @@ function useEdgeSwipe(x: MotionValue<number>, onBack: (() => void) | null) {
       const t = e.touches[0];
       start = null;
       if (e.touches.length !== 1 || t.clientX > EDGE) return;
-      if ((e.target as Element | null)?.closest?.("[role=grid], [data-board], [role=dialog], [role=alertdialog], [data-vaul-drawer]")) return;
+      if ((e.target as Element | null)?.closest?.("[role=grid], [data-board], [role=dialog], [role=alertdialog], [data-vaul-drawer]"))
+        return;
       start = { x: t.clientX, y: t.clientY };
       engaged = false;
       samples = [{ x: t.clientX, t: e.timeStamp }];

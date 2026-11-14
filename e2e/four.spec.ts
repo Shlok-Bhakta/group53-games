@@ -26,7 +26,8 @@ async function fourGame(phones: Phones, mode: "chess:four" | "chess:realtime4") 
 // The phone playing each color.
 async function byColor(id: string, players: Player[], pages: Page[]) {
   const m = await getMatch(id);
-  const pageOf = (color: string) => pages[players.findIndex((p) => p.userId === m.players.find((s: { color: string }) => s.color === color).userId)];
+  const pageOf = (color: string) =>
+    pages[players.findIndex((p) => p.userId === m.players.find((s: { color: string }) => s.color === color).userId)];
   return { red: pageOf("red"), blue: pageOf("blue"), yellow: pageOf("yellow"), green: pageOf("green") };
 }
 
@@ -70,7 +71,9 @@ test.describe("4-player chess", () => {
     const rules = page.locator("section", { has: page.getByRole("button", { name: "How to play" }) });
     const open = (await rules.boundingBox())!.height;
     const heights: number[] = await page.evaluate(async () => {
-      const btn = [...document.querySelectorAll<HTMLElement>("[data-screen]:not([inert]) button")].find((b) => b.textContent?.includes("How to play"))!;
+      const btn = [...document.querySelectorAll<HTMLElement>("[data-screen]:not([inert]) button")].find((b) =>
+        b.textContent?.includes("How to play"),
+      )!;
       const section = btn.closest("section")!;
       const out: number[] = [];
       btn.click();
@@ -83,7 +86,10 @@ test.describe("4-player chess", () => {
     });
     const closed = heights.at(-1)!;
     expect(closed).toBeLessThan(60);
-    expect(heights.some((h) => h > closed + 40 && h < open - 40), "passes through in-between heights").toBe(true);
+    expect(
+      heights.some((h) => h > closed + 40 && h < open - 40),
+      "passes through in-between heights",
+    ).toBe(true);
     const steps = heights.slice(1).map((h, i) => heights[i] - h);
     expect(Math.max(...steps), "no frame drops more than a quarter of the way").toBeLessThan((open - closed) / 4);
     await page.getByRole("button", { name: "Back" }).click();
@@ -117,7 +123,10 @@ test.describe("4-player chess", () => {
     // URL to the app, which routes there and takes the seat.
     await d.goto("/");
     await expect(d.getByRole("region", { name: "Challenge from Shlok" })).toBeVisible();
-    await d.evaluate((url) => navigator.serviceWorker.dispatchEvent(new MessageEvent("message", { data: { type: "navigate", url } })), `${new URL(d.url()).origin}/chess/${id}?accept=1`);
+    await d.evaluate(
+      (url) => navigator.serviceWorker.dispatchEvent(new MessageEvent("message", { data: { type: "navigate", url } })),
+      `${new URL(d.url()).origin}/chess/${id}?accept=1`,
+    );
     for (const p of pages) await expect(p.getByRole("grid", { name: "4-player chess board" })).toBeVisible();
     expect(d.url()).not.toContain("accept=1");
 
@@ -127,7 +136,9 @@ test.describe("4-player chess", () => {
     await armiesAtTheBottom(await byColor(id, players, pages), "4-player chess board");
   });
 
-  test("a move waits for Confirm and lands live, a resignation greys an army, the move line steps back, and the last one standing wins", async ({ phones }) => {
+  test("a move waits for Confirm and lands live, a resignation greys an army, the move line steps back, and the last one standing wins", async ({
+    phones,
+  }) => {
     const g = await fourGame(phones, "chess:four");
     for (const p of g.pages) await expect(p.getByRole("grid", { name: "4-player chess board" })).toBeVisible();
 
@@ -234,7 +245,9 @@ test.describe("4-player chess", () => {
     expect((await getMatch(id)).status).toBe("active");
   });
 
-  test("real-time 4-player: everyone's army at the bottom, moves land on every phone, and a fallen king greys an army", async ({ phones }) => {
+  test("real-time 4-player: everyone's army at the bottom, moves land on every phone, and a fallen king greys an army", async ({
+    phones,
+  }) => {
     test.setTimeout(60_000);
     const g = await fourGame(phones, "chess:realtime4");
     const board = "4-player real-time chess board";
@@ -243,8 +256,14 @@ test.describe("4-player chess", () => {
     await armiesAtTheBottom({ red: g.red, blue: g.blue, yellow: g.yellow, green: g.green }, board);
 
     // Once the countdown's over on every phone, all four move at once.
-    for (const p of g.pages) await expect(p.getByRole("grid", { name: board })).toHaveAttribute("data-playing", "true", { timeout: 15_000 });
-    await Promise.all([tapMove(g.red, "e2", "e3"), tapMove(g.blue, "b5", "c5"), tapMove(g.yellow, "e13", "e12"), tapMove(g.green, "m5", "l5")]);
+    for (const p of g.pages)
+      await expect(p.getByRole("grid", { name: board })).toHaveAttribute("data-playing", "true", { timeout: 15_000 });
+    await Promise.all([
+      tapMove(g.red, "e2", "e3"),
+      tapMove(g.blue, "b5", "c5"),
+      tapMove(g.yellow, "e13", "e12"),
+      tapMove(g.green, "m5", "l5"),
+    ]);
     for (const p of g.pages) {
       await expect.poll(() => pieceOn(p, "redP", "e3"), { timeout: 6000 }).toBe(true);
       await expect.poll(() => pieceOn(p, "greenP", "l5"), { timeout: 6000 }).toBe(true);

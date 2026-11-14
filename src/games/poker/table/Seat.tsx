@@ -14,7 +14,25 @@ import { DECK_W, FLIGHT, Flying, Roll, SPRING, toward } from "./motion";
 
 // Someone along the rail: their avatar sits on the table's edge, with their cards behind it, on a tile with
 // their name and chips.
-export function Seat({ player, seat, show, avatar, tight, room, active, rung }: { player: Player; seat: number; show: Show; avatar: number; tight: boolean; room: number; active: boolean; rung: string[] }) {
+export function Seat({
+  player,
+  seat,
+  show,
+  avatar,
+  tight,
+  room,
+  active,
+  rung,
+}: {
+  player: Player;
+  seat: number;
+  show: Show;
+  avatar: number;
+  tight: boolean;
+  room: number;
+  active: boolean;
+  rung: string[];
+}) {
   const s = show.state;
   const { online } = useHere(player.userId);
   const { dealt, out, folded, allIn, label } = statusOf(show, seat);
@@ -33,22 +51,44 @@ export function Seat({ player, seat, show, avatar, tight, room, active, rung }: 
       data-out={out || folded}
       role="group"
       aria-label={`${player.name}, ${chips(show.stacks[seat])} chips${label ? `, ${label}` : ""}`}
-      className={cn("relative flex min-w-0 max-w-[92px] flex-1 flex-col items-center transition-[translate] duration-300", up && "-translate-y-1")}
+      className={cn(
+        "relative flex min-w-0 max-w-[92px] flex-1 flex-col items-center transition-[translate] duration-300",
+        up && "-translate-y-1",
+      )}
       style={{ "--seat": color } as CSSProperties}
     >
       <span className="relative z-[1] block" data-spot={seat}>
         {shown ? (
           <span className="absolute left-1/2 z-[2] flex -translate-x-1/2" style={{ top: -shownW * 1.4 - 2 }}>
             {shown.map((c, i) => (
-              <motion.span key={c} style={{ marginLeft: i ? shownStep - shownW : 0 }} initial={{ rotateY: 90 }} animate={{ rotateY: 0 }} transition={{ duration: 0.3 * PACE, delay: i * 0.08 * PACE }}>
+              <motion.span
+                key={c}
+                style={{ marginLeft: i ? shownStep - shownW : 0 }}
+                initial={{ rotateY: 90 }}
+                animate={{ rotateY: 0 }}
+                transition={{ duration: 0.3 * PACE, delay: i * 0.08 * PACE }}
+              >
                 <PlayingCard card={c} width={shownW} best={rung.includes(c)} />
               </motion.span>
             ))}
           </span>
         ) : (
-          <Backs key={`backs${s.hand}`} count={held} folded={folded || (s.turn === -1 && !show.busy)} color={color} width={tight ? 15 : 18} flying={show.dealtCards !== Infinity} />
+          <Backs
+            key={`backs${s.hand}`}
+            count={held}
+            folded={folded || (s.turn === -1 && !show.busy)}
+            color={color}
+            width={tight ? 15 : 18}
+            flying={show.dealtCards !== Infinity}
+          />
         )}
-        <span className={cn("block rounded-full transition-[box-shadow,opacity,filter] duration-300", up && "poker-up", (folded || out) && "opacity-55 grayscale")}>
+        <span
+          className={cn(
+            "block rounded-full transition-[box-shadow,opacity,filter] duration-300",
+            up && "poker-up",
+            (folded || out) && "opacity-55 grayscale",
+          )}
+        >
           <PlayerAvatar player={player} glow={player.glow} size={avatar} />
         </span>
         {/* Outside the dimmed part: someone who's folded can still be right here. */}
@@ -70,7 +110,10 @@ export function Seat({ player, seat, show, avatar, tight, room, active, rung }: 
         )}
         {won && won.net > 0 && <Float net={won.net} color={color} hand={s.hand} high={!!shown} />}
       </span>
-      <div className="poker-tile -mt-[calc(var(--av)/2)] flex w-full flex-col items-center rounded-md bg-card px-0.5 pb-1.5" style={{ "--av": `${avatar}px`, paddingTop: avatar / 2 + 8 } as CSSProperties}>
+      <div
+        className="poker-tile -mt-[calc(var(--av)/2)] flex w-full flex-col items-center rounded-md bg-card px-0.5 pb-1.5"
+        style={{ "--av": `${avatar}px`, paddingTop: avatar / 2 + 8 } as CSSProperties}
+      >
         <NameLine player={player} name={player.name} />
         <span className="font-display text-footnote leading-tight">
           <Roll value={show.stacks[seat]} />
@@ -87,7 +130,8 @@ export function statusOf(show: Show, seat: number) {
   const out = isOut(s, seat);
   const folded = dealt && show.folded[seat];
   const allIn = dealt && !folded && !out && show.stacks[seat] === 0 && show.dealtCards === Infinity;
-  const latest = s.turn >= 0 && !show.busy ? s.log.filter((e) => e.seat === seat && e.street === s.street && e.kind !== "blind").at(-1) : undefined;
+  const latest =
+    s.turn >= 0 && !show.busy ? s.log.filter((e) => e.seat === seat && e.street === s.street && e.kind !== "blind").at(-1) : undefined;
   const label = out ? "Out" : allIn ? "All in" : folded ? "Fold" : latest ? actionLabel(latest) : null;
   return { dealt, out, folded, allIn, label };
 }
@@ -108,7 +152,16 @@ function Backs({ count, folded, color, width, flying }: { count: number; folded:
       const to = toward(el, "[data-deck]");
       if (!to) return;
       // It stays where it lands, invisible, until the hand's over: going back to its place for even a frame shows as a blip.
-      animate(el, { x: to.x, y: to.y, rotate: k % 2 ? 150 : -150, scale: DECK_W / width, opacity: [1, 1, 0] }, { duration: 0.42 * PACE, delay: k * 0.045 * PACE, ease: [0.45, 0, 0.3, 1], opacity: { times: [0, 0.85, 1], duration: 0.42 * PACE, delay: k * 0.045 * PACE } });
+      animate(
+        el,
+        { x: to.x, y: to.y, rotate: k % 2 ? 150 : -150, scale: DECK_W / width, opacity: [1, 1, 0] },
+        {
+          duration: 0.42 * PACE,
+          delay: k * 0.045 * PACE,
+          ease: [0.45, 0, 0.3, 1],
+          opacity: { times: [0, 0.85, 1], duration: 0.42 * PACE, delay: k * 0.045 * PACE },
+        },
+      );
     });
   }, [folded, still, width]);
   if (never) return null;
@@ -118,9 +171,18 @@ function Backs({ count, folded, color, width, flying }: { count: number; folded:
       {Array.from({ length: count }, (_, k) => {
         const angle = count > 1 ? -spread / 2 + (spread * k) / (count - 1) : 0;
         return (
-          <span key={k} ref={(el) => void (hole.current[k] = el)} className="absolute block" style={{ left: -width / 2, top: -width * 0.75 }}>
+          <span
+            key={k}
+            ref={(el) => void (hole.current[k] = el)}
+            className="absolute block"
+            style={{ left: -width / 2, top: -width * 0.75 }}
+          >
             <Flying width={width} fly={flying}>
-              <PlayingCard width={width} seat={color} style={{ transform: `rotate(${angle}deg) translateX(${angle / 5}px)`, transformOrigin: "50% 120%" }} />
+              <PlayingCard
+                width={width}
+                seat={color}
+                style={{ transform: `rotate(${angle}deg) translateX(${angle / 5}px)`, transformOrigin: "50% 120%" }}
+              />
             </Flying>
           </span>
         );
@@ -131,21 +193,49 @@ function Backs({ count, folded, color, width, flying }: { count: number; folded:
 
 // Chips in front of someone this street. The outer span is what flies to the pile: it holds where it lands
 // and goes when the amounts are cleared, so nothing comes back for a frame.
-export function Bet({ amount, color, sweeping, order, tight, className, label }: { amount: number; color: string; sweeping: boolean; order: number; tight?: boolean; className?: string; label: string }) {
+export function Bet({
+  amount,
+  color,
+  sweeping,
+  order,
+  tight,
+  className,
+  label,
+}: {
+  amount: number;
+  color: string;
+  sweeping: boolean;
+  order: number;
+  tight?: boolean;
+  className?: string;
+  label: string;
+}) {
   const ref = useRef<HTMLSpanElement>(null);
   const still = useReducedMotion();
   useEffect(() => {
     if (!sweeping || still || !ref.current) return;
     const to = toward(ref.current, "[data-pile]");
     if (!to) return;
-    const go = animate(ref.current, { x: to.x, y: to.y, scale: 0.7, opacity: [1, 1, 0] }, { duration: 0.34 * PACE, delay: order * 0.03 * PACE, ease: FLIGHT, opacity: { times: [0, 0.85, 1], duration: 0.34 * PACE, delay: order * 0.03 * PACE } });
+    const go = animate(
+      ref.current,
+      { x: to.x, y: to.y, scale: 0.7, opacity: [1, 1, 0] },
+      {
+        duration: 0.34 * PACE,
+        delay: order * 0.03 * PACE,
+        ease: FLIGHT,
+        opacity: { times: [0, 0.85, 1], duration: 0.34 * PACE, delay: order * 0.03 * PACE },
+      },
+    );
     return () => go.stop();
   }, [sweeping, still, order]);
   return (
     <span ref={ref} data-bet className={cn("block", className)} role="img" aria-label={label}>
       <motion.span
         key={amount}
-        className={cn("poker-plate flex items-center gap-[3px] whitespace-nowrap rounded-full py-px pl-px font-display", tight ? "pr-1 text-caption" : "pr-[7px] text-footnote")}
+        className={cn(
+          "poker-plate flex items-center gap-[3px] whitespace-nowrap rounded-full py-px pl-px font-display",
+          tight ? "pr-1 text-caption" : "pr-[7px] text-footnote",
+        )}
         initial={{ opacity: 0.1, scale: 0.6, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ duration: 0.28 * PACE, ease: SPRING }}
@@ -167,7 +257,10 @@ function Label({ text, hot }: { text: string | null; hot: boolean }) {
           animate={{ opacity: 1, y: 0, scale: 1, x: "-50%" }}
           exit={{ opacity: 0, x: "-50%" }}
           transition={{ duration: 0.22 * PACE, ease: SPRING }}
-          className={cn("absolute -bottom-1.5 left-1/2 z-[2] whitespace-nowrap rounded-full px-1.5 text-caption font-bold leading-[15px]", hot ? "bg-[var(--tile-hit)] text-[var(--tile-hit-ink)]" : "bg-foreground text-background")}
+          className={cn(
+            "absolute -bottom-1.5 left-1/2 z-[2] whitespace-nowrap rounded-full px-1.5 text-caption font-bold leading-[15px]",
+            hot ? "bg-[var(--tile-hit)] text-[var(--tile-hit-ink)]" : "bg-foreground text-background",
+          )}
         >
           {text}
         </motion.span>
@@ -196,7 +289,14 @@ export function Float({ net, color, hand, high }: { net: number; color: string; 
 // smallest text size, like the letters on a card.
 export function Dealer({ className }: { className?: string }) {
   return (
-    <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ duration: 0.25 * PACE, ease: SPRING }} className={cn("poker-dealer absolute z-[2] grid size-[17px] place-items-center rounded-full font-display text-[10px]", className)} role="img" aria-label="Dealer">
+    <motion.span
+      initial={{ scale: 0 }}
+      animate={{ scale: 1 }}
+      transition={{ duration: 0.25 * PACE, ease: SPRING }}
+      className={cn("poker-dealer absolute z-[2] grid size-[17px] place-items-center rounded-full font-display text-[10px]", className)}
+      role="img"
+      aria-label="Dealer"
+    >
       D
     </motion.span>
   );
@@ -227,7 +327,11 @@ export function PayChip({ seat, i, color }: { seat: number; i: number; color: st
     const start = { x: from.left - table.left + from.width / 2 - 9, y: from.top - table.top + from.height / 2 - 9 };
     const end = { x: to.left - table.left + to.width / 2 - 9, y: to.top - table.top + to.height / 2 - 9 };
     const delay = i * 0.045 * PACE;
-    animate(el, { x: [start.x, end.x], y: [start.y, end.y], scale: [1, 0.8], opacity: [1, 1, 0] }, { duration: 0.48 * PACE, delay, ease: FLIGHT, opacity: { times: [0, 0.8, 1], duration: 0.48 * PACE, delay } });
+    animate(
+      el,
+      { x: [start.x, end.x], y: [start.y, end.y], scale: [1, 0.8], opacity: [1, 1, 0] },
+      { duration: 0.48 * PACE, delay, ease: FLIGHT, opacity: { times: [0, 0.8, 1], duration: 0.48 * PACE, delay } },
+    );
   }, [seat, i, still]);
   return (
     <span ref={ref} aria-hidden="true" className="pointer-events-none absolute left-0 top-0 z-30 block opacity-0">

@@ -22,7 +22,8 @@ export const SEAT_COLORS = ["red", "blue", "yellow", "green", "purple", "orange"
 
 export const seatOf = (match: Doc<"matches">, userId: Id<"users">) => match.players.findIndex((p) => p.userId === userId);
 export const isPlayer = (match: Doc<"matches">, userId: Id<"users">) => match.players.some((p) => p.userId === userId);
-export const opponentsOf = (match: Doc<"matches">, userId: Id<"users">) => match.players.filter((p) => p.userId !== userId).map((p) => p.userId);
+export const opponentsOf = (match: Doc<"matches">, userId: Id<"users">) =>
+  match.players.filter((p) => p.userId !== userId).map((p) => p.userId);
 export const playerWith = (match: Doc<"matches">, color: string) => match.players.find((p) => p.color === color)!.userId;
 
 type Want = {

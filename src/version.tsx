@@ -93,7 +93,11 @@ export function useVersionCheck() {
   useEffect(() => void check(), [pathname]);
 }
 
-const usePhase = () => useSyncExternalStore((l) => (listeners.add(l), () => listeners.delete(l)), () => phase);
+const usePhase = () =>
+  useSyncExternalStore(
+    (l) => (listeners.add(l), () => listeners.delete(l)),
+    () => phase,
+  );
 
 export function UpdateOverlay() {
   const p = usePhase();
@@ -110,12 +114,22 @@ export function UpdateOverlay() {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.25 }}
         >
-          <motion.div className="flex flex-col items-center gap-5" initial={{ scale: 0.9, y: 12 }} animate={{ scale: 1, y: 0 }} transition={{ type: "spring", bounce: 0.35, duration: 0.5 }}>
+          <motion.div
+            className="flex flex-col items-center gap-5"
+            initial={{ scale: 0.9, y: 12 }}
+            animate={{ scale: 1, y: 0 }}
+            transition={{ type: "spring", bounce: 0.35, duration: 0.5 }}
+          >
             <Tiles word="UPDATE" states={["green", "yellow", "green", "yellow", "green", "yellow"]} size="md" flip label="Updating" />
             <p className="font-display text-heading">Getting the new version</p>
             <span className="flex gap-1.5" aria-hidden="true">
               {[0, 1, 2].map((i) => (
-                <motion.span key={i} className="size-2 rounded-full bg-primary" animate={{ opacity: [0.25, 1, 0.25], y: [0, -4, 0] }} transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15 }} />
+                <motion.span
+                  key={i}
+                  className="size-2 rounded-full bg-primary"
+                  animate={{ opacity: [0.25, 1, 0.25], y: [0, -4, 0] }}
+                  transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15 }}
+                />
               ))}
             </span>
           </motion.div>
@@ -132,7 +146,11 @@ export function UpdateOverlay() {
           transition={{ type: "spring", bounce: 0.4, duration: 0.5 }}
         >
           <span className="flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 font-semibold text-primary-foreground shadow-lg">
-            <motion.span initial={{ scale: 0, rotate: -45 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", bounce: 0.6, duration: 0.5, delay: 0.15 }}>
+            <motion.span
+              initial={{ scale: 0, rotate: -45 }}
+              animate={{ scale: 1, rotate: 0 }}
+              transition={{ type: "spring", bounce: 0.6, duration: 0.5, delay: 0.15 }}
+            >
               <CheckCircleIcon size={20} weight="fill" />
             </motion.span>
             You're up to date

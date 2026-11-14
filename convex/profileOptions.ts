@@ -5,8 +5,30 @@ export const FRAMES = ["none", "solid", "comet", "pulse", "neon", "gold", "fire"
 export const CUSTOM_COLOR_FRAMES: readonly Frame[] = ["solid", "comet", "pulse", "neon"];
 export const EFFECTS = ["none", "foil", "crt"] as const;
 export const BADGES = [
-  "", "👑", "🐐", "🔥", "💀", "🤡", "🧠", "🎯", "🐍", "🍀", "🥶", "😈",
-  "🗿", "🦀", "🫡", "💻", "🐛", "☕", "🚀", "🐧", "👾", "🃏", "🎲", "⚡",
+  "",
+  "👑",
+  "🐐",
+  "🔥",
+  "💀",
+  "🤡",
+  "🧠",
+  "🎯",
+  "🐍",
+  "🍀",
+  "🥶",
+  "😈",
+  "🗿",
+  "🦀",
+  "🫡",
+  "💻",
+  "🐛",
+  "☕",
+  "🚀",
+  "🐧",
+  "👾",
+  "🃏",
+  "🎲",
+  "⚡",
 ] as const;
 export const FRAME_COLORS = ["#f8fafc", "#5fae57", "#e3b341", "#e5484d", "#3b82f6", "#a855f7", "#ec4899", "#22d3ee"] as const;
 export const TAGLINE_MAX = 40;

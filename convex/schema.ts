@@ -39,7 +39,9 @@ export default defineSchema({
     path: v.string(),
     tap: v.optional(v.object({ x: v.number(), y: v.number(), path: v.string(), seq: v.number() })),
   }).index("by_user", ["userId"]),
-  taps: defineTable({ userId: v.id("users"), x: v.number(), y: v.number(), path: v.string(), seq: v.number() }).index("by_user", ["userId"]),
+  taps: defineTable({ userId: v.id("users"), x: v.number(), y: v.number(), path: v.string(), seq: v.number() }).index("by_user", [
+    "userId",
+  ]),
   // One row per game of anything. `state` is mode-specific (see convex/chess.ts).
   matches: defineTable({
     mode: v.string(),
@@ -61,7 +63,12 @@ export default defineSchema({
     drawOffer: v.optional(v.id("users")),
     result: v.optional(
       // `standings` (four-player): places best first, ties sharing a place.
-      v.object({ winners: v.array(v.id("users")), draw: v.boolean(), reason: v.string(), standings: v.optional(v.array(v.array(v.id("users")))) }),
+      v.object({
+        winners: v.array(v.id("users")),
+        draw: v.boolean(),
+        reason: v.string(),
+        standings: v.optional(v.array(v.array(v.id("users")))),
+      }),
     ),
     ratingChanges: v.optional(v.array(v.object({ userId: v.id("users"), before: v.number(), after: v.number() }))),
     rematchOf: v.optional(v.id("matches")),
@@ -98,7 +105,14 @@ export default defineSchema({
   rtSnapshots: defineTable({ matchId: v.id("matches"), state: v.any() }).index("by_match", ["matchId"]),
   // Golf's open world (convex/golf.ts): one row per world. `awake` while the server is settling it.
   // A game's holes have one each too (`matchId`, `hole`, keyed "m:<match>:<hole>").
-  golfWorlds: defineTable({ key: v.string(), startAt: v.number(), awake: v.boolean(), collide: v.boolean(), matchId: v.optional(v.id("matches")), hole: v.optional(v.number()) })
+  golfWorlds: defineTable({
+    key: v.string(),
+    startAt: v.number(),
+    awake: v.boolean(),
+    collide: v.boolean(),
+    matchId: v.optional(v.id("matches")),
+    hole: v.optional(v.number()),
+  })
     .index("by_key", ["key"])
     .index("by_match", ["matchId"]),
   // A game's holes, built from its settings when it starts (convex/golf/build.ts), the first one first.
@@ -141,20 +155,42 @@ export default defineSchema({
   // A game's hole as it started, with every ball on the tee: with its commands, the whole hole can be played back.
   golfStarts: defineTable({ worldId: v.id("golfWorlds"), state: v.any() }).index("by_world", ["worldId"]),
   // What a player's carrying to the next golf hole of their run on a course.
-  golfBags: defineTable({ course: v.string(), userId: v.id("users"), bag: v.array(v.string()), at: v.number() }).index("by_course_user", ["course", "userId"]),
+  golfBags: defineTable({ course: v.string(), userId: v.id("users"), bag: v.array(v.string()), at: v.number() }).index("by_course_user", [
+    "course",
+    "userId",
+  ]),
   // Each player's score on each golf hole, from the server's own run of the world, so it can't be faked.
-  golfScores: defineTable({ hole: v.string(), userId: v.id("users"), best: v.number(), last: v.number(), plays: v.number(), at: v.number() })
-    .index("by_hole_user", ["hole", "userId"]),
+  golfScores: defineTable({
+    hole: v.string(),
+    userId: v.id("users"),
+    best: v.number(),
+    last: v.number(),
+    plays: v.number(),
+    at: v.number(),
+  }).index("by_hole_user", ["hole", "userId"]),
   // What players mustn't see: a player's own hand (`userId` set; a Scrabble rack) or the game's (no
   // `userId`; the tile bag). Only ever returned to its owner.
   // Landlord's history: one row per move, with what it did (`events`, numbered from `seq`), who did it (a seat,
   // or -1 for the game) and the public state after it, so a phone can play back everything since it last
   // looked. Only ever inserted.
-  landlordLog: defineTable({ matchId: v.id("matches"), seq: v.number(), by: v.number(), events: v.any(), state: v.any(), at: v.number() }).index("by_match", ["matchId", "seq"]),
-  secrets: defineTable({ matchId: v.id("matches"), userId: v.optional(v.id("users")), data: v.any() }).index("by_match_user", ["matchId", "userId"]),
+  landlordLog: defineTable({
+    matchId: v.id("matches"),
+    seq: v.number(),
+    by: v.number(),
+    events: v.any(),
+    state: v.any(),
+    at: v.number(),
+  }).index("by_match", ["matchId", "seq"]),
+  secrets: defineTable({ matchId: v.id("matches"), userId: v.optional(v.id("users")), data: v.any() }).index("by_match_user", [
+    "matchId",
+    "userId",
+  ]),
   // A player's plan for their next turn (tiles laid out on the board, rack order), saved as they go so it's
   // there when they come back. Private to them; others only see that they're planning.
-  drafts: defineTable({ matchId: v.id("matches"), userId: v.id("users"), data: v.any(), count: v.number(), at: v.number() }).index("by_match_user", ["matchId", "userId"]),
+  drafts: defineTable({ matchId: v.id("matches"), userId: v.id("users"), data: v.any(), count: v.number(), at: v.number() }).index(
+    "by_match_user",
+    ["matchId", "userId"],
+  ),
   // Game links opened outside the app, sent on to the player's phone as a push (convex/links.ts). Kept
   // to rate-limit them.
   handoffs: defineTable({ userId: v.id("users"), matchId: v.id("matches"), at: v.number() }).index("by_user", ["userId"]),
@@ -260,7 +296,13 @@ export default defineSchema({
     .index("by_status_filled", ["status", "filledAt"]),
   // Everything that can be traded: US listings from Nasdaq's daily files, plus whatever Yahoo's search has
   // turned up. `search` is the ticker and name together.
-  stockSymbols: defineTable({ symbol: v.string(), name: v.string(), type: v.optional(v.string()), exchange: v.optional(v.string()), search: v.string() })
+  stockSymbols: defineTable({
+    symbol: v.string(),
+    name: v.string(),
+    type: v.optional(v.string()),
+    exchange: v.optional(v.string()),
+    search: v.string(),
+  })
     .index("by_symbol", ["symbol"])
     .searchIndex("search_text", { searchField: "search" }),
   // Searches sent to Yahoo, so each is asked once a week. The sidecar answers what's pending.
@@ -273,7 +315,9 @@ export default defineSchema({
   // Everyone's net worth over the game: one row per moment, for those who've traded (anyone missing is still
   // on $10,000). Written every 15 minutes and on every fill, and thinned out as it ages (`thinWorth`).
   stockWorth: defineTable({ t: v.number(), worths: v.array(v.object({ u: v.id("users"), w: v.number() })) }).index("by_t", ["t"]),
-  stockFeeds: defineTable({ source: v.string(), state: v.string(), detail: v.optional(v.string()), at: v.number() }).index("by_source", ["source"]),
+  stockFeeds: defineTable({ source: v.string(), state: v.string(), detail: v.optional(v.string()), at: v.number() }).index("by_source", [
+    "source",
+  ]),
   pushSubscriptions: defineTable({
     userId: v.id("users"),
     endpoint: v.string(),
@@ -286,7 +330,14 @@ export default defineSchema({
   // Games built and hosted apart from the app (convex/hosted.ts): which build is live, and its files.
   // What test players would have been pushed, kept only on the throwaway test backend (ALLOW_TEST_HELPERS)
   // so e2e tests can check who hears what. Never written on kiwi.
-  testPushes: defineTable({ userId: v.id("users"), title: v.string(), body: v.string(), url: v.string(), tag: v.optional(v.string()), badge: v.number() }).index("by_user", ["userId"]),
+  testPushes: defineTable({
+    userId: v.id("users"),
+    title: v.string(),
+    body: v.string(),
+    url: v.string(),
+    tag: v.optional(v.string()),
+    badge: v.number(),
+  }).index("by_user", ["userId"]),
   hostedGames: defineTable({ game: v.string(), build: v.string(), previous: v.optional(v.string()) }).index("by_game", ["game"]),
   hostedFiles: defineTable({
     game: v.string(),

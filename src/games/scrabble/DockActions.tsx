@@ -1,5 +1,12 @@
 import { useMutation } from "convex/react";
-import { ArrowCounterClockwiseIcon, ArrowsClockwiseIcon, HandIcon, ShuffleIcon, SkipForwardIcon, ToteSimpleIcon } from "@phosphor-icons/react";
+import {
+  ArrowCounterClockwiseIcon,
+  ArrowsClockwiseIcon,
+  HandIcon,
+  ShuffleIcon,
+  SkipForwardIcon,
+  ToteSimpleIcon,
+} from "@phosphor-icons/react";
 import { api } from "../../../convex/_generated/api";
 import type { MatchView } from "../../../convex/matches";
 import type { evaluate, Placement } from "../../../convex/scrabble/engine";
@@ -78,23 +85,44 @@ export function DockActions({
     );
   }
 
-  const label =
-    !evaluation ? (myTurn ? "Play" : "Your turn's next")
-    : !evaluation.ok ? evaluation.error
-    : bad.length ? (bad.length === 1 ? `${bad[0]} isn't a word` : `${bad.length} aren't words`)
-    : checking ? `${evaluation.score} points`
-    : myTurn ? `Play ${evaluation.words[0].word} for ${evaluation.score}`
-    : `Planned: ${evaluation.words[0].word}, ${evaluation.score}`;
+  const label = !evaluation
+    ? myTurn
+      ? "Play"
+      : "Your turn's next"
+    : !evaluation.ok
+      ? evaluation.error
+      : bad.length
+        ? bad.length === 1
+          ? `${bad[0]} isn't a word`
+          : `${bad.length} aren't words`
+        : checking
+          ? `${evaluation.score} points`
+          : myTurn
+            ? `Play ${evaluation.words[0].word} for ${evaluation.score}`
+            : `Planned: ${evaluation.words[0].word}, ${evaluation.score}`;
   const canPlay = myTurn && !!evaluation?.ok && bad.length === 0 && !checking;
 
   return (
     <div className="flex items-stretch gap-2">
       <BagButton count={bagCount} onClick={onBag} />
-      <Button variant="secondary" size="dock-square" className={tool} disabled={!myTurn} onClick={() => setSwapping([])} aria-label="Swap or pass">
+      <Button
+        variant="secondary"
+        size="dock-square"
+        className={tool}
+        disabled={!myTurn}
+        onClick={() => setSwapping([])}
+        aria-label="Swap or pass"
+      >
         <ArrowsClockwiseIcon weight="bold" />
         Swap
       </Button>
-      <AsyncButton size="xl" className="min-w-0 flex-1 px-3" disabled={!canPlay} icon={myTurn ? <HandIcon weight="fill" /> : undefined} onClick={onPlay}>
+      <AsyncButton
+        size="xl"
+        className="min-w-0 flex-1 px-3"
+        disabled={!canPlay}
+        icon={myTurn ? <HandIcon weight="fill" /> : undefined}
+        onClick={onPlay}
+      >
         <span className="truncate">{label}</span>
       </AsyncButton>
       {placed.length > 0 ? (

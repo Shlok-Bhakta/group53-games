@@ -27,9 +27,19 @@ const worldOfMatch = async (t: T, id: Id<"matches">) => {
   return t.run(async (ctx) => (await ctx.db.get(st.worldId as Id<"golfWorlds">))!);
 };
 const courseOfHole = (t: T, id: Id<"matches">, n: number) =>
-  t.run(async (ctx) => (await ctx.db.query("golfCourses").withIndex("by_match", (q) => q.eq("matchId", id).eq("n", n)).unique())!.course as Course);
+  t.run(
+    async (ctx) =>
+      (await ctx.db
+        .query("golfCourses")
+        .withIndex("by_match", (q) => q.eq("matchId", id).eq("n", n))
+        .unique())!.course as Course,
+  );
 const pushes = (t: T) =>
-  t.run(async (ctx) => (await ctx.db.system.query("_scheduled_functions").collect()).filter((s) => s.name === "push:sendToUser").map((s) => s.args[0] as { userId: Id<"users">; title: string; body: string }));
+  t.run(async (ctx) =>
+    (await ctx.db.system.query("_scheduled_functions").collect())
+      .filter((s) => s.name === "push:sendToUser")
+      .map((s) => s.args[0] as { userId: Id<"users">; title: string; body: string }),
+  );
 
 async function game(t: T, n: number, mode: "golf:turns" | "golf:live", settings: Record<string, number>) {
   const names = ["Shlok", "Chris", "Sam", "Alex"];
@@ -57,11 +67,29 @@ async function settle(t: T, id: Id<"matches">, seconds: number) {
 async function worldNow(t: T, id: Id<"matches">) {
   const w = await worldOfMatch(t, id);
   const c = await courseOfHole(t, id, w.hole!);
-  const snap = await t.run(async (ctx) => (await ctx.db.query("golfSnapshots").withIndex("by_world", (q) => q.eq("worldId", w._id)).unique())!);
-  const cmds = await t.run((ctx) => ctx.db.query("golfCommands").withIndex("by_world_tick", (q) => q.eq("worldId", w._id)).collect());
+  const snap = await t.run(
+    async (ctx) =>
+      (await ctx.db
+        .query("golfSnapshots")
+        .withIndex("by_world", (q) => q.eq("worldId", w._id))
+        .unique())!,
+  );
+  const cmds = await t.run((ctx) =>
+    ctx.db
+      .query("golfCommands")
+      .withIndex("by_world_tick", (q) => q.eq("worldId", w._id))
+      .collect(),
+  );
   const s = unpack(snap.state as Packed);
   const now = Math.floor(((Date.now() - w.startAt) * TPS) / 1000);
-  advance(s, worldOf(c), Math.max(s.tick, now) + 6, cmds.map((r) => ({ tick: r.tick, by: r.by, seq: r.seq, kind: r.kind, a: r.a, p: r.p, i: r.i, x: r.x, y: r.y })).sort((a, b) => a.tick - b.tick || (a.by < b.by ? -1 : a.by > b.by ? 1 : 0) || a.seq - b.seq));
+  advance(
+    s,
+    worldOf(c),
+    Math.max(s.tick, now) + 6,
+    cmds
+      .map((r) => ({ tick: r.tick, by: r.by, seq: r.seq, kind: r.kind, a: r.a, p: r.p, i: r.i, x: r.x, y: r.y }))
+      .sort((a, b) => a.tick - b.tick || (a.by < b.by ? -1 : a.by > b.by ? 1 : 0) || a.seq - b.seq),
+  );
   return { w, c, s };
 }
 
@@ -70,14 +98,33 @@ async function playTurn(t: T, id: Id<"matches">, players: Player[]) {
   const m = await get(t, id);
   const p = players.find((x) => x.userId === m.turn)!;
   const { w, c, s } = await worldNow(t, id);
-  const shot = bestShot(worldOf(c), JSON.parse(JSON.stringify({ ...s, balls: s.balls.map(({ boxes: _b, gone: _g, mines: _m, strikes: _s, patches: _p, events: _e, ...rest }) => rest) })), p.userId, undefined, { angles: 16, powers: [0.2, 0.4, 0.6, 0.8, 1] })!;
+  const shot = bestShot(
+    worldOf(c),
+    JSON.parse(
+      JSON.stringify({
+        ...s,
+        balls: s.balls.map(({ boxes: _b, gone: _g, mines: _m, strikes: _s, patches: _p, events: _e, ...rest }) => rest),
+      }),
+    ),
+    p.userId,
+    undefined,
+    { angles: 16, powers: [0.2, 0.4, 0.6, 0.8, 1] },
+  )!;
   const now = Math.floor(((Date.now() - w.startAt) * TPS) / 1000);
-  await p.as.mutation(api.golf.act, { worldId: w._id, kind: "shot", clientTick: now, seq: Math.floor(Math.random() * 1e6), a: shot.a, p: shot.p });
+  await p.as.mutation(api.golf.act, {
+    worldId: w._id,
+    kind: "shot",
+    clientTick: now,
+    seq: Math.floor(Math.random() * 1e6),
+    a: shot.a,
+    p: shot.p,
+  });
   const before = m.moveCount;
   for (let i = 0; i < 40; i++) {
     await settle(t, id, 1);
     const after = await get(t, id);
-    if (after.moveCount !== before || after.status !== "active" || (after.state as GolfState).hole !== (m.state as GolfState).hole) return p;
+    if (after.moveCount !== before || after.status !== "active" || (after.state as GolfState).hole !== (m.state as GolfState).hole)
+      return p;
   }
   throw new Error("The turn never passed.");
 }
@@ -104,8 +151,12 @@ describe("a turn-based round", () => {
     const t = setup();
     const { id, seats } = await game(t, 2, "golf:turns", { course: 1, holes: 3 });
     const w = await worldOfMatch(t, id);
-    await expect(seats[1].as.mutation(api.golf.act, { worldId: w._id, kind: "shot", clientTick: 0, seq: 1, a: -1.5, p: 0.5 })).rejects.toThrow("not your turn");
-    await expect(seats[0].as.mutation(api.golf.act, { worldId: w._id, kind: "reset", clientTick: 0, seq: 1 })).rejects.toThrow("starting again");
+    await expect(
+      seats[1].as.mutation(api.golf.act, { worldId: w._id, kind: "shot", clientTick: 0, seq: 1, a: -1.5, p: 0.5 }),
+    ).rejects.toThrow("not your turn");
+    await expect(seats[0].as.mutation(api.golf.act, { worldId: w._id, kind: "reset", clientTick: 0, seq: 1 })).rejects.toThrow(
+      "starting again",
+    );
     // Two shots in one turn: the world takes the first, ignores the second.
     await seats[0].as.mutation(api.golf.act, { worldId: w._id, kind: "shot", clientTick: 0, seq: 1, a: -Math.PI / 2, p: 0.15 });
     vi.advanceTimersByTime(3000);
@@ -147,7 +198,9 @@ describe("a turn-based round", () => {
     const t = setup();
     const { id } = await game(t, 2, "golf:turns", { course: 1, holes: 3 });
     expect((await get(t, id)).turn).toBeTruthy();
-    const timeouts = await t.run(async (ctx) => (await ctx.db.system.query("_scheduled_functions").collect()).filter((s) => s.name === "golf:shotTimeout"));
+    const timeouts = await t.run(async (ctx) =>
+      (await ctx.db.system.query("_scheduled_functions").collect()).filter((s) => s.name === "golf:shotTimeout"),
+    );
     expect(timeouts).toHaveLength(0);
   });
 
@@ -272,7 +325,8 @@ describe("a live round", () => {
     const { id, seats } = await game(t, 2, "golf:live", { course: 1, holes: 3, holeTime: 2 });
     const w = await worldOfMatch(t, id);
     expect((await get(t, id)).turn).toBeUndefined();
-    for (const p of seats) await p.as.mutation(api.golf.act, { worldId: w._id, kind: "shot", clientTick: 0, seq: 1, a: Math.PI / 2, p: 0.1 });
+    for (const p of seats)
+      await p.as.mutation(api.golf.act, { worldId: w._id, kind: "shot", clientTick: 0, seq: 1, a: Math.PI / 2, p: 0.1 });
     vi.advanceTimersByTime(2 * 60_000);
     await t.mutation(internal.golf.holeClock, { id, hole: 0 });
     await t.run((ctx) => ctx.db.patch(w._id, { awake: true }));
@@ -303,7 +357,8 @@ describe("seeds", () => {
     const a = await game(t, 2, "golf:turns", { holes: 3, seed: 4242 });
     const b = await game(t, 2, "golf:turns", { holes: 3, seed: 4242 });
     for (let n = 0; n < 3; n++) {
-      const ca = await courseOfHole(t, a.id, n), cb = await courseOfHole(t, b.id, n);
+      const ca = await courseOfHole(t, a.id, n),
+        cb = await courseOfHole(t, b.id, n);
       expect({ ...ca, id: "" }).toEqual({ ...cb, id: "" });
     }
   }, 120_000);

@@ -1,6 +1,21 @@
 import { describe, expect, test } from "vitest";
 import { bestHand, deckOf, madeCards, rank5 } from "./cards";
-import { act, alive, blindsFor, deal, leave, newGame, potOf, raiseBounds, sidePots, standings, streetOf, toCall, type Card, type Table } from "./engine";
+import {
+  act,
+  alive,
+  blindsFor,
+  deal,
+  leave,
+  newGame,
+  potOf,
+  raiseBounds,
+  sidePots,
+  standings,
+  streetOf,
+  toCall,
+  type Card,
+  type Table,
+} from "./engine";
 
 const r = (s: string) => rank5(s.split(" "));
 const short = (s: string) => rank5(s.split(" "), true);
@@ -27,7 +42,17 @@ describe("the cards that make a hand", () => {
 
 describe("hand rankings", () => {
   test("every category beats the one below it", () => {
-    const ladder = ["As Kd 9h 7c 3s", "2s 2d 9h 7c 3s", "2s 2d 3h 3c 9s", "2s 2d 2h 7c 9s", "5s 6d 7h 8c 9s", "2s 7s 9s Js Ks", "2s 2d 2h 3c 3s", "2s 2d 2h 2c 3s", "5s 6s 7s 8s 9s"];
+    const ladder = [
+      "As Kd 9h 7c 3s",
+      "2s 2d 9h 7c 3s",
+      "2s 2d 3h 3c 9s",
+      "2s 2d 2h 7c 9s",
+      "5s 6d 7h 8c 9s",
+      "2s 7s 9s Js Ks",
+      "2s 2d 2h 3c 3s",
+      "2s 2d 2h 2c 3s",
+      "5s 6s 7s 8s 9s",
+    ];
     const scores = ladder.map((h) => r(h).score);
     expect([...scores].sort((a, b) => a - b)).toEqual(scores);
     expect(ladder.map((h) => r(h).name)).toEqual([
@@ -85,7 +110,10 @@ describe("a hand of Hold'em", () => {
     expect(t.state.button).toBe(0);
     expect(t.state.bets).toEqual([10, 20]);
     expect(t.state.turn).toBe(0);
-    expect(t.hidden.holes).toEqual([["Kc", "Kd"], ["As", "Ad"]]);
+    expect(t.hidden.holes).toEqual([
+      ["Kc", "Kd"],
+      ["As", "Ad"],
+    ]);
     t = act(t, 0, { kind: "call" });
     expect(t.state.turn).toBe(1); // the big blind's option
     expect(() => act(t, 0, { kind: "check" })).toThrow("not your turn");
@@ -101,7 +129,10 @@ describe("a hand of Hold'em", () => {
     expect(t.state.stacks).toEqual([980, 1020]);
     expect(t.state.last).toMatchObject({ showdown: true, net: [-20, 20], board: ["2h", "7s", "9c", "Jd", "3h"] });
     expect(t.state.last!.names).toEqual(["Pair of Kings", "Pair of Aces"]);
-    expect(t.state.last!.shown).toEqual([["Kc", "Kd"], ["As", "Ad"]]);
+    expect(t.state.last!.shown).toEqual([
+      ["Kc", "Kd"],
+      ["As", "Ad"],
+    ]);
   });
 
   test("everyone folding hands the pot over without a showdown", () => {

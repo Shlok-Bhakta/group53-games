@@ -30,7 +30,11 @@ export function PokerGame({ match, meId }: { match: MatchView; meId: Id<"users">
   const playing = mySeat >= 0;
   const active = match.status === "active";
   const nameOf = (seat: number) => (match.players[seat].userId === meId ? "You" : match.players[seat].name);
-  const show = useShow(real, { mySeat, nameOf, fresh: active && real.hand === 1 && real.log.length <= 2 && Date.now() - (match.startedAt ?? 0) < FRESH_MS });
+  const show = useShow(real, {
+    mySeat,
+    nameOf,
+    fresh: active && real.hand === 1 && real.log.length <= 2 && Date.now() - (match.startedAt ?? 0) < FRESH_MS,
+  });
   const state = show.state;
   const myTurn = active && playing && !show.busy && show.turn === mySeat;
   const hand = useQuery(api.poker.cards, playing ? { id: match._id } : "skip");
@@ -83,7 +87,16 @@ export function PokerGame({ match, meId }: { match: MatchView; meId: Id<"users">
   return (
     <GameFrame tight dock={dock}>
       <TopLine match={match} state={state} />
-      <Table match={match} show={show} over={over} mySeat={mySeat} cards={myCards} picking={myTurn && draw} swap={swap} onPick={toggleSwap} />
+      <Table
+        match={match}
+        show={show}
+        over={over}
+        mySeat={mySeat}
+        cards={myCards}
+        picking={myTurn && draw}
+        swap={swap}
+        onPick={toggleSwap}
+      />
     </GameFrame>
   );
 }

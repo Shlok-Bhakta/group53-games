@@ -2,8 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { anyApi } from "convex/server";
 import { admin, createPlayer, expect, onScreen, ready, test } from "./fixtures";
 
-const ANDROID_UA =
-  "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36";
+const ANDROID_UA = "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36";
 
 test.describe("install gate", () => {
   test("iPhone in Safari gets Add to Home Screen steps and no way in", async ({ phones }) => {
@@ -15,7 +14,10 @@ test.describe("install gate", () => {
   });
 
   test("Android in Chrome gets Chrome menu steps", async ({ phones }) => {
-    const page = await phones.open({ installed: false, context: { userAgent: ANDROID_UA, viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true } });
+    const page = await phones.open({
+      installed: false,
+      context: { userAgent: ANDROID_UA, viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true },
+    });
     await page.goto("/");
     await expect(page.getByText("Add to Home screen")).toBeVisible();
   });
@@ -24,7 +26,8 @@ test.describe("install gate", () => {
     const page = await phones.open({
       installed: false,
       context: {
-        userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Discord/250.0",
+        userAgent:
+          "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Discord/250.0",
         viewport: { width: 393, height: 852 },
         isMobile: true,
         hasTouch: true,
@@ -85,7 +88,8 @@ test.describe("signed in", () => {
     for (const b of await page.getByRole("button", { name: "Locked" }).all()) await expect(b).toBeDisabled();
     await page.getByRole("button", { name: "Turn on notifications" }).click();
     await expect(page.getByRole("link", { name: /^Play / })).toHaveCount(playable);
-    for (const name of ["Chess", "Scrabble", "Poker", "Golf", "Stonks"]) await expect(page.getByRole("link", { name: `Play ${name}` })).toBeVisible();
+    for (const name of ["Chess", "Scrabble", "Poker", "Golf", "Stonks"])
+      await expect(page.getByRole("link", { name: `Play ${name}` })).toBeVisible();
     await expect(page.getByText("Turn on notifications to play")).toHaveCount(0);
   });
 
@@ -120,7 +124,12 @@ test.describe("signed in", () => {
     const page = await phones.open({ player: me });
     await page.goto("/");
     const nav = page.getByRole("navigation", { name: "Main" });
-    for (const [tab, heading] of [["Games", "Games"], ["Crew", "Crew"], ["You", "You"], ["Home", "Home"]] as const) {
+    for (const [tab, heading] of [
+      ["Games", "Games"],
+      ["Crew", "Crew"],
+      ["You", "You"],
+      ["Home", "Home"],
+    ] as const) {
       await nav.getByRole("link", { name: tab }).click();
       await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
       // iOS misplaces fixed bottom bars on pages shorter than the screen, so every tab fills it.
@@ -144,9 +153,18 @@ test.describe("signed in", () => {
           .filter((el) => {
             const r = el.getBoundingClientRect();
             const style = getComputedStyle(el);
-            return r.width > 0 && style.visibility !== "hidden" && !el.closest("[aria-hidden=true]") && r.height < 44 && el.getAttribute("role") !== "switch";
+            return (
+              r.width > 0 &&
+              style.visibility !== "hidden" &&
+              !el.closest("[aria-hidden=true]") &&
+              r.height < 44 &&
+              el.getAttribute("role") !== "switch"
+            );
           })
-          .map((el) => `${el.tagName} "${(el.textContent ?? el.getAttribute("aria-label") ?? "").trim().slice(0, 30)}" ${Math.round(el.getBoundingClientRect().height)}px`),
+          .map(
+            (el) =>
+              `${el.tagName} "${(el.textContent ?? el.getAttribute("aria-label") ?? "").trim().slice(0, 30)}" ${Math.round(el.getBoundingClientRect().height)}px`,
+          ),
       );
       expect(small, `small targets on ${path}`).toEqual([]);
     }
@@ -381,7 +399,10 @@ test.describe("signed in", () => {
     // Only index.html's own script runs: no stylesheet, no app.
     await page.route(/\.(css|js|tsx?)(\?|$)/, (r) => r.abort());
     await page.reload({ waitUntil: "domcontentloaded" });
-    const early = await page.evaluate(() => ({ bg: getComputedStyle(document.documentElement).backgroundColor, scheme: getComputedStyle(document.documentElement).colorScheme }));
+    const early = await page.evaluate(() => ({
+      bg: getComputedStyle(document.documentElement).backgroundColor,
+      scheme: getComputedStyle(document.documentElement).colorScheme,
+    }));
     expect(early).toEqual({ bg, scheme: "dark" });
   });
 
@@ -421,7 +442,15 @@ test.describe("signed in", () => {
       await ready(page);
       const results = await new AxeBuilder({ page }).exclude(".pointer-events-none").analyze();
       const serious = results.violations.filter((v) => v.impact === "serious" || v.impact === "critical");
-      expect(serious.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).slice(0, 3).join(", ")}`)).toEqual([]);
+      expect(
+        serious.map(
+          (v) =>
+            `${v.id}: ${v.nodes
+              .map((n) => n.target.join(" "))
+              .slice(0, 3)
+              .join(", ")}`,
+        ),
+      ).toEqual([]);
     });
   }
 });

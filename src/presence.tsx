@@ -89,7 +89,12 @@ export function ThinkingDots() {
   return (
     <span className="flex gap-1" aria-hidden="true">
       {[0, 1, 2].map((i) => (
-        <motion.span key={i} className="size-1.5 rounded-full bg-muted-foreground" animate={{ opacity: [0.25, 1, 0.25] }} transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }} />
+        <motion.span
+          key={i}
+          className="size-1.5 rounded-full bg-muted-foreground"
+          animate={{ opacity: [0.25, 1, 0.25] }}
+          transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
+        />
       ))}
     </span>
   );
@@ -137,7 +142,14 @@ export function TapLayer({ meId }: { meId: Id<"users"> | undefined }) {
           const left = r.x * window.innerWidth;
           const top = r.y - window.scrollY;
           return (
-            <motion.div key={r.key} data-tap={p.name} className="absolute" style={{ left, top }} initial={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.35 } }}>
+            <motion.div
+              key={r.key}
+              data-tap={p.name}
+              className="absolute"
+              style={{ left, top }}
+              initial={{ opacity: 1 }}
+              exit={{ opacity: 0, transition: { duration: 0.35 } }}
+            >
               <motion.span
                 className="absolute -left-7 -top-7 size-14 rounded-full border-2"
                 style={{ borderColor: p.frameColor }}
@@ -151,7 +163,13 @@ export function TapLayer({ meId }: { meId: Id<"users"> | undefined }) {
                 animate={{ scale: 1, rotate: 0 }}
                 transition={{ type: "spring", stiffness: 520, damping: 22 }}
               >
-                <PlayerAvatar name={p.name} image={p.image} frame={p.frame === "none" ? "solid" : p.frame} frameColor={p.frameColor} size={36} />
+                <PlayerAvatar
+                  name={p.name}
+                  image={p.image}
+                  frame={p.frame === "none" ? "solid" : p.frame}
+                  frameColor={p.frameColor}
+                  size={36}
+                />
               </motion.span>
               <motion.span
                 className="absolute left-5 top-3 whitespace-nowrap rounded-full bg-foreground px-2 py-0.5 text-caption font-semibold text-background shadow-md"
@@ -211,14 +229,23 @@ export function ArrivalPills() {
     const fresh = others.filter((p) => !seen.current!.has(p._id));
     seen.current = now;
     if (fresh.length === 0) return;
-    const items = fresh.map((p) => ({ key: `${p._id}:${Date.now()}`, name: p.name, image: p.image, frame: p.frame, frameColor: p.frameColor }));
+    const items = fresh.map((p) => ({
+      key: `${p._id}:${Date.now()}`,
+      name: p.name,
+      image: p.image,
+      frame: p.frame,
+      frameColor: p.frameColor,
+    }));
     setArrivals((a) => [...a, ...items].slice(-3));
     const keys = new Set(items.map((i) => i.key));
     setTimeout(() => setArrivals((a) => a.filter((x) => !keys.has(x.key))), 3200);
   }, [others, loaded]);
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+36px)] z-50 flex flex-col items-center gap-2" aria-live="polite">
+    <div
+      className="pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+36px)] z-50 flex flex-col items-center gap-2"
+      aria-live="polite"
+    >
       <AnimatePresence>
         {arrivals.map((a) => (
           <motion.div

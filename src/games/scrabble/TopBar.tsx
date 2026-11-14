@@ -15,16 +15,32 @@ import { cn } from "@/lib/utils";
 
 // Floats over the top of the board, Letter League style: back, whose turn it is with the last play and the
 // clock, and the menu.
-export function TopBar({ ref, match, state, meId, myTurn, onMenu }: { ref: Ref<HTMLDivElement>; match: MatchView; state: ScrabbleState; meId: Id<"users"> | undefined; myTurn: boolean; onMenu: () => void }) {
+export function TopBar({
+  ref,
+  match,
+  state,
+  meId,
+  myTurn,
+  onMenu,
+}: {
+  ref: Ref<HTMLDivElement>;
+  match: MatchView;
+  state: ScrabbleState;
+  meId: Id<"users"> | undefined;
+  myTurn: boolean;
+  onMenu: () => void;
+}) {
   const goBack = useGoBack("/");
   const up = match.players[state.turn];
   const { text, thinking } = useTurnText(up, meId, "Your turn");
   const last = state.moves.at(-1);
   const lastBy = last ? match.players[last.seat] : undefined;
   const lastText =
-    !last || !lastBy ? null
-    : last.kind === "play" ? `${lastBy.userId === meId ? "You" : lastBy.name}: ${last.words!.map((w) => w.word).join(", ")} +${last.score}`
-    : `${lastBy.userId === meId ? "You" : lastBy.name} ${last.kind === "swap" ? `swapped ${last.count}` : last.kind === "pass" ? "passed" : last.kind === "timeout" ? "ran out of time" : "resigned"}`;
+    !last || !lastBy
+      ? null
+      : last.kind === "play"
+        ? `${lastBy.userId === meId ? "You" : lastBy.name}: ${last.words!.map((w) => w.word).join(", ")} +${last.score}`
+        : `${lastBy.userId === meId ? "You" : lastBy.name} ${last.kind === "swap" ? `swapped ${last.count}` : last.kind === "pass" ? "passed" : last.kind === "timeout" ? "ran out of time" : "resigned"}`;
   return (
     <FloatingTopBar ref={ref}>
       <FloatButton aria-label="Back" onClick={goBack}>

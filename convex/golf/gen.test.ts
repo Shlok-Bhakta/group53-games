@@ -16,8 +16,16 @@ describe("generated holes", () => {
     test(`seed ${o.seed}, hole ${o.n + 1}, terrain ${o.terrain}, style ${o.style}`, () => {
       const log: string[] = [];
       const c = generateHole(o, (m) => log.push(m));
-      expect(log.some((l) => l.startsWith("kept")), log.join("\n")).toBe(true);
-      expect(problems(c, c.zones.some((z) => z.kind === "ramp"))).toBeNull();
+      expect(
+        log.some((l) => l.startsWith("kept")),
+        log.join("\n"),
+      ).toBe(true);
+      expect(
+        problems(
+          c,
+          c.zones.some((z) => z.kind === "ramp"),
+        ),
+      ).toBeNull();
       expect(c.par).toBeGreaterThanOrEqual(2);
       expect(c.par).toBeLessThanOrEqual(7);
       if (o.terrain === 1) expect(c.theme).toBe("ice");
@@ -42,7 +50,8 @@ describe("generated holes", () => {
   }, 120_000);
 
   test("a seed's hole doesn't depend on what was generated before it (the caches)", async () => {
-    const a = { seed: 101, n: 0, terrain: 0, style: 0, hazards: 1 }, b = { seed: 101, n: 0, terrain: 1, style: 1, hazards: 2 };
+    const a = { seed: 101, n: 0, terrain: 0, style: 0, hazards: 1 },
+      b = { seed: 101, n: 0, terrain: 1, style: 1, hazards: 2 };
     generateHole(a);
     const after = generateHole(b);
     vi.resetModules();

@@ -94,7 +94,21 @@ export function Flash({ value, className, children }: { value: number; className
 
 // "▲ +1.23 (0.45%)": the caret carries the color; the numbers stay in text color, with a sign, so up and
 // down never depend on telling green from red. The numbers roll when they change.
-export function Change({ change, base, unit, small, label, instant }: { change: number; base: number; unit?: string; small?: boolean; label?: string; instant?: boolean }) {
+export function Change({
+  change,
+  base,
+  unit,
+  small,
+  label,
+  instant,
+}: {
+  change: number;
+  base: number;
+  unit?: string;
+  small?: boolean;
+  label?: string;
+  instant?: boolean;
+}) {
   const dir: Dir = change < 0 ? "down" : "up";
   const Icon = dir === "up" ? CaretUpIcon : CaretDownIcon;
   const pct = (change / base) * 100;
@@ -118,17 +132,40 @@ export function Stat({ label, children }: { label: string; children: ReactNode }
 }
 
 // A range as a track with a dot where the price is: today's low to high, the year's, analysts' targets.
-export function RangeRow({ label, low, high, value, unit, mark }: { label: string; low?: number; high?: number; value?: number; unit: string; mark?: { at: number; name: string } }) {
+export function RangeRow({
+  label,
+  low,
+  high,
+  value,
+  unit,
+  mark,
+}: {
+  label: string;
+  low?: number;
+  high?: number;
+  value?: number;
+  unit: string;
+  mark?: { at: number; name: string };
+}) {
   const known = low !== undefined && high !== undefined && high > low;
   const at = (x: number) => `${Math.max(0, Math.min(1, (x - low!) / (high! - low!))) * 100}%`;
   return (
-    <div className={`${S.range} flex flex-col justify-center gap-2.5 px-4`} aria-label={known ? `${label}: ${price(low, unit)} to ${price(high, unit)}` : label}>
+    <div
+      className={`${S.range} flex flex-col justify-center gap-2.5 px-4`}
+      aria-label={known ? `${label}: ${price(low, unit)} to ${price(high, unit)}` : label}
+    >
       <div className="flex items-center justify-between gap-3">
         <span className="text-callout text-muted-foreground">{label}</span>
         <span className="text-callout font-semibold tabular-nums">{known ? `${price(low, unit)} – ${price(high, unit)}` : "—"}</span>
       </div>
       <div className="relative h-1.5 rounded-full bg-muted" aria-hidden>
-        {known && mark && <span className="absolute -top-1 h-3.5 w-0.5 -translate-x-1/2 rounded-full bg-muted-foreground" style={{ left: at(mark.at) }} title={mark.name} />}
+        {known && mark && (
+          <span
+            className="absolute -top-1 h-3.5 w-0.5 -translate-x-1/2 rounded-full bg-muted-foreground"
+            style={{ left: at(mark.at) }}
+            title={mark.name}
+          />
+        )}
         {known && value !== undefined && (
           <motion.span
             className="absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground ring-2 ring-card"

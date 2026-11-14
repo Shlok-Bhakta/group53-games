@@ -1,5 +1,21 @@
 import { describe, expect, test } from "vitest";
-import { BALL_R, CUP_R, DT, JUMBO, closest, compile, fireTargeted, groundAt, newSim, shoot, step, v, type Course, type Sim, type World } from "./engine";
+import {
+  BALL_R,
+  CUP_R,
+  DT,
+  JUMBO,
+  closest,
+  compile,
+  fireTargeted,
+  groundAt,
+  newSim,
+  shoot,
+  step,
+  v,
+  type Course,
+  type Sim,
+  type World,
+} from "./engine";
 import { BATTLE_GROUNDS } from "./battle";
 import { BUMPER_PLAINS } from "./plains";
 
@@ -9,9 +25,27 @@ const roll = (sim: Sim, world: World, seconds = 30) => {
 };
 // A long plain lane with one bumper in it, for trying items.
 const lane = (extra: Partial<Course> = {}): Course => ({
-  id: "lane", name: "Lane", course: "Test", theme: "hills", par: 3, w: 20, h: 90, tee: v(10, 80), cup: v(10, 6), off: "oob",
+  id: "lane",
+  name: "Lane",
+  course: "Test",
+  theme: "hills",
+  par: 3,
+  w: 20,
+  h: 90,
+  tee: v(10, 80),
+  cup: v(10, 6),
+  off: "oob",
   greens: [{ poly: [v(4, 2), v(16, 2), v(16, 86), v(4, 86)] }],
-  zones: [], walls: [], blocks: [], props: [], bumpers: [{ at: v(10, 60), r: 0.85, kick: 5 }], movers: [], portals: [], wells: [], lamps: [], boxes: [],
+  zones: [],
+  walls: [],
+  blocks: [],
+  props: [],
+  bumpers: [{ at: v(10, 60), r: 0.85, kick: 5 }],
+  movers: [],
+  portals: [],
+  wells: [],
+  lamps: [],
+  boxes: [],
   ...extra,
 });
 
@@ -99,7 +133,12 @@ describe("items", () => {
   });
 
   test("a Rail Gun takes out the bumper in its line and leaves the rest", () => {
-    const c = lane({ bumpers: [{ at: v(10, 60), r: 0.85, kick: 5 }, { at: v(14, 40), r: 0.85, kick: 5 }] });
+    const c = lane({
+      bumpers: [
+        { at: v(10, 60), r: 0.85, kick: 5 },
+        { at: v(14, 40), r: 0.85, kick: 5 },
+      ],
+    });
     const sim = newSim(c);
     sim.bag = ["railgun"];
     fireTargeted(sim, c, 0, v(10, 10));
@@ -150,7 +189,8 @@ describe("items", () => {
 
     const open = lane({ bumpers: [] });
     const w2 = compile(open);
-    const plain = newSim(open), cart = newSim(open);
+    const plain = newSim(open),
+      cart = newSim(open);
     shoot(plain, up, 0.4);
     cart.armed = "cart";
     shoot(cart, up, 0.4);

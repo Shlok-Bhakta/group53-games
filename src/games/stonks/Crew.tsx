@@ -39,7 +39,13 @@ export function CrewBoard({ crew, history }: { crew: Crew; history: History }) {
     () =>
       history.length === 0
         ? []
-        : crew.map((c) => ({ id: c.userId, me: c.me, color: colors.get(c.userId)!.color, dash: colors.get(c.userId)!.dash, points: worthLine(history, c.userId, { t: Math.max(Date.now(), history[history.length - 1].t + 1), worth: c.worth }) })),
+        : crew.map((c) => ({
+            id: c.userId,
+            me: c.me,
+            color: colors.get(c.userId)!.color,
+            dash: colors.get(c.userId)!.dash,
+            points: worthLine(history, c.userId, { t: Math.max(Date.now(), history[history.length - 1].t + 1), worth: c.worth }),
+          })),
     // Rebuilt when someone's worth or the history changes, not on every render.
     [history, worths, colors], // eslint-disable-line
   );
@@ -50,7 +56,14 @@ export function CrewBoard({ crew, history }: { crew: Crew; history: History }) {
     <Section title="Crew" bare>
       {series.length > 0 && (
         <div className="pb-3">
-          <CrewChart series={series} base={10_000} label={`Everyone's net worth over the game. ${crew.map((c) => `${c.name} ${price(c.worth)}`).join(", ")}`} timeLabel={(t) => scrubTime.format(t)} onScrub={setAt} money={(n) => price(n)} />
+          <CrewChart
+            series={series}
+            base={10_000}
+            label={`Everyone's net worth over the game. ${crew.map((c) => `${c.name} ${price(c.worth)}`).join(", ")}`}
+            timeLabel={(t) => scrubTime.format(t)}
+            onScrub={setAt}
+            money={(n) => price(n)}
+          />
         </div>
       )}
       <Group>
@@ -64,20 +77,42 @@ export function CrewBoard({ crew, history }: { crew: Crew; history: History }) {
                 to={playerPath(c.userId)}
                 onPointerDown={() => warmPlayer(convex, c.userId)}
                 aria-label={`${c.name}'s profile`}
-                className={cn(`flex ${S.crew} items-center gap-3 px-4 transition-transform duration-100 active:scale-[0.97]`, c.me && "bg-accent/40")}
+                className={cn(
+                  `flex ${S.crew} items-center gap-3 px-4 transition-transform duration-100 active:scale-[0.97]`,
+                  c.me && "bg-accent/40",
+                )}
               >
                 <span className="w-4 shrink-0 text-right text-footnote font-semibold text-muted-foreground tabular-nums">{i + 1}</span>
-                <PlayerAvatar name={c.name} image={c.image} frame={c.frame} frameColor={c.frameColor} glow={c.glow} badge={c.badge} size={36} />
+                <PlayerAvatar
+                  name={c.name}
+                  image={c.image}
+                  frame={c.frame}
+                  frameColor={c.frameColor}
+                  glow={c.glow}
+                  badge={c.badge}
+                  size={36}
+                />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-1.5">
                     {series.length > 0 && (
                       <svg width={14} height={4} className="shrink-0" aria-hidden>
-                        <line x1={1} x2={13} y1={2} y2={2} stroke={key.color} strokeWidth={3} strokeLinecap="round" strokeDasharray={key.dash ? "3 3" : undefined} />
+                        <line
+                          x1={1}
+                          x2={13}
+                          y1={2}
+                          y2={2}
+                          stroke={key.color}
+                          strokeWidth={3}
+                          strokeLinecap="round"
+                          strokeDasharray={key.dash ? "3 3" : undefined}
+                        />
                       </svg>
                     )}
                     <span className="truncate text-callout font-semibold">{c.name}</span>
                   </span>
-                  <span className="block text-footnote text-muted-foreground">{c.positions === 0 ? "All cash" : `${c.positions} ${c.positions === 1 ? "position" : "positions"}`}</span>
+                  <span className="block text-footnote text-muted-foreground">
+                    {c.positions === 0 ? "All cash" : `${c.positions} ${c.positions === 1 ? "position" : "positions"}`}
+                  </span>
                 </span>
                 <span className="flex shrink-0 flex-col items-end gap-0.5">
                   <Flash value={worth} className="text-callout font-semibold">
@@ -100,7 +135,11 @@ export function CrewTrades({ trades, now, title = "Crew trades" }: { trades: Tra
     <Section title={title}>
       {trades.slice(0, 6).map((t) => (
         <div key={t.id} className={`flex ${S.crew} items-center gap-3 px-4`}>
-          <Link to={playerPath(t.userId)} aria-label={`${t.name}'s profile`} className="grid size-11 shrink-0 place-items-center transition-transform duration-100 active:scale-[0.97]">
+          <Link
+            to={playerPath(t.userId)}
+            aria-label={`${t.name}'s profile`}
+            className="grid size-11 shrink-0 place-items-center transition-transform duration-100 active:scale-[0.97]"
+          >
             <PlayerAvatar name={t.name} image={t.image} size={32} />
           </Link>
           <Link to={stockPath(t.symbol)} className="min-w-0 flex-1 transition-transform duration-100 active:scale-[0.97]">

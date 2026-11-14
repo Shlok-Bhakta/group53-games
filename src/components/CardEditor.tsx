@@ -14,8 +14,17 @@ import { Section } from "@/components/parts";
 import { cn } from "@/lib/utils";
 
 const FRAME_NAMES: Record<Frame, string> = {
-  none: "None", solid: "Solid", comet: "Comet", pulse: "Pulse", neon: "Neon",
-  gold: "Gold", fire: "Fire", ice: "Ice", toxic: "Toxic", holo: "Holo", rgb: "RGB",
+  none: "None",
+  solid: "Solid",
+  comet: "Comet",
+  pulse: "Pulse",
+  neon: "Neon",
+  gold: "Gold",
+  fire: "Fire",
+  ice: "Ice",
+  toxic: "Toxic",
+  holo: "Holo",
+  rgb: "RGB",
 };
 const EFFECT_NAMES: Record<string, string> = { none: "None", foil: "Foil", crt: "CRT" };
 
@@ -30,7 +39,14 @@ export function CardEditor({ open, onOpenChange, player }: { open: boolean; onOp
   const customColor = CUSTOM_COLOR_FRAMES.includes(player.frame as Frame);
 
   return (
-    <Sheet open={open} onClose={() => onOpenChange(false)} title="Edit card" hideTitle className="max-h-[94dvh]" bodyClassName="block pb-[calc(env(safe-area-inset-bottom)+24px)]">
+    <Sheet
+      open={open}
+      onClose={() => onOpenChange(false)}
+      title="Edit card"
+      hideTitle
+      className="max-h-[94dvh]"
+      bodyClassName="block pb-[calc(env(safe-area-inset-bottom)+24px)]"
+    >
       {/* The preview stays pinned while you scroll the options. */}
       <div className="sticky top-0 z-10 -mx-4 mb-4 flex justify-center border-b border-border/60 bg-popover px-4 pb-4 pt-2 shadow-[0_10px_20px_-16px_rgb(0_0_0/0.5)]">
         <div className="w-[min(36vw,148px)]">
@@ -45,7 +61,14 @@ export function CardEditor({ open, onOpenChange, player }: { open: boolean; onOp
           <div className="grid grid-cols-4 gap-2.5">
             {FRAMES.map((frame) => (
               <Choice key={frame} selected={player.frame === frame} group="frame" onClick={() => set({ frame })} label={FRAME_NAMES[frame]}>
-                <PlayerAvatar name={player.name} image={player.image} frame={frame} frameColor={player.frameColor} glow={player.glow} size={48} />
+                <PlayerAvatar
+                  name={player.name}
+                  image={player.image}
+                  frame={frame}
+                  frameColor={player.frameColor}
+                  glow={player.glow}
+                  size={48}
+                />
               </Choice>
             ))}
           </div>
@@ -66,11 +89,19 @@ export function CardEditor({ open, onOpenChange, player }: { open: boolean; onOp
                   style={{ background: c }}
                 >
                   {player.frameColor.toLowerCase() === c && (
-                    <motion.span layoutId="color-selected" transition={spring} className="absolute -inset-[5px] rounded-full border-[3px] border-foreground" />
+                    <motion.span
+                      layoutId="color-selected"
+                      transition={spring}
+                      className="absolute -inset-[5px] rounded-full border-[3px] border-foreground"
+                    />
                   )}
                 </motion.button>
               ))}
-              <CustomColor value={player.frameColor} onChange={(frameColor) => set({ frameColor })} selected={!FRAME_COLORS.includes(player.frameColor.toLowerCase() as never)} />
+              <CustomColor
+                value={player.frameColor}
+                onChange={(frameColor) => set({ frameColor })}
+                selected={!FRAME_COLORS.includes(player.frameColor.toLowerCase() as never)}
+              />
             </div>
           </Section>
         )}
@@ -83,14 +114,30 @@ export function CardEditor({ open, onOpenChange, player }: { open: boolean; onOp
         </div>
 
         <Section bare title="Effect">
-          <Segmented label="Effect" value={player.effect} onChange={(effect) => set({ effect })} options={EFFECTS.map((e) => ({ value: e, label: EFFECT_NAMES[e] }))} />
+          <Segmented
+            label="Effect"
+            value={player.effect}
+            onChange={(effect) => set({ effect })}
+            options={EFFECTS.map((e) => ({ value: e, label: EFFECT_NAMES[e] }))}
+          />
         </Section>
 
         <Section bare title="Badge">
           <div className="grid grid-cols-6 gap-2">
             {BADGES.map((badge) => (
-              <Choice key={badge || "none"} selected={player.badge === badge} group="badge" onClick={() => set({ badge })} ariaLabel={badge || "No badge"} square>
-                {badge ? <span className="text-title leading-none">{badge}</span> : <span className="text-footnote font-semibold text-muted-foreground">None</span>}
+              <Choice
+                key={badge || "none"}
+                selected={player.badge === badge}
+                group="badge"
+                onClick={() => set({ badge })}
+                ariaLabel={badge || "No badge"}
+                square
+              >
+                {badge ? (
+                  <span className="text-title leading-none">{badge}</span>
+                ) : (
+                  <span className="text-footnote font-semibold text-muted-foreground">None</span>
+                )}
               </Choice>
             ))}
           </div>
@@ -129,9 +176,17 @@ function Choice({
         square ? "aspect-square" : "py-3",
       )}
     >
-      {selected && <motion.span layoutId={`${group}-selected`} transition={spring} className="absolute inset-0 rounded-lg border-2 border-primary bg-primary/8" />}
+      {selected && (
+        <motion.span
+          layoutId={`${group}-selected`}
+          transition={spring}
+          className="absolute inset-0 rounded-lg border-2 border-primary bg-primary/8"
+        />
+      )}
       <span className="relative">{children}</span>
-      {label && <span className={cn("relative text-caption font-semibold", selected ? "text-primary" : "text-muted-foreground")}>{label}</span>}
+      {label && (
+        <span className={cn("relative text-caption font-semibold", selected ? "text-primary" : "text-muted-foreground")}>{label}</span>
+      )}
     </motion.button>
   );
 }
@@ -144,7 +199,13 @@ function CustomColor({ value, onChange, selected }: { value: string; onChange: (
       <span className="grid size-7 place-items-center rounded-full bg-card">
         <EyedropperIcon size={16} weight="bold" />
       </span>
-      {selected && <motion.span layoutId="color-selected" transition={spring} className="absolute -inset-[5px] rounded-full border-[3px] border-foreground" />}
+      {selected && (
+        <motion.span
+          layoutId="color-selected"
+          transition={spring}
+          className="absolute -inset-[5px] rounded-full border-[3px] border-foreground"
+        />
+      )}
       <input
         type="color"
         aria-label="Custom color"

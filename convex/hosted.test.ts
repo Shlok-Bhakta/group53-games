@@ -6,9 +6,22 @@ import { gzipSync, gunzipSync } from "node:zlib";
 
 const modules = import.meta.glob("./**/*.ts");
 
-async function addFile(t: ReturnType<typeof convexTest>, build: string, path: string, body: string | Uint8Array, opts: { type?: string; gzip?: boolean } = {}) {
+async function addFile(
+  t: ReturnType<typeof convexTest>,
+  build: string,
+  path: string,
+  body: string | Uint8Array,
+  opts: { type?: string; gzip?: boolean } = {},
+) {
   const storageId = await t.run((ctx) => ctx.storage.store(new Blob([body as BlobPart])));
-  await t.mutation(internal.hosted.addFile, { game: "g", build, path, storageId, type: opts.type ?? "text/html; charset=utf-8", gzip: opts.gzip ?? false });
+  await t.mutation(internal.hosted.addFile, {
+    game: "g",
+    build,
+    path,
+    storageId,
+    type: opts.type ?? "text/html; charset=utf-8",
+    gzip: opts.gzip ?? false,
+  });
 }
 
 describe("hosted games", () => {

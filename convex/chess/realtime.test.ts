@@ -27,7 +27,9 @@ const move = (tick: number, from: string, to: string, state = initialState()): C
   return { tick, color: p.color, pieceId: p.id, toX, toY };
 };
 const targets = (state: State, from: string) =>
-  legalTargets(state.pieces, at(state, from)!).map(([x, y]) => String.fromCharCode(97 + x) + (y + 1)).sort();
+  legalTargets(state.pieces, at(state, from)!)
+    .map(([x, y]) => String.fromCharCode(97 + x) + (y + 1))
+    .sort();
 
 // A custom position: pieces given as "wKe1" style strings, all ready.
 function position(...specs: string[]): State {

@@ -49,7 +49,13 @@ export function fill(book: Book, ask: Ask, price: number, power: number): Fill |
     const total = Math.abs(held) + shares;
     const avg = (Math.abs(held) * (pos?.avg ?? 0) + amount) / total;
     const long = ask.side === "buy";
-    return { cash: book.cash + (long ? -amount : amount), position: { symbol: ask.symbol, shares: long ? total : -total, avg }, shares, amount, realized: 0 };
+    return {
+      cash: book.cash + (long ? -amount : amount),
+      position: { symbol: ask.symbol, shares: long ? total : -total, avg },
+      shares,
+      amount,
+      realized: 0,
+    };
   }
   const shares = Math.min(ask.shares ?? Math.abs(held), Math.abs(held));
   if (shares <= 0) return { refused: "Nothing to close." };
@@ -69,7 +75,13 @@ export function fill(book: Book, ask: Ask, price: number, power: number): Fill |
 // ---- Other currencies ----
 
 // Yahoo quotes a few markets in cents of their currency: London's GBp is a hundredth of a pound.
-const MINOR: Record<string, [string, number]> = { GBp: ["GBP", 100], GBX: ["GBP", 100], ILA: ["ILS", 100], ZAc: ["ZAR", 100], ZAC: ["ZAR", 100] };
+const MINOR: Record<string, [string, number]> = {
+  GBp: ["GBP", 100],
+  GBX: ["GBP", 100],
+  ILA: ["ILS", 100],
+  ZAc: ["ZAR", 100],
+  ZAC: ["ZAR", 100],
+};
 
 /** The currency's pair against the dollar, or null for dollars. */
 export function fxPair(currency: string | undefined): string | null {

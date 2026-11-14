@@ -1,4 +1,15 @@
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { AnimatePresence, animate, motion } from "motion/react";
 import { layout, type Placed } from "../../../convex/scrabble/engine";
 import { cn } from "@/lib/utils";
@@ -53,9 +64,48 @@ const key = (x: number, y: number) => `${x},${y}`;
 // The board: pinch or double-tap to zoom, drag to look around. Moves happen in the DOM directly, not
 // through React, so panning stays smooth on a full board.
 export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoard(props, ref) {
-  const { size, px, view, tiles, draft, seatColor, fresh, freshSeat, target, tone, bubble, hidden, focus, zoomOnDoubleTap, reveal, ghosts, scored, shake, onCellTap, onDraftDown } = props;
+  const {
+    size,
+    px,
+    view,
+    tiles,
+    draft,
+    seatColor,
+    fresh,
+    freshSeat,
+    target,
+    tone,
+    bubble,
+    hidden,
+    focus,
+    zoomOnDoubleTap,
+    reveal,
+    ghosts,
+    scored,
+    shake,
+    onCellTap,
+    onDraftDown,
+  } = props;
   // Fresh tiles land in reading order, one after another, in time with the notes of the play sound.
-  const freshOrder = useMemo(() => new Map([...fresh].sort((a, b) => a.split(",").map(Number).reduce((s, v) => s + v, 0) - b.split(",").map(Number).reduce((s, v) => s + v, 0)).map((k, i) => [k, i])), [fresh]);
+  const freshOrder = useMemo(
+    () =>
+      new Map(
+        [...fresh]
+          .sort(
+            (a, b) =>
+              a
+                .split(",")
+                .map(Number)
+                .reduce((s, v) => s + v, 0) -
+              b
+                .split(",")
+                .map(Number)
+                .reduce((s, v) => s + v, 0),
+          )
+          .map((k, i) => [k, i]),
+      ),
+    [fresh],
+  );
   const base = px / size;
   const maxScale = Math.max(1, MAX_CELL / base);
   const startScale = Math.min(maxScale, Math.max(1, START_CELL / base));
@@ -110,7 +160,8 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
         type: "spring",
         bounce: 0,
         duration: 0.35,
-        onUpdate: (p) => apply({ s: from.s + (next.s - from.s) * p, tx: from.tx + (next.tx - from.tx) * p, ty: from.ty + (next.ty - from.ty) * p }),
+        onUpdate: (p) =>
+          apply({ s: from.s + (next.s - from.s) * p, tx: from.tx + (next.tx - from.tx) * p, ty: from.ty + (next.ty - from.ty) * p }),
       });
     },
     [apply],
@@ -269,12 +320,22 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
               data-cell={k}
               data-letter={tile.letter}
               className="absolute grid place-items-center rounded-[3px]"
-              style={{ left: tile.x * base, top: tile.y * base, width: base, height: base, background: isFresh && freshSeat !== null ? `color-mix(in oklch, ${seatColor(freshSeat)} 55%, transparent)` : undefined }}
+              style={{
+                left: tile.x * base,
+                top: tile.y * base,
+                width: base,
+                height: base,
+                background: isFresh && freshSeat !== null ? `color-mix(in oklch, ${seatColor(freshSeat)} 55%, transparent)` : undefined,
+              }}
             >
               <motion.span
                 className="grid place-items-center"
                 initial={isFresh ? { y: -base * 0.8, scale: 0.6, opacity: 0 } : false}
-                animate={isFresh ? { y: [-base * 0.8, 0, -base * 0.28, 0], scale: [0.6, 1.08, 1, 0.9], opacity: [0, 1, 1, 1] } : { y: 0, scale: 1, opacity: 1 }}
+                animate={
+                  isFresh
+                    ? { y: [-base * 0.8, 0, -base * 0.28, 0], scale: [0.6, 1.08, 1, 0.9], opacity: [0, 1, 1, 1] }
+                    : { y: 0, scale: 1, opacity: 1 }
+                }
                 transition={{ duration: 0.62, times: [0, 0.42, 0.7, 1], ease: "easeOut", delay: 0.07 * (freshOrder.get(k) ?? 0) }}
               >
                 <LetterTile letter={tile.letter} blank={tile.blank} size={base - 2} seat={seatColor(tile.seat)} />
@@ -297,7 +358,14 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
                 transition={{ type: "spring", bounce: 0.45, duration: 0.4 }}
               >
                 {/* Face down: a solid tile back in the player's color, so nothing shows through. */}
-                <LetterTile letter="?" size={base - 2} seat={ghosts.color} style={{ background: `linear-gradient(color-mix(in oklch, ${ghosts.color} 30%, #fbf0d6), color-mix(in oklch, ${ghosts.color} 42%, #efdcb4))` }} />
+                <LetterTile
+                  letter="?"
+                  size={base - 2}
+                  seat={ghosts.color}
+                  style={{
+                    background: `linear-gradient(color-mix(in oklch, ${ghosts.color} 30%, #fbf0d6), color-mix(in oklch, ${ghosts.color} 42%, #efdcb4))`,
+                  }}
+                />
               </motion.div>
             ))}
         </AnimatePresence>
@@ -327,7 +395,13 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
         {target && (
           <div
             className="pointer-events-none absolute rounded-[3px] ring-2 ring-primary ring-offset-0"
-            style={{ left: target[0] * base, top: target[1] * base, width: base, height: base, background: "color-mix(in oklch, var(--primary) 25%, transparent)" }}
+            style={{
+              left: target[0] * base,
+              top: target[1] * base,
+              width: base,
+              height: base,
+              background: "color-mix(in oklch, var(--primary) 25%, transparent)",
+            }}
           />
         )}
         <AnimatePresence>
@@ -341,7 +415,10 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
               transition={{ duration: 1.8, times: [0, 0.2, 0.7, 1], delay: 0.35 }}
             >
               {/* White ink on the player's seat color, which is the same in every theme. */}
-              <span className="block -translate-x-1/2 rounded-full px-2.5 py-1 font-display text-callout tabular-nums text-white shadow-lg" style={{ scale: "calc(1 / var(--s, 1))", background: scored.color }}>
+              <span
+                className="block -translate-x-1/2 rounded-full px-2.5 py-1 font-display text-callout tabular-nums text-white shadow-lg"
+                style={{ scale: "calc(1 / var(--s, 1))", background: scored.color }}
+              >
                 {scored.text}
               </span>
             </motion.div>
@@ -358,7 +435,11 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
           >
             <span
               className="block origin-bottom-left -translate-x-1/3 -translate-y-2/3 rounded-full px-2 py-0.5 text-footnote font-bold tabular-nums shadow"
-              style={{ scale: "calc(1 / var(--s, 1))", background: ring, color: tone === "idle" ? "var(--primary-foreground)" : tone === "ok" ? "var(--tile-ink)" : "var(--tile-hit-ink)" }}
+              style={{
+                scale: "calc(1 / var(--s, 1))",
+                background: ring,
+                color: tone === "idle" ? "var(--primary-foreground)" : tone === "ok" ? "var(--tile-ink)" : "var(--tile-hit-ink)",
+              }}
             >
               {bubble.text}
             </span>
@@ -374,7 +455,10 @@ function Puffs({ cells, base, color }: { cells: [number, number][]; base: number
   const prev = useRef(new Set<string>());
   const [puffs, setPuffs] = useState<{ id: number; x: number; y: number }[]>([]);
   const nextId = useRef(0);
-  const sig = cells.map(([x, y]) => key(x, y)).sort().join("|");
+  const sig = cells
+    .map(([x, y]) => key(x, y))
+    .sort()
+    .join("|");
   useEffect(() => {
     const now = new Set(sig ? sig.split("|") : []);
     const changed = [...now].filter((k) => !prev.current.has(k)).concat([...prev.current].filter((k) => !now.has(k)));
@@ -416,7 +500,10 @@ function Puffs({ cells, base, color }: { cells: [number, number][]; base: number
 const Squares = memo(function Squares({ size, base }: { size: number; base: number }) {
   const rows = useMemo(() => layout(size), [size]);
   return (
-    <div className="absolute inset-0 grid" style={{ gridTemplateColumns: `repeat(${size}, 1fr)`, gridTemplateRows: `repeat(${size}, 1fr)` }}>
+    <div
+      className="absolute inset-0 grid"
+      style={{ gridTemplateColumns: `repeat(${size}, 1fr)`, gridTemplateRows: `repeat(${size}, 1fr)` }}
+    >
       {rows.flatMap((row, y) =>
         [...row].map((c, x) => {
           const p = PREMIUM_STYLE[c as keyof typeof PREMIUM_STYLE];

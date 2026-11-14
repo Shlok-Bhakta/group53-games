@@ -35,7 +35,21 @@ export function SectionTitle({ children, action, className }: { children: ReactN
 
 // A titled group of rows. The heading carries the section; the group is a single flat surface. `bare` leaves
 // out the group, for sections that lay out their own content; `footer` is a line of fine print under it.
-export function Section({ title, children, action, footer, bare, className }: { title: string; children: ReactNode; action?: ReactNode; footer?: ReactNode; bare?: boolean; className?: string }) {
+export function Section({
+  title,
+  children,
+  action,
+  footer,
+  bare,
+  className,
+}: {
+  title: string;
+  children: ReactNode;
+  action?: ReactNode;
+  footer?: ReactNode;
+  bare?: boolean;
+  className?: string;
+}) {
   return (
     <section aria-label={title} className={className}>
       <SectionTitle action={action}>{title}</SectionTitle>
@@ -129,7 +143,10 @@ export function ResultChip({ match, meId }: { match: MatchView; meId?: Id<"users
   }
   const winners = match.players.filter((p) => r.winners.includes(p.userId)).map((p) => p.name);
   return (
-    <span className="max-w-[40%] truncate text-right text-footnote font-medium text-muted-foreground" title={reasonText(r.reason, match.mode)}>
+    <span
+      className="max-w-[40%] truncate text-right text-footnote font-medium text-muted-foreground"
+      title={reasonText(r.reason, match.mode)}
+    >
       {r.draw ? "Draw" : `${listNames(winners)} won`}
     </span>
   );
@@ -215,7 +232,11 @@ export function Leaderboard({ mode, meId, onPick }: { mode: ModeKey; meId?: Id<"
             </>
           ),
           title: r.userId === meId ? "You" : p.name,
-          detail: ranked && <span className="tabular-nums">{four ? `${r.wins} won of ${r.games}` : `${r.wins} won, ${r.losses} lost${r.draws ? `, ${r.draws} drawn` : ""}`}</span>,
+          detail: ranked && (
+            <span className="tabular-nums">
+              {four ? `${r.wins} won of ${r.games}` : `${r.wins} won, ${r.losses} lost${r.draws ? `, ${r.draws} drawn` : ""}`}
+            </span>
+          ),
           trailing: <span className={cn("font-display text-heading tabular-nums", !ranked && "text-muted-foreground")}>{r.rating}</span>,
           selected: r.userId === meId,
         };

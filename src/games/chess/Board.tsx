@@ -44,7 +44,21 @@ export const fromName = (s: string): Sq => [s.charCodeAt(0) - 97, Number(s.slice
 // A tap this close to a square's center (in squares) counts as that square on the 14x14 board.
 const REACH = 0.85;
 
-export function Board({ pieces, view, canSelect, selectable, selected, targets, onSelect, onMove, lastMove, check = [], disabled, label, children }: Props) {
+export function Board({
+  pieces,
+  view,
+  canSelect,
+  selectable,
+  selected,
+  targets,
+  onSelect,
+  onMove,
+  lastMove,
+  check = [],
+  disabled,
+  label,
+  children,
+}: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<{ from: Sq; dx: number; dy: number; moved: boolean } | null>(null);
   const start = useRef<{ x: number; y: number } | null>(null);
@@ -110,7 +124,10 @@ export function Board({ pieces, view, canSelect, selectable, selected, targets, 
       role="grid"
       aria-label={label ?? "Chess board"}
       data-disabled={disabled || undefined}
-      className={cn("board relative aspect-square w-full touch-none select-none overflow-hidden rounded-sm", !small && "shadow-lg shadow-black/20")}
+      className={cn(
+        "board relative aspect-square w-full touch-none select-none overflow-hidden rounded-sm",
+        !small && "shadow-lg shadow-black/20",
+      )}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -128,23 +145,50 @@ export function Board({ pieces, view, canSelect, selectable, selected, targets, 
           const occupied = pieces.some((p) => !p.ghost && Math.round(p.x) === sq[0] && Math.round(p.y) === sq[1] && !p.moving);
           const name = view.name(sq);
           return (
-            <div key={i} role="gridcell" aria-label={name} data-square={name} className={cn("relative", dark ? "bg-[var(--board-dark)]" : "bg-[var(--board-light)]")}>
+            <div
+              key={i}
+              role="gridcell"
+              aria-label={name}
+              data-square={name}
+              className={cn("relative", dark ? "bg-[var(--board-dark)]" : "bg-[var(--board-light)]")}
+            >
               {(same(lastMove?.[0], sq) || same(lastMove?.[1], sq)) && <span className="absolute inset-0 bg-[oklch(0.85_0.17_95/0.42)]" />}
               {same(selected, sq) && <span className="absolute inset-0 bg-[oklch(0.8_0.17_95/0.6)]" />}
-              {check.some((k) => same(k, sq)) && <span className="absolute inset-0 bg-[radial-gradient(circle,oklch(0.65_0.25_25/0.85)_15%,transparent_70%)]" />}
+              {check.some((k) => same(k, sq)) && (
+                <span className="absolute inset-0 bg-[radial-gradient(circle,oklch(0.65_0.25_25/0.85)_15%,transparent_70%)]" />
+              )}
               {isTarget &&
                 (occupied ? (
-                  <span data-target className={cn("absolute inset-0 rounded-full border-black/25", small ? "border-[3px]" : "border-[5px]")} />
+                  <span
+                    data-target
+                    className={cn("absolute inset-0 rounded-full border-black/25", small ? "border-[3px]" : "border-[5px]")}
+                  />
                 ) : (
-                  <span data-target className={cn("absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/25", small ? "size-[38%]" : "size-[30%]")} />
+                  <span
+                    data-target
+                    className={cn(
+                      "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/25",
+                      small ? "size-[38%]" : "size-[30%]",
+                    )}
+                  />
                 ))}
               {!small && c === 0 && (
-                <span className={cn("pointer-events-none absolute left-[5%] top-[4%] text-caption font-bold leading-none", dark ? "text-[var(--board-light)]" : "text-[var(--board-dark)]")}>
+                <span
+                  className={cn(
+                    "pointer-events-none absolute left-[5%] top-[4%] text-caption font-bold leading-none",
+                    dark ? "text-[var(--board-light)]" : "text-[var(--board-dark)]",
+                  )}
+                >
                   {sq[1] + 1}
                 </span>
               )}
               {!small && r === 7 && (
-                <span className={cn("pointer-events-none absolute bottom-[4%] right-[6%] text-caption font-bold leading-none", dark ? "text-[var(--board-light)]" : "text-[var(--board-dark)]")}>
+                <span
+                  className={cn(
+                    "pointer-events-none absolute bottom-[4%] right-[6%] text-caption font-bold leading-none",
+                    dark ? "text-[var(--board-light)]" : "text-[var(--board-dark)]",
+                  )}
+                >
                   {FILES[sq[0]]}
                 </span>
               )}
@@ -168,7 +212,13 @@ export function Board({ pieces, view, canSelect, selectable, selected, targets, 
             zIndex: dragging ? 30 : 10,
           };
           return (
-            <div key={p.key} className={cn("absolute", p.ghost && "opacity-30")} style={style} data-piece={p.ghost ? undefined : `${p.dead ? "dead" : p.color}${p.kind}`} data-ghost={p.ghost || undefined}>
+            <div
+              key={p.key}
+              className={cn("absolute", p.ghost && "opacity-30")}
+              style={style}
+              data-piece={p.ghost ? undefined : `${p.dead ? "dead" : p.color}${p.kind}`}
+              data-ghost={p.ghost || undefined}
+            >
               <img src={pieceSrc(p)} alt="" draggable={false} className="relative size-full" />
             </div>
           );

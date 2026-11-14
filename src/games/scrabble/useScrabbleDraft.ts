@@ -10,7 +10,19 @@ export const key = (x: number, y: number) => `${x},${y}`;
 
 // My plan: tiles laid out on the board, and the order of my rack. It comes back from the server when the game
 // opens and is saved as I go, so it's there on any phone.
-export function useScrabbleDraft({ match, state, mySeat, playing, rack }: { match: MatchView; state: ScrabbleState; mySeat: number; playing: boolean; rack: Tile[] | null | undefined }) {
+export function useScrabbleDraft({
+  match,
+  state,
+  mySeat,
+  playing,
+  rack,
+}: {
+  match: MatchView;
+  state: ScrabbleState;
+  mySeat: number;
+  playing: boolean;
+  rack: Tile[] | null | undefined;
+}) {
   const serverDraft = useQuery(api.scrabble.draft, playing ? { id: match._id } : "skip");
   const saveDraft = useMutation(api.scrabble.saveDraft);
 
@@ -34,7 +46,15 @@ export function useScrabbleDraft({ match, state, mySeat, playing, rack }: { matc
   const rackById = useMemo(() => new Map((rack ?? []).map((t) => [t.id, t])), [rack]);
   // Tiles that are still mine and on free squares. Someone playing over a planned square sends it home.
   const placed = useMemo(
-    () => draft.placed.filter((p, i, all) => rackById.has(p.id) && !occupied.has(key(p.x, p.y)) && p.x < state.size && p.y < state.size && all.findIndex((q) => q.x === p.x && q.y === p.y) === i),
+    () =>
+      draft.placed.filter(
+        (p, i, all) =>
+          rackById.has(p.id) &&
+          !occupied.has(key(p.x, p.y)) &&
+          p.x < state.size &&
+          p.y < state.size &&
+          all.findIndex((q) => q.x === p.x && q.y === p.y) === i,
+      ),
     [draft.placed, rackById, occupied, state.size],
   );
   const bumped = draft.placed.some((p) => rackById.has(p.id) && occupied.has(key(p.x, p.y)));

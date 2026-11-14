@@ -17,10 +17,13 @@ type Player = Awaited<ReturnType<typeof signedIn>>;
 
 const scheduled = (t: T) => t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
 const pushes = async (t: T) =>
-  (await scheduled(t)).filter((s) => s.name === "push:sendToUser" && s.state.kind === "pending").map((s) => s.args[0] as { userId: Id<"users">; title: string; body: string });
+  (await scheduled(t))
+    .filter((s) => s.name === "push:sendToUser" && s.state.kind === "pending")
+    .map((s) => s.args[0] as { userId: Id<"users">; title: string; body: string });
 const clearPushes = (t: T) =>
   t.run(async (ctx) => {
-    for (const s of await ctx.db.system.query("_scheduled_functions").collect()) if (s.name === "push:sendToUser" && s.state.kind === "pending") await ctx.scheduler.cancel(s._id);
+    for (const s of await ctx.db.system.query("_scheduled_functions").collect())
+      if (s.name === "push:sendToUser" && s.state.kind === "pending") await ctx.scheduler.cancel(s._id);
   });
 const get = (t: T, id: Id<"matches">) => t.run((ctx) => ctx.db.get(id));
 const stateOf = async (t: T, id: Id<"matches">) => (await get(t, id))!.state as MonoState;
@@ -52,7 +55,12 @@ describe("a game of Monopoly", () => {
     expect(m.turn).toBe(seats[0].userId);
     // The decks' order isn't in the public state, only in the game's secret.
     expect(JSON.stringify(s)).not.toContain("decks");
-    const secret = await t.run((ctx) => ctx.db.query("secrets").withIndex("by_match_user", (q) => q.eq("matchId", id).eq("userId", undefined)).unique());
+    const secret = await t.run((ctx) =>
+      ctx.db
+        .query("secrets")
+        .withIndex("by_match_user", (q) => q.eq("matchId", id).eq("userId", undefined))
+        .unique(),
+    );
     expect((secret!.data as { chance: number[] }).chance).toHaveLength(16);
     const p = (await pushes(t)).filter((x) => x.title === "Monopoly is on");
     expect(p.find((x) => x.userId === seats[0].userId)?.body).toBe("You roll first.");
@@ -126,7 +134,12 @@ describe("a game of Monopoly", () => {
     await clearPushes(t);
     await seats[0].as.mutation(api.landlord.move, { id, action: { k: "decline" } });
     let p = await pushes(t);
-    expect(p.filter((x) => x.title.startsWith("Auction")).map((x) => x.userId).sort()).toEqual([seats[1].userId, seats[2].userId].sort());
+    expect(
+      p
+        .filter((x) => x.title.startsWith("Auction"))
+        .map((x) => x.userId)
+        .sort(),
+    ).toEqual([seats[1].userId, seats[2].userId].sort());
     await clearPushes(t);
     await seats[1].as.mutation(api.landlord.move, { id, action: { k: "bid", amount: 150 } });
     p = await pushes(t);
@@ -148,11 +161,18 @@ describe("a game of Monopoly", () => {
       await ctx.db.patch(id, { state: s });
     });
     await clearPushes(t);
-    await seats[0].as.mutation(api.landlord.move, { id, action: { k: "offer", to: 1, give: { cash: 0, props: [1], free: [] }, get: { cash: 100, props: [], free: [] } } });
-    expect(await pushes(t)).toEqual([expect.objectContaining({ userId: seats[1].userId, title: expect.stringMatching(/sent you a trade/) })]);
+    await seats[0].as.mutation(api.landlord.move, {
+      id,
+      action: { k: "offer", to: 1, give: { cash: 0, props: [1], free: [] }, get: { cash: 100, props: [], free: [] } },
+    });
+    expect(await pushes(t)).toEqual([
+      expect.objectContaining({ userId: seats[1].userId, title: expect.stringMatching(/sent you a trade/) }),
+    ]);
     await clearPushes(t);
     await seats[1].as.mutation(api.landlord.move, { id, action: { k: "accept", id: 1 } });
-    expect(await pushes(t)).toEqual([expect.objectContaining({ userId: seats[0].userId, title: expect.stringMatching(/took your trade/) })]);
+    expect(await pushes(t)).toEqual([
+      expect.objectContaining({ userId: seats[0].userId, title: expect.stringMatching(/took your trade/) }),
+    ]);
     const s = await stateOf(t, id);
     expect(s.props[1]!.owner).toBe(1);
   });
@@ -184,7 +204,12 @@ describe("a game of Monopoly", () => {
     expect(m.result?.reason).toBe("richest");
     expect(m.result?.standings).toHaveLength(3);
     // The log holds every event, in order, with no gaps.
-    const rows = await t.run((ctx) => ctx.db.query("landlordLog").withIndex("by_match", (q) => q.eq("matchId", id)).collect());
+    const rows = await t.run((ctx) =>
+      ctx.db
+        .query("landlordLog")
+        .withIndex("by_match", (q) => q.eq("matchId", id))
+        .collect(),
+    );
     let seq = 0;
     for (const r of rows) {
       expect(r.seq).toBe(seq);

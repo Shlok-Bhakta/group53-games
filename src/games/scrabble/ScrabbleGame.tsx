@@ -37,7 +37,13 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
   const rack = useQuery(api.scrabble.rack, mySeat >= 0 ? { id: match._id } : "skip");
   const play = useMutation(api.scrabble.play);
 
-  const { draft, setDraft, hydrated, occupied, rackById, placed, inRack, setPlaced, setOrder } = useScrabbleDraft({ match, state, mySeat, playing, rack });
+  const { draft, setDraft, hydrated, occupied, rackById, placed, inRack, setPlaced, setOrder } = useScrabbleDraft({
+    match,
+    state,
+    mySeat,
+    playing,
+    rack,
+  });
 
   // --- Picking and placing ---
   const [selected, setSelected] = useState<number | null>(null);
@@ -64,16 +70,37 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
     if (selected !== null && !occupied.has(key(x, y))) putDown(selected, x, y);
   };
 
-  const { board, rackEl, ghost, drag, target, slot, startDrag } = useTileDrag({ playing, swapping, setSwapping, setSelected, occupied, placed, inRack, rackSize: rules.rack, putDown, recall, setOrder });
+  const { board, rackEl, ghost, drag, target, slot, startDrag } = useTileDrag({
+    playing,
+    swapping,
+    setSwapping,
+    setSelected,
+    occupied,
+    placed,
+    inRack,
+    rackSize: rules.rack,
+    putDown,
+    recall,
+    setOrder,
+  });
   const [hop, setHop] = useState(0);
 
   const { evaluation, bad, checking, tone, bubble, shake, setShake } = usePreview({ placed, rack, tiles: state.tiles, rules });
 
   // --- The latest move, which every phone animates in ---
   const last = state.moves.at(-1);
-  const fresh = useMemo(() => new Set(state.tiles.filter((t) => t.turn === state.moves.length - 1 && last?.kind === "play").map((t) => key(t.x, t.y))), [state.tiles, state.moves.length, last?.kind]);
-  const lastCell = useMemo(() => [...fresh].map((k) => k.split(",").map(Number) as [number, number]).sort((a, b) => b[0] + b[1] - a[0] - a[1])[0], [fresh]);
-  const scored = last?.kind === "play" && lastCell ? { key: state.moves.length, x: lastCell[0], y: lastCell[1], text: `+${last.score}`, color: colorOf(last.seat) } : null;
+  const fresh = useMemo(
+    () => new Set(state.tiles.filter((t) => t.turn === state.moves.length - 1 && last?.kind === "play").map((t) => key(t.x, t.y))),
+    [state.tiles, state.moves.length, last?.kind],
+  );
+  const lastCell = useMemo(
+    () => [...fresh].map((k) => k.split(",").map(Number) as [number, number]).sort((a, b) => b[0] + b[1] - a[0] - a[1])[0],
+    [fresh],
+  );
+  const scored =
+    last?.kind === "play" && lastCell
+      ? { key: state.moves.length, x: lastCell[0], y: lastCell[1], text: `+${last.score}`, color: colorOf(last.seat) }
+      : null;
 
   // Whoever's turn it is, trying tiles out: face down on everyone else's board.
   const planning = useQuery(api.scrabble.planning, match.status === "active" ? { id: match._id } : "skip");
@@ -128,7 +155,12 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
     const measure = () => {
       const bar = topBar.current;
       const d = dock.current;
-      setBox({ w: el.clientWidth, h: el.clientHeight || el.clientWidth, top: bar ? bar.offsetTop + bar.offsetHeight + 6 : 0, bottom: d ? d.offsetHeight + 6 : 0 });
+      setBox({
+        w: el.clientWidth,
+        h: el.clientHeight || el.clientWidth,
+        top: bar ? bar.offsetTop + bar.offsetHeight + 6 : 0,
+        bottom: d ? d.offsetHeight + 6 : 0,
+      });
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -143,7 +175,13 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
   const draggedTile = drag ? rackById.get(drag.id) : undefined;
   const draftTiles: DraftTile[] = placed.map((p) => {
     const tile = rackById.get(p.id)!;
-    return { id: p.id, x: p.x, y: p.y, letter: tile.letter === "?" ? (p.letter ?? "?").toUpperCase() : tile.letter, blank: tile.letter === "?" };
+    return {
+      id: p.id,
+      x: p.x,
+      y: p.y,
+      letter: tile.letter === "?" ? (p.letter ?? "?").toUpperCase() : tile.letter,
+      blank: tile.letter === "?",
+    };
   });
 
   const boardEl = px > 0 && (
@@ -193,12 +231,13 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
       <div ref={area} className="absolute inset-0">
         {boardEl && <div className="absolute inset-0">{boardEl}</div>}
         <TopBar ref={topBar} match={match} state={state} meId={meId} myTurn={myTurn} onMenu={() => setMenu(true)} />
-        <AnimatePresence>
-          {bingoKey !== null && <Bingo key={bingoKey} />}
-        </AnimatePresence>
+        <AnimatePresence>{bingoKey !== null && <Bingo key={bingoKey} />}</AnimatePresence>
       </div>
 
-      <div ref={dock} className="absolute inset-x-0 bottom-0 z-10 flex flex-col gap-2.5 rounded-t-3xl bg-card/80 px-3 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-3 shadow-[0_-8px_24px_rgb(0_0_0/0.18)] backdrop-blur-xl">
+      <div
+        ref={dock}
+        className="absolute inset-x-0 bottom-0 z-10 flex flex-col gap-2.5 rounded-t-3xl bg-card/80 px-3 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-3 shadow-[0_-8px_24px_rgb(0_0_0/0.18)] backdrop-blur-xl"
+      >
         {playing ? (
           <>
             <Rack
@@ -250,7 +289,9 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
         ) : (
           <div className="flex items-center gap-3">
             <BagButton count={state.bag} onClick={() => setBagOpen(true)} />
-            <p className="text-callout text-muted-foreground">{mySeat >= 0 ? "You're out. Stick around to see who wins." : "You're watching."}</p>
+            <p className="text-callout text-muted-foreground">
+              {mySeat >= 0 ? "You're out. Stick around to see who wins." : "You're watching."}
+            </p>
           </div>
         )}
       </div>
@@ -258,7 +299,13 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
       <ScrabbleMenu open={menu} onOpenChange={setMenu} match={match} state={state} meId={meId} planning={planning} playing={playing} />
       <BagSheet open={bagOpen} onClose={() => setBagOpen(false)} match={match} state={state} rack={rack ?? undefined} />
 
-      {drag && draggedTile && <DragGhost ref={ghost} letter={draftTiles.find((d) => d.id === drag.id)?.letter ?? draggedTile.letter} blank={draggedTile.letter === "?"} />}
+      {drag && draggedTile && (
+        <DragGhost
+          ref={ghost}
+          letter={draftTiles.find((d) => d.id === drag.id)?.letter ?? draggedTile.letter}
+          blank={draggedTile.letter === "?"}
+        />
+      )}
 
       <BlankPicker
         open={blankFor !== null}

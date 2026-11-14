@@ -78,14 +78,13 @@ export function nextUp(s: WorldState, field: Field, seatOfId: (id: string) => nu
   const rank = (id: string) => order.indexOf(seatOfId(id));
   const fresh = balls.filter((b) => b.strokes === 0).sort((a, b) => rank(a.id) - rank(b.id));
   if (fresh.length) return fresh[0].id;
-  const away = balls
-    .map((b) => ({ id: b.id, d: field(b.x, b.y) }))
-    .sort((a, b) => b.d - a.d || rank(a.id) - rank(b.id));
+  const away = balls.map((b) => ({ id: b.id, d: field(b.x, b.y) })).sort((a, b) => b.d - a.d || rank(a.id) - rank(b.id));
   return away[0].id;
 }
 
 // Everyone's total, by seat.
-export const totals = (st: GolfState, seats: number) => Array.from({ length: seats }, (_, i) => st.scores.reduce((a, h) => a + (h[i] ?? 0), 0));
+export const totals = (st: GolfState, seats: number) =>
+  Array.from({ length: seats }, (_, i) => st.scores.reduce((a, h) => a + (h[i] ?? 0), 0));
 // Par for the holes played so far.
 export const parSoFar = (st: GolfState) => st.scores.reduce((a, _, n) => a + (st.holes[n]?.par ?? 0), 0);
 

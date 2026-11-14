@@ -19,7 +19,8 @@ const BEAM = 5;
 function distanceField(c: Course) {
   const w = worldOf(c);
   const S = 1;
-  const W = Math.ceil(c.w / S), H = Math.ceil(c.h / S);
+  const W = Math.ceil(c.w / S),
+    H = Math.ceil(c.h / S);
   const d = new Float64Array(W * H).fill(Infinity);
   const ok = (x: number, y: number) => !HAZARDS.includes(groundAt(w, { x, y }));
   const blocked = (ax: number, ay: number, bx: number, by: number) => {
@@ -35,9 +36,16 @@ function distanceField(c: Course) {
   const queue = [start];
   while (queue.length) {
     const i = queue.shift()!;
-    const x = i % W, y = (i - x) / W;
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const nx = x + dx, ny = y + dy;
+    const x = i % W,
+      y = (i - x) / W;
+    for (const [dx, dy] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ]) {
+      const nx = x + dx,
+        ny = y + dy;
       if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
       const j = ny * W + nx;
       if (d[j] !== Infinity || !ok(nx + 0.5, ny + 0.5) || blocked(x + 0.5, y + 0.5, nx + 0.5, ny + 0.5)) continue;
@@ -97,7 +105,8 @@ function sloppy(c: Course, seed: number, limit = 14) {
         if (score < best.score) best = { score, a, p };
       }
     }
-    const a = best.a + (r() - 0.5) * 0.12, p = Math.min(1, best.p * (0.9 + r() * 0.2));
+    const a = best.a + (r() - 0.5) * 0.12,
+      p = Math.min(1, best.p * (0.9 + r() * 0.2));
     const { s, sunk } = shot(c, packed, a, p);
     if (sunk) return s.balls[0].strokes;
     packed = pack(s);
@@ -119,7 +128,12 @@ for (const c of HOLES) {
   const line = solve(c);
   const human = noSloppy || !line ? [] : [1, 2, 3, 4].map((seed) => sloppy(c, seed));
   const avg = human.length ? (human.reduce((a, b) => a + b, 0) / human.length).toFixed(1) : "-";
-  console.log(`${c.id.padEnd(10)} ${c.name.padEnd(16)} par ${c.par}  solved in ${line ? line.length : "NEVER"}  sloppy ${human.join(",") || "-"} (avg ${avg})  ${((performance.now() - t0) / 1000).toFixed(0)}s`);
+  console.log(
+    `${c.id.padEnd(10)} ${c.name.padEnd(16)} par ${c.par}  solved in ${line ? line.length : "NEVER"}  sloppy ${human.join(",") || "-"} (avg ${avg})  ${((performance.now() - t0) / 1000).toFixed(0)}s`,
+  );
   if (line) out[c.id] = line;
-  fs.writeFileSync(path, `// A way round every hole, found by scripts/golf-solve.ts and replayed by convex/golf/holes.test.ts, so a\n// hole that can't be sunk any more fails the tests. [angle, power] per shot.\nexport const SOLUTIONS: Record<string, [number, number][]> = ${JSON.stringify(out)};\n`);
+  fs.writeFileSync(
+    path,
+    `// A way round every hole, found by scripts/golf-solve.ts and replayed by convex/golf/holes.test.ts, so a\n// hole that can't be sunk any more fails the tests. [angle, power] per shot.\nexport const SOLUTIONS: Record<string, [number, number][]> = ${JSON.stringify(out)};\n`,
+  );
 }

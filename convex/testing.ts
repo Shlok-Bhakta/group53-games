@@ -70,7 +70,10 @@ export const profileOf = internalQuery({
   args: { userId: v.id("users") },
   handler: async (ctx, { userId }) => {
     assertTestDeployment();
-    return await ctx.db.query("profiles").withIndex("by_user", (q) => q.eq("userId", userId)).unique();
+    return await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
   },
 });
 
@@ -90,7 +93,12 @@ export const pushesOf = internalQuery({
   args: { userId: v.id("users") },
   handler: async (ctx, { userId }) => {
     assertTestDeployment();
-    return (await ctx.db.query("testPushes").withIndex("by_user", (q) => q.eq("userId", userId)).collect()).map(({ title, body, url, tag, badge }) => ({ title, body, url, tag, badge }));
+    return (
+      await ctx.db
+        .query("testPushes")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .collect()
+    ).map(({ title, body, url, tag, badge }) => ({ title, body, url, tag, badge }));
   },
 });
 
@@ -98,9 +106,15 @@ export const golfWorld = internalQuery({
   args: { key: v.string() },
   handler: async (ctx, { key }) => {
     assertTestDeployment();
-    const w = await ctx.db.query("golfWorlds").withIndex("by_key", (q) => q.eq("key", key)).unique();
+    const w = await ctx.db
+      .query("golfWorlds")
+      .withIndex("by_key", (q) => q.eq("key", key))
+      .unique();
     if (!w) return null;
-    const snap = await ctx.db.query("golfSnapshots").withIndex("by_world", (q) => q.eq("worldId", w._id)).unique();
+    const snap = await ctx.db
+      .query("golfSnapshots")
+      .withIndex("by_world", (q) => q.eq("worldId", w._id))
+      .unique();
     return { awake: w.awake, snapshotTick: snap?.tick ?? null };
   },
 });
@@ -109,7 +123,10 @@ export const rtCommands = internalQuery({
   args: { id: v.id("matches") },
   handler: async (ctx, { id }) => {
     assertTestDeployment();
-    return await ctx.db.query("rtCommands").withIndex("by_match_tick", (q) => q.eq("matchId", id)).collect();
+    return await ctx.db
+      .query("rtCommands")
+      .withIndex("by_match_tick", (q) => q.eq("matchId", id))
+      .collect();
   },
 });
 
@@ -132,13 +149,29 @@ export const startMatch = internalAction({
 export const insertActive = internalMutation({
   args: { mode: v.string(), a: v.id("users"), b: v.id("users"), settings: settingsArg },
   handler: async (ctx, { mode, a, b, settings }) => {
-    if (mode !== "chess:classic" && mode !== "chess:realtime") throw new Error(`startMatch builds two-player chess only, not ${mode}: open a lobby for other games.`);
+    if (mode !== "chess:classic" && mode !== "chess:realtime")
+      throw new Error(`startMatch builds two-player chess only, not ${mode}: open a lobby for other games.`);
     assertTestDeployment();
     const now = Date.now();
-    const state = mode === "chess:realtime" ? { kind: "realtime", ready: [], startAt: null } : { kind: "classic", fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", moves: [] };
+    const state =
+      mode === "chess:realtime"
+        ? { kind: "realtime", ready: [], startAt: null }
+        : { kind: "classic", fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", moves: [] };
     return await ctx.db.insert("matches", {
-      mode, status: "active", createdBy: a, players: [{ userId: a, color: "w" }, { userId: b, color: "b" }], invited: [], state, ...(settings ? { settings } : {}),
-      turn: mode === "chess:classic" ? a : undefined, moveCount: 0, startedAt: now, lastActivityAt: now,
+      mode,
+      status: "active",
+      createdBy: a,
+      players: [
+        { userId: a, color: "w" },
+        { userId: b, color: "b" },
+      ],
+      invited: [],
+      state,
+      ...(settings ? { settings } : {}),
+      turn: mode === "chess:classic" ? a : undefined,
+      moveCount: 0,
+      startedAt: now,
+      lastActivityAt: now,
     });
   },
 });
@@ -151,14 +184,24 @@ export const startFour = internalAction({
 export const insertFour = internalMutation({
   args: { mode: v.string(), players: v.array(v.id("users")), settings: settingsArg },
   handler: async (ctx, { mode, players, settings }) => {
-    if (mode !== "chess:four" && mode !== "chess:realtime4") throw new Error(`startFour builds four-player chess only, not ${mode}: open a lobby for other games.`);
+    if (mode !== "chess:four" && mode !== "chess:realtime4")
+      throw new Error(`startFour builds four-player chess only, not ${mode}: open a lobby for other games.`);
     assertTestDeployment();
     const now = Date.now();
     const colors = ["red", "blue", "yellow", "green"];
     const state = mode === "chess:realtime4" ? { kind: "realtime", ready: [], startAt: null } : initialFour();
     return await ctx.db.insert("matches", {
-      mode, status: "active", createdBy: players[0], players: players.map((userId, i) => ({ userId, color: colors[i] })), invited: [], state, ...(settings ? { settings } : {}),
-      turn: mode === "chess:four" ? players[0] : undefined, moveCount: 0, startedAt: now, lastActivityAt: now,
+      mode,
+      status: "active",
+      createdBy: players[0],
+      players: players.map((userId, i) => ({ userId, color: colors[i] })),
+      invited: [],
+      state,
+      ...(settings ? { settings } : {}),
+      turn: mode === "chess:four" ? players[0] : undefined,
+      moveCount: 0,
+      startedAt: now,
+      lastActivityAt: now,
     });
   },
 });
@@ -169,7 +212,10 @@ export const setRack = internalMutation({
   handler: async (ctx, { id, userId, letters }) => {
     assertTestDeployment();
     const rack = [...letters].map((letter, i) => ({ id: 1000 + i + Math.floor(Math.random() * 1e6) * 100, letter }));
-    const row = await ctx.db.query("secrets").withIndex("by_match_user", (q) => q.eq("matchId", id).eq("userId", userId)).unique();
+    const row = await ctx.db
+      .query("secrets")
+      .withIndex("by_match_user", (q) => q.eq("matchId", id).eq("userId", userId))
+      .unique();
     if (row) await ctx.db.patch(row._id, { data: { rack } });
     else await ctx.db.insert("secrets", { matchId: id, userId, data: { rack } });
     return rack;
@@ -180,14 +226,21 @@ export const rackOf = internalQuery({
   args: { id: v.id("matches"), userId: v.id("users") },
   handler: async (ctx, { id, userId }) => {
     assertTestDeployment();
-    const row = await ctx.db.query("secrets").withIndex("by_match_user", (q) => q.eq("matchId", id).eq("userId", userId)).unique();
+    const row = await ctx.db
+      .query("secrets")
+      .withIndex("by_match_user", (q) => q.eq("matchId", id).eq("userId", userId))
+      .unique();
     return row?.data.rack ?? [];
   },
 });
 
 // Plays a word for a player, for screenshots that need a board with something on it.
 export const playAs = internalMutation({
-  args: { id: v.id("matches"), userId: v.id("users"), tiles: v.array(v.object({ id: v.number(), x: v.number(), y: v.number(), letter: v.optional(v.string()) })) },
+  args: {
+    id: v.id("matches"),
+    userId: v.id("users"),
+    tiles: v.array(v.object({ id: v.number(), x: v.number(), y: v.number(), letter: v.optional(v.string()) })),
+  },
   handler: async (ctx, { id, userId, tiles }) => {
     assertTestDeployment();
     return await playTiles(ctx, id, tiles, userId);
@@ -251,7 +304,8 @@ export const reset = internalMutation({
     if (users.some((u) => !u.isTest)) throw new Error("Refusing to reset: real players exist. Use removeTestData.");
     // Whatever the last test left scheduled (real-time and golf ticks, turn timers, reminders, pushes)
     // would otherwise run against the next test's data.
-    for (const job of await ctx.db.system.query("_scheduled_functions").collect()) if (job.state.kind === "pending") await ctx.scheduler.cancel(job._id);
+    for (const job of await ctx.db.system.query("_scheduled_functions").collect())
+      if (job.state.kind === "pending") await ctx.scheduler.cancel(job._id);
     for (const f of await ctx.db.query("hostedFiles").collect()) await ctx.storage.delete(f.storageId);
     let left = BUDGET;
     for (const table of TABLES) {
@@ -273,10 +327,26 @@ export const removeTestData = internalMutation({
     let removed = 0;
     for (const m of await ctx.db.query("matches").collect()) {
       if (!m.players.some((p) => testIds.has(p.userId)) && !testIds.has(m.createdBy)) continue;
-      for (const c of await ctx.db.query("rtCommands").withIndex("by_match_tick", (q) => q.eq("matchId", m._id)).collect()) await ctx.db.delete(c._id);
-      for (const s of await ctx.db.query("rtSnapshots").withIndex("by_match", (q) => q.eq("matchId", m._id)).collect()) await ctx.db.delete(s._id);
-      for (const s of await ctx.db.query("secrets").withIndex("by_match_user", (q) => q.eq("matchId", m._id)).collect()) await ctx.db.delete(s._id);
-      for (const d of await ctx.db.query("drafts").withIndex("by_match_user", (q) => q.eq("matchId", m._id)).collect()) await ctx.db.delete(d._id);
+      for (const c of await ctx.db
+        .query("rtCommands")
+        .withIndex("by_match_tick", (q) => q.eq("matchId", m._id))
+        .collect())
+        await ctx.db.delete(c._id);
+      for (const s of await ctx.db
+        .query("rtSnapshots")
+        .withIndex("by_match", (q) => q.eq("matchId", m._id))
+        .collect())
+        await ctx.db.delete(s._id);
+      for (const s of await ctx.db
+        .query("secrets")
+        .withIndex("by_match_user", (q) => q.eq("matchId", m._id))
+        .collect())
+        await ctx.db.delete(s._id);
+      for (const d of await ctx.db
+        .query("drafts")
+        .withIndex("by_match_user", (q) => q.eq("matchId", m._id))
+        .collect())
+        await ctx.db.delete(d._id);
       await ctx.db.delete(m._id);
       removed++;
     }
@@ -290,8 +360,19 @@ export const removeTestData = internalMutation({
           golf = true;
         }
     if (golf) for (const s of await ctx.db.query("golfSnapshots").collect()) await ctx.db.delete(s._id);
-    for (const table of ["golfScores", "golfBags"] as const) for (const r of await ctx.db.query(table).collect()) if (testIds.has(r.userId)) await ctx.db.delete(r._id);
-    for (const table of ["ratings", "presence", "taps", "profiles", "pushSubscriptions", "handoffs", "stockAccounts", "stockPositions", "stockOrders"] as const) {
+    for (const table of ["golfScores", "golfBags"] as const)
+      for (const r of await ctx.db.query(table).collect()) if (testIds.has(r.userId)) await ctx.db.delete(r._id);
+    for (const table of [
+      "ratings",
+      "presence",
+      "taps",
+      "profiles",
+      "pushSubscriptions",
+      "handoffs",
+      "stockAccounts",
+      "stockPositions",
+      "stockOrders",
+    ] as const) {
       for (const doc of await ctx.db.query(table).collect()) if (testIds.has(doc.userId)) await ctx.db.delete(doc._id);
     }
     for (const row of await ctx.db.query("stockWorth").collect()) {
@@ -300,7 +381,11 @@ export const removeTestData = internalMutation({
     }
     for (const s of await ctx.db.query("authSessions").collect()) {
       if (!testIds.has(s.userId)) continue;
-      for (const r of await ctx.db.query("authRefreshTokens").withIndex("sessionId", (q) => q.eq("sessionId", s._id)).collect()) await ctx.db.delete(r._id);
+      for (const r of await ctx.db
+        .query("authRefreshTokens")
+        .withIndex("sessionId", (q) => q.eq("sessionId", s._id))
+        .collect())
+        await ctx.db.delete(r._id);
       await ctx.db.delete(s._id);
     }
     for (const id of testIds) await ctx.db.delete(id as Id<"users">);

@@ -35,7 +35,11 @@ export function ChessGame({ match, meId }: { match: MatchView; meId: Id<"users">
 
   const seats = four ? <FourSeats match={match} meId={meId} /> : null;
   const top = !four ? <PlayerBar player={opponent ?? match.players[0]} match={match} meId={meId} /> : null;
-  const bottom = !four ? <PlayerBar player={mine ?? match.players[1]} match={match} meId={meId} /> : <FourStatus match={match} meId={meId} />;
+  const bottom = !four ? (
+    <PlayerBar player={mine ?? match.players[1]} match={match} meId={meId} />
+  ) : (
+    <FourStatus match={match} meId={meId} />
+  );
   // The dock under the board. In async games a move waiting for Confirm takes the place of draw and resign.
   const dock: Dock = (confirm) =>
     match.status === "finished" ? (
@@ -66,7 +70,10 @@ function PlayerBar({ player, match, meId }: { player: Player; match: MatchView; 
   const isMe = player.userId === meId;
   const toMove = match.status === "active" && sideToMove(match) === player.color;
   const winner = match.result && !match.result.draw && match.result.winners.includes(player.userId);
-  const ready = match.mode === "chess:realtime" && (match.state as RealtimeState)?.startAt === null && (match.state as RealtimeState)?.ready.includes(player.userId);
+  const ready =
+    match.mode === "chess:realtime" &&
+    (match.state as RealtimeState)?.startAt === null &&
+    (match.state as RealtimeState)?.ready.includes(player.userId);
   const color = COLOR_NAMES[player.color ?? ""] ?? "";
   return (
     <div className="flex min-h-12 items-center gap-3 px-1">
@@ -75,16 +82,25 @@ function PlayerBar({ player, match, meId }: { player: Player; match: MatchView; 
         <p className="truncate font-semibold">
           {isMe ? "You" : player.name} {player.badge}
         </p>
-        <p className="truncate text-footnote text-muted-foreground">{!isMe && here && match.status === "active" ? `${color}, here now` : color}</p>
+        <p className="truncate text-footnote text-muted-foreground">
+          {!isMe && here && match.status === "active" ? `${color}, here now` : color}
+        </p>
       </div>
       {/* Fades in where it sits: a chip flying between the bars would cross the board and catch taps. */}
       {toMove &&
         (isMe ? (
-          <motion.span initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: "spring", bounce: 0.2, duration: 0.3 }} className="pointer-events-none rounded-full bg-primary px-3.5 py-2 font-display text-callout text-primary-foreground">
+          <motion.span
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: "spring", bounce: 0.2, duration: 0.3 }}
+            className="pointer-events-none rounded-full bg-primary px-3.5 py-2 font-display text-callout text-primary-foreground"
+          >
             Your move
           </motion.span>
         ) : (
-          <span className="pointer-events-none rounded-full bg-muted px-3 py-1.5 text-footnote font-semibold text-muted-foreground">To move</span>
+          <span className="pointer-events-none rounded-full bg-muted px-3 py-1.5 text-footnote font-semibold text-muted-foreground">
+            To move
+          </span>
         ))}
       {ready && <Chip tone="quiet">Ready</Chip>}
       {winner && <Chip tone="win">Winner</Chip>}
@@ -124,17 +140,51 @@ function FourSeats({ match, meId }: { match: MatchView; meId: Id<"users"> | unde
         const toMove = match.status === "active" && classic?.turn === p.color;
         const ready = rt && rt.startAt === null && rt.ready.includes(p.userId);
         const winner = match.result?.winners.includes(p.userId);
-        return <Seat key={p.userId} player={p} isMe={p.userId === meId} style={CORNER[side]} out={out?.reason} toMove={toMove} ready={!!ready} winner={!!winner} points={classic ? classic.points[p.color as keyof FourState["points"]] : null} />;
+        return (
+          <Seat
+            key={p.userId}
+            player={p}
+            isMe={p.userId === meId}
+            style={CORNER[side]}
+            out={out?.reason}
+            toMove={toMove}
+            ready={!!ready}
+            winner={!!winner}
+            points={classic ? classic.points[p.color as keyof FourState["points"]] : null}
+          />
+        );
       })}
     </div>
   );
 }
 
-function Seat({ player: p, isMe, style, out, toMove, ready, winner, points }: { player: Player; isMe: boolean; style: CSSProperties; out?: string; toMove: boolean; ready: boolean; winner: boolean; points: number | null }) {
+function Seat({
+  player: p,
+  isMe,
+  style,
+  out,
+  toMove,
+  ready,
+  winner,
+  points,
+}: {
+  player: Player;
+  isMe: boolean;
+  style: CSSProperties;
+  out?: string;
+  toMove: boolean;
+  ready: boolean;
+  winner: boolean;
+  points: number | null;
+}) {
   const { online } = useHere(p.userId);
   const color = seatColor(p, !!out);
   return (
-    <div data-seat={p.color} className="absolute flex h-[21.4%] w-[21.4%] flex-col items-center justify-center gap-0.5 text-center" style={style}>
+    <div
+      data-seat={p.color}
+      className="absolute flex h-[21.4%] w-[21.4%] flex-col items-center justify-center gap-0.5 text-center"
+      style={style}
+    >
       <span
         // flex, so the box is exactly the avatar: an inline avatar adds a line's descender below it and the
         // turn ring comes out an oval.
@@ -169,7 +219,8 @@ function FourStatus({ match, meId }: { match: MatchView; meId: Id<"users"> | und
   );
 }
 
-const outText = (reason: string) => ({ checkmate: "Mated", stalemate: "Stalemated", resign: "Resigned", timeout: "Timed out", king: "King fell" })[reason] ?? "Out";
+const outText = (reason: string) =>
+  ({ checkmate: "Mated", stalemate: "Stalemated", resign: "Resigned", timeout: "Timed out", king: "King fell" })[reason] ?? "Out";
 
 // The bar at the bottom of a game in progress: draw and resign, each a full-height thumb target, or Confirm
 // while a move waits.
@@ -179,7 +230,8 @@ function Controls({ match, meId, confirm }: { match: MatchView; meId: Id<"users"
   const rtOut = useRtOut(match);
   const four = match.players.length > 2;
   const myColor = match.players.find((p) => p.userId === meId)?.color;
-  const alreadyOut = match.mode === "chess:four" ? (match.state as FourState).out.some((o) => o.color === myColor) : rtOut.includes(myColor ?? "");
+  const alreadyOut =
+    match.mode === "chess:four" ? (match.state as FourState).out.some((o) => o.color === myColor) : rtOut.includes(myColor ?? "");
   const theyOffered = match.drawOffer && match.drawOffer !== meId;
   const iOffered = match.drawOffer === meId;
   if (four && alreadyOut) return <DockNote>You're out. Stick around to see who wins.</DockNote>;
@@ -188,7 +240,11 @@ function Controls({ match, meId, confirm }: { match: MatchView; meId: Id<"users"
       match={match}
       variant="card"
       size="dock"
-      detail={four ? "Your army turns grey and the others play on. You keep your place for how long you lasted." : "Your opponent gets the win and the rating points."}
+      detail={
+        four
+          ? "Your army turns grey and the others play on. You keep your place for how long you lasted."
+          : "Your opponent gets the win and the rating points."
+      }
     />
   );
   if (four) return confirm ?? <div className="grid">{resignButton}</div>;
@@ -208,7 +264,13 @@ function Controls({ match, meId, confirm }: { match: MatchView; meId: Id<"users"
       )}
       {confirm ?? (
         <div className="grid grid-cols-2 gap-2.5">
-          <AsyncButton variant="card" size="dock" disabled={iOffered} icon={<HandshakeIcon weight="bold" />} onClick={() => offerDraw({ id: match._id })}>
+          <AsyncButton
+            variant="card"
+            size="dock"
+            disabled={iOffered}
+            icon={<HandshakeIcon weight="bold" />}
+            onClick={() => offerDraw({ id: match._id })}
+          >
             {iOffered ? "Draw offered" : "Offer draw"}
           </AsyncButton>
           {resignButton}
@@ -217,4 +279,3 @@ function Controls({ match, meId, confirm }: { match: MatchView; meId: Id<"users"
     </div>
   );
 }
-

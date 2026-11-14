@@ -77,7 +77,11 @@ export function StockPage() {
             {quote.rank ? ` · #${quote.rank}` : ""}
             {moved !== 0 && (
               <span className="ml-1 inline-flex items-center text-footnote">
-                {moved > 0 ? <CaretUpIcon weight="fill" style={{ color: ink("up") }} /> : <CaretDownIcon weight="fill" style={{ color: ink("down") }} />}
+                {moved > 0 ? (
+                  <CaretUpIcon weight="fill" style={{ color: ink("up") }} />
+                ) : (
+                  <CaretDownIcon weight="fill" style={{ color: ink("down") }} />
+                )}
                 {Math.abs(moved)}
               </span>
             )}
@@ -87,7 +91,9 @@ export function StockPage() {
         <Stat label="Open">{open !== undefined && open !== null ? price(open, unit) : "—"}</Stat>
         <Stat label="Previous close">{quote.prevClose !== undefined ? price(quote.prevClose, unit) : "—"}</Stat>
         <Stat label="Volume">
-          {quote.volume !== undefined ? `${count(quote.volume)}${stats?.avgVolume ? ` · ${(quote.volume / stats.avgVolume).toFixed(1)}× normal` : ""}` : "—"}
+          {quote.volume !== undefined
+            ? `${count(quote.volume)}${stats?.avgVolume ? ` · ${(quote.volume / stats.avgVolume).toFixed(1)}× normal` : ""}`
+            : "—"}
         </Stat>
         <Stat label="Last trade">{`${tradeTime(quote.time, now)} · ${sourceName(quote.source)}`}</Stat>
       </Section>
@@ -135,13 +141,23 @@ function ProStats({ stats: s, price: p, unit }: { stats: ProfileStats; price: nu
             ["Revenue growth", opt(s.revenueGrowth, (x) => frac(x, true))],
             ["Short of float", opt(s.shortOfFloat, (x) => frac(x))],
             ["Ex-dividend", opt(s.exDividend, dayOf)],
-            ["Next earnings", opt(s.earnings, (t) => `${dayOf(t)}${s.epsEstimate !== undefined ? ` · est. ${price(s.epsEstimate, unit)}` : ""}`)],
+            [
+              "Next earnings",
+              opt(s.earnings, (t) => `${dayOf(t)}${s.epsEstimate !== undefined ? ` · est. ${price(s.epsEstimate, unit)}` : ""}`),
+            ],
           ]}
         />
       </Section>
       {s.targetMean !== undefined && (
         <Section title="Analysts">
-          <RangeRow label="Price targets" low={s.targetLow} high={s.targetHigh} value={p} unit={unit} mark={{ at: s.targetMean, name: "Mean target" }} />
+          <RangeRow
+            label="Price targets"
+            low={s.targetLow}
+            high={s.targetHigh}
+            value={p}
+            unit={unit}
+            mark={{ at: s.targetMean, name: "Mean target" }}
+          />
           <Stat label="Mean target">
             {price(s.targetMean, unit)}
             <span className="ml-1 text-footnote text-muted-foreground">({frac(s.targetMean / p - 1, true)})</span>
@@ -158,12 +174,22 @@ function ProStats({ stats: s, price: p, unit }: { stats: ProfileStats; price: nu
               </span>
             )}
             {s.summary && (
-              <button type="button" onClick={() => setMore((m) => !m)} className={cn("text-left text-callout", !more && "line-clamp-4")} aria-expanded={more}>
+              <button
+                type="button"
+                onClick={() => setMore((m) => !m)}
+                className={cn("text-left text-callout", !more && "line-clamp-4")}
+                aria-expanded={more}
+              >
                 {s.summary}
               </button>
             )}
             {s.website && (
-              <a href={s.website} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center gap-1 text-callout font-semibold text-primary">
+              <a
+                href={s.website}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex min-h-11 items-center gap-1 text-callout font-semibold text-primary"
+              >
                 {s.website.replace(/^https?:\/\/(www\.)?/, "")}
                 <ArrowSquareOutIcon aria-label="opens outside the app" />
               </a>

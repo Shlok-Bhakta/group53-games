@@ -88,7 +88,10 @@ export function StonksBoard() {
 
 function Breadth({ up, down }: { up: number; down: number }) {
   return (
-    <span className="flex items-center gap-2.5 pb-0.5 text-footnote font-semibold text-muted-foreground tabular-nums" aria-label={`${up} up, ${down} down`}>
+    <span
+      className="flex items-center gap-2.5 pb-0.5 text-footnote font-semibold text-muted-foreground tabular-nums"
+      aria-label={`${up} up, ${down} down`}
+    >
       <span className="flex items-center gap-0.5">
         <CaretUpIcon weight="fill" style={{ color: ink("up") }} aria-hidden />
         {up}
@@ -103,7 +106,21 @@ function Breadth({ up, down }: { up: number; down: number }) {
 
 // A row only re-renders when one of its own numbers changes, so a trade in one stock doesn't redraw 20.
 const Row = memo(
-  function Row({ r, spark, open, close, pro, now }: { r: BoardRow; spark?: Point[]; open: number; close: number; pro: boolean; now: number }) {
+  function Row({
+    r,
+    spark,
+    open,
+    close,
+    pro,
+    now,
+  }: {
+    r: BoardRow;
+    spark?: Point[];
+    open: number;
+    close: number;
+    pro: boolean;
+    now: number;
+  }) {
     const convex = useConvex();
     const ref = useWarmWhileSeen<HTMLDivElement>(r.symbol);
     const points = useMemo(() => withLive(spark ?? [], r, dayDomain(open, close)), [spark, r, open, close]);
@@ -131,7 +148,11 @@ const Row = memo(
                   className="flex items-center text-caption font-bold tabular-nums"
                   aria-label={moved > 0 ? `up ${moved} today` : `down ${-moved} today`}
                 >
-                  {moved > 0 ? <CaretUpIcon weight="fill" style={{ color: ink("up") }} /> : <CaretDownIcon weight="fill" style={{ color: ink("down") }} />}
+                  {moved > 0 ? (
+                    <CaretUpIcon weight="fill" style={{ color: ink("up") }} />
+                  ) : (
+                    <CaretDownIcon weight="fill" style={{ color: ink("down") }} />
+                  )}
                   {Math.abs(moved)}
                 </motion.span>
               )}

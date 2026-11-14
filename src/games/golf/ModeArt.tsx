@@ -5,12 +5,27 @@ import { drawBall, drawBoard, drawBumper, drawCup, drawFlag } from "./toy";
 
 // Each golf mode's card: a little green with the balls on it. Turn-based has one ball rolling and the rest
 // waiting their turn, with a dotted line for the next shot; Live has everyone on the move at once. Still.
-const W = 26, H = 14;
+const W = 26,
+  H = 14;
 const CUP = { x: 21, y: 5 };
-const BOARD = [{ x: 1, y: 1 }, { x: W - 1, y: 1 }, { x: W - 1, y: H - 1 }, { x: 1, y: H - 1 }];
+const BOARD = [
+  { x: 1, y: 1 },
+  { x: W - 1, y: 1 },
+  { x: W - 1, y: H - 1 },
+  { x: 1, y: H - 1 },
+];
 const BALLS = {
-  "golf:turns": [{ x: 6, y: 10, c: "yellow" }, { x: 13, y: 7.5, c: "blue", dir: -0.4, go: 1 }, { x: 18.5, y: 9.5, c: "pink" }],
-  "golf:live": [{ x: 7, y: 9, c: "yellow", dir: -0.3, go: 1 }, { x: 11, y: 11, c: "blue", dir: -0.6, go: 1 }, { x: 16, y: 7, c: "pink", dir: 0.1, go: 1 }, { x: 9, y: 5, c: "teal", dir: 0.2, go: 1 }],
+  "golf:turns": [
+    { x: 6, y: 10, c: "yellow" },
+    { x: 13, y: 7.5, c: "blue", dir: -0.4, go: 1 },
+    { x: 18.5, y: 9.5, c: "pink" },
+  ],
+  "golf:live": [
+    { x: 7, y: 9, c: "yellow", dir: -0.3, go: 1 },
+    { x: 11, y: 11, c: "blue", dir: -0.6, go: 1 },
+    { x: 16, y: 7, c: "pink", dir: 0.1, go: 1 },
+    { x: 9, y: 5, c: "teal", dir: 0.2, go: 1 },
+  ],
 } as const;
 
 export function GolfModeArt({ mode }: { mode: ModeKey }) {
@@ -65,5 +80,12 @@ export function GolfModeArt({ mode }: { mode: ModeKey }) {
       drawBall(ctx, b.x, b.y, 0.5, { ring: SEAT_COLORS[b.c], dir: "dir" in b ? b.dir : 0, stretch: moving ? 1.2 : 1 });
     }
   }, [mode]);
-  return <canvas ref={cv} role="img" aria-label={mode === "golf:live" ? "Everyone putting at once" : "Balls waiting their turn"} className="aspect-[26/14] w-full" />;
+  return (
+    <canvas
+      ref={cv}
+      role="img"
+      aria-label={mode === "golf:live" ? "Everyone putting at once" : "Balls waiting their turn"}
+      className="aspect-[26/14] w-full"
+    />
+  );
 }

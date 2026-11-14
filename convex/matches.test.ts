@@ -15,7 +15,10 @@ afterEach(() => vi.useRealTimers());
 type T = ReturnType<typeof setup>;
 
 const scheduled = (t: T) => t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
-const pushes = async (t: T) => (await scheduled(t)).filter((s) => s.name === "push:sendToUser" && s.state.kind === "pending").map((s) => s.args[0] as { userId: Id<"users">; title: string; url: string });
+const pushes = async (t: T) =>
+  (await scheduled(t))
+    .filter((s) => s.name === "push:sendToUser" && s.state.kind === "pending")
+    .map((s) => s.args[0] as { userId: Id<"users">; title: string; url: string });
 const match = (t: T, id: Id<"matches">) => t.run((ctx) => ctx.db.get(id));
 
 async function twoPlayers(t: T) {
@@ -90,7 +93,9 @@ describe("lobby", () => {
   test("challenging the same person twice returns the same challenge", async () => {
     const t = setup();
     const { a, b } = await twoPlayers(t);
-    const ids = await Promise.all(Array.from({ length: 5 }, () => a.as.mutation(api.matches.challenge, { mode: "chess:realtime", opponent: b.userId })));
+    const ids = await Promise.all(
+      Array.from({ length: 5 }, () => a.as.mutation(api.matches.challenge, { mode: "chess:realtime", opponent: b.userId })),
+    );
     expect(new Set(ids).size).toBe(1);
     expect((await pushes(t)).filter((p) => p.title === "Shlok challenged you")).toHaveLength(1);
   });
@@ -100,7 +105,20 @@ describe("lobby", () => {
     const { a, b } = await twoPlayers(t);
     // Duplicates made before dedupe existed.
     const dupes = await t.run(async (ctx) =>
-      Promise.all([0, 1, 2].map(() => ctx.db.insert("matches", { mode: "chess:classic", status: "waiting", createdBy: a.userId, players: [{ userId: a.userId }], invited: [b.userId], state: null, moveCount: 0, lastActivityAt: Date.now() }))),
+      Promise.all(
+        [0, 1, 2].map(() =>
+          ctx.db.insert("matches", {
+            mode: "chess:classic",
+            status: "waiting",
+            createdBy: a.userId,
+            players: [{ userId: a.userId }],
+            invited: [b.userId],
+            state: null,
+            moveCount: 0,
+            lastActivityAt: Date.now(),
+          }),
+        ),
+      ),
     );
     const rt = await a.as.mutation(api.matches.queue, { mode: "chess:realtime" });
     await b.as.mutation(api.matches.queue, { mode: "chess:realtime" });
@@ -252,7 +270,9 @@ describe("classic chess", () => {
     expect((await pushes(t)).length).toBe(before);
     await t.mutation(internal.matches.remind, { id, moveCount: 1 });
     expect((await pushes(t)).at(-1)).toMatchObject({ userId: black.userId, title: "Still your move" });
-    expect((await scheduled(t)).filter((s) => s.name === "matches:remind" && (s.args[0] as { moveCount: number }).moveCount === 1)).toHaveLength(2);
+    expect(
+      (await scheduled(t)).filter((s) => s.name === "matches:remind" && (s.args[0] as { moveCount: number }).moveCount === 1),
+    ).toHaveLength(2);
   });
 
   test("checkmate ends the game and moves ratings", async () => {
@@ -385,7 +405,13 @@ describe("real-time chess", () => {
     const startAt = ((await match(t, g.id))!.state as RealtimeState).startAt!;
     return { ...g, startAt, serverTick: () => Math.floor((Date.now() - startAt) / TICK_MS) };
   }
-  const commands = (t: T, id: Id<"matches">) => t.run((ctx) => ctx.db.query("rtCommands").withIndex("by_match_tick", (q) => q.eq("matchId", id)).collect());
+  const commands = (t: T, id: Id<"matches">) =>
+    t.run((ctx) =>
+      ctx.db
+        .query("rtCommands")
+        .withIndex("by_match_tick", (q) => q.eq("matchId", id))
+        .collect(),
+    );
 
   test("the clock starts only when both players are on the board, then the ticker runs", async () => {
     const t = setup();
@@ -412,9 +438,17 @@ describe("real-time chess", () => {
     const now = g.serverTick();
     expect(await g.white.as.mutation(api.chess.rtMove, { id: g.id, pieceId: 12, toX: 4, toY: 3, clientTick: now - 5 })).toBe(now - 5);
     // Too far in the past is pulled up to the edge of the window; the future is capped too.
-    expect(await g.black.as.mutation(api.chess.rtMove, { id: g.id, pieceId: 28, toX: 4, toY: 4, clientTick: now - 500 })).toBe(now - MAX_LAG_TICKS);
-    expect(await g.black.as.mutation(api.chess.rtMove, { id: g.id, pieceId: 27, toX: 3, toY: 4, clientTick: now + 500 })).toBeLessThanOrEqual(now + 3);
-    expect((await commands(t, g.id)).map((c) => [c.color, c.tick])).toEqual([["b", now - MAX_LAG_TICKS], ["w", now - 5], ["b", expect.any(Number)]]);
+    expect(await g.black.as.mutation(api.chess.rtMove, { id: g.id, pieceId: 28, toX: 4, toY: 4, clientTick: now - 500 })).toBe(
+      now - MAX_LAG_TICKS,
+    );
+    expect(
+      await g.black.as.mutation(api.chess.rtMove, { id: g.id, pieceId: 27, toX: 3, toY: 4, clientTick: now + 500 }),
+    ).toBeLessThanOrEqual(now + 3);
+    expect((await commands(t, g.id)).map((c) => [c.color, c.tick])).toEqual([
+      ["b", now - MAX_LAG_TICKS],
+      ["w", now - 5],
+      ["b", expect.any(Number)],
+    ]);
   });
 
   test("moving never writes the match, so two players moving at once can't collide", async () => {
@@ -436,7 +470,9 @@ describe("real-time chess", () => {
     const c = await signedIn(t, "Boiler");
     vi.advanceTimersByTime(REALTIME_COUNTDOWN_MS + 30 * TICK_MS);
     await expect(c.as.mutation(api.chess.rtMove, { id: g.id, pieceId: 12, toX: 4, toY: 3, clientTick: 30 })).rejects.toThrow("not playing");
-    await expect(g.white.as.mutation(api.chess.rtMove, { id: g.id, pieceId: 12, toX: 9, toY: 3, clientTick: 30 })).rejects.toThrow("not a square");
+    await expect(g.white.as.mutation(api.chess.rtMove, { id: g.id, pieceId: 12, toX: 9, toY: 3, clientTick: 30 })).rejects.toThrow(
+      "not a square",
+    );
   });
 
   test("rtState hands clients the settled snapshot and every command after it", async () => {
@@ -468,7 +504,9 @@ describe("real-time chess", () => {
     await t.mutation(internal.chess.rtTick, { id: g.id });
     const m = (await match(t, g.id))!;
     expect(m).toMatchObject({ status: "finished", result: { winners: [g.white.userId], draw: false, reason: "king" } });
-    await expect(g.black.as.mutation(api.chess.rtMove, { id: g.id, pieceId: 28, toX: 4, toY: 4, clientTick: g.serverTick() })).rejects.toThrow("over");
+    await expect(
+      g.black.as.mutation(api.chess.rtMove, { id: g.id, pieceId: 28, toX: 4, toY: 4, clientTick: g.serverTick() }),
+    ).rejects.toThrow("over");
   });
 
   test("the ticker keeps going while the game is live", async () => {
@@ -515,7 +553,9 @@ describe("who may change a lobby", () => {
     await a.as.mutation(api.matches.startGame, { id });
     const before = await match(t, id);
     expect(before).toMatchObject({ status: "active", settings: { rack: 9 } });
-    await expect(a.as.mutation(api.matches.configure, { id, settings: { rack: 5, board: 21 } })).rejects.toThrow("Only the host can change the settings.");
+    await expect(a.as.mutation(api.matches.configure, { id, settings: { rack: 5, board: 21 } })).rejects.toThrow(
+      "Only the host can change the settings.",
+    );
     expect(await match(t, id)).toEqual(before);
   });
 });

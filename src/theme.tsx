@@ -35,8 +35,20 @@ function toHex(color: string) {
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeChoice>(() => read("theme", ["system", "light", "dark"], "system"));
-  const [palette, setPaletteState] = useState<PaletteId>(() => read("palette", PALETTES.map((p) => p.id), "felt"));
-  const [font, setFontState] = useState<FontId>(() => read("font", FONTS.map((f) => f.id), "oxanium"));
+  const [palette, setPaletteState] = useState<PaletteId>(() =>
+    read(
+      "palette",
+      PALETTES.map((p) => p.id),
+      "felt",
+    ),
+  );
+  const [font, setFontState] = useState<FontId>(() =>
+    read(
+      "font",
+      FONTS.map((f) => f.id),
+      "oxanium",
+    ),
+  );
   const [systemDark, setSystemDark] = useState(media.matches);
   const resolved = theme === "system" ? (systemDark ? "dark" : "light") : theme;
 

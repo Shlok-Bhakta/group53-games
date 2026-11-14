@@ -34,7 +34,7 @@ function graph(c: BaseAudioContext, dest: AudioNode): Graph {
     let lp = 0;
     for (let i = 0; i < len; i++) {
       const k = i / len;
-      lp += ((Math.random() * 2 - 1) - lp) * (0.6 - k * 0.45);
+      lp += (Math.random() * 2 - 1 - lp) * (0.6 - k * 0.45);
       d[i] = lp * (1 - k) ** 3;
     }
   }
@@ -89,7 +89,8 @@ let listening = false;
 export function listen() {
   if (listening || typeof window === "undefined") return;
   listening = true;
-  for (const type of ["touchend", "click", "keydown", "pointerdown"]) window.addEventListener(type, unlock, { capture: true, passive: true });
+  for (const type of ["touchend", "click", "keydown", "pointerdown"])
+    window.addEventListener(type, unlock, { capture: true, passive: true });
 }
 
 export function setMuted(m: boolean) {
@@ -101,7 +102,29 @@ export function stop() {
   rolling(0, null);
 }
 
-type Name = "putt" | "knock" | "bump" | "plunk" | "drop" | "blast" | "whoosh" | "land" | "pickup" | "brake" | "lip" | "rolling" | "horn" | "camera" | "thunder" | "freeze" | "gun" | "shieldUp" | "coffee" | "honey" | "fizzle" | "rocket";
+type Name =
+  | "putt"
+  | "knock"
+  | "bump"
+  | "plunk"
+  | "drop"
+  | "blast"
+  | "whoosh"
+  | "land"
+  | "pickup"
+  | "brake"
+  | "lip"
+  | "rolling"
+  | "horn"
+  | "camera"
+  | "thunder"
+  | "freeze"
+  | "gun"
+  | "shieldUp"
+  | "coffee"
+  | "honey"
+  | "fizzle"
+  | "rocket";
 function rec(name: Name, args: unknown[]) {
   if (offline) return;
   const log = (window as unknown as { __golfSounds?: unknown[] }).__golfSounds;
@@ -113,7 +136,17 @@ function live(): BaseAudioContext | null {
 }
 const now = (c: BaseAudioContext) => at ?? c.currentTime;
 
-function burst(c: BaseAudioContext, t: number, dur: number, type: BiquadFilterType, freq: number, q: number, level: number, sweepTo?: number, send = 0.5) {
+function burst(
+  c: BaseAudioContext,
+  t: number,
+  dur: number,
+  type: BiquadFilterType,
+  freq: number,
+  q: number,
+  level: number,
+  sweepTo?: number,
+  send = 0.5,
+) {
   const src = c.createBufferSource();
   src.buffer = g!.noise;
   const f = c.createBiquadFilter();
@@ -281,7 +314,10 @@ export function horn() {
   const c = live();
   if (!c) return;
   const t = now(c);
-  for (const [f, d] of [[233, 0], [233, 0.16]] as const) {
+  for (const [f, d] of [
+    [233, 0],
+    [233, 0.16],
+  ] as const) {
     tone(c, t + d, f, 0.14, 0.14, f * 0.97, 0.5, 0.01);
     tone(c, t + d, f * 2, 0.12, 0.07, undefined, 0.5, 0.01);
     tone(c, t + d, f * 3, 0.1, 0.04, undefined, 0.5, 0.01);
@@ -385,7 +421,30 @@ export function rolling(speed: number, ground: Ground | null) {
   g.roll.filter.frequency.setTargetAtTime(180 + s * 900 * rough, t, 0.05);
 }
 
-const PLAY: Record<Name, (...a: never[]) => void> = { putt, knock, bump, plunk, drop, blast, whoosh, land, pickup, brake, lip, rolling, horn, camera, thunder, freeze, gun, shieldUp, coffee, honey, fizzle, rocket };
+const PLAY: Record<Name, (...a: never[]) => void> = {
+  putt,
+  knock,
+  bump,
+  plunk,
+  drop,
+  blast,
+  whoosh,
+  land,
+  pickup,
+  brake,
+  lip,
+  rolling,
+  horn,
+  camera,
+  thunder,
+  freeze,
+  gun,
+  shieldUp,
+  coffee,
+  honey,
+  fizzle,
+  rocket,
+};
 
 // Renders a log of sounds (from `window.__golfSounds`) into a buffer, `t0` being the log time (ms)
 // at which the buffer starts.

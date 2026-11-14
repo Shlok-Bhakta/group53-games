@@ -100,13 +100,26 @@ export default function LandlordGame({ match, meId }: { match: MatchView; meId: 
     : shown.busy
       ? (shown.line ?? (state.current === mySeat ? "Your turn" : `${nameOf(state.current)}'s turn`))
       : up === mySeat
-        ? ph.k === "auction" ? `Auction: ${squareName(ph.pos)}` : ph.k === "debt" ? "You owe money" : ph.k === "buy" ? `Buy ${squareName(ph.pos)}?` : "Your turn"
+        ? ph.k === "auction"
+          ? `Auction: ${squareName(ph.pos)}`
+          : ph.k === "debt"
+            ? "You owe money"
+            : ph.k === "buy"
+              ? `Buy ${squareName(ph.pos)}?`
+              : "Your turn"
         : `${nameOf(up)}${ph.k === "auction" ? " to bid" : ph.k === "debt" ? " is raising money" : ph.k === "buy" ? " is deciding" : "'s turn"}`;
 
   return (
     <FullscreenStage className="[background-image:radial-gradient(color-mix(in_oklch,var(--foreground)_8%,transparent)_1px,transparent_1px)] [background-size:16px_16px]">
       <div ref={stage} className="absolute inset-0 touch-none overflow-hidden" {...camera.bind}>
-        <Board camera={camera} state={state} match={match} highlight={shown.highlight} picking={picking} onSquare={(pos) => (picking ? setPick(pos) : setDeed(pos))} />
+        <Board
+          camera={camera}
+          state={state}
+          match={match}
+          highlight={shown.highlight}
+          picking={picking}
+          onSquare={(pos) => (picking ? setPick(pos) : setDeed(pos))}
+        />
       </div>
       <Overlays shown={shown} top={pads.top} bottom={pads.bottom} />
 
@@ -114,12 +127,30 @@ export default function LandlordGame({ match, meId }: { match: MatchView; meId: 
         <FloatButton aria-label="Back" onClick={goBack}>
           <CaretLeftIcon size={22} weight="bold" />
         </FloatButton>
-        <FloatPill onClick={() => setMenu(true)} aria-label="Players" className="flex-1 border-2 py-1 pl-1 pr-3 transition-colors duration-300" style={{ borderColor: upPlayer ? seatColor(upPlayer) : "transparent" }}>
+        <FloatPill
+          onClick={() => setMenu(true)}
+          aria-label="Players"
+          className="flex-1 border-2 py-1 pl-1 pr-3 transition-colors duration-300"
+          style={{ borderColor: upPlayer ? seatColor(upPlayer) : "transparent" }}
+        >
           {upPlayer && <PlayerAvatar player={upPlayer} size={34} className="shrink-0" />}
-          <motion.span key={status} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className={cn("min-w-0 flex-1 truncate font-display text-callout leading-tight", up === mySeat && !shown.busy && "text-primary")} aria-live="polite">
+          <motion.span
+            key={status}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={cn(
+              "min-w-0 flex-1 truncate font-display text-callout leading-tight",
+              up === mySeat && !shown.busy && "text-primary",
+            )}
+            aria-live="polite"
+          >
             {status}
           </motion.span>
-          {shown.catching && <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-caption font-semibold text-primary-foreground">Catching up</span>}
+          {shown.catching && (
+            <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-caption font-semibold text-primary-foreground">
+              Catching up
+            </span>
+          )}
         </FloatPill>
         <FloatButton
           aria-label={camera.overview ? "Zoom in" : "Whole board"}
@@ -137,7 +168,11 @@ export default function LandlordGame({ match, meId }: { match: MatchView; meId: 
         </FloatButton>
       </FloatingTopBar>
 
-      <div ref={dock} className="absolute inset-x-0 bottom-0 z-10 rounded-t-3xl bg-card/85 px-3 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-1 shadow-[0_-8px_24px_rgb(0_0_0/0.18)] backdrop-blur-xl" data-busy={shown.busy ? "" : undefined}>
+      <div
+        ref={dock}
+        className="absolute inset-x-0 bottom-0 z-10 rounded-t-3xl bg-card/85 px-3 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-1 shadow-[0_-8px_24px_rgb(0_0_0/0.18)] backdrop-blur-xl"
+        data-busy={shown.busy ? "" : undefined}
+      >
         <Dock
           match={match}
           meId={meId}
@@ -173,7 +208,15 @@ export default function LandlordGame({ match, meId }: { match: MatchView; meId: 
       />
       {mySeat >= 0 && (
         <>
-          <HoldingsSheet open={holdings} onClose={() => setHoldings(false)} match={match} state={state} seat={mySeat} busy={shown.busy} onDeed={(pos) => setDeed(pos)} />
+          <HoldingsSheet
+            open={holdings}
+            onClose={() => setHoldings(false)}
+            match={match}
+            state={state}
+            seat={mySeat}
+            busy={shown.busy}
+            onDeed={(pos) => setDeed(pos)}
+          />
           <TradeSheet open={trade !== null} start={trade ?? {}} onClose={() => setTrade(null)} match={match} state={state} seat={mySeat} />
         </>
       )}

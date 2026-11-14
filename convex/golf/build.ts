@@ -44,11 +44,16 @@ function boxesFor(c: Course, level: number, seed: number): Vec[] {
     if (!c.greens.some((gr) => inPoly(p, gr.poly))) continue;
     if (c.zones.some((z) => (z.kind === "boost" || z.kind === "ramp") && inPoly(p, z.poly))) continue;
     if ([...busy, ...extra].some((q) => hyp(q.x - p.x, q.y - p.y) < 3)) continue;
-    if (w.segs.some((sg) => {
-      const dx = sg.b.x - sg.a.x, dy = sg.b.y - sg.a.y, l2 = dx * dx + dy * dy || 1;
-      const t = Math.max(0, Math.min(1, ((p.x - sg.a.x) * dx + (p.y - sg.a.y) * dy) / l2));
-      return hyp(p.x - sg.a.x - dx * t, p.y - sg.a.y - dy * t) < sg.r + 1.2;
-    })) continue;
+    if (
+      w.segs.some((sg) => {
+        const dx = sg.b.x - sg.a.x,
+          dy = sg.b.y - sg.a.y,
+          l2 = dx * dx + dy * dy || 1;
+        const t = Math.max(0, Math.min(1, ((p.x - sg.a.x) * dx + (p.y - sg.a.y) * dy) / l2));
+        return hyp(p.x - sg.a.x - dx * t, p.y - sg.a.y - dy * t) < sg.r + 1.2;
+      })
+    )
+      continue;
     extra.push(p);
   }
   return [...c.boxes, ...extra];
@@ -56,7 +61,13 @@ function boxesFor(c: Course, level: number, seed: number): Vec[] {
 
 // What the generator's output depends on: the same key always builds the same holes, so they can be
 // generated once (a preview on the mode page) and used again when the game starts.
-export const genOpts = (s: Settings, n: number) => ({ seed: s.seed ?? 1, n, terrain: s.terrain ?? 0, style: s.style ?? 2, hazards: s.hazards ?? 1 });
+export const genOpts = (s: Settings, n: number) => ({
+  seed: s.seed ?? 1,
+  n,
+  terrain: s.terrain ?? 0,
+  style: s.style ?? 2,
+  hazards: s.hazards ?? 1,
+});
 export const genKey = (s: Settings) => {
   const o = genOpts(s, 0);
   return `${o.seed}:${o.terrain}:${o.style}:${o.hazards}`;

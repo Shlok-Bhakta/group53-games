@@ -8,7 +8,8 @@ import { admin, createPlayer, expect, fillLobby, getMatch, matchIdOf, openLobby,
 
 type BallView = { id: string; x: number; y: number; mode: string; holes: number; strokes: number; t: number };
 const balls = (page: Page) => page.evaluate(() => (window as unknown as { __golf?: { balls(): BallView[] } }).__golf?.balls() ?? []);
-const shoot = (page: Page, a: number, p: number) => page.evaluate(([x, y]) => (window as unknown as { __golf: { shoot(a: number, p: number): void } }).__golf.shoot(x, y), [a, p]);
+const shoot = (page: Page, a: number, p: number) =>
+  page.evaluate(([x, y]) => (window as unknown as { __golf: { shoot(a: number, p: number): void } }).__golf.shoot(x, y), [a, p]);
 const meOn = (page: Page) => page.evaluate(() => (window as unknown as { __golf?: { me(): string } }).__golf?.me());
 
 // Two phones with push on.
@@ -35,7 +36,8 @@ async function intoGolf(page: Page) {
 // Drags back from the middle of the screen and lets go: the shot goes the other way.
 async function putt(page: Page, dx: number, dy: number) {
   const box = (await page.getByLabel("Driftwood Bay, an open course").boundingBox())!;
-  const x = box.x + box.width / 2, y = box.y + box.height / 2;
+  const x = box.x + box.width / 2,
+    y = box.y + box.height / 2;
   await page.mouse.move(x, y);
   await page.mouse.down();
   for (let i = 1; i <= 8; i++) await page.mouse.move(x + (dx * i) / 8, y + (dy * i) / 8);
@@ -88,10 +90,15 @@ test("a shot on one phone lands in exactly the same spot on the other", async ({
   await putt(pa, -70, 0);
   await expect.poll(async () => (await balls(pa)).find((x) => x.id === idA)?.mode, { timeout: 5000 }).toBe("roll");
   // It reaches the other phone, rolls, and stops.
-  await expect.poll(async () => {
-    const seen = (await balls(pb)).find((x) => x.id === idA)!;
-    return Math.hypot(seen.x - start.x, seen.y - start.y) > 2 && seen.mode === "aim";
-  }, { timeout: 15_000 }).toBe(true);
+  await expect
+    .poll(
+      async () => {
+        const seen = (await balls(pb)).find((x) => x.id === idA)!;
+        return Math.hypot(seen.x - start.x, seen.y - start.y) > 2 && seen.mode === "aim";
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
   await expect.poll(async () => (await balls(pa)).find((x) => x.id === idA)?.mode, { timeout: 15_000 }).toBe("aim");
 
   // Exactly the same world on both: every coordinate, to the last bit.
@@ -119,7 +126,8 @@ test("a shot costs the other phone a few kilobytes, not a stream of positions", 
   // Let joining settle, then count everything the other phone receives from the first touch of the
   // shot until the server has settled it and gone to sleep.
   await worldAsleep(pb);
-  let bytes = 0, frames = 0;
+  let bytes = 0,
+    frames = 0;
   const cdp = await pb.context().newCDPSession(pb);
   await cdp.send("Network.enable");
   cdp.on("Network.webSocketFrameReceived", (e: { response: { payloadData: string } }) => {
@@ -129,10 +137,15 @@ test("a shot costs the other phone a few kilobytes, not a stream of positions", 
   const start = (await balls(pb)).find((x) => x.id === idA)!;
   await putt(pa, -70, 0);
   // The shot reaches this phone, the ball stops, and the server settles it and sleeps.
-  await expect.poll(async () => {
-    const seen = (await balls(pb)).find((x) => x.id === idA)!;
-    return Math.hypot(seen.x - start.x, seen.y - start.y) > 2 && seen.mode === "aim";
-  }, { timeout: 15_000 }).toBe(true);
+  await expect
+    .poll(
+      async () => {
+        const seen = (await balls(pb)).find((x) => x.id === idA)!;
+        return Math.hypot(seen.x - start.x, seen.y - start.y) > 2 && seen.mode === "aim";
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
   await worldAsleep(pb);
   expect(frames).toBeGreaterThan(0);
   console.log(`A shot cost the other phone ${bytes} bytes in ${frames} messages`);
@@ -245,7 +258,10 @@ test("on a slow connection a putt plays at once and the ball never jumps, even a
           const start = g.drawn();
           g.shoot(angle, 0.14);
           const t0 = performance.now();
-          let movedAfter: number | null = null, biggest = 0, last = start, lastAt = t0;
+          let movedAfter: number | null = null,
+            biggest = 0,
+            last = start,
+            lastAt = t0;
           const frame = () => {
             const at = g.drawn();
             // Per 60fps frame, so a frame a busy machine drew late doesn't count as a jump.
@@ -282,7 +298,9 @@ test("on a slow connection, sinking one still shows the score", async ({ phones 
   // Alone on the hole, so the solver's line.
   const [angle, power] = SOLUTIONS["plains-1"][0];
   await shoot(page, angle, power);
-  await expect(page.getByRole("dialog", { name: "Hole finished" }).getByRole("heading", { name: "Hole in one" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("dialog", { name: "Hole finished" }).getByRole("heading", { name: "Hole in one" })).toBeVisible({
+    timeout: 15_000,
+  });
   await expect.poll(async () => (await balls(page))[0].holes, { timeout: 15_000 }).toBe(1);
 });
 
@@ -327,7 +345,9 @@ test("a turn-based game: the lobby, then one shot at a time, and the card", asyn
   await expect(mine.getByLabel(/hole 1 of 3/)).toHaveAttribute("data-turn", "theirs");
   // Both phones agree where the first ball stopped.
   const strip = (b: BallView[]) => b.map(({ t: _t, ...x }) => x).sort((p, q) => p.id.localeCompare(q.id));
-  await expect.poll(async () => JSON.stringify(strip(await balls(theirs))) === JSON.stringify(strip(await balls(mine))), { timeout: 10_000 }).toBe(true);
+  await expect
+    .poll(async () => JSON.stringify(strip(await balls(theirs))) === JSON.stringify(strip(await balls(mine))), { timeout: 10_000 })
+    .toBe(true);
   // The card's in the menu, with the seedless course's holes on it.
   await mine.getByRole("button", { name: "Menu" }).click();
   await expect(mine.getByRole("region", { name: "Scorecard" })).toBeVisible();
@@ -358,7 +378,9 @@ test("opening a turn-based game again plays back the shots you missed, then goes
   await expect(theirs.getByRole("status").filter({ hasText: "Catching up" })).toHaveCount(0, { timeout: 30_000 });
   await expect(theirs.getByLabel(/hole 1 of 3/)).toHaveAttribute("data-turn", "mine");
   const strip = (b: BallView[]) => b.map(({ t: _t, ...x }) => x).sort((p, q) => p.id.localeCompare(q.id));
-  await expect.poll(async () => JSON.stringify(strip(await balls(theirs))) === JSON.stringify(strip(await balls(mine))), { timeout: 10_000 }).toBe(true);
+  await expect
+    .poll(async () => JSON.stringify(strip(await balls(theirs))) === JSON.stringify(strip(await balls(mine))), { timeout: 10_000 })
+    .toBe(true);
   // Nothing new since: opening it again goes straight to live, and Skip is there for a long one.
   await theirs.goto("/");
   await theirs.goto(url);

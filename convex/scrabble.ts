@@ -99,7 +99,8 @@ export const scrabbleHooks: GameHooks = {
     const racks = state.racks.map((n, i) => (i === seat ? 0 : n));
     const next: ScrabbleState = { ...state, out: [...state.out, seat], racks, bag: bag.bag.length };
     const record: Move = { seat, kind: "resign", score: 0, at: Date.now() };
-    if (state.scores.length - next.out.length < 2) return await endGame(ctx, match, { ...next, moves: [...state.moves, record] }, "last_player");
+    if (state.scores.length - next.out.length < 2)
+      return await endGame(ctx, match, { ...next, moves: [...state.moves, record] }, "last_player");
     if (state.turn === seat) return await advance(ctx, match, next, record, false);
     await ctx.db.patch(match._id, { state: { ...next, moves: [...state.moves, record] }, lastActivityAt: Date.now() });
   },
@@ -142,17 +143,29 @@ async function advance(ctx: MutationCtx, match: Doc<"matches">, state: ScrabbleS
   const mover = match.players[record.seat].userId;
   const who = await displayName(ctx, mover);
   const title =
-    record.kind === "play" ? `${who} played ${record.words![0].word} for ${record.score}`
-    : record.kind === "swap" ? `${who} swapped ${record.count} tile${record.count === 1 ? "" : "s"}`
-    : record.kind === "resign" ? `${who} resigned`
-    : record.kind === "timeout" ? `${who} ran out of time`
-    : `${who} passed`;
-  await passTurn(ctx, match, { state: updated, turn: match.players[next].userId, by: mover, push: { title, body: "Your move." }, timer: timerFor(updated) });
+    record.kind === "play"
+      ? `${who} played ${record.words![0].word} for ${record.score}`
+      : record.kind === "swap"
+        ? `${who} swapped ${record.count} tile${record.count === 1 ? "" : "s"}`
+        : record.kind === "resign"
+          ? `${who} resigned`
+          : record.kind === "timeout"
+            ? `${who} ran out of time`
+            : `${who} passed`;
+  await passTurn(ctx, match, {
+    state: updated,
+    turn: match.players[next].userId,
+    by: mover,
+    push: { title, body: "Your move." },
+    timer: timerFor(updated),
+  });
 }
 
 // Leftover tiles count against whoever holds them. If someone went out, they also get everyone else's.
 async function endGame(ctx: MutationCtx, match: Doc<"matches">, state: ScrabbleState, reason: string, wentOut?: number) {
-  const left = await Promise.all(match.players.map(async (p, i) => (state.out.includes(i) ? 0 : rackValue((await readHand(ctx, match._id, p.userId)).rack))));
+  const left = await Promise.all(
+    match.players.map(async (p, i) => (state.out.includes(i) ? 0 : rackValue((await readHand(ctx, match._id, p.userId)).rack))),
+  );
   const adjust = left.map((v) => -v);
   if (wentOut !== undefined) adjust[wentOut] = left.reduce((a, b) => a + b, 0);
   const final: ScrabbleState = { ...state, scores: state.scores.map((sc, i) => sc + adjust[i]), adjust, turn: -1, deadline: null };
@@ -212,8 +225,17 @@ export async function playTiles(ctx: MutationCtx, id: Id<"matches">, tiles: Plac
     racks: state.racks.map((n, i) => (i === seat ? rack.length : n)),
     bag: bag.bag.length,
   };
-  const record: Move = { seat, kind: "play", score: result.score, words: result.words.map(({ word, score }) => ({ word, score })), bingo: result.bingo || undefined, count: tiles.length, at: Date.now() };
-  if (rack.length === 0 && bag.bag.length === 0) await endGame(ctx, match, { ...next, moves: [...state.moves, record], scoreless: 0 }, "went_out", seat);
+  const record: Move = {
+    seat,
+    kind: "play",
+    score: result.score,
+    words: result.words.map(({ word, score }) => ({ word, score })),
+    bingo: result.bingo || undefined,
+    count: tiles.length,
+    at: Date.now(),
+  };
+  if (rack.length === 0 && bag.bag.length === 0)
+    await endGame(ctx, match, { ...next, moves: [...state.moves, record], scoreless: 0 }, "went_out", seat);
   else await advance(ctx, match, next, record, true);
   return result.score;
 }
@@ -226,7 +248,8 @@ export const swap = mutation({
     const ids = [...new Set(tileIds)].filter((t) => hand.rack.some((r) => r.id === t));
     if (ids.length === 0) throw new Error("Pick the tiles to swap.");
     const bag = await readBag(ctx, id);
-    if (bag.bag.length < ids.length) throw new Error(bag.bag.length === 0 ? "The bag is empty." : `Only ${bag.bag.length} left in the bag.`);
+    if (bag.bag.length < ids.length)
+      throw new Error(bag.bag.length === 0 ? "The bag is empty." : `Only ${bag.bag.length} left in the bag.`);
     const out = hand.rack.filter((t) => ids.includes(t.id));
     const fresh = draw(bag, ids.length);
     bag.bag = shuffle([...bag.bag, ...out.map((t) => t.letter)]);
@@ -234,7 +257,13 @@ export const swap = mutation({
     await writeSecret<Hand>(ctx, id, userId, { rack });
     await writeSecret(ctx, id, undefined, bag);
     await clearPlan(ctx, id, userId, rack);
-    await advance(ctx, match, { ...state, bag: bag.bag.length }, { seat, kind: "swap", score: 0, count: ids.length, at: Date.now() }, false);
+    await advance(
+      ctx,
+      match,
+      { ...state, bag: bag.bag.length },
+      { seat, kind: "swap", score: 0, count: ids.length, at: Date.now() },
+      false,
+    );
   },
 });
 
@@ -297,6 +326,11 @@ export const planning = query({
     if (!(await ctx.db.get(id))?.mode.startsWith("scrabble:")) return [];
     return (await draftsOf(ctx, id))
       .filter((r) => r.userId !== userId && r.count > 0)
-      .map((r) => ({ userId: r.userId, count: r.count, at: r.at, cells: (r.data as Draft).placed.map((p) => [p.x, p.y] as [number, number]) }));
+      .map((r) => ({
+        userId: r.userId,
+        count: r.count,
+        at: r.at,
+        cells: (r.data as Draft).placed.map((p) => [p.x, p.y] as [number, number]),
+      }));
   },
 });

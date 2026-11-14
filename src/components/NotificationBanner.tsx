@@ -57,7 +57,9 @@ export function NotificationBanner({ push }: { push: Push }) {
 }
 
 function blockedFix() {
-  if (platform === "ios") return "Open the Settings app, tap Notifications, find Group 53, and turn on Allow Notifications. Then reopen the app.";
-  if (platform === "android") return "Long-press the Group 53 icon, tap App info, then Notifications, and turn them on. Then reopen the app.";
+  if (platform === "ios")
+    return "Open the Settings app, tap Notifications, find Group 53, and turn on Allow Notifications. Then reopen the app.";
+  if (platform === "android")
+    return "Long-press the Group 53 icon, tap App info, then Notifications, and turn them on. Then reopen the app.";
   return "Click the icon at the left of the address bar, set Notifications to Allow, then reload the page.";
 }

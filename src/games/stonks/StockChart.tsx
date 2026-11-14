@@ -56,7 +56,17 @@ export function withLive(points: Point[], q: { time: number; price: number } | n
 export const dirOf = (p?: number, base?: number): Dir => (p !== undefined && base !== undefined && p < base ? "down" : "up");
 
 // One stock's chart, with its price above it.
-export function StockChart({ symbol, quote, title, stats }: { symbol: string; quote: QuoteView | undefined; title?: string; stats?: ProfileStats | null }) {
+export function StockChart({
+  symbol,
+  quote,
+  title,
+  stats,
+}: {
+  symbol: string;
+  quote: QuoteView | undefined;
+  title?: string;
+  stats?: ProfileStats | null;
+}) {
   const [range, setRange] = useRange();
   const [pro] = usePro();
   const chart = useHeld(useQuery(api.stonks.chart, { symbol, range }));
@@ -74,16 +84,27 @@ export function StockChart({ symbol, quote, title, stats }: { symbol: string; qu
   );
   const points = useMemo(() => withLive(chart.value?.points ?? [], quote, day), [chart.value, quote, day]);
   const domain = useMemo(
-    () => (open === undefined || close === undefined ? undefined : newYork ? axisFor(open, close, points, quote) : ([open, close] as [number, number])),
+    () =>
+      open === undefined || close === undefined
+        ? undefined
+        : newYork
+          ? axisFor(open, close, points, quote)
+          : ([open, close] as [number, number]),
     [open, close, newYork, points, quote],
   );
-  const regular = useMemo<[number, number] | undefined>(() => (open === undefined || close === undefined || !newYork ? undefined : [open, close]), [open, close, newYork]);
+  const regular = useMemo<[number, number] | undefined>(
+    () => (open === undefined || close === undefined || !newYork ? undefined : [open, close]),
+    [open, close, newYork],
+  );
   const period = range === "1D" ? (open === undefined ? "Today" : sessionName(open, now)) : periodName[range];
   const base = range === "1D" ? quote?.prevClose : points[0]?.[1];
   const last = scrub?.[1] ?? quote?.price ?? points.at(-1)?.[1];
   const dir = dirOf(points.at(-1)?.[1], base);
   // After hours (or before the open), the move since the bell is its own line.
-  const ext = !scrub && newYork && range === "1D" && quote?.regularPrice !== undefined && quote.session && quote.session !== "regular" ? quote.price - quote.regularPrice : null;
+  const ext =
+    !scrub && newYork && range === "1D" && quote?.regularPrice !== undefined && quote.session && quote.session !== "regular"
+      ? quote.price - quote.regularPrice
+      : null;
   const isLive = !!quote && now - quote.recv < 2 * 60_000;
   // Pro: the 50- and 200-day moving averages on the year (on five years, 10 and 40 weeks are the same).
   const overlays = useMemo(() => {
@@ -115,7 +136,9 @@ export function StockChart({ symbol, quote, title, stats }: { symbol: string; qu
           {last !== undefined && <Ticker value={last} text={price(last, unit)} instant={!!scrub} />}
         </div>
         <div className={`flex ${S.heroLine} items-center`}>
-          {last !== undefined && base ? <Change change={last - base} base={base} unit={unit} label={scrub ? pointTime(scrub[0], range) : period} instant={!!scrub} /> : null}
+          {last !== undefined && base ? (
+            <Change change={last - base} base={base} unit={unit} label={scrub ? pointTime(scrub[0], range) : period} instant={!!scrub} />
+          ) : null}
         </div>
         {symbol !== INDEX && (
           <div className={`flex ${S.heroLine} items-center`}>
@@ -168,7 +191,11 @@ function MarketState({ market, earnings, now }: { market: Market; earnings?: num
           : "Market closed";
   // An earnings report this week beats the market's hours: it's what's about to move the price.
   if (!market.late && earningsSoon(earnings, now))
-    return <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-footnote font-semibold text-muted-foreground">Earnings {soon(earnings!, now)}</span>;
+    return (
+      <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-footnote font-semibold text-muted-foreground">
+        Earnings {soon(earnings!, now)}
+      </span>
+    );
   return (
     <span className="flex shrink-0 items-center gap-1.5 text-footnote font-medium text-muted-foreground">
       {market.open && <span className="size-2 rounded-full bg-online" />}

@@ -26,8 +26,20 @@ export function AppearanceGroup() {
           ]}
         />
       </div>
-      <SettingsRow icon={PaletteIcon} tint={TINT.orange} label="Theme" value={PALETTES.find((p) => p.id === palette)?.name} onClick={() => setSheet("theme")} />
-      <SettingsRow icon={TextAaIcon} tint={TINT.cyan} label="Heading font" value={FONTS.find((f) => f.id === font)?.name} onClick={() => setSheet("font")} />
+      <SettingsRow
+        icon={PaletteIcon}
+        tint={TINT.orange}
+        label="Theme"
+        value={PALETTES.find((p) => p.id === palette)?.name}
+        onClick={() => setSheet("theme")}
+      />
+      <SettingsRow
+        icon={TextAaIcon}
+        tint={TINT.cyan}
+        label="Heading font"
+        value={FONTS.find((f) => f.id === font)?.name}
+        onClick={() => setSheet("font")}
+      />
 
       <PickSheet open={sheet === "theme"} onClose={() => setSheet(null)} title="Theme">
         <div className="grid grid-cols-2 gap-3">
@@ -43,7 +55,11 @@ export function AppearanceGroup() {
             >
               {/* 19px is the card's 16 plus the 3px it sits out, so the ring runs parallel to the corner. */}
               {palette === p.id && (
-                <motion.span layoutId="theme-selected" className="absolute -inset-[3px] rounded-[19px] border-[3px] border-primary" transition={{ type: "spring", bounce: 0, duration: 0.3 }} />
+                <motion.span
+                  layoutId="theme-selected"
+                  className="absolute -inset-[3px] rounded-[19px] border-[3px] border-primary"
+                  transition={{ type: "spring", bounce: 0, duration: 0.3 }}
+                />
               )}
               <span className="flex items-center gap-1" aria-hidden="true">
                 {(["green", "yellow", "gray", "hit"] as const).map((c) => (

@@ -21,12 +21,25 @@ export function LargeTitle({ title, subtitle, action }: { title: string; subtitl
 // screen opened fresh never steps back out of the app or onto nothing.
 export function useGoBack(fallback = "/") {
   const navigate = useNavigate();
-  return useCallback(() => ((window.history.state?.idx ?? 0) > 0 ? navigate(-1) : navigate(fallback, { replace: true })), [navigate, fallback]);
+  return useCallback(
+    () => ((window.history.state?.idx ?? 0) > 0 ? navigate(-1) : navigate(fallback, { replace: true })),
+    [navigate, fallback],
+  );
 }
 
 // The bar on screens pushed on top of a tab: back, a centered title, and one optional action. It scrolls with
 // the page on purpose, and starts below the band iOS blurs under the status bar (see TopEdge).
-export function NavBar({ title, subtitle, back = "/", action }: { title: string; subtitle?: ReactNode; back?: string; action?: ReactNode }) {
+export function NavBar({
+  title,
+  subtitle,
+  back = "/",
+  action,
+}: {
+  title: string;
+  subtitle?: ReactNode;
+  back?: string;
+  action?: ReactNode;
+}) {
   const goBack = useGoBack(back);
   return (
     <header className="-mx-2 mb-2 grid min-h-12 grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-2 pt-[calc(env(safe-area-inset-top)+34px)]">

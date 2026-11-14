@@ -52,7 +52,10 @@ export async function recordResult(ctx: MutationCtx, match: Doc<"matches">) {
   const placeOf = (id: Id<"users">) => places.findIndex((g) => g.includes(id));
   const rows = await Promise.all(match.players.map((p) => row(ctx, p.userId, match.mode)));
   const place = match.players.map((p) => placeOf(p.userId));
-  const deltas = multiElo(rows.map((r) => r.rating), place);
+  const deltas = multiElo(
+    rows.map((r) => r.rating),
+    place,
+  );
   return Promise.all(
     match.players.map(async (p, i) => {
       const r = rows[i];
@@ -75,7 +78,14 @@ export const leaderboard = query({
   args: { mode: v.string() },
   handler: async (ctx, { mode }) => {
     if ((await getAuthUserId(ctx)) === null) return [];
-    const ratings = new Map((await ctx.db.query("ratings").withIndex("by_mode", (q) => q.eq("mode", mode)).collect()).map((r) => [r.userId, r]));
+    const ratings = new Map(
+      (
+        await ctx.db
+          .query("ratings")
+          .withIndex("by_mode", (q) => q.eq("mode", mode))
+          .collect()
+      ).map((r) => [r.userId, r]),
+    );
     const users = await ctx.db.query("users").collect();
     return users
       .map((u) => {
@@ -100,6 +110,10 @@ export const mine = query({
     const userId = await getAuthUserId(ctx);
     if (userId === null) return {};
     const rows = await ctx.db.query("ratings").collect();
-    return Object.fromEntries(rows.filter((r) => r.userId === userId).map((r) => [r.mode, { rating: r.rating, games: r.games, wins: r.wins, losses: r.losses, draws: r.draws }]));
+    return Object.fromEntries(
+      rows
+        .filter((r) => r.userId === userId)
+        .map((r) => [r.mode, { rating: r.rating, games: r.games, wins: r.wins, losses: r.losses, draws: r.draws }]),
+    );
   },
 });

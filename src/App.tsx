@@ -43,7 +43,6 @@ const golfRoute = (path: string, element: ReactNode) => (
   />
 );
 
-
 export function App() {
   useVersionCheck();
   return (
@@ -64,7 +63,11 @@ export function App() {
           <SignedIn />
         </Authenticated>
         {/* Phones use mobileOffset, not offset. Toasts sit below the band iOS blurs under the status bar. */}
-        <Toaster position="top-center" offset={{ top: "calc(env(safe-area-inset-top) + 44px)" }} mobileOffset={{ top: "calc(env(safe-area-inset-top) + 44px)" }} />
+        <Toaster
+          position="top-center"
+          offset={{ top: "calc(env(safe-area-inset-top) + 44px)" }}
+          mobileOffset={{ top: "calc(env(safe-area-inset-top) + 44px)" }}
+        />
         <UpdateOverlay />
         <TopEdge />
       </InstallGate>
@@ -107,13 +110,64 @@ function SignedIn() {
                 {golfRoute("/golf/world", <GolfOpenWorld />)}
                 {golfRoute("/golf/:course/:hole", <GolfHole />)}
                 {/* Stonks' code loads before it's opened (src/games/stonks/load.tsx); the skeletons are its exact shape. */}
-                <Route path="/stonks" element={<NotificationsRequired><Suspense fallback={<BoardSkeleton />}><StonksBoardRoute /></Suspense></NotificationsRequired>} />
-                <Route path="/stonks/u/:id" element={<NotificationsRequired><Suspense fallback={<PlayerSkeleton />}><PlayerRoute /></Suspense></NotificationsRequired>} />
-                <Route path="/stonks/:symbol" element={<NotificationsRequired><Suspense fallback={<StockSkeleton />}><StockRoute /></Suspense></NotificationsRequired>} />
+                <Route
+                  path="/stonks"
+                  element={
+                    <NotificationsRequired>
+                      <Suspense fallback={<BoardSkeleton />}>
+                        <StonksBoardRoute />
+                      </Suspense>
+                    </NotificationsRequired>
+                  }
+                />
+                <Route
+                  path="/stonks/u/:id"
+                  element={
+                    <NotificationsRequired>
+                      <Suspense fallback={<PlayerSkeleton />}>
+                        <PlayerRoute />
+                      </Suspense>
+                    </NotificationsRequired>
+                  }
+                />
+                <Route
+                  path="/stonks/:symbol"
+                  element={
+                    <NotificationsRequired>
+                      <Suspense fallback={<StockSkeleton />}>
+                        <StockRoute />
+                      </Suspense>
+                    </NotificationsRequired>
+                  }
+                />
                 {Object.values(GAME_UI).flatMap((g) => [
-                  <Route key={g.key} path={g.path} element={<NotificationsRequired><GameHub game={g} /></NotificationsRequired>} />,
-                  <Route key={`${g.key}-mode`} path={`${g.path}/mode/:slug`} element={<NotificationsRequired><ModePage game={g} /></NotificationsRequired>} />,
-                  <Route key={`${g.key}-match`} path={`${g.path}/:id`} element={<NotificationsRequired><MatchScreen game={g} /></NotificationsRequired>} />,
+                  <Route
+                    key={g.key}
+                    path={g.path}
+                    element={
+                      <NotificationsRequired>
+                        <GameHub game={g} />
+                      </NotificationsRequired>
+                    }
+                  />,
+                  <Route
+                    key={`${g.key}-mode`}
+                    path={`${g.path}/mode/:slug`}
+                    element={
+                      <NotificationsRequired>
+                        <ModePage game={g} />
+                      </NotificationsRequired>
+                    }
+                  />,
+                  <Route
+                    key={`${g.key}-match`}
+                    path={`${g.path}/:id`}
+                    element={
+                      <NotificationsRequired>
+                        <MatchScreen game={g} />
+                      </NotificationsRequired>
+                    }
+                  />,
                 ])}
                 <Route path="*" element={<NotFound />} />
               </Routes>

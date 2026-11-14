@@ -46,7 +46,9 @@ export function dealOrder(s: PokerState) {
 }
 export function cardsHeld(s: PokerState, seat: number, dealtCards: number) {
   if (dealtCards === Infinity) return VARIANTS[s.variant].hole;
-  return dealOrder(s).slice(0, dealtCards).filter((x) => x === seat).length;
+  return dealOrder(s)
+    .slice(0, dealtCards)
+    .filter((x) => x === seat).length;
 }
 
 const blankShown = (s: PokerState) => s.stacks.map(() => null);
@@ -79,7 +81,17 @@ function settled(s: PokerState, nameOf: (seat: number) => string): Show {
   if (s.turn !== -1 || !r) return steady(s);
   return { ...steady(s), board: r.board, shown: r.shown, best: winningHand(s, r)?.cards ?? null, banner: resultText(r, nameOf) };
 }
-const undealt = (s: PokerState): Show => ({ ...steady(s), board: [], bets: s.bets.map(() => 0), paid: s.paid.map(() => 0), stacks: s.start, turn: -1, dealtCards: 0, faceUp: 0, busy: true });
+const undealt = (s: PokerState): Show => ({
+  ...steady(s),
+  board: [],
+  bets: s.bets.map(() => 0),
+  paid: s.paid.map(() => 0),
+  stacks: s.start,
+  turn: -1,
+  dealtCards: 0,
+  faceUp: 0,
+  busy: true,
+});
 
 // A flush or better gets its name spelled over the board.
 function bigHand(s: PokerState, r: HandResult): string | null {
@@ -135,7 +147,7 @@ export function useShow(state: PokerState, opts: { mySeat: number; nameOf: (seat
       const gap = Math.min(75, 1500 / order.length);
       for (let i = 0; i < order.length && alive.current; i++) {
         patch({ dealtCards: i + 1 });
-        play("deal", { count: 1 + i % VARIANTS[to.variant].hole });
+        play("deal", { count: 1 + (i % VARIANTS[to.variant].hole) });
         await sleep(gap);
       }
       await sleep(380);
@@ -241,8 +253,7 @@ export function useShow(state: PokerState, opts: { mySeat: number; nameOf: (seat
           // Over already: a later hand finished the game before this phone got there.
           if (to.turn === -1) setShow(settled(to, nameOf));
           else await deal(to);
-        }
-        else if (to.street !== from.street) await nextStreet(from, to);
+        } else if (to.street !== from.street) await nextStreet(from, to);
         else {
           setShow(settled(to, nameOf));
           const moves = to.log.slice(from.log.length);

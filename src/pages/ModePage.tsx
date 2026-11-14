@@ -46,12 +46,21 @@ function ModeScreen({ game, mode }: { game: GameUI; mode: ModeKey }) {
       {lobby === undefined || lobby === null ? (
         <Skeleton className="h-14 rounded-lg" />
       ) : mine ? (
-        <Link to={matchPath(mine)} className="flex min-h-16 items-center gap-3 rounded-lg bg-primary/10 px-4 py-3 ring-2 ring-primary/50 transition-transform duration-100 active:scale-[0.98]">
+        <Link
+          to={matchPath(mine)}
+          className="flex min-h-16 items-center gap-3 rounded-lg bg-primary/10 px-4 py-3 ring-2 ring-primary/50 transition-transform duration-100 active:scale-[0.98]"
+        >
           <span className="grid size-11 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground">
             <MagnifyingGlassIcon size={22} weight="bold" />
           </span>
           <span className="flex-1 font-semibold">
-            {flexible ? `${mine.players.length} in, waiting to start` : seats > 2 ? `${mine.players.length} of ${seats} in` : mine.invited.length ? "Challenge sent" : "Looking for an opponent"}
+            {flexible
+              ? `${mine.players.length} in, waiting to start`
+              : seats > 2
+                ? `${mine.players.length} of ${seats} in`
+                : mine.invited.length
+                  ? "Challenge sent"
+                  : "Looking for an opponent"}
           </span>
           <CaretRightIcon size={18} weight="bold" className="text-muted-foreground" />
         </Link>
@@ -65,7 +74,13 @@ function ModeScreen({ game, mode }: { game: GameUI; mode: ModeKey }) {
           >
             {lobby.open.length ? "Join a game" : flexible ? "Open a game" : "Find a game"}
           </AsyncButton>
-          <SettingsSection mode={mode} value={settings} onChange={setSettings} defaultOpen={new URLSearchParams(location.search).has("settings")} preview={game.setup?.({ mode, settings, onChange: setSettings })} />
+          <SettingsSection
+            mode={mode}
+            value={settings}
+            onChange={setSettings}
+            defaultOpen={new URLSearchParams(location.search).has("settings")}
+            preview={game.setup?.({ mode, settings, onChange: setSettings })}
+          />
         </div>
       )}
 
@@ -106,7 +121,6 @@ function ModeScreen({ game, mode }: { game: GameUI; mode: ModeKey }) {
           ))}
         </Section>
       )}
-
     </div>
   );
 }
@@ -125,7 +139,9 @@ function Challenge({ mode, meId, settings }: { mode: ModeKey; meId?: Id<"users">
   const multi = m.players > 2;
   const flexible = flexibleSeats(mode);
   const max = m.players - 1;
-  const others = (crew ?? []).filter((p) => p._id !== meId).sort((a, b) => Number(isOnline(b._id)) - Number(isOnline(a._id)) || a.name.localeCompare(b.name));
+  const others = (crew ?? [])
+    .filter((p) => p._id !== meId)
+    .sort((a, b) => Number(isOnline(b._id)) - Number(isOnline(a._id)) || a.name.localeCompare(b.name));
   if (crew && others.length === 0) return null;
 
   const send = (opponents: Id<"users">[]) =>
@@ -171,10 +187,20 @@ function Challenge({ mode, meId, settings }: { mode: ModeKey; meId?: Id<"users">
                   busy === p._id ? (
                     <SpinnerGapIcon size={20} weight="bold" className="animate-spin text-muted-foreground" />
                   ) : multi ? (
-                    <span className={cn("grid size-7 place-items-center rounded-full border-2 transition-colors", on ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40")}>
+                    <span
+                      className={cn(
+                        "grid size-7 place-items-center rounded-full border-2 transition-colors",
+                        on ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40",
+                      )}
+                    >
                       <AnimatePresence>
                         {on && (
-                          <motion.span initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} transition={{ type: "spring", bounce: 0.4, duration: 0.3 }}>
+                          <motion.span
+                            initial={{ scale: 0.5, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.5, opacity: 0 }}
+                            transition={{ type: "spring", bounce: 0.4, duration: 0.3 }}
+                          >
                             <CheckIcon size={16} weight="bold" />
                           </motion.span>
                         )}
@@ -190,9 +216,20 @@ function Challenge({ mode, meId, settings }: { mode: ModeKey; meId?: Id<"users">
         </Group>
         <AnimatePresence initial={false}>
           {multi && picked.length > 0 && (
-            <motion.div key="send" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ type: "spring", bounce: 0, duration: 0.3 }} className="overflow-hidden">
+            <motion.div
+              key="send"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ type: "spring", bounce: 0, duration: 0.3 }}
+              className="overflow-hidden"
+            >
               <AsyncButton size="xl" className="mt-0.5 w-full" icon={<SwordIcon weight="bold" />} onClick={() => send(picked)}>
-                {flexible ? `Challenge ${picked.length}` : free > 0 ? `Challenge ${picked.length}, open ${free} seat${free > 1 ? "s" : ""}` : "Send challenge"}
+                {flexible
+                  ? `Challenge ${picked.length}`
+                  : free > 0
+                    ? `Challenge ${picked.length}, open ${free} seat${free > 1 ? "s" : ""}`
+                    : "Send challenge"}
               </AsyncButton>
             </motion.div>
           )}

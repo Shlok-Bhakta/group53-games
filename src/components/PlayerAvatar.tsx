@@ -20,9 +20,26 @@ type Props = FrameStyle & {
   className?: string;
 };
 
-export function PlayerAvatar({ player, name = player?.name ?? "", image = player?.image, frame = player?.frame ?? "none", frameColor = player?.frameColor, glow = false, badge, size = 48, online, dotRing = "card", seat, className }: Props) {
+export function PlayerAvatar({
+  player,
+  name = player?.name ?? "",
+  image = player?.image,
+  frame = player?.frame ?? "none",
+  frameColor = player?.frameColor,
+  glow = false,
+  badge,
+  size = 48,
+  online,
+  dotRing = "card",
+  seat,
+  className,
+}: Props) {
   const face = (
-    <span className={cn("pa", className)} data-seat={seat ? "" : undefined} style={{ "--s": `${size}px`, "--frame-color": frameColor, "--seat": seat } as CSSProperties}>
+    <span
+      className={cn("pa", className)}
+      data-seat={seat ? "" : undefined}
+      style={{ "--s": `${size}px`, "--frame-color": frameColor, "--seat": seat } as CSSProperties}
+    >
       <span className="frame block" data-frame={frame} data-glow={glow}>
         <span className="pa-face">
           {image ? (
@@ -45,18 +62,42 @@ export function PlayerAvatar({ player, name = player?.name ?? "", image = player
   return (
     <span className="relative flex shrink-0">
       {face}
-      {online && <span className="online-dot absolute -bottom-0.5 -right-0.5 block" style={{ "--dot-ring": `var(--${dotRing})` } as CSSProperties} role="img" aria-label="Online" />}
+      {online && (
+        <span
+          className="online-dot absolute -bottom-0.5 -right-0.5 block"
+          style={{ "--dot-ring": `var(--${dotRing})` } as CSSProperties}
+          role="img"
+          aria-label="Online"
+        />
+      )}
     </span>
   );
 }
 
 // A few faces overlapping, for "who's here" and games with several people in them. `ring` is what they sit on.
-export function AvatarStack({ people, max = 3, size = 28, ring = "card", className }: { people: Face[]; max?: number; size?: number; ring?: "card" | "background"; className?: string }) {
+export function AvatarStack({
+  people,
+  max = 3,
+  size = 28,
+  ring = "card",
+  className,
+}: {
+  people: Face[];
+  max?: number;
+  size?: number;
+  ring?: "card" | "background";
+  className?: string;
+}) {
   if (people.length === 0) return null;
   return (
     <span className={cn("flex shrink-0", size >= 32 ? "-space-x-2.5" : "-space-x-2", className)}>
       {people.slice(0, max).map((p, i) => (
-        <PlayerAvatar key={i} player={p} size={size} className={cn("rounded-full ring-2", ring === "card" ? "ring-card" : "ring-background")} />
+        <PlayerAvatar
+          key={i}
+          player={p}
+          size={size}
+          className={cn("rounded-full ring-2", ring === "card" ? "ring-card" : "ring-background")}
+        />
       ))}
     </span>
   );

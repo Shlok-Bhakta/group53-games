@@ -36,7 +36,21 @@ type BoardProps = {
 
 // The board, its highlights and the drag. It draws each piece where it rests; the game's frame loop moves them
 // in the DOM from there (`pieceEls`, `cooldownEls`), so this only re-renders when the board's structure changes.
-export function RtBoard({ sim, myColor, view, playing, selected, targets, pieceEls, cooldownEls, displayTick, onSelect, onMove, onCancel, children }: BoardProps) {
+export function RtBoard({
+  sim,
+  myColor,
+  view,
+  playing,
+  selected,
+  targets,
+  pieceEls,
+  cooldownEls,
+  displayTick,
+  onSelect,
+  onMove,
+  onCancel,
+  children,
+}: BoardProps) {
   const ref = useRef<HTMLDivElement>(null);
   const ghost = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<{ piece: Piece; over: Sq | null } | null>(null);
@@ -70,7 +84,15 @@ export function RtBoard({ sim, myColor, view, playing, selected, targets, pieceE
     const exact = sq && (mine.find((m) => m.p.status !== "moving" && same(m.sq, sq)) ?? mine.find((m) => same(m.sq, sq)));
     if (exact || !small) return exact?.p ?? null;
     const at = pointToScreen(ref.current!, n, clientX, clientY);
-    const near = at && nearest(view, mine.map((m) => m.sq), at[0], at[1], REACH);
+    const near =
+      at &&
+      nearest(
+        view,
+        mine.map((m) => m.sq),
+        at[0],
+        at[1],
+        REACH,
+      );
     return (near && mine.find((m) => same(m.sq, near))?.p) ?? null;
   };
   const isTarget = (sq: Sq | null) => !!sq && targets.some((t) => same(t, sq));
@@ -128,7 +150,8 @@ export function RtBoard({ sim, myColor, view, playing, selected, targets, pieceE
 
   const moving = sim.pieces.filter((p) => p.status === "moving");
   const pendings = sim.pieces.filter((p) => p.pending && p.color === myColor);
-  const restingEnemy = (sq: Sq) => sim.pieces.some((p) => (p.color !== myColor || p.dead) && p.status !== "moving" && p.x === sq[0] && p.y === sq[1]);
+  const restingEnemy = (sq: Sq) =>
+    sim.pieces.some((p) => (p.color !== myColor || p.dead) && p.status !== "moving" && p.x === sq[0] && p.y === sq[1]);
   const premoving = selected && selected.status !== "ready";
 
   return (
@@ -137,7 +160,10 @@ export function RtBoard({ sim, myColor, view, playing, selected, targets, pieceE
       role="grid"
       aria-label={small ? "4-player real-time chess board" : "Real-time chess board"}
       data-playing={playing || undefined}
-      className={cn("board relative aspect-square w-full touch-none select-none overflow-hidden rounded-sm", !small && "shadow-lg shadow-black/20")}
+      className={cn(
+        "board relative aspect-square w-full touch-none select-none overflow-hidden rounded-sm",
+        !small && "shadow-lg shadow-black/20",
+      )}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -151,20 +177,40 @@ export function RtBoard({ sim, myColor, view, playing, selected, targets, pieceE
           <Tint key={`f${p.id}`} sq={toScreen([p.x, p.y])} color={COLORS.moveFrom} pct={pct} />,
           <Tint key={`t${p.id}`} sq={toScreen([p.toX!, p.toY!])} color={COLORS.moveTo} pct={pct} />,
         ])}
-        {selected && <Tint sq={toScreen(selected.status === "moving" ? [selected.toX!, selected.toY!] : [selected.x, selected.y])} color={COLORS.selected} pct={pct} />}
+        {selected && (
+          <Tint
+            sq={toScreen(selected.status === "moving" ? [selected.toX!, selected.toY!] : [selected.x, selected.y])}
+            color={COLORS.selected}
+            pct={pct}
+          />
+        )}
         {targets.map((t) => {
           const [c, r] = toScreen(t);
           const focused = same(drag?.over, t);
           return (
-            <span key={view.name(t)} className="absolute" style={{ left: `${c * pct}%`, top: `${r * pct}%`, width: `${pct}%`, height: `${pct}%` }} data-target={view.name(t)}>
+            <span
+              key={view.name(t)}
+              className="absolute"
+              style={{ left: `${c * pct}%`, top: `${r * pct}%`, width: `${pct}%`, height: `${pct}%` }}
+              data-target={view.name(t)}
+            >
               {focused ? (
                 <span className="absolute inset-0" style={{ background: premoving ? COLORS.premove : COLORS.target, opacity: 0.6 }} />
               ) : premoving ? (
                 <span className="absolute inset-[8%] rounded-md border-[3px] border-dashed" style={{ borderColor: COLORS.premove }} />
               ) : restingEnemy(t) ? (
-                <span className={cn("absolute inset-0 rounded-full", small ? "border-[3px]" : "border-[5px]")} style={{ borderColor: COLORS.target }} />
+                <span
+                  className={cn("absolute inset-0 rounded-full", small ? "border-[3px]" : "border-[5px]")}
+                  style={{ borderColor: COLORS.target }}
+                />
               ) : (
-                <span className={cn("absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full", small ? "size-[38%]" : "size-[30%]")} style={{ background: COLORS.target }} />
+                <span
+                  className={cn(
+                    "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full",
+                    small ? "size-[38%]" : "size-[30%]",
+                  )}
+                  style={{ background: COLORS.target }}
+                />
               )}
             </span>
           );
@@ -180,9 +226,17 @@ export function RtBoard({ sim, myColor, view, playing, selected, targets, pieceE
               if (el) pieceEls.current.set(p.id, el);
               else pieceEls.current.delete(p.id);
             }}
-            className={cn("absolute left-0 top-0 will-change-transform", p.status === "moving" ? "z-20" : "z-10", drag?.piece.id === p.id && startPt.current?.moved && "opacity-30")}
+            className={cn(
+              "absolute left-0 top-0 will-change-transform",
+              p.status === "moving" ? "z-20" : "z-10",
+              drag?.piece.id === p.id && startPt.current?.moved && "opacity-30",
+            )}
             // Where the piece rests until the frame loop takes over, so nothing starts in the corner.
-            style={{ width: `${pct}%`, height: `${pct}%`, transform: `translate(${toScreen([p.x, p.y])[0] * 100}%, ${toScreen([p.x, p.y])[1] * 100}%)` }}
+            style={{
+              width: `${pct}%`,
+              height: `${pct}%`,
+              transform: `translate(${toScreen([p.x, p.y])[0] * 100}%, ${toScreen([p.x, p.y])[1] * 100}%)`,
+            }}
             data-piece={`${p.dead ? "dead" : p.color}${p.kind}`}
             data-status={p.status}
           >
@@ -194,7 +248,12 @@ export function RtBoard({ sim, myColor, view, playing, selected, targets, pieceE
               className="absolute inset-x-0 bottom-0"
               style={{ background: COLORS.cooldown, height: 0 }}
             />
-            <img src={pieceSrc(p)} alt="" draggable={false} className={cn("relative size-full", p.status === "moving" && "drop-shadow-[0_6px_6px_rgb(0_0_0/0.35)]")} />
+            <img
+              src={pieceSrc(p)}
+              alt=""
+              draggable={false}
+              className={cn("relative size-full", p.status === "moving" && "drop-shadow-[0_6px_6px_rgb(0_0_0/0.35)]")}
+            />
           </div>
         ))}
       </div>
@@ -231,9 +290,33 @@ const Squares = memo(function Squares({ view }: { view: View }) {
         const dark = (sq[0] + sq[1]) % 2 === 0;
         const label = view.name(sq);
         return (
-          <div key={i} role="gridcell" aria-label={label} data-square={label} className={cn("relative", dark ? "bg-[var(--board-dark)]" : "bg-[var(--board-light)]")}>
-            {n === 8 && c === 0 && <span className={cn("absolute left-[5%] top-[4%] text-caption font-bold leading-none", dark ? "text-[var(--board-light)]" : "text-[var(--board-dark)]")}>{sq[1] + 1}</span>}
-            {n === 8 && r === 7 && <span className={cn("absolute bottom-[4%] right-[6%] text-caption font-bold leading-none", dark ? "text-[var(--board-light)]" : "text-[var(--board-dark)]")}>{FILES[sq[0]]}</span>}
+          <div
+            key={i}
+            role="gridcell"
+            aria-label={label}
+            data-square={label}
+            className={cn("relative", dark ? "bg-[var(--board-dark)]" : "bg-[var(--board-light)]")}
+          >
+            {n === 8 && c === 0 && (
+              <span
+                className={cn(
+                  "absolute left-[5%] top-[4%] text-caption font-bold leading-none",
+                  dark ? "text-[var(--board-light)]" : "text-[var(--board-dark)]",
+                )}
+              >
+                {sq[1] + 1}
+              </span>
+            )}
+            {n === 8 && r === 7 && (
+              <span
+                className={cn(
+                  "absolute bottom-[4%] right-[6%] text-caption font-bold leading-none",
+                  dark ? "text-[var(--board-light)]" : "text-[var(--board-dark)]",
+                )}
+              >
+                {FILES[sq[0]]}
+              </span>
+            )}
           </div>
         );
       })}
@@ -242,7 +325,12 @@ const Squares = memo(function Squares({ view }: { view: View }) {
 });
 
 function Tint({ sq: [c, r], color, pct }: { sq: Sq; color: string; pct: number }) {
-  return <span className="absolute" style={{ left: `${c * pct}%`, top: `${r * pct}%`, width: `${pct}%`, height: `${pct}%`, background: color }} />;
+  return (
+    <span
+      className="absolute"
+      style={{ left: `${c * pct}%`, top: `${r * pct}%`, width: `${pct}%`, height: `${pct}%`, background: color }}
+    />
+  );
 }
 
 function Arrow({ from: [fc, fr], to: [tc, tr] }: { from: Sq; to: Sq }) {

@@ -17,14 +17,24 @@ type Props = {
   selected?: boolean;
   className?: string;
 } & AriaAttributes & // an aria-label or aria-pressed, for a row that needs one
-  ({ to: string; onClick?: never; disabled?: never } | { onClick: () => void; to?: never; disabled?: boolean } | { to?: never; onClick?: never; disabled?: never });
+  (
+    | { to: string; onClick?: never; disabled?: never }
+    | { onClick: () => void; to?: never; disabled?: boolean }
+    | { to?: never; onClick?: never; disabled?: never }
+  );
 
 // One row in a Group: what's at the start, a title with a line under it, and what's at the end. With `to` it's a
 // link and with `onClick` a button, both pressing in; with neither, it's just a row. Anything else a wrapper
 // hands it (a dialog trigger's ref and aria) goes on the element.
 export function ListRow({ leading, title, detail, trailing, size = "md", selected, className, to, onClick, disabled, ...rest }: Props) {
   const action = { to, onClick, disabled };
-  const cls = cn("flex w-full items-center gap-3 px-4 py-2 text-left", HEIGHT[size], selected && "bg-primary/8", (action.to || action.onClick) && "touch-manipulation transition-colors active:bg-muted disabled:opacity-60", className);
+  const cls = cn(
+    "flex w-full items-center gap-3 px-4 py-2 text-left",
+    HEIGHT[size],
+    selected && "bg-primary/8",
+    (action.to || action.onClick) && "touch-manipulation transition-colors active:bg-muted disabled:opacity-60",
+    className,
+  );
   const inner = (
     <>
       {leading}
@@ -47,5 +57,9 @@ export function ListRow({ leading, title, detail, trailing, size = "md", selecte
         {inner}
       </button>
     );
-  return <div {...rest} className={cls}>{inner}</div>;
+  return (
+    <div {...rest} className={cls}>
+      {inner}
+    </div>
+  );
 }

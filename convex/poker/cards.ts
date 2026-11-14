@@ -24,7 +24,17 @@ export function shuffle<T>(xs: T[], random: () => number = Math.random): T[] {
 }
 
 // Hand categories, weakest first, as named in the standard game.
-export const CATEGORY = ["High card", "Pair", "Two pair", "Three of a kind", "Straight", "Flush", "Full house", "Four of a kind", "Straight flush"] as const;
+export const CATEGORY = [
+  "High card",
+  "Pair",
+  "Two pair",
+  "Three of a kind",
+  "Straight",
+  "Flush",
+  "Full house",
+  "Four of a kind",
+  "Straight flush",
+] as const;
 // Short Deck (Triton rules): with fewer cards a flush is rarer than a full house, and a straight more common
 // than three of a kind, so those swap places. The wheel is A-6-7-8-9.
 const SHORT_ORDER = [0, 1, 2, 4, 3, 6, 5, 7, 8];
@@ -106,7 +116,10 @@ export function bestHand(variant: Variant, hole: Card[], board: Card[]): HandRan
   if (variant === "draw") return rank5(hole, false);
   if (variant === "omaha") {
     if (board.length < 3) return null;
-    return bestOf(combos(hole, 2).flatMap((h) => combos(board, 3).map((b) => [...h, ...b])), false);
+    return bestOf(
+      combos(hole, 2).flatMap((h) => combos(board, 3).map((b) => [...h, ...b])),
+      false,
+    );
   }
   const all = [...hole, ...board];
   return bestOf(all.length <= 5 ? [all] : combos(all, 5), short);

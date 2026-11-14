@@ -33,11 +33,15 @@ export function GameHub({ game }: { game: GameUI }) {
         art={game.modeArt}
         rating={(mode) => (ratings ? (ratings[mode] ?? { rating: 1200, games: 0 }) : null)}
         badge={(mode) =>
-          count(mode, "invites") ? `${count(mode, "invites")} challenge${count(mode, "invites") > 1 ? "s" : ""}`
-          : count(mode, "myTurn") ? "Your move"
-          : count(mode, "live") ? "Live"
-          : count(mode, "open") ? `${count(mode, "open")} open`
-          : null
+          count(mode, "invites")
+            ? `${count(mode, "invites")} challenge${count(mode, "invites") > 1 ? "s" : ""}`
+            : count(mode, "myTurn")
+              ? "Your move"
+              : count(mode, "live")
+                ? "Live"
+                : count(mode, "open")
+                  ? `${count(mode, "open")} open`
+                  : null
         }
       />
       {game.extra?.()}

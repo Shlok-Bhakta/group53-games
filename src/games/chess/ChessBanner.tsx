@@ -57,10 +57,19 @@ export function ChessBanner() {
               className="absolute bottom-0"
               style={{ left: `${c * 12.5}%`, height: "50%", width: "12.5%" }}
               initial={{ y: 18, opacity: 0 }}
-              animate={knight ? { y: [18, 0, 0, "-140%", "-100%"], x: ["0%", "0%", "0%", `${dx / 2}%`, `${dx}%`], opacity: [0, 1, 1, 1, 1] } : { y: 0, opacity: 1 }}
+              animate={
+                knight
+                  ? { y: [18, 0, 0, "-140%", "-100%"], x: ["0%", "0%", "0%", `${dx / 2}%`, `${dx}%`], opacity: [0, 1, 1, 1, 1] }
+                  : { y: 0, opacity: 1 }
+              }
               transition={
                 knight
-                  ? { duration: HOP_AT + HOP, times: [0, 0.25, HOP_AT / (HOP_AT + HOP), (HOP_AT + HOP / 2) / (HOP_AT + HOP), 1], ease: "easeOut", delay: 0.05 + c * 0.03 }
+                  ? {
+                      duration: HOP_AT + HOP,
+                      times: [0, 0.25, HOP_AT / (HOP_AT + HOP), (HOP_AT + HOP / 2) / (HOP_AT + HOP), 1],
+                      ease: "easeOut",
+                      delay: 0.05 + c * 0.03,
+                    }
                   : { type: "spring", stiffness: 520, damping: 26, delay: 0.05 + c * 0.03 }
               }
             />

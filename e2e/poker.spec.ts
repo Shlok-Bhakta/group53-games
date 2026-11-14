@@ -22,7 +22,8 @@ function watchErrors(pages: Page[]) {
   }
   return errors;
 }
-const boardCards = (page: Page) => page.getByRole("group", { name: "Poker table" }).getByRole("group", { name: "Board" }).locator("[data-card]");
+const boardCards = (page: Page) =>
+  page.getByRole("group", { name: "Poker table" }).getByRole("group", { name: "Board" }).locator("[data-card]");
 
 // Two phones at a started table. Returns them with whoever acts first (the button, heads-up) first.
 async function twoPlayerGame(phones: Phones, mode = "holdem", opts: { reducedMotion?: boolean } = {}) {
@@ -47,7 +48,12 @@ test.describe("Poker", () => {
     await page.goto("/games");
     await page.getByRole("link", { name: "Play Poker" }).click();
     await expect(page).toHaveURL(/\/poker$/);
-    await expect(page.getByRole("region", { name: "Async" }).getByRole("link")).toHaveText([/Hold'em/, /Omaha/, /Short Deck/, /5-Card Draw/]);
+    await expect(page.getByRole("region", { name: "Async" }).getByRole("link")).toHaveText([
+      /Hold'em/,
+      /Omaha/,
+      /Short Deck/,
+      /5-Card Draw/,
+    ]);
     await page.getByRole("link", { name: "Omaha" }).click();
     await expect(page.getByRole("heading", { name: "Omaha", level: 1 })).toBeVisible();
     await expect(page.getByText(/exactly two of your four cards/)).toBeVisible();
@@ -55,7 +61,12 @@ test.describe("Poker", () => {
   });
 
   test("the table shows everyone's card, who's online, and plays its sounds", async ({ phones }) => {
-    const t = await table(phones, ["Shlok", "Chris"], { profiles: [{ frame: "gold", badge: "🦀" }, { frame: "comet", frameColor: "#f38ba8", glow: true, badge: "🃏" }] });
+    const t = await table(phones, ["Shlok", "Chris"], {
+      profiles: [
+        { frame: "gold", badge: "🦀" },
+        { frame: "comet", frameColor: "#f38ba8", glow: true, badge: "🃏" },
+      ],
+    });
     const [pa, pb] = t.pages;
     const a = t.players[0];
     const id = await openLobby(pa, "poker", "holdem");
@@ -106,7 +117,12 @@ test.describe("Poker", () => {
       }
       return out;
     });
-    const tooLoud = levels.filter((l) => l.peak > l.loudest * 1.1 || l.rms > l.loudestRms).map((l) => `${l.pack} ${l.name}: peak ${l.peak.toFixed(3)} of ${l.loudest.toFixed(3)}, rms ${l.rms.toFixed(3)} of ${l.loudestRms.toFixed(3)}`);
+    const tooLoud = levels
+      .filter((l) => l.peak > l.loudest * 1.1 || l.rms > l.loudestRms)
+      .map(
+        (l) =>
+          `${l.pack} ${l.name}: peak ${l.peak.toFixed(3)} of ${l.loudest.toFixed(3)}, rms ${l.rms.toFixed(3)} of ${l.loudestRms.toFixed(3)}`,
+      );
     expect(tooLoud).toEqual([]);
   });
 
@@ -206,7 +222,9 @@ test.describe("Poker", () => {
     }
     // The win or lose sound comes after the last hand has played out, not as the news arrives.
     for (const p of [first.page, second.page]) {
-      await expect.poll(() => p.evaluate(() => (window as unknown as { __sfx: string[] }).__sfx.filter((n) => n === "win" || n === "lose").length)).toBe(1);
+      await expect
+        .poll(() => p.evaluate(() => (window as unknown as { __sfx: string[] }).__sfx.filter((n) => n === "win" || n === "lose").length))
+        .toBe(1);
       const sounds = await p.evaluate(() => (window as unknown as { __sfx: string[] }).__sfx);
       expect(Math.max(sounds.lastIndexOf("win"), sounds.lastIndexOf("lose"))).toBeGreaterThan(sounds.lastIndexOf("payout"));
     }
@@ -215,11 +233,12 @@ test.describe("Poker", () => {
 
   // Backs a seat still shows, ignoring any that have flown off and faded out.
   const visibleBacks = (page: Page) =>
-    page.locator("[data-seat] [data-back]").evaluateAll((els) =>
-      els.filter((el) => {
-        for (let e: Element | null = el; e; e = e.parentElement) if (getComputedStyle(e).opacity === "0") return false;
-        return true;
-      }).length,
+    page.locator("[data-seat] [data-back]").evaluateAll(
+      (els) =>
+        els.filter((el) => {
+          for (let e: Element | null = el; e; e = e.parentElement) if (getComputedStyle(e).opacity === "0") return false;
+          return true;
+        }).length,
     );
 
   test("cards leave the table: a fold mid-hand, and everyone's when the game ends", async ({ phones }) => {
@@ -288,7 +307,9 @@ test.describe("Poker", () => {
     const bust = m.state.out[0].seat;
     expect(m.state.dealt[bust]).toBe(false);
     const name = players.find((p) => p.userId === m.players[bust].userId)!.name;
-    const seat = pageOf(third).getByRole("group", { name: "Poker table" }).getByRole("group", { name: new RegExp(`^${name}, `) });
+    const seat = pageOf(third)
+      .getByRole("group", { name: "Poker table" })
+      .getByRole("group", { name: new RegExp(`^${name}, `) });
     await expect(seat).toHaveAttribute("data-out", "true");
     await expect(pageOf(third).getByText(`Hand ${m.state.hand}`, { exact: true })).toBeVisible();
     // Through the whole deal of the next hand, not only once it's settled: every frame for six seconds,
@@ -336,7 +357,10 @@ test.describe("Poker", () => {
     await second.page.getByRole("button", { name: "Check", exact: true }).click();
     // The draw: the big blind (first to the button's left) swaps first.
     await expect(second.page.getByText("Pick cards to swap")).toBeVisible();
-    const before = await second.page.getByRole("group", { name: "Your cards" }).locator("[data-card]").evaluateAll((els) => els.map((e) => e.getAttribute("data-card")));
+    const before = await second.page
+      .getByRole("group", { name: "Your cards" })
+      .locator("[data-card]")
+      .evaluateAll((els) => els.map((e) => e.getAttribute("data-card")));
     await second.page.getByRole("button", { name: "Swap card 1" }).click();
     await second.page.getByRole("button", { name: "Swap card 2" }).click();
     if (process.env.SCREENS) await second.page.screenshot({ path: "e2e/.state/screens/dark-poker-draw.png" });
@@ -344,7 +368,10 @@ test.describe("Poker", () => {
     await expect(first.page.getByText("Pick cards to swap")).toBeVisible();
     await first.page.getByRole("button", { name: "Keep all five" }).click();
     await expect(second.page.getByText("Your move")).toBeVisible();
-    const after = await second.page.getByRole("group", { name: "Your cards" }).locator("[data-card]").evaluateAll((els) => els.map((e) => e.getAttribute("data-card")));
+    const after = await second.page
+      .getByRole("group", { name: "Your cards" })
+      .locator("[data-card]")
+      .evaluateAll((els) => els.map((e) => e.getAttribute("data-card")));
     expect(after.slice(2)).toEqual(before.slice(2));
     expect(after.slice(0, 2)).not.toEqual(before.slice(0, 2));
     const m = await getMatch(id);

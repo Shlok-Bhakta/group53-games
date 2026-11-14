@@ -39,7 +39,8 @@ const COLORS: Record<Variant, readonly string[]> = { two: ["w", "b"], four: COLO
 const SIZES: Record<Variant, number> = { two: 8, four: 14 };
 const insideFor = (v: Variant) => (v === "two" ? (x: number, y: number) => x >= 0 && x < 8 && y >= 0 && y < 8 : onBoard4);
 const forwardFor = (v: Variant, color: Color): [number, number] => (v === "two" ? [0, color === "w" ? 1 : -1] : forward4(color as Color4));
-const promotesAt = (v: Variant, color: Color, x: number, y: number) => (v === "two" ? y === (color === "w" ? 7 : 0) : promotes4(color as Color4, x, y));
+const promotesAt = (v: Variant, color: Color, x: number, y: number) =>
+  v === "two" ? y === (color === "w" ? 7 : 0) : promotes4(color as Color4, x, y);
 // The two squares a pawn captures on: one step forward plus one step to either side.
 const pawnDiagonals = (v: Variant, p: { color: Color; x: number; y: number }): [number, number][] => {
   const [fx, fy] = forwardFor(v, p.color);
@@ -77,7 +78,10 @@ export type Command = { tick: number; color: Color; pieceId: number; toX: number
 // The order commands apply in within a tick. Deterministic, so every client and the server agree.
 const COLOR_RANK: Record<string, number> = { w: 0, b: 1, red: 0, blue: 1, yellow: 2, green: 3 };
 export const commandOrder = (a: Command, b: Command) =>
-  a.tick - b.tick || (COLOR_RANK[a.color] ?? 9) - (COLOR_RANK[b.color] ?? 9) || a.pieceId - b.pieceId || (a.kind === "cancel" ? 1 : 0) - (b.kind === "cancel" ? 1 : 0);
+  a.tick - b.tick ||
+  (COLOR_RANK[a.color] ?? 9) - (COLOR_RANK[b.color] ?? 9) ||
+  a.pieceId - b.pieceId ||
+  (a.kind === "cancel" ? 1 : 0) - (b.kind === "cancel" ? 1 : 0);
 
 // `ranking` lists every color, best first, grouped where they tie.
 export type Result = { winner: Color | null; reason: "king" | "both_kings" | "no_progress" | "last_king"; ranking: Color[][] };
@@ -112,7 +116,8 @@ const BACK_RANK: Kind[] = ["R", "N", "B", "Q", "K", "B", "N", "R"];
 
 // White is on ranks 0 and 1, black on 6 and 7. x is the file (0 = a), y the rank (0 = rank 1).
 export function initialPieces(variant: Variant = "two"): Piece[] {
-  if (variant === "four") return setup4().map((s, id) => ({ id, color: s.color, kind: s.kind, x: s.x, y: s.y, firstMove: true, status: "ready" }));
+  if (variant === "four")
+    return setup4().map((s, id) => ({ id, color: s.color, kind: s.kind, x: s.x, y: s.y, firstMove: true, status: "ready" }));
   const pieces: Piece[] = [];
   let id = 0;
   for (const color of ["w", "b"] as const) {
@@ -125,7 +130,17 @@ export function initialPieces(variant: Variant = "two"): Piece[] {
 }
 
 export function initialState(variant: Variant = "two", pace?: Pace): State {
-  return { variant, ...(pace ? { pace } : {}), out: [], tick: 0, pieces: initialPieces(variant), captures: [], lastProgressTick: 0, result: null, endTick: null };
+  return {
+    variant,
+    ...(pace ? { pace } : {}),
+    out: [],
+    tick: 0,
+    pieces: initialPieces(variant),
+    captures: [],
+    lastProgressTick: 0,
+    result: null,
+    endTick: null,
+  };
 }
 
 // Where a piece is at a (possibly fractional) tick, in position units.
@@ -144,7 +159,9 @@ type Square = { rest: Color | null; incoming: Set<Color> };
 // Resting pieces (ready or cooling down) occupy their square; moving pieces claim their destination.
 // Dead pieces rest as "dead", which is nobody's color.
 function boardOf(pieces: Piece[], size: number): Square[][] {
-  const board: Square[][] = Array.from({ length: size }, () => Array.from({ length: size }, () => ({ rest: null, incoming: new Set<Color>() })));
+  const board: Square[][] = Array.from({ length: size }, () =>
+    Array.from({ length: size }, () => ({ rest: null, incoming: new Set<Color>() })),
+  );
   for (const p of pieces) {
     if (p.status === "moving") board[p.toY!][p.toX!].incoming.add(p.color);
     else board[p.y][p.x].rest = p.dead ? "dead" : p.color;
@@ -185,19 +202,56 @@ export function legalTargets(pieces: Piece[], piece: Piece, variant: Variant = "
 
   switch (piece.kind) {
     case "Q":
-      slide([[1, 1], [1, -1], [-1, 1], [-1, -1], [1, 0], [-1, 0], [0, 1], [0, -1]]);
+      slide([
+        [1, 1],
+        [1, -1],
+        [-1, 1],
+        [-1, -1],
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ]);
       break;
     case "R":
-      slide([[1, 0], [-1, 0], [0, 1], [0, -1]]);
+      slide([
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ]);
       break;
     case "B":
-      slide([[1, 1], [1, -1], [-1, 1], [-1, -1]]);
+      slide([
+        [1, 1],
+        [1, -1],
+        [-1, 1],
+        [-1, -1],
+      ]);
       break;
     case "N":
-      step([[2, 1], [2, -1], [-2, 1], [-2, -1], [1, 2], [1, -2], [-1, 2], [-1, -2]]);
+      step([
+        [2, 1],
+        [2, -1],
+        [-2, 1],
+        [-2, -1],
+        [1, 2],
+        [1, -2],
+        [-1, 2],
+        [-1, -2],
+      ]);
       break;
     case "K": {
-      step([[1, 1], [1, 0], [1, -1], [0, 1], [0, -1], [-1, 1], [-1, 0], [-1, -1]]);
+      step([
+        [1, 1],
+        [1, 0],
+        [1, -1],
+        [0, 1],
+        [0, -1],
+        [-1, 1],
+        [-1, 0],
+        [-1, -1],
+      ]);
       if (piece.firstMove && variant === "two") {
         for (const rook of pieces) {
           if (rook.kind !== "R" || rook.color !== me || !rook.firstMove || rook.status !== "ready" || rook.y !== piece.y) continue;
@@ -236,15 +290,48 @@ export function premoveTargets(piece: Piece, variant: Variant = "two"): [number,
   const fromY = piece.status === "moving" ? piece.toY! : piece.y;
   const out: [number, number][] = [];
   const add = (x: number, y: number) => inside(x, y) && !(x === fromX && y === fromY) && out.push([x, y]);
-  const ray = (dirs: [number, number][]) => dirs.forEach(([dx, dy]) => { for (let i = 1; i < size; i++) add(fromX + dx * i, fromY + dy * i); });
-  const diag: [number, number][] = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
-  const orth: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const ray = (dirs: [number, number][]) =>
+    dirs.forEach(([dx, dy]) => {
+      for (let i = 1; i < size; i++) add(fromX + dx * i, fromY + dy * i);
+    });
+  const diag: [number, number][] = [
+    [1, 1],
+    [1, -1],
+    [-1, 1],
+    [-1, -1],
+  ];
+  const orth: [number, number][] = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ];
   switch (piece.kind) {
-    case "Q": ray([...diag, ...orth]); break;
-    case "R": ray(orth); break;
-    case "B": ray(diag); break;
-    case "N": for (const [dx, dy] of [[2, 1], [2, -1], [-2, 1], [-2, -1], [1, 2], [1, -2], [-1, 2], [-1, -2]]) add(fromX + dx, fromY + dy); break;
-    case "K": for (const [dx, dy] of [...diag, ...orth]) add(fromX + dx, fromY + dy); break;
+    case "Q":
+      ray([...diag, ...orth]);
+      break;
+    case "R":
+      ray(orth);
+      break;
+    case "B":
+      ray(diag);
+      break;
+    case "N":
+      for (const [dx, dy] of [
+        [2, 1],
+        [2, -1],
+        [-2, 1],
+        [-2, -1],
+        [1, 2],
+        [1, -2],
+        [-1, 2],
+        [-1, -2],
+      ])
+        add(fromX + dx, fromY + dy);
+      break;
+    case "K":
+      for (const [dx, dy] of [...diag, ...orth]) add(fromX + dx, fromY + dy);
+      break;
     case "P": {
       const [fx, fy] = forwardFor(variant, piece.color);
       add(fromX + fx, fromY + fy);
@@ -296,7 +383,11 @@ function startReadyMove(state: State, piece: Piece, toX: number, toY: number): b
     const rook = state.pieces.find((p) => p.kind === "R" && p.color === piece.color && p.y === piece.y && p.x === (kingside ? 7 : 0))!;
     const duration = (kingside ? 2 : 3) * perSquare;
     state.pieces = state.pieces.map((p) =>
-      p.id === piece.id ? startMove(p, cmd.toX, cmd.toY, tick, duration) : p.id === rook.id ? startMove(p, kingside ? 5 : 3, p.y, tick, duration) : p,
+      p.id === piece.id
+        ? startMove(p, cmd.toX, cmd.toY, tick, duration)
+        : p.id === rook.id
+          ? startMove(p, kingside ? 5 : 3, p.y, tick, duration)
+          : p,
     );
   } else {
     const duration = Math.max(Math.abs(cmd.toX - piece.x), Math.abs(cmd.toY - piece.y)) * perSquare;
@@ -313,7 +404,16 @@ function knockOut(state: State, lost: Set<Color>, t: number) {
   state.pieces = state.pieces.map((p) => {
     if (!lost.has(p.color)) return p;
     const at = positionAt(p, t);
-    return { id: p.id, color: p.color, kind: p.kind, x: Math.round(at.x / CELL), y: Math.round(at.y / CELL), firstMove: false, status: "ready", dead: true };
+    return {
+      id: p.id,
+      color: p.color,
+      kind: p.kind,
+      x: Math.round(at.x / CELL),
+      y: Math.round(at.y / CELL),
+      firstMove: false,
+      status: "ready",
+      dead: true,
+    };
   });
   const live = COLORS.four.filter((c) => !state.out.some((o) => o.color === c));
   if (live.length <= 1) {
@@ -337,8 +437,7 @@ function stepTick(state: State) {
       const pa = pos.get(a.id)!;
       const pb = pos.get(b.id)!;
       if (Math.abs(pa.x - pb.x) >= HIT || Math.abs(pa.y - pb.y) >= HIT) continue;
-      const loser =
-        b.status !== "moving" ? [b] : a.startTick! < b.startTick! ? [b] : b.startTick! < a.startTick! ? [a] : [a, b];
+      const loser = b.status !== "moving" ? [b] : a.startTick! < b.startTick! ? [b] : b.startTick! < a.startTick! ? [a] : [a, b];
       for (const l of loser) {
         const winner = l.id === a.id ? b : a;
         captured.add(l.id);
@@ -367,9 +466,30 @@ function stepTick(state: State) {
   state.pieces = state.pieces.map((p) => {
     if (p.status === "moving" && t >= p.startTick! + p.duration!) {
       const kind: Kind = p.kind === "P" && promotesAt(state.variant, p.color, p.toX!, p.toY!) ? "Q" : p.kind;
-      return { id: p.id, color: p.color, kind, x: p.toX!, y: p.toY!, firstMove: p.firstMove, status: "cooldown", readyAt: t + cooldown, pending: p.pending };
+      return {
+        id: p.id,
+        color: p.color,
+        kind,
+        x: p.toX!,
+        y: p.toY!,
+        firstMove: p.firstMove,
+        status: "cooldown",
+        readyAt: t + cooldown,
+        pending: p.pending,
+      };
     }
-    if (p.status === "cooldown" && t >= p.readyAt!) return { id: p.id, color: p.color, kind: p.kind, x: p.x, y: p.y, firstMove: p.firstMove, status: "ready", pending: p.pending, dead: p.dead };
+    if (p.status === "cooldown" && t >= p.readyAt!)
+      return {
+        id: p.id,
+        color: p.color,
+        kind: p.kind,
+        x: p.x,
+        y: p.y,
+        firstMove: p.firstMove,
+        status: "ready",
+        pending: p.pending,
+        dead: p.dead,
+      };
     return p;
   });
 

@@ -23,12 +23,17 @@ const placesFor = (n: number) => (n === 0 || Math.abs(n) >= 1 ? 2 : Math.abs(n) 
 const MINOR: Record<string, string> = { GBp: "p", GBX: "p", ILA: "ag", ZAc: "c", ZAC: "c" };
 
 /** How a thing's prices read: a currency code, or "" for plain numbers (index points, exchange rates). */
-export const unitOf = (q: { type?: string; currency?: string } | null | undefined) => (q?.type === "INDEX" || q?.type === "CURRENCY" ? "" : (q?.currency ?? "USD"));
+export const unitOf = (q: { type?: string; currency?: string } | null | undefined) =>
+  q?.type === "INDEX" || q?.type === "CURRENCY" ? "" : (q?.currency ?? "USD");
 
 /** "$1,234.56", "¥3,056.00", "119.10p", or "6,812.34" where there's no unit. */
 export function price(n: number, unit: string = "USD") {
   const places = placesFor(n);
-  if (unit === "") return new Intl.NumberFormat("en-US", { minimumFractionDigits: Math.max(places, 2), maximumFractionDigits: Math.max(places, 2) }).format(n);
+  if (unit === "")
+    return new Intl.NumberFormat("en-US", {
+      minimumFractionDigits: Math.max(places, 2),
+      maximumFractionDigits: Math.max(places, 2),
+    }).format(n);
   if (MINOR[unit]) return `${two.format(n)}${MINOR[unit]}`;
   return money(n, unit, places);
 }
@@ -45,7 +50,8 @@ const weekday = new Intl.DateTimeFormat("en-US", { timeZone: NY, weekday: "short
 const short = new Intl.DateTimeFormat("en-US", { timeZone: NY, month: "short", day: "numeric" });
 
 /** What a point on a range's chart is called when you put your finger on it. */
-export const pointTime = (t: number, range: Range) => (range === "1D" ? `${clock.format(t)} ET` : range === "1W" || range === "1M" ? dayTime.format(t) : date.format(t));
+export const pointTime = (t: number, range: Range) =>
+  range === "1D" ? `${clock.format(t)} ET` : range === "1W" || range === "1M" ? dayTime.format(t) : date.format(t);
 export const opensAt = (t: number) => `${weekday.format(t)} ET`;
 const dayName = new Intl.DateTimeFormat("en-US", { timeZone: NY, weekday: "long" });
 /** "Today", or the session's day when it's over and another day has started (a weekend: "Friday"). */
@@ -55,7 +61,13 @@ export const tradeTime = (t: number, now: number) => (now - t < 3600_000 ? ago(n
 /** Where a price came from, as a reader would put it. */
 export const sourceName = (s: string) => ({ yahoo: "Yahoo", nasdaq: "Nasdaq", history: "Yahoo" })[s] ?? s;
 export const asOfDay = (iso: string) => short.format(new Date(`${iso}T12:00:00Z`));
-export const periodName: Record<Range, string> = { "1D": "Today", "1W": "Past week", "1M": "Past month", "1Y": "Past year", "5Y": "Past 5 years" };
+export const periodName: Record<Range, string> = {
+  "1D": "Today",
+  "1W": "Past week",
+  "1M": "Past month",
+  "1Y": "Past year",
+  "5Y": "Past 5 years",
+};
 
 const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 });
 const compact1 = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
@@ -72,7 +84,13 @@ const dayOnly = new Intl.DateTimeFormat("en-US", { timeZone: NY, weekday: "short
 export const soon = (t: number, now: number) => (t - now < 6 * 86_400_000 ? dayOnly.format(t) : short.format(t));
 /** Points moved on the index: "+12.3", "−4.0" */
 export const pts = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n).toFixed(1)}`;
-export const RATING: Record<string, string> = { strong_buy: "Strong buy", buy: "Buy", hold: "Hold", underperform: "Underperform", sell: "Sell" };
+export const RATING: Record<string, string> = {
+  strong_buy: "Strong buy",
+  buy: "Buy",
+  hold: "Hold",
+  underperform: "Underperform",
+  sell: "Sell",
+};
 
 /** "4.87 shares", "1 share", "0.024 BTC", "100 units": how much of something, in what it comes in. */
 export const shareCount = (n: number, symbol = "") => {
@@ -84,6 +102,13 @@ export const shareCount = (n: number, symbol = "") => {
   return `${amount} ${x === 1 ? "share" : "shares"}`;
 };
 
-const KINDS: Record<string, string> = { ETF: "ETF", CRYPTOCURRENCY: "Crypto", CURRENCY: "Forex", FUTURE: "Future", INDEX: "Index", MUTUALFUND: "Fund" };
+const KINDS: Record<string, string> = {
+  ETF: "ETF",
+  CRYPTOCURRENCY: "Crypto",
+  CURRENCY: "Forex",
+  FUTURE: "Future",
+  INDEX: "Index",
+  MUTUALFUND: "Fund",
+};
 /** What a search result is, when it isn't simply a stock. */
 export const kindOf = (type?: string) => (type ? KINDS[type] : undefined);

@@ -57,7 +57,10 @@ export function StockSearch({ onActive }: { onActive: (active: boolean) => void 
   return (
     <>
       <div className={`relative ${S.search}`}>
-        <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-3 size-5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+        <MagnifyingGlassIcon
+          className="pointer-events-none absolute top-1/2 left-3 size-5 -translate-y-1/2 text-muted-foreground"
+          aria-hidden
+        />
         <Input
           ref={input}
           type="search"

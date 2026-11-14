@@ -16,7 +16,14 @@ export function Countdown({ deadline, mine }: { deadline: number; mine: boolean 
   const urgent = left <= 10;
   return (
     <span
-      className={cn("shrink-0 rounded-full px-2.5 py-1 font-display text-callout tabular-nums", urgent ? "bg-[var(--tile-hit)] text-[var(--tile-hit-ink)]" : mine ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}
+      className={cn(
+        "shrink-0 rounded-full px-2.5 py-1 font-display text-callout tabular-nums",
+        urgent
+          ? "bg-[var(--tile-hit)] text-[var(--tile-hit-ink)]"
+          : mine
+            ? "bg-primary text-primary-foreground"
+            : "bg-muted text-muted-foreground",
+      )}
       aria-label={`${left} seconds left`}
     >
       {Math.floor(left / 60)}:{String(left % 60).padStart(2, "0")}

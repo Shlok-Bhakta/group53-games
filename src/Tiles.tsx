@@ -19,12 +19,7 @@ export function Tiles({
   return (
     <div className={`tiles tiles-${size}${flip ? " tiles-flip" : ""}`} role="img" aria-label={label ?? word}>
       {[...word].map((ch, i) => (
-        <span
-          key={i}
-          className={`tile tile-${states?.[i] ?? "blank"}`}
-          style={{ "--i": i } as CSSProperties}
-          aria-hidden="true"
-        >
+        <span key={i} className={`tile tile-${states?.[i] ?? "blank"}`} style={{ "--i": i } as CSSProperties} aria-hidden="true">
           {ch.trim()}
         </span>
       ))}

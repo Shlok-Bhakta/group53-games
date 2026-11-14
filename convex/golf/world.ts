@@ -1,6 +1,29 @@
 import {
-  activate, BALL_R, blast, BLIND_S, brake, closest, compile, DT, fireTargeted, FREEZE_S, hop, landStrikes, newSim, rng, setMode, shoot, stepBall, TARGETED,
-  type Course, type Ev, type Patch, type Power, type Sim, type Vec, type World,
+  activate,
+  BALL_R,
+  blast,
+  BLIND_S,
+  brake,
+  closest,
+  compile,
+  DT,
+  fireTargeted,
+  FREEZE_S,
+  hop,
+  landStrikes,
+  newSim,
+  rng,
+  setMode,
+  shoot,
+  stepBall,
+  TARGETED,
+  type Course,
+  type Ev,
+  type Patch,
+  type Power,
+  type Sim,
+  type Vec,
+  type World,
 } from "./engine";
 import { dcos, dsin, DTWO_PI, hyp } from "./dmath";
 
@@ -32,7 +55,18 @@ export const FREEZE_R = 4.2;
 // hole with par plus four (a live game's hole clock ran out).
 export type CmdKind = "join" | "leave" | "shot" | "use" | "fire" | "hop" | "brake" | "reset" | "turn" | "pickup";
 // `bag`, on a join: what the player's carrying from the last hole of their run.
-export type Cmd = { tick: number; by: string; seq: number; kind: CmdKind; a?: number; p?: number; i?: number; x?: number; y?: number; bag?: Power[] };
+export type Cmd = {
+  tick: number;
+  by: string;
+  seq: number;
+  kind: CmdKind;
+  a?: number;
+  p?: number;
+  i?: number;
+  x?: number;
+  y?: number;
+  bag?: Power[];
+};
 
 export type Mine = { x: number; y: number; live: boolean; fixed: boolean; back: number };
 // `startBag`: what they came onto this hole with, what a retry goes back to. `carry`: what they held
@@ -136,14 +170,16 @@ function hit(b: Ball, from: Vec, speed: number, stun: number, t: number) {
 }
 // The first other ball along a line from `from`, within `range`.
 function firstOnLine(s: WorldState, me: Ball, from: Vec, dir: Vec, range: number) {
-  let best: Ball | null = null, bestAlong = range;
+  let best: Ball | null = null,
+    bestAlong = range;
   for (const o of s.balls) {
     if (o === me || !inPlay(o)) continue;
-    const rx = o.x - from.x, ry = o.y - from.y;
+    const rx = o.x - from.x,
+      ry = o.y - from.y;
     const along = rx * dir.x + ry * dir.y;
     if (along <= 0 || along >= bestAlong) continue;
     const off = Math.abs(rx * dir.y - ry * dir.x);
-    if (off < o.r + 0.35) (best = o), (bestAlong = along);
+    if (off < o.r + 0.35) ((best = o), (bestAlong = along));
   }
   return { ball: best, along: bestAlong };
 }
@@ -222,17 +258,29 @@ export function applyCmd(s: WorldState, c: Course, cmd: Cmd) {
       break;
     }
     case "use": {
-      const i = cmd.i ?? -1, item = b.bag[i];
+      const i = cmd.i ?? -1,
+        item = b.bag[i];
       if (b.mode !== "aim") break;
       const t = T(s);
       if (item === "missile") {
         // Locks onto the nearest player in play; with nobody about it stays in the bag.
         let target: Ball | null = null;
-        for (const o of s.balls) if (o !== b && inPlay(o) && (!target || hyp(o.x - b.x, o.y - b.y) < hyp(target.x - b.x, target.y - b.y))) target = o;
+        for (const o of s.balls)
+          if (o !== b && inPlay(o) && (!target || hyp(o.x - b.x, o.y - b.y) < hyp(target.x - b.x, target.y - b.y))) target = o;
         if (!target) break;
         b.bag.splice(i, 1);
-        const dx = target.x - b.x, dy = target.y - b.y, d = hyp(dx, dy) || 1;
-        s.missiles.push({ x: b.x, y: b.y, vx: (dx / d) * MISSILE.speed, vy: (dy / d) * MISSILE.speed, target: target.id, by: b.id, until: t + MISSILE.life });
+        const dx = target.x - b.x,
+          dy = target.y - b.y,
+          d = hyp(dx, dy) || 1;
+        s.missiles.push({
+          x: b.x,
+          y: b.y,
+          vx: (dx / d) * MISSILE.speed,
+          vy: (dy / d) * MISSILE.speed,
+          target: target.id,
+          by: b.id,
+          until: t + MISSILE.life,
+        });
         s.events.push({ tick: s.tick, id: b.id, ev: { type: "missile", x: b.x, y: b.y, power: 1 } });
       } else if (item === "horn" || item === "flash") {
         // Everyone close by: an Air Horn rattles their next putt, a Flash Camera blinds them.
@@ -251,7 +299,8 @@ export function applyCmd(s: WorldState, c: Course, cmd: Cmd) {
       break;
     }
     case "fire": {
-      const i = cmd.i ?? -1, item = b.bag[i];
+      const i = cmd.i ?? -1,
+        item = b.bag[i];
       if (!item || !TARGETED.includes(item) || !Number.isFinite(cmd.x) || !Number.isFinite(cmd.y)) return;
       const at = { x: cmd.x!, y: cmd.y! };
       const from = { x: b.x, y: b.y };
@@ -259,7 +308,9 @@ export function applyCmd(s: WorldState, c: Course, cmd: Cmd) {
       fireTargeted(b, c, i, at);
       if (b.bag.length === before) break; // not now (it's rolling)
       const t = T(s);
-      const dx0 = at.x - from.x, dy0 = at.y - from.y, d0 = hyp(dx0, dy0) || 1;
+      const dx0 = at.x - from.x,
+        dy0 = at.y - from.y,
+        d0 = hyp(dx0, dy0) || 1;
       const dir = { x: dx0 / d0, y: dy0 / d0 };
       // Ice and honey, in a turn-based game, last until the next time it's your turn.
       if (turns && (item === "freeze" || item === "honey")) {
@@ -267,17 +318,24 @@ export function applyCmd(s: WorldState, c: Course, cmd: Cmd) {
         if (p) Object.assign(p, { until: UNTIL_NEXT_TURN, by: b.id });
       }
       if (item === "freeze") {
-        for (const o of s.balls) if (inPlay(o) && !shielded(o, t) && hyp(o.x - at.x, o.y - at.y) < FREEZE_R) o.frozenUntil = turns ? UNTIL_NEXT_TURN : t + FREEZE_S;
+        for (const o of s.balls)
+          if (inPlay(o) && !shielded(o, t) && hyp(o.x - at.x, o.y - at.y) < FREEZE_R)
+            o.frozenUntil = turns ? UNTIL_NEXT_TURN : t + FREEZE_S;
       } else if (item === "storm") {
         s.storms.push({ x: at.x, y: at.y, r: STORM.r, until: t + STORM.life, next: t + 0.5 });
       } else if (item === "pistol" || item === "elephant") {
         const g = item === "pistol" ? PISTOL : ELEPHANT;
         const { ball: o, along } = firstOnLine(s, b, from, dir, g.range);
         const end = { x: from.x + dir.x * along, y: from.y + dir.y * along };
-        s.events.push({ tick: s.tick, id: b.id, ev: { type: "tracer", x: from.x, y: from.y, x2: end.x, y2: end.y, power: item === "pistol" ? 0.5 : 1 } });
+        s.events.push({
+          tick: s.tick,
+          id: b.id,
+          ev: { type: "tracer", x: from.x, y: from.y, x2: end.x, y2: end.y, power: item === "pistol" ? 0.5 : 1 },
+        });
         if (o) {
           // Knocked straight along the shot.
-          if (hit(o, { x: o.x - dir.x, y: o.y - dir.y }, g.hit, g.stun, t)) s.events.push({ tick: s.tick, id: o.id, ev: { type: "stun", x: o.x, y: o.y, power: 1 } });
+          if (hit(o, { x: o.x - dir.x, y: o.y - dir.y }, g.hit, g.stun, t))
+            s.events.push({ tick: s.tick, id: o.id, ev: { type: "stun", x: o.x, y: o.y, power: 1 } });
           else s.events.push({ tick: s.tick, id: o.id, ev: { type: "fizzle", x: o.x, y: o.y, power: 1 } });
         }
         if (item === "elephant") {
@@ -296,7 +354,9 @@ export function applyCmd(s: WorldState, c: Course, cmd: Cmd) {
       }
       if (item === "railgun") {
         // The rail hits balls too: anyone near the line is thrown off it.
-        const dx = at.x - from.x, dy = at.y - from.y, d = hyp(dx, dy) || 1;
+        const dx = at.x - from.x,
+          dy = at.y - from.y,
+          d = hyp(dx, dy) || 1;
         const end = { x: from.x + (dx / d) * 80, y: from.y + (dy / d) * 80 };
         for (const o of s.balls) {
           if (o === b || (o.mode !== "aim" && o.mode !== "roll")) continue;
@@ -370,8 +430,15 @@ function inReach(c: Course, b: Ball) {
       if (hyp(b.x - q.x, b.y - q.y) < 0.22 + b.r + 0.01) return true;
     }
     if (m.kind === "slider") {
-      const hx = m.size.x / 2 + 0.06 + b.r + 0.01, hy = m.size.y / 2 + 0.06 + b.r + 0.01;
-      if (b.x > Math.min(m.a.x, m.b.x) - hx && b.x < Math.max(m.a.x, m.b.x) + hx && b.y > Math.min(m.a.y, m.b.y) - hy && b.y < Math.max(m.a.y, m.b.y) + hy) return true;
+      const hx = m.size.x / 2 + 0.06 + b.r + 0.01,
+        hy = m.size.y / 2 + 0.06 + b.r + 0.01;
+      if (
+        b.x > Math.min(m.a.x, m.b.x) - hx &&
+        b.x < Math.max(m.a.x, m.b.x) + hx &&
+        b.y > Math.min(m.a.y, m.b.y) - hy &&
+        b.y < Math.max(m.a.y, m.b.y) + hy
+      )
+        return true;
     }
   }
   return false;
@@ -379,8 +446,10 @@ function inReach(c: Course, b: Ball) {
 // Nothing can change until a command or a timer. The server only sleeps when this is true, so a world
 // that isn't quiet never builds up a long stretch to step through.
 export const quiet = (s: WorldState, c: Course) =>
-  s.strikes.length === 0 && s.missiles.length === 0 && s.storms.length === 0 && s.balls.every((b) => b.mode === "aim" && b.lipT === 0 && !inReach(c, b));
-
+  s.strikes.length === 0 &&
+  s.missiles.length === 0 &&
+  s.storms.length === 0 &&
+  s.balls.every((b) => b.mode === "aim" && b.lipT === 0 && !inReach(c, b));
 
 // The next tick a timer goes off, after `tick`.
 function nextTimer(s: WorldState) {
@@ -394,11 +463,11 @@ function nextTimer(s: WorldState) {
 function timers(s: WorldState) {
   for (let i = 0; i < s.boxes.length; i++) {
     if (s.boxes[i] && s.boxBack[i] < 0) s.boxBack[i] = s.tick + BOX_BACK;
-    else if (s.boxes[i] && s.tick >= s.boxBack[i]) (s.boxes[i] = false), (s.boxBack[i] = -1);
+    else if (s.boxes[i] && s.tick >= s.boxBack[i]) ((s.boxes[i] = false), (s.boxBack[i] = -1));
   }
   for (let i = 0; i < s.gone.length; i++) {
     if (s.gone[i] && s.goneBack[i] < 0) s.goneBack[i] = s.tick + BUMPER_BACK;
-    else if (s.gone[i] && s.tick >= s.goneBack[i]) (s.gone[i] = false), (s.goneBack[i] = -1);
+    else if (s.gone[i] && s.tick >= s.goneBack[i]) ((s.gone[i] = false), (s.goneBack[i] = -1));
   }
   // Ice and honey that have worn off. (Everything that reads them checks the time anyway.)
   for (let i = 0; i < s.patches.length; i++) if (s.patches[i].until <= T(s)) s.patches.splice(i--, 1);
@@ -407,7 +476,7 @@ function timers(s: WorldState) {
     if (m.live) continue;
     if (!m.fixed) s.mines.splice(i--, 1);
     else if (m.back < 0) m.back = s.tick + MINE_BACK;
-    else if (s.tick >= m.back) (m.live = true), (m.back = -1);
+    else if (s.tick >= m.back) ((m.live = true), (m.back = -1));
   }
 }
 
@@ -427,13 +496,17 @@ function collideBalls(s: WorldState, c: Course) {
       if (!moving(a) && !moving(b)) continue;
       if (marked(a) || marked(b)) continue;
       if (Math.abs(a.z - b.z) > 0.6) continue;
-      const dx = b.x - a.x, dy = b.y - a.y;
+      const dx = b.x - a.x,
+        dy = b.y - a.y;
       const d = hyp(dx, dy);
       const R = a.r + b.r;
       if (d >= R) continue;
       // Dead on top of each other: apart along x.
-      const nx = d < 1e-9 ? 1 : dx / d, ny = d < 1e-9 ? 0 : dy / d;
-      const ma = a.r * a.r, mb = b.r * b.r, m = ma + mb;
+      const nx = d < 1e-9 ? 1 : dx / d,
+        ny = d < 1e-9 ? 0 : dy / d;
+      const ma = a.r * a.r,
+        mb = b.r * b.r,
+        m = ma + mb;
       const over = R - d;
       a.x -= nx * over * (mb / m);
       a.y -= ny * over * (mb / m);
@@ -500,10 +573,12 @@ function stepStorms(s: WorldState) {
     const st = s.storms[k];
     while (t >= st.next && st.next < st.until) {
       const r = rng(s.seed * 7919 + Math.round(st.next * 240) * 31 + Math.round(st.x * 13));
-      const a = r() * DTWO_PI, d = Math.sqrt(r()) * st.r;
+      const a = r() * DTWO_PI,
+        d = Math.sqrt(r()) * st.r;
       const bolt = { x: st.x + dcos(a) * d, y: st.y + dsin(a) * d };
       s.events.push({ tick: s.tick, id: "", ev: { type: "bolt", x: bolt.x, y: bolt.y, power: 1 } });
-      for (const o of s.balls) if (inPlay(o) && o.z < 1 && hyp(o.x - bolt.x, o.y - bolt.y) < STORM.bolt) hit(o, bolt, STORM.hit, STORM.stun, t);
+      for (const o of s.balls)
+        if (inPlay(o) && o.z < 1 && hyp(o.x - bolt.x, o.y - bolt.y) < STORM.bolt) hit(o, bolt, STORM.hit, STORM.stun, t);
       st.next += STORM.every;
     }
     if (t >= st.until) s.storms.splice(k--, 1);
@@ -522,7 +597,9 @@ function stepMissiles(s: WorldState) {
       s.missiles.splice(k--, 1);
       continue;
     }
-    const dx = target.x - m.x, dy = target.y - m.y, d = hyp(dx, dy) || 1;
+    const dx = target.x - m.x,
+      dy = target.y - m.y,
+      d = hyp(dx, dy) || 1;
     const turn = Math.min(1, MISSILE.turn * DT);
     m.vx += ((dx / d) * MISSILE.speed - m.vx) * turn;
     m.vy += ((dy / d) * MISSILE.speed - m.vy) * turn;
@@ -563,7 +640,9 @@ export function advance(s: WorldState, w: World, to: number, cmds: readonly Cmd[
 }
 
 // A world as stored or sent: the shared arrays once, not on every ball, and no events.
-export type Packed = Omit<WorldState, "balls" | "events"> & { balls: Omit<Ball, "boxes" | "gone" | "mines" | "strikes" | "patches" | "events">[] };
+export type Packed = Omit<WorldState, "balls" | "events"> & {
+  balls: Omit<Ball, "boxes" | "gone" | "mines" | "strikes" | "patches" | "events">[];
+};
 export function pack(s: WorldState): Packed {
   return {
     tick: s.tick,
@@ -628,7 +707,9 @@ export function withPending(server: readonly Cmd[], pending: readonly Pending[],
   const seen = (p: Pending) => server.some((c) => c.by === p.by && c.seq === p.seq);
   // Gone once it's in the server's list, or confirmed and already inside the snapshot. Unconfirmed and
   // older than the snapshot, it plays from the snapshot on rather than vanishing.
-  const still = pending.filter((p) => !seen(p) && !(p.acked && p.tick < baseTick)).map((p) => (p.tick < baseTick ? { ...p, tick: baseTick } : p));
+  const still = pending
+    .filter((p) => !seen(p) && !(p.acked && p.tick < baseTick))
+    .map((p) => (p.tick < baseTick ? { ...p, tick: baseTick } : p));
   return { pending: still, cmds: [...server, ...still].sort(cmdOrder) };
 }
 
@@ -643,7 +724,24 @@ export function fingerprint(s: WorldState) {
     h = Math.imul(h ^ u[1], 16777619);
   };
   mix(s.tick);
-  for (const b of s.balls) for (const n of [b.x, b.y, b.vx, b.vy, b.z, b.vz, b.strokes, b.holes, b.r, b.bag.length, b.frozenUntil, b.stunUntil, b.shieldUntil, b.rattled ? 1 : 0]) mix(n);
+  for (const b of s.balls)
+    for (const n of [
+      b.x,
+      b.y,
+      b.vx,
+      b.vy,
+      b.z,
+      b.vz,
+      b.strokes,
+      b.holes,
+      b.r,
+      b.bag.length,
+      b.frozenUntil,
+      b.stunUntil,
+      b.shieldUntil,
+      b.rattled ? 1 : 0,
+    ])
+      mix(n);
   for (const m of s.missiles) for (const n of [m.x, m.y]) mix(n);
   for (const m of s.storms) mix(m.next);
   for (const m of s.patches) mix(m.until);

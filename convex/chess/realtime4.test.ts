@@ -91,7 +91,15 @@ describe("four-player real-time", () => {
     expect(s.pieces.filter((p) => p.color === "green").every((p) => p.dead)).toBe(true);
     // A grey army can't move or resign again.
     const greenPawn = s.pieces.find((p) => p.color === "green" && p.kind === "P")!;
-    s = simulate([resign(10, "green"), { tick: 20, color: "green", pieceId: greenPawn.id, toX: greenPawn.x - 1, toY: greenPawn.y }, resign(25, "green")], 40, s0);
+    s = simulate(
+      [
+        resign(10, "green"),
+        { tick: 20, color: "green", pieceId: greenPawn.id, toX: greenPawn.x - 1, toY: greenPawn.y },
+        resign(25, "green"),
+      ],
+      40,
+      s0,
+    );
     expect(s.out).toHaveLength(1);
     expect(s.pieces.find((p) => p.id === greenPawn.id)).toMatchObject({ x: greenPawn.x, dead: true });
     s = simulate([resign(10, "green"), resign(30, "blue"), resign(50, "red")], 80, s0);

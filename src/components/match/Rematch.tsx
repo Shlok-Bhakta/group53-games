@@ -88,7 +88,13 @@ export function Rematch({ match, meId }: { match: MatchView; meId: Id<"users"> }
     const declinedByThem = offer.by === meId;
     return (
       <div className={wrap}>
-        <p className="text-callout text-muted-foreground">{declinedByThem ? (others.length > 1 ? "Someone passed on a rematch." : `${others[0]?.name} passed on a rematch.`) : "Rematch declined."}</p>
+        <p className="text-callout text-muted-foreground">
+          {declinedByThem
+            ? others.length > 1
+              ? "Someone passed on a rematch."
+              : `${others[0]?.name} passed on a rematch.`
+            : "Rematch declined."}
+        </p>
         <Button size="xl" className="w-full" onClick={() => navigate(modePath(match.mode as ModeKey))}>
           New game
         </Button>
@@ -100,7 +106,11 @@ export function Rematch({ match, meId }: { match: MatchView; meId: Id<"users"> }
       {stillHere.length > 0 && (
         <p className="flex items-center justify-center gap-2 text-footnote text-muted-foreground">
           <span className="size-2 rounded-full bg-online" />
-          {stillHere.length === others.length ? (others.length === 1 ? `${others[0].name} is still here` : "Everyone's still here") : `${listNames(stillHere.map((p) => p.name))} still here`}
+          {stillHere.length === others.length
+            ? others.length === 1
+              ? `${others[0].name} is still here`
+              : "Everyone's still here"
+            : `${listNames(stillHere.map((p) => p.name))} still here`}
         </p>
       )}
       <AsyncButton size="xl" className="w-full" icon={<ArrowsClockwiseIcon weight="bold" />} onClick={() => rematch({ id: match._id })}>

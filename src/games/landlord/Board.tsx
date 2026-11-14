@@ -1,6 +1,17 @@
 import { memo, type ReactNode } from "react";
 import { motion } from "motion/react";
-import { BusIcon, CarIcon, CoinsIcon, DropIcon, LightningIcon, LockIcon, QuestionIcon, ReceiptIcon, SirenIcon, TrainIcon } from "@phosphor-icons/react";
+import {
+  BusIcon,
+  CarIcon,
+  CoinsIcon,
+  DropIcon,
+  LightningIcon,
+  LockIcon,
+  QuestionIcon,
+  ReceiptIcon,
+  SirenIcon,
+  TrainIcon,
+} from "@phosphor-icons/react";
 import { BOARD, type Square } from "../../../convex/landlord/board";
 import type { MonoState, Prop } from "../../../convex/landlord/engine";
 import type { MatchView } from "../../../convex/matches";
@@ -34,9 +45,21 @@ export function Board({
   onSquare: (pos: number) => void;
 }) {
   return (
-    <motion.div className="ll-board absolute left-0 top-0" style={{ width: SIDE, height: SIDE, x: camera.x, y: camera.y, scale: camera.k, originX: 0, originY: 0 }}>
+    <motion.div
+      className="ll-board absolute left-0 top-0"
+      style={{ width: SIDE, height: SIDE, x: camera.x, y: camera.y, scale: camera.k, originX: 0, originY: 0 }}
+    >
       {BOARD.map((sq, pos) => (
-        <Cell key={pos} pos={pos} sq={sq} prop={state.props[pos]} owner={ownerOf(match, state.props[pos])} lit={highlight === pos} picking={picking} onTap={onSquare} />
+        <Cell
+          key={pos}
+          pos={pos}
+          sq={sq}
+          prop={state.props[pos]}
+          owner={ownerOf(match, state.props[pos])}
+          lit={highlight === pos}
+          picking={picking}
+          onTap={onSquare}
+        />
       ))}
       <Middle state={state} />
       <Tokens state={state} match={match} />
@@ -117,17 +140,24 @@ const ICONS: Partial<Record<Square["kind"], ReactNode>> = {
 function Face({ sq, box }: { sq: Square; box: Box }) {
   const corner = box.edge === "corner";
   const icon =
-    sq.kind === "util" ? (sq.name === "Water Works" ? <DropIcon weight="fill" /> : <LightningIcon weight="fill" />)
-    : sq.kind === "go" ? <span className="font-display text-heading">GO</span>
-    : sq.kind === "jail" ? <LockIcon weight="fill" />
-    : sq.kind === "parking" ? <CarIcon weight="fill" />
-    : sq.kind === "gotojail" ? <SirenIcon weight="fill" />
-    : ICONS[sq.kind];
-  const sub =
-    sq.kind === "go" ? "Collect $200"
-    : "price" in sq ? money(sq.price)
-    : sq.kind === "tax" ? `Pay ${money(sq.amount)}`
-    : null;
+    sq.kind === "util" ? (
+      sq.name === "Water Works" ? (
+        <DropIcon weight="fill" />
+      ) : (
+        <LightningIcon weight="fill" />
+      )
+    ) : sq.kind === "go" ? (
+      <span className="font-display text-heading">GO</span>
+    ) : sq.kind === "jail" ? (
+      <LockIcon weight="fill" />
+    ) : sq.kind === "parking" ? (
+      <CarIcon weight="fill" />
+    ) : sq.kind === "gotojail" ? (
+      <SirenIcon weight="fill" />
+    ) : (
+      ICONS[sq.kind]
+    );
+  const sub = sq.kind === "go" ? "Collect $200" : "price" in sq ? money(sq.price) : sq.kind === "tax" ? `Pay ${money(sq.amount)}` : null;
   return (
     <span className={cn("ll-face", corner && "ll-corner", sq.kind === "street" && `ll-banded-${box.edge}`)}>
       {sq.kind !== "go" && <span className="ll-name">{sq.name}</span>}
@@ -141,7 +171,10 @@ function Face({ sq, box }: { sq: Square; box: Box }) {
 function Middle({ state }: { state: MonoState }) {
   const inner = SIDE - 2 * 116;
   return (
-    <div className="ll-middle absolute flex flex-col items-center justify-center gap-6" style={{ left: 116, top: 116, width: inner, height: inner }}>
+    <div
+      className="ll-middle absolute flex flex-col items-center justify-center gap-6"
+      style={{ left: 116, top: 116, width: inner, height: inner }}
+    >
       <Tiles word="MONOPOLY" states={["green", "yellow", "green", "gray", "green", "yellow", "green", "hit"]} size="lg" label="Monopoly" />
       <div className="flex gap-8 text-center">
         {state.rules.pot > 0 && (

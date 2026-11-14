@@ -3,7 +3,28 @@ import { canShoot, compile, groundUnder, ICE_S, poseOf, rng, type Power } from "
 import { datan, datan2, dcos, dexp, dlog, dpow, dsin, hyp } from "./dmath";
 import { courseOf, worldOf } from "./holes";
 import { SANDBOX } from "./sandbox";
-import { advance, applyCmd, BOX_BACK, carryOf, cmdOrder, fingerprint, MINE_BACK, newWorld, pack, quiet, REACH, STORM, stepWorld, TPS, unpack, withPending, type Cmd, type Packed, type Pending, type WorldState } from "./world";
+import {
+  advance,
+  applyCmd,
+  BOX_BACK,
+  carryOf,
+  cmdOrder,
+  fingerprint,
+  MINE_BACK,
+  newWorld,
+  pack,
+  quiet,
+  REACH,
+  STORM,
+  stepWorld,
+  TPS,
+  unpack,
+  withPending,
+  type Cmd,
+  type Packed,
+  type Pending,
+  type WorldState,
+} from "./world";
 
 const W = compile(SANDBOX);
 const at = (s: WorldState, id: string) => s.balls.find((b) => b.id === id)!;
@@ -46,7 +67,8 @@ describe("portable math", () => {
       const x = (r() - 0.5) * 60;
       expect(Math.abs(dsin(x) - Math.sin(x))).toBeLessThan(1e-13);
       expect(Math.abs(dcos(x) - Math.cos(x))).toBeLessThan(1e-13);
-      const y = (r() - 0.5) * 40, z = (r() - 0.5) * 40;
+      const y = (r() - 0.5) * 40,
+        z = (r() - 0.5) * 40;
       expect(Math.abs(datan2(y, z) - Math.atan2(y, z))).toBeLessThan(1e-13);
       expect(Math.abs(hyp(y, z) - Math.hypot(y, z))).toBeLessThan(1e-12);
       const p = r() * 3;
@@ -112,7 +134,8 @@ describe("the world", () => {
     for (const id of ["a", "b", "c", "d", "e", "f", "g", "h"]) applyCmd(s, SANDBOX, { tick: 0, by: id, seq: 0, kind: "join" });
     applyCmd(s, SANDBOX, { tick: 0, by: "a", seq: 1, kind: "join" });
     expect(s.balls).toHaveLength(8);
-    for (let i = 0; i < 8; i++) for (let j = i + 1; j < 8; j++) expect(hyp(s.balls[i].x - s.balls[j].x, s.balls[i].y - s.balls[j].y)).toBeGreaterThan(1.4);
+    for (let i = 0; i < 8; i++)
+      for (let j = i + 1; j < 8; j++) expect(hyp(s.balls[i].x - s.balls[j].x, s.balls[i].y - s.balls[j].y)).toBeGreaterThan(1.4);
   });
 });
 
@@ -247,7 +270,11 @@ describe("Super Battle Golf's items, on other players", () => {
   test("an Electromagnet pops missiles and shrugs off lasers", () => {
     const s = crowd(["a", "b"], { a: ["missile", "laser"], b: ["shield"] });
     const from = { x: at(s, "b").x, y: at(s, "b").y };
-    advance(s, W, TPS * 3, [cmd(2, "b", "use", { i: 0 }), cmd(5, "a", "use", { i: 0 }), cmd(8, "a", "fire", { i: 0, x: from.x, y: from.y })]);
+    advance(s, W, TPS * 3, [
+      cmd(2, "b", "use", { i: 0 }),
+      cmd(5, "a", "use", { i: 0 }),
+      cmd(8, "a", "fire", { i: 0, x: from.x, y: from.y }),
+    ]);
     expect(evs(s, "shield", "b")).toHaveLength(1);
     expect(evs(s, "fizzle", "b")).toHaveLength(1);
     expect(moved(s, "b", from)).toBe(0);
@@ -259,7 +286,8 @@ describe("Super Battle Golf's items, on other players", () => {
       advance(s, W, TPS * 6, [cmd(2, "a", "use", { i: 0 }), cmd(10, "b", "shot", { a: 0, p: 0.3 })]);
       return { s, x: at(s, "b").x };
     };
-    const quiet = putt(false), loud = putt(true);
+    const quiet = putt(false),
+      loud = putt(true);
     expect(loud.x - 46).toBeGreaterThan((quiet.x - 46) * 1.3);
     expect(at(loud.s, "b").rattled).toBe(false); // used up by the putt
     expect(at(loud.s, "c").rattled).toBe(false); // too far away to hear it
@@ -274,7 +302,8 @@ describe("Super Battle Golf's items, on other players", () => {
 
   test("a Dueling Pistol knocks the first ball on its line and stuns it", () => {
     const s = crowd(["a", "b", "c"], { a: ["pistol"] }, [40, 46, 52]);
-    const b0 = { x: 46, y: 61 }, c0 = { x: 52, y: 61 };
+    const b0 = { x: 46, y: 61 },
+      c0 = { x: 52, y: 61 };
     advance(s, W, 30, [cmd(2, "a", "fire", { i: 0, x: 60, y: 61 }), cmd(20, "b", "shot", { a: 3, p: 0.5 })]);
     expect(evs(s, "tracer", "a")).toHaveLength(1);
     expect(moved(s, "b", b0)).toBeGreaterThan(0);
@@ -372,7 +401,8 @@ describe("the board fights back", () => {
     delete old.patches;
     delete old.missiles;
     delete old.storms;
-    for (const b of old.balls! as Record<string, unknown>[]) for (const k of ["shieldUntil", "frozenUntil", "stunUntil", "blindUntil", "coffeeUntil", "rattled"]) delete b[k];
+    for (const b of old.balls! as Record<string, unknown>[])
+      for (const k of ["shieldUntil", "frozenUntil", "stunUntil", "blindUntil", "coffeeUntil", "rattled"]) delete b[k];
     const back = unpack(JSON.parse(JSON.stringify(old)));
     advance(back, W, TPS * 3, [cmd(1, "a", "shot", { a: 0, p: 0.3 })]);
     expect(at(back, "a").x).toBeGreaterThan(41);
@@ -411,7 +441,8 @@ describe("off the ground", () => {
 
   test("blown off the board, it sails out with no invisible wall, comes down and goes back to its last shot", () => {
     const { s, b } = flying(14, 20, 20, 0);
-    let last = b.x, turnedBack = false;
+    let last = b.x,
+      turnedBack = false;
     for (let i = 0; i < TPS && b.mode === "roll"; i++) {
       stepWorld(s, WH);
       if (b.x < last) turnedBack = true;
@@ -565,7 +596,8 @@ describe("playing a hole", () => {
   test("a few players start on separate tees", () => {
     const s = newWorld(hole);
     for (const id of ["a", "b", "c", "d"]) join(s, id);
-    for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) expect(hyp(s.balls[i].x - s.balls[j].x, s.balls[i].y - s.balls[j].y)).toBeGreaterThan(1.4);
+    for (let i = 0; i < 4; i++)
+      for (let j = i + 1; j < 4; j++) expect(hyp(s.balls[i].x - s.balls[j].x, s.balls[i].y - s.balls[j].y)).toBeGreaterThan(1.4);
   });
 
   test("a sink reports its strokes, then it's a fresh start on the tee", () => {

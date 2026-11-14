@@ -10,8 +10,7 @@ export const COLORS4 = ["red", "blue", "yellow", "green"] as const;
 export type Color4 = (typeof COLORS4)[number];
 export type Kind = "P" | "N" | "B" | "R" | "Q" | "K";
 
-export const onBoard = (x: number, y: number) =>
-  x >= 0 && x < SIZE && y >= 0 && y < SIZE && !((x < 3 || x > 10) && (y < 3 || y > 10));
+export const onBoard = (x: number, y: number) => x >= 0 && x < SIZE && y >= 0 && y < SIZE && !((x < 3 || x > 10) && (y < 3 || y > 10));
 
 // Quarter turns clockwise from red's point of view.
 const TURNS: Record<Color4, number> = { red: 0, blue: 1, yellow: 2, green: 3 };
@@ -72,8 +71,35 @@ export const onPawnStart = (color: Color4, x: number, y: number) => relativeRank
 
 // Castling in red's frame: king h1 -> j1 with rook k1 -> i1, or king h1 -> f1 with rook d1 -> g1.
 export const CASTLES = [
-  { king: [7, 0], kingTo: [9, 0], rook: [10, 0], rookTo: [8, 0], between: [[8, 0], [9, 0]], kingPath: [[8, 0], [9, 0]] },
-  { king: [7, 0], kingTo: [5, 0], rook: [3, 0], rookTo: [6, 0], between: [[4, 0], [5, 0], [6, 0]], kingPath: [[6, 0], [5, 0]] },
+  {
+    king: [7, 0],
+    kingTo: [9, 0],
+    rook: [10, 0],
+    rookTo: [8, 0],
+    between: [
+      [8, 0],
+      [9, 0],
+    ],
+    kingPath: [
+      [8, 0],
+      [9, 0],
+    ],
+  },
+  {
+    king: [7, 0],
+    kingTo: [5, 0],
+    rook: [3, 0],
+    rookTo: [6, 0],
+    between: [
+      [4, 0],
+      [5, 0],
+      [6, 0],
+    ],
+    kingPath: [
+      [6, 0],
+      [5, 0],
+    ],
+  },
 ] as const;
 
 // Free-for-all capture values. Queens made by promotion are worth 1.

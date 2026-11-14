@@ -6,7 +6,10 @@ const setRack = (id: string, userId: string, letters: string) => admin().mutatio
 
 // Taps a rack tile, then a square. Squares are found by where they are on the board.
 async function place(page: Page, letter: string, x: number, y: number) {
-  await page.getByRole("button", { name: letter === "?" ? "Blank tile" : `Tile ${letter}` }).first().click();
+  await page
+    .getByRole("button", { name: letter === "?" ? "Blank tile" : `Tile ${letter}` })
+    .first()
+    .click();
   await tapSquare(page, x, y);
 }
 async function tapSquare(page: Page, x: number, y: number) {
@@ -144,7 +147,13 @@ test.describe("Scrabble", () => {
     // Someone opens the shared link in a browser: not the app, and not signed in.
     const link = await phones.open({
       installed: false,
-      context: { viewport: { width: 393, height: 852 }, isMobile: true, hasTouch: true, userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Discord/250.0" },
+      context: {
+        viewport: { width: 393, height: 852 },
+        isMobile: true,
+        hasTouch: true,
+        userAgent:
+          "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Discord/250.0",
+      },
     });
     await link.goto(`/scrabble/${id}?accept=1`);
     await expect(link.getByRole("heading", { name: "Shlok wants Scrabble" })).toBeVisible();
@@ -158,7 +167,9 @@ test.describe("Scrabble", () => {
     await expect(link.getByRole("heading", { name: /New here/ })).toBeVisible();
   });
 
-  test("the board fills the screen; the dock has the bag, Swap, Play and Shuffle, and the menu has scores, words and Resign", async ({ phones }) => {
+  test("the board fills the screen; the dock has the bag, Swap, Play and Shuffle, and the menu has scores, words and Resign", async ({
+    phones,
+  }) => {
     const { id, first, second } = await twoPlayerGame(phones);
     const p = first.page;
     const board = (await p.getByRole("group", { name: "Board" }).boundingBox())!;
@@ -216,7 +227,10 @@ test.describe("Scrabble", () => {
     await musicRow.click();
     await expect.poll(() => page.evaluate(() => (window as unknown as { __music?: string }).__music)).toBe("53_1");
     // Alex's track is the only one, then Off. Off hides the volume; back on, it's there again.
-    await expect(page.getByRole("dialog").getByRole("radiogroup", { name: "Made by a human" }).getByRole("radio")).toHaveText([/53_1.*By Alex/, /Off/]);
+    await expect(page.getByRole("dialog").getByRole("radiogroup", { name: "Made by a human" }).getByRole("radio")).toHaveText([
+      /53_1.*By Alex/,
+      /Off/,
+    ]);
     await page.getByRole("dialog").getByRole("radio", { name: /Off/ }).click();
     await expect.poll(() => page.evaluate(() => (window as unknown as { __music?: string }).__music)).toBe("off");
     await page.keyboard.press("Escape");
@@ -243,7 +257,12 @@ test.describe("Scrabble", () => {
     await expect(page.getByRole("slider", { name: "Music volume" })).toHaveAttribute("aria-valuenow", "0.3");
     await expect(page.getByRole("button", { name: /^Sound effects/ })).toContainText("Thock");
     await page.getByRole("switch", { name: "Play on silent" }).click();
-    expect(JSON.parse((await page.evaluate(() => localStorage.getItem("sound")))!)).toMatchObject({ music: "53_1", volume: 0.3, sfx: "keys", onSilent: false });
+    expect(JSON.parse((await page.evaluate(() => localStorage.getItem("sound")))!)).toMatchObject({
+      music: "53_1",
+      volume: 0.3,
+      sfx: "keys",
+      onSilent: false,
+    });
     expect(errors).toEqual([]);
   });
 
@@ -251,7 +270,9 @@ test.describe("Scrabble", () => {
     const me = await createPlayer("Shlok");
     const page = await phones.open({ player: me, notifications: "granted" });
     await page.goto("/you");
-    await page.evaluate(() => localStorage.setItem("sound", JSON.stringify({ sfx: "keys", music: "nightcap", lastMusic: "nightcap", onSilent: true })));
+    await page.evaluate(() =>
+      localStorage.setItem("sound", JSON.stringify({ sfx: "keys", music: "nightcap", lastMusic: "nightcap", onSilent: true })),
+    );
     await page.reload();
     await expect(page.getByRole("button", { name: /^Music/ })).toContainText("53_1");
     await expect(page.getByRole("button", { name: /^Sound effects/ })).toContainText("Thock");
@@ -265,10 +286,18 @@ test.describe("Scrabble", () => {
     const me = await createPlayer("Shlok");
     const page = await phones.open({ player: me });
     await page.goto("/you");
-    type Lab = { loop: (id: string) => Promise<{ length: number; loopStart: number; loopEnd: number; seconds: number; seam: number; nearby: number }>; music: (t: string, s: number, v?: number) => Promise<{ peak: number; rms: number }> };
+    type Lab = {
+      loop: (id: string) => Promise<{ length: number; loopStart: number; loopEnd: number; seconds: number; seam: number; nearby: number }>;
+      music: (t: string, s: number, v?: number) => Promise<{ peak: number; rms: number }>;
+    };
     const { loop, song, loud, quiet } = await page.evaluate(async () => {
       const lab = (window as unknown as { __soundLab: Lab }).__soundLab;
-      return { loop: await lab.loop("53_1"), song: await lab.music("53_1", 20), loud: await lab.music("53_1", 20, 1), quiet: await lab.music("53_1", 20, 0.3) };
+      return {
+        loop: await lab.loop("53_1"),
+        song: await lab.music("53_1", 20),
+        loud: await lab.music("53_1", 20, 1),
+        quiet: await lab.music("53_1", 20, 0.3),
+      };
     });
     // The loop is the whole track as bounced, the encoder delay trimmed, and past its end the file carries
     // on with the track's start, so the seam lines up sample for sample.
@@ -324,9 +353,36 @@ test.describe("Scrabble", () => {
     const page = await phones.open({ player: me });
     await page.goto("/you");
     const report = await page.evaluate(async () => {
-      type Lab = { packs: string[]; tracks: string[]; sfx: (p: string, n: string) => Promise<{ peak: number; rms: number }>; music: (t: string, s: number) => Promise<{ peak: number; rms: number }> };
+      type Lab = {
+        packs: string[];
+        tracks: string[];
+        sfx: (p: string, n: string) => Promise<{ peak: number; rms: number }>;
+        music: (t: string, s: number) => Promise<{ peak: number; rms: number }>;
+      };
       const lab = (window as unknown as { __soundLab: Lab }).__soundLab;
-      const names = ["pick", "place", "recall", "shuffle", "play", "bingo", "invalid", "turn", "ghost", "land", "tick", "win", "lose", "preview", "deal", "flip", "chips", "knock", "sweep", "slam", "payout"];
+      const names = [
+        "pick",
+        "place",
+        "recall",
+        "shuffle",
+        "play",
+        "bingo",
+        "invalid",
+        "turn",
+        "ghost",
+        "land",
+        "tick",
+        "win",
+        "lose",
+        "preview",
+        "deal",
+        "flip",
+        "chips",
+        "knock",
+        "sweep",
+        "slam",
+        "payout",
+      ];
       const out: Record<string, { peak: number; rms: number }> = {};
       // Offline renders run side by side: a pack's sounds at once, then every track at once (ten seconds
       // of each, the same as before, just not one after another).
@@ -335,8 +391,12 @@ test.describe("Scrabble", () => {
       return out;
     });
     expect(Object.keys(report).length).toBeGreaterThan(100);
-    const silent = Object.entries(report).filter(([k, r]) => r.peak < (k.includes("ghost") ? 0.002 : 0.01)).map(([k]) => k);
-    const clipping = Object.entries(report).filter(([, r]) => r.peak >= 0.99).map(([k]) => k);
+    const silent = Object.entries(report)
+      .filter(([k, r]) => r.peak < (k.includes("ghost") ? 0.002 : 0.01))
+      .map(([k]) => k);
+    const clipping = Object.entries(report)
+      .filter(([, r]) => r.peak >= 0.99)
+      .map(([k]) => k);
     expect(silent).toEqual([]);
     expect(clipping).toEqual([]);
     // Music sits under the game: there, but never loud.
@@ -360,7 +420,8 @@ test.describe("Scrabble", () => {
     await p.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
     await p.mouse.down();
     // The tile sits right under the finger, so it lands where the finger lets go.
-    for (let i = 1; i <= 8; i++) await p.mouse.move(from.x + ((board.x + target.x - from.x) * i) / 8, from.y + ((board.y + target.y - from.y) * i) / 8);
+    for (let i = 1; i <= 8; i++)
+      await p.mouse.move(from.x + ((board.x + target.x - from.x) * i) / 8, from.y + ((board.y + target.y - from.y) * i) / 8);
     await p.mouse.up();
     await expect(p.locator('[data-draft][data-cell="7,7"]')).toHaveAttribute("data-letter", "H");
     await place(p, "I", 8, 7);

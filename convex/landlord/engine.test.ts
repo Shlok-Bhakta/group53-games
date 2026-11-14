@@ -135,7 +135,10 @@ describe("jail", () => {
   });
   test("three misses: pay $50 and move by the third roll", () => {
     let g = jailed();
-    for (const [a, b] of [[6, 5], [1, 2]]) {
+    for (const [a, b] of [
+      [6, 5],
+      [1, 2],
+    ]) {
       g = roll(g, 0, 1, 2);
       expect(g.s.players[0].pos).toBe(JAIL);
       g = roll(g, 1, a, b);
@@ -483,7 +486,9 @@ describe("trades", () => {
     let g = game(3);
     own(g, 0, 1, 3);
     g.s.props[3]!.houses = 1;
-    expect(() => play(g, 0, { k: "offer", to: 1, give: { cash: 0, props: [1], free: [] }, get: { cash: 10, props: [], free: [] } })).toThrow("Sell the buildings");
+    expect(() =>
+      play(g, 0, { k: "offer", to: 1, give: { cash: 0, props: [1], free: [] }, get: { cash: 10, props: [], free: [] } }),
+    ).toThrow("Sell the buildings");
     g.s.props[3]!.houses = 0;
     g = play(g, 0, { k: "offer", to: 1, give: { cash: 0, props: [1], free: [] }, get: { cash: 10, props: [], free: [] } });
     g = play(g, 0, { k: "offer", to: 2, give: { cash: 0, props: [1], free: [] }, get: { cash: 20, props: [], free: [] } });

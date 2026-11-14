@@ -61,7 +61,14 @@ export function MoveLine({ history: { at, count, go }, empty, children }: { hist
 
 function Step({ label, disabled, onClick, children }: { label: string; disabled: boolean; onClick: () => void; children: ReactNode }) {
   return (
-    <Button variant="ghost" size="icon" aria-label={label} disabled={disabled} onClick={onClick} className="rounded-md disabled:opacity-30 [&_svg:not([class*='size-'])]:size-[22px]">
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className="rounded-md disabled:opacity-30 [&_svg:not([class*='size-'])]:size-[22px]"
+    >
       {children}
     </Button>
   );
@@ -69,7 +76,17 @@ function Step({ label, disabled, onClick, children }: { label: string; disabled:
 
 // One move in the line. `ply` counts from 0, so the board after it is `ply + 1` moves in. Moves after the one
 // on show are faded.
-export function MoveChip({ ply, history, currentClass = "bg-primary text-primary-foreground", children }: { ply: number; history: History; currentClass?: string; children: ReactNode }) {
+export function MoveChip({
+  ply,
+  history,
+  currentClass = "bg-primary text-primary-foreground",
+  children,
+}: {
+  ply: number;
+  history: History;
+  currentClass?: string;
+  children: ReactNode;
+}) {
   const current = ply === history.at - 1;
   return (
     <button
@@ -77,7 +94,10 @@ export function MoveChip({ ply, history, currentClass = "bg-primary text-primary
       data-current={current || undefined}
       aria-current={current ? "step" : undefined}
       onClick={() => history.go(ply + 1)}
-      className={cn("flex h-full shrink-0 touch-manipulation items-center transition-opacity duration-100", ply >= history.at && "opacity-40")}
+      className={cn(
+        "flex h-full shrink-0 touch-manipulation items-center transition-opacity duration-100",
+        ply >= history.at && "opacity-40",
+      )}
     >
       <span className={cn("flex items-center gap-1.5 rounded-sm", current && cn("px-1.5", currentClass))}>{children}</span>
     </button>
@@ -87,5 +107,12 @@ export function MoveChip({ ply, history, currentClass = "bg-primary text-primary
 // Lies over the board while it shows the past: a tap there goes back to now, where pieces move again.
 export function BackToNow({ history }: { history: History }) {
   if (history.live) return null;
-  return <button type="button" aria-label="Back to the current position" onClick={() => history.go(history.count)} className="absolute inset-0 z-40 touch-manipulation" />;
+  return (
+    <button
+      type="button"
+      aria-label="Back to the current position"
+      onClick={() => history.go(history.count)}
+      className="absolute inset-0 z-40 touch-manipulation"
+    />
+  );
 }

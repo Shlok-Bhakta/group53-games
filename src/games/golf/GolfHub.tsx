@@ -30,7 +30,11 @@ function Thumb({ c }: { c: Course }) {
 function HoleRow({ c, to, detail, best, leader }: { c: Course; to: string; detail: string; best?: number; leader?: string }) {
   const here = usePlayingIn(to);
   return (
-    <Link to={to} aria-label={`${c.name}, ${detail}`} className="flex min-h-[72px] items-center gap-3 px-3 py-2 transition-transform duration-100 active:scale-[0.97]">
+    <Link
+      to={to}
+      aria-label={`${c.name}, ${detail}`}
+      className="flex min-h-[72px] items-center gap-3 px-3 py-2 transition-transform duration-100 active:scale-[0.97]"
+    >
       <Thumb c={c} />
       <span className="min-w-0 flex-1">
         <span className="block truncate font-display text-body">{c.name}</span>
@@ -64,12 +68,26 @@ export function GolfHub() {
         const resume = nextUp < 0 ? 0 : nextUp;
         return (
           <section key={co.id} className="flex flex-col gap-3">
-            <SectionTitle className="items-baseline px-0 pb-0" action={<span className="text-footnote text-muted-foreground">{played.length === co.holes.length ? `You ${total}, par ${par}` : `Par ${par}`}</span>}>
+            <SectionTitle
+              className="items-baseline px-0 pb-0"
+              action={
+                <span className="text-footnote text-muted-foreground">
+                  {played.length === co.holes.length ? `You ${total}, par ${par}` : `Par ${par}`}
+                </span>
+              }
+            >
               {co.name}
             </SectionTitle>
             <Group>
               {co.holes.map((h, i) => (
-                <HoleRow key={h.id} c={h} to={holePath(co.id, i + 1)} detail={`Hole ${i + 1}, par ${h.par}`} best={mine(h.id)?.best} leader={leader(h.id)} />
+                <HoleRow
+                  key={h.id}
+                  c={h}
+                  to={holePath(co.id, i + 1)}
+                  detail={`Hole ${i + 1}, par ${h.par}`}
+                  best={mine(h.id)?.best}
+                  leader={leader(h.id)}
+                />
               ))}
             </Group>
             <Button size="xl" asChild>
@@ -101,5 +119,11 @@ export function GolfHole() {
   const n = Number(hole);
   const c = co?.holes[n - 1];
   if (!co || !c) return <Navigate to="/golf" replace />;
-  return <GolfWorld key={c.id} course={c} hole={{ number: n, total: co.holes.length, next: n < co.holes.length ? holePath(co.id, n + 1) : null }} />;
+  return (
+    <GolfWorld
+      key={c.id}
+      course={c}
+      hole={{ number: n, total: co.holes.length, next: n < co.holes.length ? holePath(co.id, n + 1) : null }}
+    />
+  );
 }

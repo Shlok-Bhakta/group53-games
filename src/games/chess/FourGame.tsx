@@ -14,7 +14,19 @@ import { SeatDot } from "@/components/game/SeatDot";
 // The armies' colors match the piece art (scripts/gen-four-pieces.mjs), so they stay the same in every theme.
 import { SEAT_COLORS } from "@/games/seats";
 
-export function FourGame({ match, meId, overlay, below, dock }: { match: MatchView; meId: Id<"users"> | undefined; overlay?: ReactNode; below?: ReactNode; dock: Dock }) {
+export function FourGame({
+  match,
+  meId,
+  overlay,
+  below,
+  dock,
+}: {
+  match: MatchView;
+  meId: Id<"users"> | undefined;
+  overlay?: ReactNode;
+  below?: ReactNode;
+  dock: Dock;
+}) {
   const state = match.state as FourState;
   const me = match.players.find((p) => p.userId === meId);
   const myColor = me?.color as Color4 | undefined;
@@ -50,7 +62,10 @@ export function FourGame({ match, meId, overlay, below, dock }: { match: MatchVi
   // While a move waits you can still pick up any of your pieces, the waiting one included, and move it instead.
   const pickable = myTurn && !sending;
   const mineIn = (s: FourState, [x, y]: Sq) => s.pieces.some((p) => p.color === myColor && !p.dead && p.x === x && p.y === y);
-  const mine = pickable && !past ? display.pieces.map((p): Sq => [p.x, p.y]).filter((sq) => mineIn(display, sq) && mineIn(state, realSquare(shown, sq))) : [];
+  const mine =
+    pickable && !past
+      ? display.pieces.map((p): Sq => [p.x, p.y]).filter((sq) => mineIn(display, sq) && mineIn(state, realSquare(shown, sq)))
+      : [];
   const from = selected && realSquare(shown, selected);
   const targets = from && pickable ? draftTargets(shown, from, legalTargetsFrom(state, from[0], from[1])) : [];
   const last = past ? state.moves[history.at - 1] : state.moves.at(-1);
@@ -65,11 +80,18 @@ export function FourGame({ match, meId, overlay, below, dock }: { match: MatchVi
     setDraft(shown && same(from, shown.from) && same(to, shown.from) ? null : { from, to });
   };
   const text = preview?.moves.at(-1)?.text;
-  const confirm = (d: { from: Sq; to: Sq }, text: string) => send(text, () => move({ id: match._id, fromX: d.from[0], fromY: d.from[1], toX: d.to[0], toY: d.to[1] }));
+  const confirm = (d: { from: Sq; to: Sq }, text: string) =>
+    send(text, () => move({ id: match._id, fromX: d.from[0], fromY: d.from[1], toX: d.to[0], toY: d.to[1] }));
 
   return (
     <GameFrame
-      dock={dock(sending ? <ConfirmMove move={sending} busy /> : shown && text ? <ConfirmMove move={text} onCancel={() => setDraft(null)} onConfirm={() => void confirm(shown, text)} /> : undefined)}
+      dock={dock(
+        sending ? (
+          <ConfirmMove move={sending} busy />
+        ) : shown && text ? (
+          <ConfirmMove move={text} onCancel={() => setDraft(null)} onConfirm={() => void confirm(shown, text)} />
+        ) : undefined,
+      )}
     >
       <div className="relative -mx-2.5">
         <Board

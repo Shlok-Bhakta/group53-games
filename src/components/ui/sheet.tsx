@@ -31,7 +31,14 @@ export function Sheet({
     <Drawer open={open} onOpenChange={(o) => !o && onClose()}>
       <DrawerContent className={cn("max-h-[92dvh]", className)} aria-describedby={undefined}>
         <SheetHeader title={title} hideTitle={hideTitle} closable={closable} />
-        <div className={cn("flex flex-col gap-4 overflow-y-auto overscroll-contain px-4 pb-[calc(env(safe-area-inset-bottom)+20px)]", bodyClassName)}>{children}</div>
+        <div
+          className={cn(
+            "flex flex-col gap-4 overflow-y-auto overscroll-contain px-4 pb-[calc(env(safe-area-inset-bottom)+20px)]",
+            bodyClassName,
+          )}
+        >
+          {children}
+        </div>
       </DrawerContent>
     </Drawer>
   );
@@ -44,7 +51,12 @@ export function SheetHeader({ title, hideTitle, closable }: { title: ReactNode; 
       <DrawerTitle className={cn(closable && "px-12")}>{title}</DrawerTitle>
       {closable && (
         <DrawerClose asChild>
-          <Button variant="ghost" size="icon" aria-label="Close" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Close"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
+          >
             <XIcon weight="bold" />
           </Button>
         </DrawerClose>

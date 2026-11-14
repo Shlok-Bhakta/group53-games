@@ -7,10 +7,29 @@ import { cn } from "@/lib/utils";
 // A sunk hole: what that was called, how the crew's done on it, and on to the next. The ball's already
 // back on the tee behind it, for another go. Not a Sheet: it sits inside the stage, inset from the edges and
 // rounded all round, where a Sheet is portalled to the bottom edge of the screen.
-export function HoleResult({ strokes, par, scores, next, onAgain, onNext }: { strokes: number; par: number; scores: { userId: string; name: string; image: string | null; best: number }[]; next: string | null; onAgain: () => void; onNext: () => void }) {
+export function HoleResult({
+  strokes,
+  par,
+  scores,
+  next,
+  onAgain,
+  onNext,
+}: {
+  strokes: number;
+  par: number;
+  scores: { userId: string; name: string; image: string | null; best: number }[];
+  next: string | null;
+  onAgain: () => void;
+  onNext: () => void;
+}) {
   const tone = strokes < par ? "text-primary" : "";
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-30 flex items-end bg-black/40 p-3 pb-[calc(env(safe-area-inset-bottom)+12px)]">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="absolute inset-0 z-30 flex items-end bg-black/40 p-3 pb-[calc(env(safe-area-inset-bottom)+12px)]"
+    >
       <motion.div
         initial={{ y: 40 }}
         animate={{ y: 0 }}

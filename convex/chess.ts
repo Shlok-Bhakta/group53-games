@@ -11,7 +11,16 @@ import type { GameHooks } from "./games";
 import { opponentsOf, playerWith, seated } from "./lib/seats";
 import { displayName } from "./lib/people";
 import { passTurn, scheduleReminder, startPushes } from "./lib/turns";
-import { TICK_MS, initialState as initialRtState, paceFromSettings, simulate, type Color, type Command, type State, type Variant } from "./chess/realtime";
+import {
+  TICK_MS,
+  initialState as initialRtState,
+  paceFromSettings,
+  simulate,
+  type Color,
+  type Command,
+  type State,
+  type Variant,
+} from "./chess/realtime";
 import { COLORS4, SIZE as SIZE4, type Color4 } from "./chess/four/board";
 import { initialFour, move4, retire4, type FourState } from "./chess/four/classic";
 
@@ -114,14 +123,22 @@ export const move = mutation({
       throw new Error("That move isn't legal.");
     }
     const now = Date.now();
-    const next: ClassicState = { kind: "classic", fen: chess.fen(), moves: [...state.moves, { san: played.san, lan: played.lan, at: now }] };
+    const next: ClassicState = {
+      kind: "classic",
+      fen: chess.fen(),
+      moves: [...state.moves, { san: played.san, lan: played.lan, at: now }],
+    };
     const opponent = playerWith(match, color === "w" ? "b" : "w");
     const end = classicEnding(chess);
     if (end) {
       const moveCount = match.moveCount + 1;
       await ctx.db.patch(id, { state: next, moveCount, turn: opponent, drawOffer: undefined, lastActivityAt: now });
       const updated = { ...match, state: next, moveCount, turn: opponent };
-      await finish(ctx, updated, end.draw ? { winners: [], draw: true, reason: end.reason } : { winners: [userId], draw: false, reason: end.reason });
+      await finish(
+        ctx,
+        updated,
+        end.draw ? { winners: [], draw: true, reason: end.reason } : { winners: [userId], draw: false, reason: end.reason },
+      );
       return;
     }
     const name = await displayName(ctx, userId);
@@ -166,7 +183,11 @@ async function applyFour(ctx: MutationCtx, match: Doc<"matches">, next: FourStat
     const moveCount = match.moveCount + 1;
     await ctx.db.patch(match._id, { state: next, moveCount, turn: undefined, lastActivityAt: Date.now() });
     const standings = next.result.standings.map((g) => g.map((c) => playerWith(match, c)));
-    await finish(ctx, { ...match, state: next, moveCount, turn: undefined }, { winners: standings[0], draw: false, reason: next.result.reason, standings });
+    await finish(
+      ctx,
+      { ...match, state: next, moveCount, turn: undefined },
+      { winners: standings[0], draw: false, reason: next.result.reason, standings },
+    );
     return;
   }
   const name = await displayName(ctx, actor);
@@ -178,7 +199,9 @@ async function applyFour(ctx: MutationCtx, match: Doc<"matches">, next: FourStat
     turn: playerWith(match, next.turn!),
     by: actor,
     push: {
-      title: lastMove ? `${name} played ${lastMove.text}${checked ? ". You're in check!" : ""}` : `${name} ${retired?.reason === "timeout" ? "timed out" : "resigned"}`,
+      title: lastMove
+        ? `${name} played ${lastMove.text}${checked ? ". You're in check!" : ""}`
+        : `${name} ${retired?.reason === "timeout" ? "timed out" : "resigned"}`,
       body: "Your move in 4-player chess.",
     },
   });
@@ -247,7 +270,8 @@ export const rtMove = mutation({
     const serverTick = tickAt(state, Date.now());
     if (serverTick < 0) throw new Error("Wait for the countdown.");
     const size = variantOf(match.mode) === "four" ? SIZE4 : 8;
-    if (![pieceId, toX, toY].every(Number.isInteger) || toX < 0 || toX >= size || toY < 0 || toY >= size) throw new Error("That's not a square.");
+    if (![pieceId, toX, toY].every(Number.isInteger) || toX < 0 || toX >= size || toY < 0 || toY >= size)
+      throw new Error("That's not a square.");
     // Honour the tick the player saw, within reason.
     const tick = Math.min(serverTick + FUTURE_SLACK_TICKS, Math.max(serverTick - MAX_LAG_TICKS, Math.floor(clientTick)));
     await ctx.db.insert("rtCommands", { matchId: id, tick, color: color!, pieceId, toX, toY, kind: kind ?? "move" });
@@ -261,7 +285,11 @@ export const rtMove = mutation({
 async function commandsFrom(ctx: QueryCtx, id: Id<"matches">, fromTick: number, beforeTick?: number): Promise<Command[]> {
   const rows = await ctx.db
     .query("rtCommands")
-    .withIndex("by_match_tick", (q) => (beforeTick === undefined ? q.eq("matchId", id).gte("tick", fromTick) : q.eq("matchId", id).gte("tick", fromTick).lt("tick", beforeTick)))
+    .withIndex("by_match_tick", (q) =>
+      beforeTick === undefined
+        ? q.eq("matchId", id).gte("tick", fromTick)
+        : q.eq("matchId", id).gte("tick", fromTick).lt("tick", beforeTick),
+    )
     .collect();
   return rows.map(({ tick, color, pieceId, toX, toY, kind }) => ({ tick, color: color as Color, pieceId, toX, toY, kind }));
 }

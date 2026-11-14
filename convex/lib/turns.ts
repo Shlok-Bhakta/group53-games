@@ -56,7 +56,11 @@ export async function passTurn(ctx: MutationCtx, match: Doc<"matches">, { state,
 
 // A game's opening pushes: `push` says what each player gets, if anything. Rematches start with everyone
 // already looking at the game, so they get none.
-export async function startPushes(ctx: MutationCtx, match: Doc<"matches">, push: (player: Doc<"matches">["players"][number]) => { title: string; body: string } | null) {
+export async function startPushes(
+  ctx: MutationCtx,
+  match: Doc<"matches">,
+  push: (player: Doc<"matches">["players"][number]) => { title: string; body: string } | null,
+) {
   if (match.rematchOf) return;
   for (const p of match.players) {
     const m = push(p);

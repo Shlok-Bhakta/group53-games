@@ -38,7 +38,12 @@ export function LastHand({ match, result, open, onClose }: { match: MatchView; r
                 ))}
               </span>
             )}
-            <span className={cn("shrink-0 rounded-full px-2 py-0.5 font-display text-footnote tabular-nums", r.net > 0 ? "bg-[var(--tile-green)] text-[var(--tile-ink)]" : "text-muted-foreground")}>
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-2 py-0.5 font-display text-footnote tabular-nums",
+                r.net > 0 ? "bg-[var(--tile-green)] text-[var(--tile-ink)]" : "text-muted-foreground",
+              )}
+            >
               {r.net > 0 ? "+" : r.net < 0 ? "−" : ""}
               {chips(Math.abs(r.net))}
             </span>

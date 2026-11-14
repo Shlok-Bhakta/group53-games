@@ -27,7 +27,10 @@ const LIMIT_MS = 40 * 60 * 1000;
 
 const backend = await startBackend();
 // Its own process group, so stopping it also stops the vite under npx.
-const preview = spawn("npx", ["vite", "preview", "--outDir", "e2e/.state/dist", "--port", "4573", "--strictPort", "--host", "127.0.0.1"], { stdio: "ignore", detached: true });
+const preview = spawn("npx", ["vite", "preview", "--outDir", "e2e/.state/dist", "--port", "4573", "--strictPort", "--host", "127.0.0.1"], {
+  stdio: "ignore",
+  detached: true,
+});
 await new Promise((r) => setTimeout(r, 3000));
 const browser = await chromium.launch();
 
@@ -40,7 +43,14 @@ for (const g of GAMES) {
   const players: Player[] = [];
   for (const name of g.players) {
     const player = await createPlayer(name);
-    const context = await browser.newContext({ baseURL: "http://127.0.0.1:4573", viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: "dark" });
+    const context = await browser.newContext({
+      baseURL: "http://127.0.0.1:4573",
+      viewport: { width: 393, height: 852 },
+      deviceScaleFactor: 2,
+      isMobile: true,
+      hasTouch: true,
+      colorScheme: "dark",
+    });
     const page = await phone(context, { player, notifications: "granted" });
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
@@ -69,7 +79,10 @@ const getMatch = (id: string) => admin().query(anyApi.testing.getMatch, { id });
 async function screen(name: string) {
   const s = seats.get(name)!;
   await s.page.waitForTimeout(600);
-  const tree = await s.page.locator("body").ariaSnapshot().catch((e) => `(no snapshot: ${e.message})`);
+  const tree = await s.page
+    .locator("body")
+    .ariaSnapshot()
+    .catch((e) => `(no snapshot: ${e.message})`);
   const errors = s.errors.splice(0);
   return { url: s.page.url(), errors, screen: tree || "(blank screen)" };
 }
@@ -78,12 +91,25 @@ async function status() {
     matchIds.map(async (id) => {
       const m = await getMatch(id);
       const up = m.state?.turn >= 0 ? [...seats.entries()].find(([, s]) => s.player.userId === m.players[m.state.turn].userId)?.[0] : null;
-      return { id, mode: m.mode, status: m.status, hand: m.state?.hand, turn: m.status === "active" ? up : null, stacks: m.state?.stacks, result: m.result?.reason ?? null };
+      return {
+        id,
+        mode: m.mode,
+        status: m.status,
+        hand: m.state?.hand,
+        turn: m.status === "active" ? up : null,
+        stacks: m.state?.stacks,
+        result: m.result?.reason ?? null,
+      };
     }),
   );
 }
 
-const body = (req: http.IncomingMessage) => new Promise<string>((r) => { let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => r(b)); });
+const body = (req: http.IncomingMessage) =>
+  new Promise<string>((r) => {
+    let b = "";
+    req.on("data", (c) => (b += c));
+    req.on("end", () => r(b));
+  });
 const server = http.createServer(async (req, res) => {
   const send = (code: number, data: unknown) => {
     res.writeHead(code, { "content-type": "application/json" });
@@ -105,7 +131,12 @@ const server = http.createServer(async (req, res) => {
       }
       // The table plays things out on screen before the phone can act: wait for it to catch up.
       const g = await getMatch(s.matchId);
-      const ready = g.status !== "active" ? s.page.getByRole("region", { name: "Result" }) : g.turn === s.player.userId ? s.page.getByText(/^(Your move|Pick cards to swap)$/) : null;
+      const ready =
+        g.status !== "active"
+          ? s.page.getByRole("region", { name: "Result" })
+          : g.turn === s.player.userId
+            ? s.page.getByText(/^(Your move|Pick cards to swap)$/)
+            : null;
       await ready?.waitFor({ timeout: 25_000 }).catch(() => {});
       return send(200, await screen(name));
     }
@@ -135,7 +166,10 @@ for (;;) {
   await new Promise((r) => setTimeout(r, 5000));
   const st = await status();
   if (st.every((g) => g.status !== "active") || Date.now() - started > LIMIT_MS) {
-    writeFileSync("e2e/.state/playtest.json", JSON.stringify({ games: st, leftoverErrors: Object.fromEntries([...seats].map(([n, s]) => [n, s.errors])) }, null, 1));
+    writeFileSync(
+      "e2e/.state/playtest.json",
+      JSON.stringify({ games: st, leftoverErrors: Object.fromEntries([...seats].map(([n, s]) => [n, s.errors])) }, null, 1),
+    );
     console.log("Playtest over", JSON.stringify(st));
     // Leave a minute for the agents to look at the result screens.
     await new Promise((r) => setTimeout(r, 90_000));

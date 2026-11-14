@@ -11,4 +11,3 @@ export const me = query({
     return { _id: user._id, name: user.name ?? "Player", image: user.image };
   },
 });
-

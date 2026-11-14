@@ -186,7 +186,10 @@ function wake() {
     silent.buffer = c.createBuffer(1, 1, c.sampleRate);
     silent.connect(c.destination);
     silent.start();
-    void c.resume().then(() => music.refresh()).catch(() => {});
+    void c
+      .resume()
+      .then(() => music.refresh())
+      .catch(() => {});
   }
   return c;
 }
@@ -384,7 +387,9 @@ const VOICES: Record<Exclude<SfxPack, "off">, Voice> = {
       osc(c, "sine", 4350 * pitch, { at, dur: 0.05, gain: gain * 0.12, out: o });
     },
     note: (c, o, at, midi, gain, dur = 1.8) => {
-      [1, 2.76, 5.4, 8.93].forEach((p, i) => osc(c, "sine", hz(midi) * p, { at, dur: dur / (1 + i * 0.8), gain: (gain * 0.36) / (1 + i * 1.4), out: o }));
+      [1, 2.76, 5.4, 8.93].forEach((p, i) =>
+        osc(c, "sine", hz(midi) * p, { at, dur: dur / (1 + i * 0.8), gain: (gain * 0.36) / (1 + i * 1.4), out: o }),
+      );
     },
     thump: (c, o, at, gain) => osc(c, "sine", 880, { at, dur: 0.09, gain: gain * 0.2, out: o }, 760),
   },
@@ -420,7 +425,28 @@ const VOICES: Record<Exclude<SfxPack, "off">, Voice> = {
   },
 };
 
-type SfxName = "pick" | "place" | "recall" | "shuffle" | "play" | "bingo" | "invalid" | "turn" | "ghost" | "land" | "tick" | "win" | "lose" | "preview" | "deal" | "flip" | "chips" | "knock" | "sweep" | "slam" | "payout";
+type SfxName =
+  | "pick"
+  | "place"
+  | "recall"
+  | "shuffle"
+  | "play"
+  | "bingo"
+  | "invalid"
+  | "turn"
+  | "ghost"
+  | "land"
+  | "tick"
+  | "win"
+  | "lose"
+  | "preview"
+  | "deal"
+  | "flip"
+  | "chips"
+  | "knock"
+  | "sweep"
+  | "slam"
+  | "payout";
 // `live`: something happening on its own, not a tap's answer. It's dropped while audio is still locked; waiting
 // for the first tap would play every one of them at once.
 type SfxOpts = { count?: number; score?: number; live?: boolean };
@@ -533,7 +559,10 @@ export function sfx(name: SfxName, opts: SfxOpts = {}) {
   // Asked for in the same tap that unlocks audio: play it the moment the context is up.
   if (c.state !== "running") {
     if (opts.live) return;
-    void c.resume().then(() => c.state === "running" && sfx(name, opts)).catch(() => {});
+    void c
+      .resume()
+      .then(() => c.state === "running" && sfx(name, opts))
+      .catch(() => {});
     return;
   }
   render(c, pack, name, opts, c.currentTime + 0.005);

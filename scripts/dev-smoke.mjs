@@ -24,7 +24,10 @@ try {
   const grace = await signIn("Grace");
 
   // Each tab has to still be its own player once the other has signed in.
-  for (const [page, name] of [[ada, "Ada"], [grace, "Grace"]]) {
+  for (const [page, name] of [
+    [ada, "Ada"],
+    [grace, "Grace"],
+  ]) {
     await page.goto(`${WEB}/you`);
     await page.getByText(name, { exact: true }).first().waitFor();
     pass(`that tab is still ${name}`);
@@ -52,7 +55,9 @@ try {
     quotes = (await convex.query("stonks:board", {})).rows.length;
     if (quotes === 0) await new Promise((r) => setTimeout(r, 3000));
   }
-  console.log(quotes ? `✔ the sidecar has written ${quotes} prices` : "⚠ no prices yet: is the stonks task still building, or Yahoo unreachable?");
+  console.log(
+    quotes ? `✔ the sidecar has written ${quotes} prices` : "⚠ no prices yet: is the stonks task still building, or Yahoo unreachable?",
+  );
   console.log("\nAll good.");
 } catch (err) {
   console.error(`\n✘ ${err.message}`);

@@ -40,7 +40,9 @@ export const preview = query({
       status: match.status,
       host: players.find((p) => p._id === match.createdBy)?.name ?? players[0]?.name ?? "Someone",
       players,
-      crew: users.sort((a, b) => a._creationTime - b._creationTime).map((u) => ({ _id: u._id, name: u.name ?? "Player", image: u.image ?? null, canPush: subscribed.has(u._id) })),
+      crew: users
+        .sort((a, b) => a._creationTime - b._creationTime)
+        .map((u) => ({ _id: u._id, name: u.name ?? "Player", image: u.image ?? null, canPush: subscribed.has(u._id) })),
     };
   },
 });
@@ -52,10 +54,18 @@ export const handoff = mutation({
     const match = await matchFromPath(ctx, path);
     if (!match) throw new Error("That game doesn't exist.");
     if (!(await ctx.db.get(userId))) throw new Error("That player doesn't exist.");
-    const subs = await ctx.db.query("pushSubscriptions").withIndex("by_user", (q) => q.eq("userId", userId)).first();
+    const subs = await ctx.db
+      .query("pushSubscriptions")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
     if (!subs) return "no-push";
     const now = Date.now();
-    const last = (await ctx.db.query("handoffs").withIndex("by_user", (q) => q.eq("userId", userId)).collect()).sort((a, b) => b.at - a.at)[0];
+    const last = (
+      await ctx.db
+        .query("handoffs")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .collect()
+    ).sort((a, b) => b.at - a.at)[0];
     if (last && now - last.at < HANDOFF_EVERY_MS) return "wait";
     await ctx.db.insert("handoffs", { userId, matchId: match._id, at: now });
     const mode = MODES[match.mode as ModeKey];

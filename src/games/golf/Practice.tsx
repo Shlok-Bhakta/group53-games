@@ -7,8 +7,18 @@ import { Section } from "@/components/parts";
 export function GolfPractice() {
   return (
     <Section title="Practice">
-      <ListRow to="/golf/practice" leading={<FlagPennantIcon size={24} weight="fill" className="text-primary" />} title="Practice holes" detail="Bumper Plains and Cold Start, eighteen holes" />
-      <ListRow to="/golf/world" leading={<GlobeHemisphereWestIcon size={24} weight="fill" className="text-primary" />} title="Driftwood Bay" detail="The open world, with whoever's in it" />
+      <ListRow
+        to="/golf/practice"
+        leading={<FlagPennantIcon size={24} weight="fill" className="text-primary" />}
+        title="Practice holes"
+        detail="Bumper Plains and Cold Start, eighteen holes"
+      />
+      <ListRow
+        to="/golf/world"
+        leading={<GlobeHemisphereWestIcon size={24} weight="fill" className="text-primary" />}
+        title="Driftwood Bay"
+        detail="The open world, with whoever's in it"
+      />
     </Section>
   );
 }

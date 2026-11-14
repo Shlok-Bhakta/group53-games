@@ -45,7 +45,19 @@ function useStableKeys(board: ReturnType<Chess["board"]>) {
 
 type Draft = { from: Sq; to: Sq; promotion?: string };
 
-export function ClassicGame({ match, meId, above, below, dock }: { match: MatchView; meId: Id<"users"> | undefined; above?: ReactNode; below?: ReactNode; dock: Dock }) {
+export function ClassicGame({
+  match,
+  meId,
+  above,
+  below,
+  dock,
+}: {
+  match: MatchView;
+  meId: Id<"users"> | undefined;
+  above?: ReactNode;
+  below?: ReactNode;
+  dock: Dock;
+}) {
   const state = match.state as ClassicState;
   const chess = useMemo(() => new Chess(state.fen), [state.fen]);
   const me = match.players.find((p) => p.userId === meId);
@@ -79,8 +91,16 @@ export function ClassicGame({ match, meId, above, below, dock }: { match: MatchV
     const c = new Chess((current.state as ClassicState).fen);
     try {
       const m = c.move({ from, to, promotion: promotion as "q" | undefined });
-      const next: ClassicState = { kind: "classic", fen: c.fen(), moves: [...(current.state as ClassicState).moves, { san: m.san, lan: m.lan, at: Date.now() }] };
-      store.setQuery(api.matches.get, { id }, { ...current, state: next, turn: current.players.find((p) => p.userId !== meId)?.userId, drawOffer: undefined });
+      const next: ClassicState = {
+        kind: "classic",
+        fen: c.fen(),
+        moves: [...(current.state as ClassicState).moves, { san: m.san, lan: m.lan, at: Date.now() }],
+      };
+      store.setQuery(
+        api.matches.get,
+        { id },
+        { ...current, state: next, turn: current.players.find((p) => p.userId !== meId)?.userId, drawOffer: undefined },
+      );
     } catch {
       // Leave it to the server to reject.
     }
@@ -91,7 +111,15 @@ export function ClassicGame({ match, meId, above, below, dock }: { match: MatchV
     return { key: p.key, color: p.color as "w" | "b", kind: p.type.toUpperCase() as Kind, x, y };
   });
   const moved = shown && chess.get(squareName(shown.from) as Square);
-  if (shown && moved) pieces.push({ key: "ghost", color: moved.color, kind: moved.type.toUpperCase() as Kind, x: shown.from[0], y: shown.from[1], ghost: true });
+  if (shown && moved)
+    pieces.push({
+      key: "ghost",
+      color: moved.color,
+      kind: moved.type.toUpperCase() as Kind,
+      x: shown.from[0],
+      y: shown.from[1],
+      ghost: true,
+    });
 
   // While a move waits you can still pick up any of your pieces, the waiting one included, and move it instead.
   const pickable = myTurn && !sending;
@@ -101,7 +129,11 @@ export function ClassicGame({ match, meId, above, below, dock }: { match: MatchV
   const targets: Sq[] = from && pickable ? draftTargets(shown, from, legalFrom(from)) : [];
   const last = state.moves.at(-1);
   const lastLan = past ? state.moves[history.at - 1]?.lan : last?.lan;
-  const lastMove: [Sq, Sq] | null = shown ? [shown.from, shown.to] : lastLan ? [fromName(lastLan.slice(0, 2)), fromName(lastLan.slice(2, 4))] : null;
+  const lastMove: [Sq, Sq] | null = shown
+    ? [shown.from, shown.to]
+    : lastLan
+      ? [fromName(lastLan.slice(0, 2)), fromName(lastLan.slice(2, 4))]
+      : null;
   const king = display.inCheck() ? kingSquare(display, display.turn()) : null;
   const view = useMemo(() => viewFor("two", myColor), [myColor]);
 
@@ -111,12 +143,17 @@ export function ClassicGame({ match, meId, above, below, dock }: { match: MatchV
     const piece = chess.get(squareName(from) as Square);
     setDraft({ from, to, choosing: piece?.type === "p" && (to[1] === 7 || to[1] === 0) });
   };
-  const confirm = (d: Draft, san: string) => send(san, () => move({ id: match._id, from: squareName(d.from), to: squareName(d.to), promotion: d.promotion }));
+  const confirm = (d: Draft, san: string) =>
+    send(san, () => move({ id: match._id, from: squareName(d.from), to: squareName(d.to), promotion: d.promotion }));
 
   return (
     <GameFrame
       dock={dock(
-        sending ? <ConfirmMove move={sending} busy /> : shown && preview ? <ConfirmMove move={preview.move.san} onCancel={() => setDraft(null)} onConfirm={() => void confirm(shown, preview.move.san)} /> : undefined,
+        sending ? (
+          <ConfirmMove move={sending} busy />
+        ) : shown && preview ? (
+          <ConfirmMove move={preview.move.san} onCancel={() => setDraft(null)} onConfirm={() => void confirm(shown, preview.move.san)} />
+        ) : undefined,
       )}
     >
       {above}

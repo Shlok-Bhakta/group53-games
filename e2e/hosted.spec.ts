@@ -91,7 +91,9 @@ test("the real build plays in the iframe", async ({ phones }) => {
   const { url, adminKey } = backend();
   const started = Date.now();
   const done = await publish({ url, adminKey, game: "mereddia", dir: process.env.MEREDDIA_DIST! });
-  console.log(`published ${done.files} files, ${(done.bytes / 1e6).toFixed(1)} MB stored, in ${((Date.now() - started) / 1000).toFixed(0)}s`);
+  console.log(
+    `published ${done.files} files, ${(done.bytes / 1e6).toFixed(1)} MB stored, in ${((Date.now() - started) / 1000).toFixed(0)}s`,
+  );
   const page = await phones.open({ player: await createPlayer("Shlok"), push: "on" });
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -126,7 +128,9 @@ test("the real build plays in the iframe", async ({ phones }) => {
   await page.waitForTimeout(4000);
   await page.screenshot({ path: "e2e/.state/screens/mereddia-iframe-2.png" });
   slow.sort((a, b) => a - b);
-  console.log(`files ${files}, ${(bytes / 1e6).toFixed(1)} MB on the wire, request p50 ${slow[slow.length >> 1]}ms p95 ${slow[Math.floor(slow.length * 0.95)]}ms max ${slow.at(-1)}ms`);
+  console.log(
+    `files ${files}, ${(bytes / 1e6).toFixed(1)} MB on the wire, request p50 ${slow[slow.length >> 1]}ms p95 ${slow[Math.floor(slow.length * 0.95)]}ms max ${slow.at(-1)}ms`,
+  );
   console.log("errors", JSON.stringify(errors.slice(0, 8)));
   // Saves survive: the game comes back to where it was.
   await page.reload();

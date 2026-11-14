@@ -5,7 +5,13 @@ import { admin, createPlayer, expect, fillLobby, getMatch, openLobby, test, type
 // Landlord on two phones: the lobby with house rules, rolling and buying, the other phone watching it play out,
 // catching up after being away, and a trade.
 
-type Mono = { seq: number; current: number; phase: { k: string }; players: { pos: number; cash: number }[]; props: ({ owner: number } | null)[] };
+type Mono = {
+  seq: number;
+  current: number;
+  phase: { k: string };
+  players: { pos: number; cash: number }[];
+  props: ({ owner: number } | null)[];
+};
 const stateOf = async (id: string) => (await getMatch(id)).state as Mono;
 const SHOTS = !!process.env.SCREENS;
 const shot = async (page: Page, name: string) => {
@@ -29,7 +35,16 @@ const settledOn = async (page: Page) => {
         const l = (window as unknown as { __landlord?: Record<string, () => unknown> }).__landlord;
         const v = l?.view() as { seq: number } | null;
         const r = l?.real() as { seq: number; phase: unknown } | null;
-        return JSON.stringify({ busyEls: document.querySelectorAll("[data-busy]").length, screens: document.querySelectorAll(".ll-board").length, view: v?.seq, real: r?.seq, phase: r?.phase, queued: l?.queued(), running: l?.running(), playedTo: l?.playedTo() });
+        return JSON.stringify({
+          busyEls: document.querySelectorAll("[data-busy]").length,
+          screens: document.querySelectorAll(".ll-board").length,
+          view: v?.seq,
+          real: r?.seq,
+          phase: r?.phase,
+          queued: l?.queued(),
+          running: l?.running(),
+          playedTo: l?.playedTo(),
+        });
       }),
     );
     throw e;
@@ -43,7 +58,11 @@ async function step(page: Page) {
   for (const name of [/^Roll/, /^Buy for/, /^Pay /, /^Drop out/, /^Auction it/, /^Move \d+$/]) {
     const b = dock.getByRole("button", { name }).first();
     if (await b.isVisible().catch(() => false)) {
-      if (await b.isEnabled()) return await b.click({ timeout: 5000 }).then(() => true, () => false);
+      if (await b.isEnabled())
+        return await b.click({ timeout: 5000 }).then(
+          () => true,
+          () => false,
+        );
     }
   }
   return false;
@@ -65,7 +84,8 @@ test("Monopoly has a card on Games and a mode page with its house rules", async 
   await expect(page.getByRole("heading", { name: "Monopoly" })).toBeVisible();
   await page.goto("/landlord/mode/classic");
   await page.getByRole("button", { name: "Settings" }).click();
-  for (const group of ["Starting cash", "Auctions", "Free Parking jackpot", "Speed die", "Game"]) await expect(page.getByRole("radiogroup", { name: group })).toBeVisible();
+  for (const group of ["Starting cash", "Auctions", "Free Parking jackpot", "Speed die", "Game"])
+    await expect(page.getByRole("radiogroup", { name: group })).toBeVisible();
   await shot(page, "mode");
 });
 
@@ -83,7 +103,8 @@ test("a game on two phones: roll, buy, and the other phone sees it happen", asyn
   await expect.poll(async () => (await stateOf(id)).seq).toBeGreaterThan(before.seq);
   const s = await stateOf(id);
   const seat = before.current;
-  for (const p of [up, other]) await expect(p.locator(`[data-token="${seat}"]`)).toHaveAttribute("data-pos", String(s.players[seat].pos), { timeout: 15_000 });
+  for (const p of [up, other])
+    await expect(p.locator(`[data-token="${seat}"]`)).toHaveAttribute("data-pos", String(s.players[seat].pos), { timeout: 15_000 });
   await shot(up, "rolled");
   // Play on a few turns, whoever's up doing the obvious thing, and both phones agree on everyone's money.
   for (let i = 0; i < 6; i++) {
@@ -94,7 +115,8 @@ test("a game on two phones: roll, buy, and the other phone sees it happen", asyn
   const end = await stateOf(id);
   for (const p of [up, other]) {
     await settledOn(p);
-    for (const [i, pl] of end.players.entries()) await expect(p.locator(`[data-seat="${i}"]`)).toContainText(`$${pl.cash.toLocaleString("en-US")}`);
+    for (const [i, pl] of end.players.entries())
+      await expect(p.locator(`[data-seat="${i}"]`)).toContainText(`$${pl.cash.toLocaleString("en-US")}`);
   }
   // Tapping an owned square shows its deed.
   const owned = end.props.findIndex((x) => x && x.owner >= 0);
@@ -144,7 +166,10 @@ test("a trade: offered on one phone, accepted on the other", async ({ phones }) 
   await admin().mutation(anyApi.testing.landlordPatch, { id, state: { props } });
   await settledOn(pa);
   await pa.getByRole("button", { name: "Trade" }).click();
-  await pa.getByRole("region", { name: "You give" }).getByRole("button", { name: /Mediterranean Avenue/ }).click();
+  await pa
+    .getByRole("region", { name: "You give" })
+    .getByRole("button", { name: /Mediterranean Avenue/ })
+    .click();
   await pa.getByRole("textbox", { name: /gives: cash/ }).fill("100");
   await shot(pa, "trade");
   await pa.getByRole("button", { name: /^Send to/ }).click();
@@ -190,7 +215,21 @@ test("landlord-screens", async ({ phones }) => {
   const me = m.players.findIndex((p: { userId: string }) => p.userId === a.userId);
   const them = 1 - me;
   const s = m.state as Mono;
-  const own: Record<number, [number, number, boolean?]> = { 1: [me, 2], 3: [me, 2], 5: [me, 0], 11: [them, 0], 13: [them, 0, true], 16: [me, 0], 21: [them, 3], 23: [them, 3], 24: [them, 4], 37: [them, 5], 39: [them, 5], 25: [them, 0], 12: [me, 0] };
+  const own: Record<number, [number, number, boolean?]> = {
+    1: [me, 2],
+    3: [me, 2],
+    5: [me, 0],
+    11: [them, 0],
+    13: [them, 0, true],
+    16: [me, 0],
+    21: [them, 3],
+    23: [them, 3],
+    24: [them, 4],
+    37: [them, 5],
+    39: [them, 5],
+    25: [them, 0],
+    12: [me, 0],
+  };
   const props = s.props.map((p, i) => (own[i] ? { owner: own[i][0], houses: own[i][1], mortgaged: !!own[i][2] } : p));
   const players = s.players.map((p, i) => ({ ...p, pos: i === me ? 24 : 26, cash: i === me ? 640 : 1820 }));
   await admin().mutation(anyApi.testing.landlordPatch, { id, state: { props, players } });
@@ -225,7 +264,12 @@ test("landlord-soak", async ({ phones }) => {
   const page = await phones.open({ player: me, push: "on" });
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  const id = await openLobby(page, "landlord", "classic", process.env.SOAK_SHORT ? { "Starting cash": "$1,000", Game: "Short game" } : { "Speed die": "On", "Free Parking jackpot": "Plus $500" });
+  const id = await openLobby(
+    page,
+    "landlord",
+    "classic",
+    process.env.SOAK_SHORT ? { "Starting cash": "$1,000", Game: "Short game" } : { "Speed die": "On", "Free Parking jackpot": "Plus $500" },
+  );
   // The bots take their seats on the server, then the host starts it.
   for (const b of [b1, b2]) await admin().mutation(anyApi.testing.joinAs, { id, userId: b.userId });
   await page.getByRole("button", { name: "Start with 3" }).click();
@@ -243,9 +287,11 @@ test("landlord-soak", async ({ phones }) => {
   }
   await settledOn(page);
   const s = await stateOf(id);
-  for (const [i, p] of s.players.entries()) if (!(p as { out?: boolean }).out) await expect(page.locator(`[data-token="${i}"]`)).toHaveAttribute("data-pos", String(p.pos));
+  for (const [i, p] of s.players.entries())
+    if (!(p as { out?: boolean }).out) await expect(page.locator(`[data-token="${i}"]`)).toHaveAttribute("data-pos", String(p.pos));
   // Then the bots finish it off on the server, and the phone plays it through to the result.
-  for (let i = 0; i < 100 && (await getMatch(id)).status === "active"; i++) await admin().mutation(anyApi.testing.landlordBots, { id, steps: 200 });
+  for (let i = 0; i < 100 && (await getMatch(id)).status === "active"; i++)
+    await admin().mutation(anyApi.testing.landlordBots, { id, steps: 200 });
   expect((await getMatch(id)).status).toBe("finished");
   // That's a lot to watch: it offers Skip.
   await page.getByRole("button", { name: "Skip to now" }).click({ timeout: 30_000 });

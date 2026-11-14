@@ -12,7 +12,17 @@ import { refreshTheme, still } from "./toy";
 // The holes the next game will be played on, at the bottom of a golf mode page: a course made by hand
 // straight away, a generated one as the server makes each hole for the seed (convex/golf.ts, `preview`).
 // Spot a goofy one, roll another seed; a game started on this seed plays exactly these, already made.
-export function GolfHoles({ mode, settings, onChange, editable = true }: { mode: ModeKey; settings: Settings; onChange: (next: Settings) => void; editable?: boolean }) {
+export function GolfHoles({
+  mode,
+  settings,
+  onChange,
+  editable = true,
+}: {
+  mode: ModeKey;
+  settings: Settings;
+  onChange: (next: Settings) => void;
+  editable?: boolean;
+}) {
   const s = settingsOf(mode, settings);
   const generated = s.course === 0;
   // A generated course always has a seed here, so there's something to look at. (The phone never remembers
@@ -22,7 +32,10 @@ export function GolfHoles({ mode, settings, onChange, editable = true }: { mode:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generated, s.seed]);
   // Only what changes the holes, so ticking items on and off doesn't ask again.
-  const args = { mode, settings: { course: s.course, holes: s.holes, terrain: s.terrain, style: s.style, hazards: s.hazards, seed: s.seed, boxes: s.boxes } };
+  const args = {
+    mode,
+    settings: { course: s.course, holes: s.holes, terrain: s.terrain, style: s.style, hazards: s.hazards, seed: s.seed, boxes: s.boxes },
+  };
   const key = JSON.stringify(args);
   const data = useQuery(api.golf.preview, generated && !s.seed ? "skip" : args);
   const request = useMutation(api.golf.requestPreview);
@@ -61,7 +74,12 @@ export function GolfHoles({ mode, settings, onChange, editable = true }: { mode:
         {holes.map((c, n) => (
           <li key={n}>
             {c ? (
-              <button type="button" onClick={() => setOpen(n)} aria-label={`Hole ${n + 1}, ${c.name}, par ${c.par}`} className="flex w-full flex-col gap-1 text-left transition-transform duration-100 active:scale-[0.97]">
+              <button
+                type="button"
+                onClick={() => setOpen(n)}
+                aria-label={`Hole ${n + 1}, ${c.name}, par ${c.par}`}
+                className="flex w-full flex-col gap-1 text-left transition-transform duration-100 active:scale-[0.97]"
+              >
                 <Thumb c={c} />
                 <span className="block truncate px-0.5 text-footnote font-semibold">
                   {n + 1}. {c.name}
@@ -96,5 +114,16 @@ function Thumb({ c, big = false }: { c: Course; big?: boolean }) {
     refreshTheme();
     return still(c, big ? 720 : 300).toDataURL("image/png");
   }, [c, big]);
-  return <img src={src} alt="" draggable={false} className={big ? "mx-auto max-h-[60dvh] w-auto rounded-sm bg-background object-contain" : "aspect-[3/4] w-full rounded-sm bg-background object-contain"} />;
+  return (
+    <img
+      src={src}
+      alt=""
+      draggable={false}
+      className={
+        big
+          ? "mx-auto max-h-[60dvh] w-auto rounded-sm bg-background object-contain"
+          : "aspect-[3/4] w-full rounded-sm bg-background object-contain"
+      }
+    />
+  );
 }

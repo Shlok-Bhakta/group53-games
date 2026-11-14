@@ -63,7 +63,13 @@ export function Games() {
                   </Link>
                 </Button>
               )}
-              <Button size="xl" variant="secondary" className="w-14 px-0" aria-label={`Share ${g.name}`} onClick={() => void shareLink(g.path, `${g.name} on Group 53:`)}>
+              <Button
+                size="xl"
+                variant="secondary"
+                className="w-14 px-0"
+                aria-label={`Share ${g.name}`}
+                onClick={() => void shareLink(g.path, `${g.name} on Group 53:`)}
+              >
                 <ShareNetworkIcon weight="bold" />
               </Button>
             </div>
@@ -100,7 +106,12 @@ function PlayWhenSeen({ children, onSeen }: { children: ReactNode; onSeen?: () =
     if (seen) onSeenRef.current?.();
   }, [seen]);
   return (
-    <div ref={ref} className={cn("w-full", !seen && "invisible")} aria-hidden={seen ? undefined : true} data-art={seen ? "played" : "waiting"}>
+    <div
+      ref={ref}
+      className={cn("w-full", !seen && "invisible")}
+      aria-hidden={seen ? undefined : true}
+      data-art={seen ? "played" : "waiting"}
+    >
       {/* Centred like the card centres its art: full-width art fills it, fixed-width art sits in the middle. */}
       <div key={seen ? "seen" : "waiting"} className="grid w-full place-items-center">
         {children}

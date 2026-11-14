@@ -2,7 +2,14 @@ import { useId } from "react";
 
 // Journey Across Mereddia's card art. It's all the app holds of the game: the game itself is a separate build
 // hosted from Convex (convex/hosted.ts) and opened in an iframe (src/games/HostedGame.tsx).
-const SLIME_COLOR: Record<string, string> = { green: "#5fb86a", blue: "#4f8fd8", orange: "#f0922b", red: "#d9534f", purple: "#9b59b6", rainbow: "#c46bff" };
+const SLIME_COLOR: Record<string, string> = {
+  green: "#5fb86a",
+  blue: "#4f8fd8",
+  orange: "#f0922b",
+  red: "#d9534f",
+  purple: "#9b59b6",
+  rainbow: "#c46bff",
+};
 
 const svg = (label: string, children: React.ReactNode, className?: string, view = "0 0 16 16") => (
   <svg viewBox={view} className={className} role="img" aria-label={label} shapeRendering="crispEdges">
@@ -36,7 +43,14 @@ function Slime({ color = "green", className }: { color?: string; className?: str
   );
 }
 
-const Sprite = ({ name, className }: { name: string; className: string }) => <img src={`/mereddia-card/${name}.png`} alt="" draggable={false} className={`pointer-events-none select-none [image-rendering:pixelated] ${className}`} />;
+const Sprite = ({ name, className }: { name: string; className: string }) => (
+  <img
+    src={`/mereddia-card/${name}.png`}
+    alt=""
+    draggable={false}
+    className={`pointer-events-none select-none [image-rendering:pixelated] ${className}`}
+  />
+);
 
 export function MereddiaBanner() {
   return (

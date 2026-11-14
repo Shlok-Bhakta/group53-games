@@ -11,7 +11,27 @@ import {
   SpeakerSlashIcon,
 } from "@phosphor-icons/react";
 import * as sound from "./audio";
-import { BAG_SIZE, DT, INSTANT, MAX_STROKES, TARGETED, activate, brake, compile, groundAt, hop, newSim, preview, scoreName, shoot, step, fireTargeted, type Course, type Power, type Sim } from "./engine";
+import {
+  BAG_SIZE,
+  DT,
+  INSTANT,
+  MAX_STROKES,
+  TARGETED,
+  activate,
+  brake,
+  compile,
+  groundAt,
+  hop,
+  newSim,
+  preview,
+  scoreName,
+  shoot,
+  step,
+  fireTargeted,
+  type Course,
+  type Power,
+  type Sim,
+} from "./engine";
 import { BATTLE_GROUNDS } from "./battle";
 import { BUMPER_PLAINS } from "./plains";
 import { SANDBOX } from "../../../convex/golf/sandbox";
@@ -64,7 +84,8 @@ export function GolfExplorer() {
 
   if (round) {
     const { name, holes } = COURSES[round.course];
-    if (round.scores.length === holes.length - round.start) return <Scorecard name={name} holes={holes} round={round} onHome={() => setRound(null)} />;
+    if (round.scores.length === holes.length - round.start)
+      return <Scorecard name={name} holes={holes} round={round} onHome={() => setRound(null)} />;
     return (
       <Play
         key={`${round.course}-${round.index}-${round.attempt}`}
@@ -73,7 +94,9 @@ export function GolfExplorer() {
         number={round.index + 1}
         round={round}
         onBack={() => setRound(null)}
-        onDone={(strokes) => setRound({ ...round, scores: [...round.scores, strokes], index: Math.min(round.index + 1, holes.length - 1), attempt: 0 })}
+        onDone={(strokes) =>
+          setRound({ ...round, scores: [...round.scores, strokes], index: Math.min(round.index + 1, holes.length - 1), attempt: 0 })
+        }
         onAgain={() => setRound({ ...round, attempt: round.attempt + 1 })}
       />
     );
@@ -116,14 +139,28 @@ export function GolfExplorer() {
         <h2 className="g-display g-heading">Theme</h2>
         <div className="g-themes" role="radiogroup" aria-label="Theme">
           {PALETTES.map((p) => (
-            <button key={p.id} type="button" role="radio" aria-checked={palette === p.id} className={`g-chip-btn ${palette === p.id ? "g-chip-on" : ""}`} onClick={() => pickTheme(p.id, dark)}>
+            <button
+              key={p.id}
+              type="button"
+              role="radio"
+              aria-checked={palette === p.id}
+              className={`g-chip-btn ${palette === p.id ? "g-chip-on" : ""}`}
+              onClick={() => pickTheme(p.id, dark)}
+            >
               {p.name}
             </button>
           ))}
         </div>
         <div className="g-seg" role="radiogroup" aria-label="Light or dark">
           {[false, true].map((d) => (
-            <button key={String(d)} type="button" role="radio" aria-checked={dark === d} className={`g-seg-item ${dark === d ? "g-seg-on" : ""}`} onClick={() => pickTheme(palette, d)}>
+            <button
+              key={String(d)}
+              type="button"
+              role="radio"
+              aria-checked={dark === d}
+              className={`g-seg-item ${dark === d ? "g-seg-on" : ""}`}
+              onClick={() => pickTheme(palette, d)}
+            >
               {d ? "Dark" : "Light"}
             </button>
           ))}
@@ -146,14 +183,36 @@ function Thumb({ c, theme }: { c: Course; theme: string }) {
 
 type Hud = { strokes: number; mode: Sim["mode"]; bag: Power[]; armed: Power | null; shot: Power | null };
 
-function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes: Course[]; course: Course; number: number; round: Round; onBack: () => void; onDone: (strokes: number) => void; onAgain: () => void }) {
+function Play({
+  holes,
+  course,
+  number,
+  round,
+  onBack,
+  onDone,
+  onAgain,
+}: {
+  holes: Course[];
+  course: Course;
+  number: number;
+  round: Round;
+  onBack: () => void;
+  onDone: (strokes: number) => void;
+  onAgain: () => void;
+}) {
   const wrap = useRef<HTMLDivElement>(null);
   const cv = useRef<HTMLCanvasElement>(null);
   const world = useMemo(() => compile(course), [course]);
   const sim = useRef<Sim>(newSim(course, number));
   const cam = useRef<Camera>({ x: course.w / 2, y: course.h / 2, s: 10, ox: 0, oy: 0 });
   const view = useRef({ w: 0, h: 0, fit: 10, play: 16, big: false, started: false, panned: 0, zoomed: false, top: 84 });
-  const aim = useRef<{ angle: number; power: number; line: { x: number; y: number }[]; from?: { x: number; y: number }; to?: { x: number; y: number } } | null>(null);
+  const aim = useRef<{
+    angle: number;
+    power: number;
+    line: { x: number; y: number }[];
+    from?: { x: number; y: number };
+    to?: { x: number; y: number };
+  } | null>(null);
   const fx = useRef<Fx[]>([]);
   const hits = useRef(new Map<number, number>());
   const juice = useRef<Juice>({ start: 0, spawn: 0.25, impact: null });
@@ -172,7 +231,10 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
 
   // The board's bounds, so the whole hole fits on screen.
   const bounds = useMemo(() => {
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    let x0 = Infinity,
+      y0 = Infinity,
+      x1 = -Infinity,
+      y1 = -Infinity;
     for (const g of course.greens)
       for (const p of g.poly) {
         x0 = Math.min(x0, p.x);
@@ -183,7 +245,8 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
     return { x0, y0, x1, y1: y1 + 1 };
   }, [course]);
 
-  const PAD_TOP = 84, PAD_BOTTOM = 104;
+  const PAD_TOP = 84,
+    PAD_BOTTOM = 104;
   useEffect(() => {
     const el = wrap.current!;
     const ro = new ResizeObserver(() => {
@@ -232,7 +295,8 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
     let lastHud = "";
     let lastKnock = 0;
     let lastMode = sim.current.mode;
-    let px = sim.current.x, py = sim.current.y;
+    let px = sim.current.x,
+      py = sim.current.y;
     let stoppedAt = -9;
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
@@ -241,7 +305,8 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
       t += dt;
       const s = sim.current;
       acc += dt;
-      const vx0 = s.vx, vy0 = s.vy;
+      const vx0 = s.vx,
+        vy0 = s.vy;
       while (acc >= DT) {
         px = s.x;
         py = s.y;
@@ -346,11 +411,17 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
       sound.rolling(s.mode === "roll" && s.z <= 0 ? speed : 0, s.mode === "roll" ? groundAt(world, s) : null);
 
       // The whole hole stays on screen; zoomed in, the camera follows the ball.
-      const c = cam.current, v = view.current;
+      const c = cam.current,
+        v = view.current;
       if (v.zoomed && now - v.panned > 1500) {
         // Ahead of the ball: toward the cup while aiming, the way it's going while it rolls.
-        const dx = course.cup.x - ball.x, dy = course.cup.y - ball.y, d = Math.hypot(dx, dy) || 1;
-        const lean = s.mode === "roll" ? { x: s.vx * 0.35, y: s.vy * 0.35 } : { x: (dx / d) * Math.min(7, d * 0.3), y: (dy / d) * Math.min(7, d * 0.3) };
+        const dx = course.cup.x - ball.x,
+          dy = course.cup.y - ball.y,
+          d = Math.hypot(dx, dy) || 1;
+        const lean =
+          s.mode === "roll"
+            ? { x: s.vx * 0.35, y: s.vy * 0.35 }
+            : { x: (dx / d) * Math.min(7, d * 0.3), y: (dy / d) * Math.min(7, d * 0.3) };
         const k = 1 - Math.exp(-dt * 3);
         c.x += (ball.x + lean.x - c.x) * k;
         c.y += (ball.y + lean.y - c.y) * k;
@@ -374,7 +445,8 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
         fx: fx.current,
         hits: hits.current,
         aim: aim.current,
-        target: targetRef.current && ITEMS[targetRef.current.kind].aim ? { ...ITEMS[targetRef.current.kind].aim!, at: targetAt.current } : null,
+        target:
+          targetRef.current && ITEMS[targetRef.current.kind].aim ? { ...ITEMS[targetRef.current.kind].aim!, at: targetAt.current } : null,
         inset: v.zoomed ? { top: v.top, bottom: PAD_BOTTOM } : undefined,
       });
 
@@ -394,12 +466,21 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
 
   // --- Touch: pull back anywhere to aim; two fingers to zoom in and look around ---
   const pointers = useRef(new Map<number, { x: number; y: number }>());
-  const gesture = useRef<{ kind: "aim" | "pan" | "pinch" | "target"; start?: { x: number; y: number }; d0?: number; s0?: number; mid?: { x: number; y: number } } | null>(null);
+  const gesture = useRef<{
+    kind: "aim" | "pan" | "pinch" | "target";
+    start?: { x: number; y: number };
+    d0?: number;
+    s0?: number;
+    mid?: { x: number; y: number };
+  } | null>(null);
   const local = (e: { clientX: number; clientY: number }) => {
     const r = cv.current!.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
-  const toWorld = (x: number, y: number) => ({ x: (x - cam.current.ox) / cam.current.s + cam.current.x, y: (y - cam.current.oy) / cam.current.s + cam.current.y });
+  const toWorld = (x: number, y: number) => ({
+    x: (x - cam.current.ox) / cam.current.s + cam.current.x,
+    y: (y - cam.current.oy) / cam.current.s + cam.current.y,
+  });
   const maxPull = () => Math.min(190, view.current.w * 0.46);
   const setZoom = (s: number) => {
     const v = view.current;
@@ -447,7 +528,8 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
       return;
     }
     if (g.kind === "aim" && g.start) {
-      const dx = g.start.x - p.x, dy = g.start.y - p.y;
+      const dx = g.start.x - p.x,
+        dy = g.start.y - p.y;
       const pull = Math.hypot(dx, dy);
       if (pull < 10) {
         aim.current = null;
@@ -520,7 +602,15 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
 
   return (
     <div ref={wrap} className="g-play" data-mode={hud.mode}>
-      <canvas ref={cv} className="g-canvas" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} aria-label={`${course.name}, par ${course.par}`} />
+      <canvas
+        ref={cv}
+        className="g-canvas"
+        onPointerDown={down}
+        onPointerMove={move}
+        onPointerUp={up}
+        onPointerCancel={up}
+        aria-label={`${course.name}, par ${course.par}`}
+      />
 
       <div className="g-top">
         <button type="button" className="g-icon-btn" onClick={onBack} aria-label="Back">
@@ -557,7 +647,14 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
           {hud.bag.slice(0, BAG_SIZE).map((p, i) => {
             const IconC = POWER_UI[p].icon;
             return (
-              <button key={`${i}-${p}`} type="button" className={`g-slot ${target?.i === i ? "g-slot-on" : ""}`} disabled={hud.mode !== "aim"} onClick={() => tapPower(i)} aria-label={`Use ${POWER_UI[p].name}`}>
+              <button
+                key={`${i}-${p}`}
+                type="button"
+                className={`g-slot ${target?.i === i ? "g-slot-on" : ""}`}
+                disabled={hud.mode !== "aim"}
+                onClick={() => tapPower(i)}
+                aria-label={`Use ${POWER_UI[p].name}`}
+              >
                 <IconC size={22} weight="fill" />
                 <span>{POWER_UI[p].short}</span>
               </button>
@@ -585,7 +682,11 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
             </div>
           )}
           {hud.mode === "roll" && (hud.shot === "brake" || hud.shot === "jump") && (
-            <button type="button" className="g-btn g-btn-on g-brake" onClick={() => (hud.shot === "jump" ? hop(sim.current) : brake(sim.current))}>
+            <button
+              type="button"
+              className="g-btn g-btn-on g-brake"
+              onClick={() => (hud.shot === "jump" ? hop(sim.current) : brake(sim.current))}
+            >
               {hud.shot === "jump" ? <ArrowFatLinesUpIcon size={22} weight="fill" /> : <HandPalmIcon size={22} weight="fill" />}
               {hud.shot === "jump" ? "Jump" : "Brake"}
             </button>
@@ -620,7 +721,14 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
       </div>
 
       {hud.mode === "aim" && hud.strokes >= MAX_STROKES && !done && (
-        <Result title="Picked up" sub={`${MAX_STROKES} strokes is the most a hole takes`} tone="over" primary={last ? "Scorecard" : "Next hole"} onPrimary={() => onDone(MAX_STROKES)} onSecondary={onAgain} />
+        <Result
+          title="Picked up"
+          sub={`${MAX_STROKES} strokes is the most a hole takes`}
+          tone="over"
+          primary={last ? "Scorecard" : "Next hole"}
+          onPrimary={() => onDone(MAX_STROKES)}
+          onSecondary={onAgain}
+        />
       )}
       {done && (
         <Result
@@ -637,7 +745,21 @@ function Play({ holes, course, number, round, onBack, onDone, onAgain }: { holes
 }
 
 // The hole's result: a sheet from the bottom with the score's name, big.
-function Result({ title, sub, tone, primary, onPrimary, onSecondary }: { title: string; sub: string; tone: "under" | "par" | "over"; primary: string; onPrimary: () => void; onSecondary: () => void }) {
+function Result({
+  title,
+  sub,
+  tone,
+  primary,
+  onPrimary,
+  onSecondary,
+}: {
+  title: string;
+  sub: string;
+  tone: "under" | "par" | "over";
+  primary: string;
+  onPrimary: () => void;
+  onSecondary: () => void;
+}) {
   return (
     <div className="g-result">
       <div className="g-result-card">

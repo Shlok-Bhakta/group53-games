@@ -10,14 +10,24 @@ import { ConvexHttpClient } from "convex/browser";
 import { anyApi } from "convex/server";
 
 const TYPES = {
-  html: "text/html; charset=utf-8", js: "text/javascript; charset=utf-8", css: "text/css; charset=utf-8", json: "application/json",
-  bin: "application/octet-stream", png: "image/png", svg: "image/svg+xml", mp3: "audio/mpeg", woff2: "font/woff2", map: "application/json",
+  html: "text/html; charset=utf-8",
+  js: "text/javascript; charset=utf-8",
+  css: "text/css; charset=utf-8",
+  json: "application/json",
+  bin: "application/octet-stream",
+  png: "image/png",
+  svg: "image/svg+xml",
+  mp3: "audio/mpeg",
+  woff2: "font/woff2",
+  map: "application/json",
 };
 const COMPRESSIBLE = new Set(["html", "js", "css", "json", "bin", "svg", "map"]);
 const AT_ONCE = 8;
 
 const walk = (dir, under = "") =>
-  readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(dir, e.name), `${under}${e.name}/`) : [`${under}${e.name}`]));
+  readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? walk(path.join(dir, e.name), `${under}${e.name}/`) : [`${under}${e.name}`],
+  );
 
 export async function publish({ url, adminKey, game, dir, log = () => {} }) {
   if (!existsSync(path.join(dir, "index.html"))) throw new Error(`${dir} has no index.html`);
@@ -40,7 +50,11 @@ export async function publish({ url, adminKey, game, dir, log = () => {} }) {
       const gzip = packed.length < raw.length;
       const body = gzip ? packed : raw;
       const type = TYPES[ext] ?? "application/octet-stream";
-      const res = await fetch(await client.mutation(anyApi.hosted.uploadUrl, {}), { method: "POST", headers: { "Content-Type": type }, body });
+      const res = await fetch(await client.mutation(anyApi.hosted.uploadUrl, {}), {
+        method: "POST",
+        headers: { "Content-Type": type },
+        body,
+      });
       if (!res.ok) throw new Error(`Uploading ${p}: ${res.status} ${await res.text()}`);
       const { storageId } = await res.json();
       await client.mutation(anyApi.hosted.addFile, { game, build, path: p, storageId, type, gzip });
@@ -56,7 +70,14 @@ export async function publish({ url, adminKey, game, dir, log = () => {} }) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [game, dir] = process.argv.slice(2);
   if (!game || !dir) throw new Error("Usage: npm run game:publish -- <game> <dir>");
-  const local = existsSync(".env.local") ? Object.fromEntries(readFileSync(".env.local", "utf8").split("\n").filter((l) => /^\w+=/.test(l)).map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1).replace(/^"|"$/g, "")])) : {};
+  const local = existsSync(".env.local")
+    ? Object.fromEntries(
+        readFileSync(".env.local", "utf8")
+          .split("\n")
+          .filter((l) => /^\w+=/.test(l))
+          .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1).replace(/^"|"$/g, "")]),
+      )
+    : {};
   const url = process.env.CONVEX_SELF_HOSTED_URL ?? local.CONVEX_SELF_HOSTED_URL;
   const adminKey = process.env.CONVEX_SELF_HOSTED_ADMIN_KEY ?? local.CONVEX_SELF_HOSTED_ADMIN_KEY;
   const done = await publish({ url, adminKey, game, dir });

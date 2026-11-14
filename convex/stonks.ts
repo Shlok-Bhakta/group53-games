@@ -5,7 +5,20 @@ import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } fr
 import type { Doc, Id } from "./_generated/dataModel";
 import { notify } from "./notify";
 import { card } from "./profiles";
-import { buyingPower, fill, fxPair, MIN_ORDER, netWorth, opens, refusal, START_CASH, toUsd, type Ask, type Book, type Side } from "./stonks/trade";
+import {
+  buyingPower,
+  fill,
+  fxPair,
+  MIN_ORDER,
+  netWorth,
+  opens,
+  refusal,
+  START_CASH,
+  toUsd,
+  type Ask,
+  type Book,
+  type Side,
+} from "./stonks/trade";
 import { contribution, downsample, liveWeight, minuteOf, withMinute, type Point } from "./stonks/board";
 import { INDEX, RANGES } from "./stonks/market";
 import { newsItem, statsValidator } from "./stonks/profile";
@@ -69,10 +82,19 @@ export const deepWatch = query({
 async function watched(ctx: QueryCtx) {
   const idx = await indexDoc(ctx);
   const held = (await ctx.db.query("stockPositions").collect()).map((p) => p.symbol);
-  const waiting = (await ctx.db.query("stockOrders").withIndex("by_status_filled", (q) => q.eq("status", "waiting")).collect()).map((o) => o.symbol);
+  const waiting = (
+    await ctx.db
+      .query("stockOrders")
+      .withIndex("by_status_filled", (q) => q.eq("status", "waiting"))
+      .collect()
+  ).map((o) => o.symbol);
   const views = await ctx.db.query("stockViews").collect();
   const core = [INDEX, ...(idx?.holdings.slice(0, TOP).map((h) => h.symbol) ?? []), ...held, ...waiting];
-  return { core, seen: views.map((v) => v.symbol), deep: [...new Set([...core, ...views.filter((v) => v.level === "open").map((v) => v.symbol)])] };
+  return {
+    core,
+    seen: views.map((v) => v.symbol),
+    deep: [...new Set([...core, ...views.filter((v) => v.level === "open").map((v) => v.symbol)])],
+  };
 }
 
 /** When each thing was last fetched, so a restarted sidecar doesn't ask Yahoo for it all again. */
@@ -85,7 +107,10 @@ export const freshness = query({
     return [
       ...series.filter((s) => s.range !== "1D").map((s) => ({ symbol: s.symbol, kind: s.range, at: s.at })),
       ...hours.map((h) => ({ symbol: h.symbol, kind: "1D", at: h.at })),
-      ...profiles.flatMap((p) => [...(p.statsAt ? [{ symbol: p.symbol, kind: "stats", at: p.statsAt }] : []), ...(p.newsAt ? [{ symbol: p.symbol, kind: "news", at: p.newsAt }] : [])]),
+      ...profiles.flatMap((p) => [
+        ...(p.statsAt ? [{ symbol: p.symbol, kind: "stats", at: p.statsAt }] : []),
+        ...(p.newsAt ? [{ symbol: p.symbol, kind: "news", at: p.newsAt }] : []),
+      ]),
     ];
   },
 });
@@ -162,7 +187,11 @@ export const board = query({
       up: shown.filter((r) => moved(r) > 0).length,
       down: shown.filter((r) => moved(r) < 0).length,
       share: shown.reduce((n, r) => n + r.weight, 0),
-      movers: [...rows].filter((r) => r.points !== 0).sort((a, b) => Math.abs(b.points) - Math.abs(a.points)).slice(0, 6).map((r) => ({ symbol: r.symbol, points: r.points })),
+      movers: [...rows]
+        .filter((r) => r.points !== 0)
+        .sort((a, b) => Math.abs(b.points) - Math.abs(a.points))
+        .slice(0, 6)
+        .map((r) => ({ symbol: r.symbol, points: r.points })),
       feeds: feeds.map((f) => ({ source: f.source, state: f.state, detail: f.detail, at: f.at })),
     };
   },
@@ -211,7 +240,15 @@ export const quote = query({
     // Only the index's members have a place on the board, and only working that out depends on every price.
     const member = (await indexDoc(ctx))?.holdings.some((h) => h.symbol === symbol);
     const row = member ? (await ranked(ctx)).rows.find((r) => r.symbol === symbol) : undefined;
-    return { ...view(q), name: row?.name ?? q.name, weight: row?.weight, rank: row?.rank, baseRank: row?.baseRank, points: row?.points, rate: await usdRate(ctx, q.currency) };
+    return {
+      ...view(q),
+      name: row?.name ?? q.name,
+      weight: row?.weight,
+      rank: row?.rank,
+      baseRank: row?.baseRank,
+      points: row?.points,
+      rate: await usdRate(ctx, q.currency),
+    };
   },
 });
 
@@ -350,10 +387,12 @@ export const series = internalMutation({
     const q = await quoteOf(ctx, symbol);
     const last = points.at(-1);
     // Something nobody's watched in a while: its history can be newer than its last known price.
-    if (range === "1D" && last && (!q || last[0] > q.time)) Object.assign(patch, { price: last[1], time: last[0], recv: Date.now(), source: "history" });
+    if (range === "1D" && last && (!q || last[0] > q.time))
+      Object.assign(patch, { price: last[1], time: last[0], recv: Date.now(), source: "history" });
     if (Object.keys(patch).length === 0) return;
     if (q) await ctx.db.patch(q._id, patch);
-    else if (last) await ctx.db.insert("stockQuotes", { symbol, price: last[1], time: last[0], recv: Date.now(), source: "history", ...patch });
+    else if (last)
+      await ctx.db.insert("stockQuotes", { symbol, price: last[1], time: last[0], recv: Date.now(), source: "history", ...patch });
   },
 });
 
@@ -481,13 +520,32 @@ export const search = query({
       .query("stockSymbols")
       .withSearchIndex("search_text", (x) => x.search("search", text))
       .take(15);
-    const order = [...(prefix[0]?.symbol === ticker ? [ticker] : []), ...(yahoo?.symbols ?? []), ...prefix.map((p) => p.symbol), ...named.map((n) => n.symbol)];
+    const order = [
+      ...(prefix[0]?.symbol === ticker ? [ticker] : []),
+      ...(yahoo?.symbols ?? []),
+      ...prefix.map((p) => p.symbol),
+      ...named.map((n) => n.symbol),
+    ];
     const rows = [];
     for (const symbol of [...new Set(order)].slice(0, 20)) {
-      const s = prefix.find((p) => p.symbol === symbol) ?? named.find((n) => n.symbol === symbol) ?? (await ctx.db.query("stockSymbols").withIndex("by_symbol", (x) => x.eq("symbol", symbol)).unique());
+      const s =
+        prefix.find((p) => p.symbol === symbol) ??
+        named.find((n) => n.symbol === symbol) ??
+        (await ctx.db
+          .query("stockSymbols")
+          .withIndex("by_symbol", (x) => x.eq("symbol", symbol))
+          .unique());
       if (!s) continue;
       const quote = await quoteOf(ctx, symbol);
-      rows.push({ symbol, name: quote?.name ?? s.name, type: quote?.type ?? s.type, exchange: s.exchange, price: quote?.price, prevClose: quote?.prevClose, currency: quote?.currency });
+      rows.push({
+        symbol,
+        name: quote?.name ?? s.name,
+        type: quote?.type ?? s.type,
+        exchange: s.exchange,
+        price: quote?.price,
+        prevClose: quote?.prevClose,
+        currency: quote?.currency,
+      });
     }
     return rows;
   },
@@ -613,12 +671,20 @@ async function fillWaiting(ctx: MutationCtx, symbol: string, price: number, time
   for (const order of orders) {
     if (order.at >= time) continue;
     const book = await bookOf(ctx, order.userId);
-    const { usd } = await usdPrices(ctx, book.positions.map((p) => p.symbol));
+    const { usd } = await usdPrices(
+      ctx,
+      book.positions.map((p) => p.symbol),
+    );
     const power = buyingPower(book, (s) => (s === symbol ? usdPrice : usd.get(s)));
     const done = fill(book, askOf(order), usdPrice, power);
     if ("refused" in done) {
       await ctx.db.patch(order._id, { status: "refused", reason: done.refused, filledAt: time });
-      await notify(ctx, order.userId, { title: `${symbol} order refused`, body: done.refused, url: stockPath(symbol), tag: `stonks-${symbol}` });
+      await notify(ctx, order.userId, {
+        title: `${symbol} order refused`,
+        body: done.refused,
+        url: stockPath(symbol),
+        tag: `stonks-${symbol}`,
+      });
       continue;
     }
     const account = await ctx.db
@@ -631,10 +697,24 @@ async function fillWaiting(ctx: MutationCtx, symbol: string, price: number, time
     if (done.position && row) await ctx.db.patch(row._id, { shares: done.position.shares, avg: done.position.avg });
     else if (done.position) await ctx.db.insert("stockPositions", { userId: order.userId, ...done.position });
     else if (row) await ctx.db.delete(row._id);
-    await ctx.db.patch(order._id, { status: "filled", filledAt: time, price, currency, filledShares: done.shares, amount: done.amount, realized: done.realized });
+    await ctx.db.patch(order._id, {
+      status: "filled",
+      filledAt: time,
+      price,
+      currency,
+      filledShares: done.shares,
+      amount: done.amount,
+      realized: done.realized,
+    });
 
     // An order that sat waiting (overnight, say) reports back; one that filled in a second was watched.
-    if (time - order.at > 30_000) await notify(ctx, order.userId, { title: `${DID[order.side]} ${symbol}`, body: `${money(done.amount)} at ${money(usdPrice)}`, url: stockPath(symbol), tag: `stonks-${symbol}` });
+    if (time - order.at > 30_000)
+      await notify(ctx, order.userId, {
+        title: `${DID[order.side]} ${symbol}`,
+        body: `${money(done.amount)} at ${money(usdPrice)}`,
+        url: stockPath(symbol),
+        tag: `stonks-${symbol}`,
+      });
     await tellTheOtherSide(ctx, order, symbol);
     filled = true;
   }
@@ -721,11 +801,16 @@ export const order = mutation({
       .collect();
     // The same tap twice in a moment is one order.
     const now = Date.now();
-    const twin = waiting.find((o) => o.symbol === symbol && o.side === side && o.dollars === dollars && o.shares === shares && now - o.at < 3000);
+    const twin = waiting.find(
+      (o) => o.symbol === symbol && o.side === side && o.dollars === dollars && o.shares === shares && now - o.at < 3000,
+    );
     if (twin) return twin._id;
     if (opens(side)) {
       if (dollars === undefined || !(dollars >= MIN_ORDER)) throw new Error(`The smallest order is ${money(MIN_ORDER)}.`);
-      const { usd } = await usdPrices(ctx, book.positions.map((p) => p.symbol));
+      const { usd } = await usdPrices(
+        ctx,
+        book.positions.map((p) => p.symbol),
+      );
       const free = buyingPower(book, (s) => usd.get(s)) - waiting.reduce((n, o) => n + (o.dollars ?? 0), 0);
       if (dollars > free + 0.005) throw new Error(`You have ${money(Math.max(0, free))} to invest.`);
     } else if (shares !== undefined && !(shares > 0)) throw new Error("Pick how many.");
@@ -750,7 +835,10 @@ export const portfolio = query({
     const userId = await getAuthUserId(ctx);
     if (userId === null) return null;
     const book = await bookOf(ctx, userId);
-    const { quotes, usd } = await usdPrices(ctx, book.positions.map((p) => p.symbol));
+    const { quotes, usd } = await usdPrices(
+      ctx,
+      book.positions.map((p) => p.symbol),
+    );
     const price = (s: string) => usd.get(s);
     const waiting = await ctx.db
       .query("stockOrders")
@@ -771,16 +859,48 @@ export const portfolio = query({
       positions: book.positions
         .map((p) => {
           const now = usd.get(p.symbol) ?? p.avg; // all in dollars, so a currency's moves count too
-          return { symbol: p.symbol, name: quotes.get(p.symbol)?.name, shares: p.shares, avg: p.avg, price: now, value: p.shares * now, gain: p.shares * (now - p.avg), gainPct: (Math.sign(p.shares) * (now - p.avg)) / p.avg };
+          return {
+            symbol: p.symbol,
+            name: quotes.get(p.symbol)?.name,
+            shares: p.shares,
+            avg: p.avg,
+            price: now,
+            value: p.shares * now,
+            gain: p.shares * (now - p.avg),
+            gainPct: (Math.sign(p.shares) * (now - p.avg)) / p.avg,
+          };
         })
         .sort((a, b) => Math.abs(b.value) - Math.abs(a.value)),
       waiting: await Promise.all(
         waiting.map(async (o) => {
           const q = await quoteOf(ctx, o.symbol);
-          return { id: o._id, symbol: o.symbol, side: o.side, dollars: o.dollars, shares: o.shares, at: o.at, quote: q && { type: q.type, exchange: q.exchange, state: q.state, time: q.time, recv: q.recv, periodOpen: q.periodOpen, periodClose: q.periodClose } };
+          return {
+            id: o._id,
+            symbol: o.symbol,
+            side: o.side,
+            dollars: o.dollars,
+            shares: o.shares,
+            at: o.at,
+            quote: q && {
+              type: q.type,
+              exchange: q.exchange,
+              state: q.state,
+              time: q.time,
+              recv: q.recv,
+              periodOpen: q.periodOpen,
+              periodClose: q.periodClose,
+            },
+          };
         }),
       ),
-      lastFill: filled && { id: filled._id, side: filled.side, symbol: filled.symbol, amount: filled.amount ?? 0, price: filled.price ?? 0, currency: filled.currency },
+      lastFill: filled && {
+        id: filled._id,
+        side: filled.side,
+        symbol: filled.symbol,
+        amount: filled.amount ?? 0,
+        price: filled.price ?? 0,
+        currency: filled.currency,
+      },
     };
   },
 });
@@ -791,7 +911,10 @@ async function standings(ctx: QueryCtx) {
   const positions = await ctx.db.query("stockPositions").collect();
   const accounts = new Map((await ctx.db.query("stockAccounts").collect()).map((a) => [a.userId, a.cash]));
   const profiles = new Map((await ctx.db.query("profiles").collect()).map((p) => [p.userId, p]));
-  const { usd } = await usdPrices(ctx, positions.map((p) => p.symbol));
+  const { usd } = await usdPrices(
+    ctx,
+    positions.map((p) => p.symbol),
+  );
   return users
     .map((u) => {
       const book = { cash: accounts.get(u._id) ?? START_CASH, positions: positions.filter((p) => p.userId === u._id) };
@@ -838,13 +961,25 @@ export const player = query({
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .unique();
     const book = await bookOf(ctx, userId);
-    const { quotes, usd } = await usdPrices(ctx, book.positions.map((p) => p.symbol));
+    const { quotes, usd } = await usdPrices(
+      ctx,
+      book.positions.map((p) => p.symbol),
+    );
     const worth = netWorth(book, (s) => usd.get(s));
     const ranks = await standings(ctx);
     const positions = book.positions
       .map((p) => {
         const now = usd.get(p.symbol) ?? p.avg;
-        return { symbol: p.symbol, name: quotes.get(p.symbol)?.name, shares: p.shares, avg: p.avg, price: now, value: p.shares * now, gain: p.shares * (now - p.avg), gainPct: (Math.sign(p.shares) * (now - p.avg)) / p.avg };
+        return {
+          symbol: p.symbol,
+          name: quotes.get(p.symbol)?.name,
+          shares: p.shares,
+          avg: p.avg,
+          price: now,
+          value: p.shares * now,
+          gain: p.shares * (now - p.avg),
+          gainPct: (Math.sign(p.shares) * (now - p.avg)) / p.avg,
+        };
       })
       .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
     const waiting = await ctx.db
@@ -873,7 +1008,23 @@ export const player = query({
       waiting: await Promise.all(
         waiting.map(async (o) => {
           const q = await quoteOf(ctx, o.symbol);
-          return { id: o._id, symbol: o.symbol, side: o.side, dollars: o.dollars, shares: o.shares, at: o.at, quote: q && { type: q.type, exchange: q.exchange, state: q.state, time: q.time, recv: q.recv, periodOpen: q.periodOpen, periodClose: q.periodClose } };
+          return {
+            id: o._id,
+            symbol: o.symbol,
+            side: o.side,
+            dollars: o.dollars,
+            shares: o.shares,
+            at: o.at,
+            quote: q && {
+              type: q.type,
+              exchange: q.exchange,
+              state: q.state,
+              time: q.time,
+              recv: q.recv,
+              periodOpen: q.periodOpen,
+              periodClose: q.periodClose,
+            },
+          };
         }),
       ),
       record: {
@@ -884,7 +1035,16 @@ export const player = query({
         best: best && { symbol: best.symbol, realized: best.realized! },
         worst: worst && { symbol: worst.symbol, realized: worst.realized! },
       },
-      history: fills.slice(0, 50).map((o) => ({ id: o._id, side: o.side, symbol: o.symbol, amount: o.amount ?? 0, price: o.price ?? 0, currency: o.currency, at: o.filledAt ?? o.at, realized: o.realized })),
+      history: fills.slice(0, 50).map((o) => ({
+        id: o._id,
+        side: o.side,
+        symbol: o.symbol,
+        amount: o.amount ?? 0,
+        price: o.price ?? 0,
+        currency: o.currency,
+        at: o.filledAt ?? o.at,
+        realized: o.realized,
+      })),
     };
   },
 });
@@ -903,7 +1063,19 @@ export const trades = query({
     return Promise.all(
       rows.map(async (o) => {
         const u = await ctx.db.get(o.userId);
-        return { id: o._id, userId: o.userId, name: u?.name ?? "Someone", image: u?.image, side: o.side, symbol: o.symbol, amount: o.amount ?? 0, price: o.price ?? 0, currency: o.currency, at: o.filledAt ?? o.at, realized: o.realized };
+        return {
+          id: o._id,
+          userId: o.userId,
+          name: u?.name ?? "Someone",
+          image: u?.image,
+          side: o.side,
+          symbol: o.symbol,
+          amount: o.amount ?? 0,
+          price: o.price ?? 0,
+          currency: o.currency,
+          at: o.filledAt ?? o.at,
+          realized: o.realized,
+        };
       }),
     );
   },
@@ -925,7 +1097,15 @@ export const holders = query({
       rows.map(async (p) => {
         const u = await ctx.db.get(p.userId);
         const now = price ?? p.avg;
-        return { userId: p.userId, me: p.userId === me, name: u?.name ?? "Someone", image: u?.image, shares: p.shares, value: p.shares * now, gainPct: (Math.sign(p.shares) * (now - p.avg)) / p.avg };
+        return {
+          userId: p.userId,
+          me: p.userId === me,
+          name: u?.name ?? "Someone",
+          image: u?.image,
+          shares: p.shares,
+          value: p.shares * now,
+          gainPct: (Math.sign(p.shares) * (now - p.avg)) / p.avg,
+        };
       }),
     );
   },

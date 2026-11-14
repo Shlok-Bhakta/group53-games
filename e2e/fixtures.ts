@@ -115,7 +115,14 @@ export async function phone(context: BrowserContext, opts: PhoneOptions = {}): P
       type Net = { open: number; last: number; sent: number; acked: number; inflight: Set<string>; chunks: string[] };
       const net: Net = { open: 0, last: 0, sent: 0, acked: 0, inflight: new Set(), chunks: [] };
       (window as unknown as { __convexNet: Net }).__convexNet = net;
-      const onServer = (msg: { type?: string; requestId?: string; endVersion?: { querySet: number }; chunk?: string; partNumber?: number; totalParts?: number }) => {
+      const onServer = (msg: {
+        type?: string;
+        requestId?: string;
+        endVersion?: { querySet: number };
+        chunk?: string;
+        partNumber?: number;
+        totalParts?: number;
+      }) => {
         if (msg.type === "TransitionChunk") {
           net.chunks[msg.partNumber!] = msg.chunk!;
           if (net.chunks.filter((c) => c !== undefined).length < msg.totalParts!) return;
@@ -197,7 +204,14 @@ export async function phone(context: BrowserContext, opts: PhoneOptions = {}): P
       const sw = Object.assign(new EventTarget(), { ready: Promise.resolve(reg), register: async () => reg, startMessages() {} });
       Object.defineProperty(navigator, "serviceWorker", { value: sw, configurable: true });
     },
-    [opts.installed ?? true, ns, opts.player?.token ?? "", opts.player?.refreshToken ?? "", opts.notifications ?? "default", opts.pushEndpoint ?? ""] as const,
+    [
+      opts.installed ?? true,
+      ns,
+      opts.player?.token ?? "",
+      opts.player?.refreshToken ?? "",
+      opts.notifications ?? "default",
+      opts.pushEndpoint ?? "",
+    ] as const,
   );
   return await context.newPage();
 }
@@ -243,7 +257,8 @@ export async function convexIdle(page: Page) {
     .poll(
       () =>
         page.evaluate(() => {
-          const n = (window as unknown as { __convexNet?: { open: number; sent: number; acked: number; inflight: Set<string> } }).__convexNet;
+          const n = (window as unknown as { __convexNet?: { open: number; sent: number; acked: number; inflight: Set<string> } })
+            .__convexNet;
           return !!n && n.open > 0 && n.acked >= n.sent && n.inflight.size === 0;
         }),
       { message: "Convex has answered everything the page asked for" },
@@ -259,10 +274,13 @@ export async function holdsStill(page: Page) {
       () =>
         page.evaluate(async () => {
           const running = document.getAnimations().some((a) => a.playState === "running" && a.effect?.getTiming().iterations !== Infinity);
-          const layout = () => [...document.querySelectorAll("button, a, h1, h2, [role=img]")].map((el) => {
-            const r = el.getBoundingClientRect();
-            return `${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.width)},${Math.round(r.height)}`;
-          }).join(" ");
+          const layout = () =>
+            [...document.querySelectorAll("button, a, h1, h2, [role=img]")]
+              .map((el) => {
+                const r = el.getBoundingClientRect();
+                return `${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.width)},${Math.round(r.height)}`;
+              })
+              .join(" ");
           const before = layout();
           await new Promise((r) => setTimeout(r, 120));
           return !running && layout() === before;
@@ -298,7 +316,8 @@ export async function openLobby(host: Page, game: string, mode: string, settings
   await host.goto(`/${game}/mode/${mode}`);
   if (Object.keys(settings).length) {
     await host.getByRole("button", { name: "Settings" }).click();
-    for (const [group, option] of Object.entries(settings)) await host.getByRole("radiogroup", { name: group }).getByRole("radio", { name: option, exact: true }).click();
+    for (const [group, option] of Object.entries(settings))
+      await host.getByRole("radiogroup", { name: group }).getByRole("radio", { name: option, exact: true }).click();
   }
   await host.getByRole("button", { name: "Open a game" }).click();
   await expect(host.getByRole("heading", { name: "Waiting for players" })).toBeVisible();
@@ -320,11 +339,17 @@ export async function fillLobby(host: Page, guests: Page[]) {
 // that has to wait out travel and cooldowns quicker (Cooldown and Piece speed, as in convex/modes.ts).
 export async function realtimePair(phones: Phones, settings?: { cooldown?: number; speed?: number }) {
   const [shlok, chris] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
-  const id: string = await admin().action(anyApi.testing.startMatch, { mode: "chess:realtime", a: shlok.userId, b: chris.userId, settings });
+  const id: string = await admin().action(anyApi.testing.startMatch, {
+    mode: "chess:realtime",
+    a: shlok.userId,
+    b: chris.userId,
+    settings,
+  });
   // startMatch seats its first player as white.
   const [white, black] = await Promise.all([phones.open({ player: shlok, push: "on" }), phones.open({ player: chris, push: "on" })]);
   await Promise.all([white.goto(`/chess/${id}`), black.goto(`/chess/${id}`)]);
-  for (const p of [white, black]) await expect(p.getByRole("grid", { name: "Real-time chess board" })).toHaveAttribute("data-playing", "true", { timeout: 15_000 });
+  for (const p of [white, black])
+    await expect(p.getByRole("grid", { name: "Real-time chess board" })).toHaveAttribute("data-playing", "true", { timeout: 15_000 });
   return { id, white, black, whitePlayer: shlok, blackPlayer: chris };
 }
 
@@ -333,7 +358,7 @@ export async function realtimePair(phones: Phones, settings?: { cooldown?: numbe
 export async function settled<T>(read: () => Promise<T>, window = 600): Promise<T> {
   let last = JSON.stringify(await read());
   let since = Date.now();
-  for (const end = Date.now() + 10_000; Date.now() < end; ) {
+  for (const end = Date.now() + 10_000; Date.now() < end;) {
     await new Promise((r) => setTimeout(r, 150));
     const value = await read();
     const now = JSON.stringify(value);

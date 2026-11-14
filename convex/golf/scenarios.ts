@@ -27,7 +27,9 @@ export function chaos(seed = 1): { cmds: Cmd[]; checkpoints: number[] } {
 
 // The same, turn-based: each shot or item comes on its player's own turn, given just before it.
 function turned(scn: { cmds: Cmd[]; checkpoints: number[] }) {
-  const cmds = scn.cmds.flatMap((c) => (c.kind === "join" ? [c] : [{ tick: c.tick, by: c.by, seq: c.seq - 0.5, kind: "turn" as const }, c]));
+  const cmds = scn.cmds.flatMap((c) =>
+    c.kind === "join" ? [c] : [{ tick: c.tick, by: c.by, seq: c.seq - 0.5, kind: "turn" as const }, c],
+  );
   return { cmds: cmds.sort(cmdOrder), checkpoints: scn.checkpoints };
 }
 

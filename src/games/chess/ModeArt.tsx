@@ -3,7 +3,9 @@ import { LightningIcon } from "@phosphor-icons/react";
 import { MODES, type ModeKey } from "../../../convex/modes";
 import { SEAT_COLORS } from "@/games/seats";
 
-export const ChessModeArt = ({ mode }: { mode: ModeKey }) => <ModeArt four={MODES[mode].players > 2} realtime={MODES[mode].kind === "realtime"} />;
+export const ChessModeArt = ({ mode }: { mode: ModeKey }) => (
+  <ModeArt four={MODES[mode].players > 2} realtime={MODES[mode].kind === "realtime"} />
+);
 
 // A tiny board: a 4x4 square for two players, a cross for four, with a spark for real-time that jolts once.
 function ModeArt({ four, realtime }: { four: boolean; realtime: boolean }) {
@@ -22,7 +24,16 @@ function ModeArt({ four, realtime }: { four: boolean; realtime: boolean }) {
     <span className="relative block size-20" aria-hidden="true">
       <svg viewBox={`0 0 ${n} ${n}`} className="size-full overflow-visible">
         {cells.map(([x, y]) =>
-          cut(x, y) ? null : <rect key={`${x}${y}`} x={x} y={y} width={1} height={1} className={(x + y) % 2 ? "fill-[var(--board-dark)]" : "fill-[var(--board-light)]"} />,
+          cut(x, y) ? null : (
+            <rect
+              key={`${x}${y}`}
+              x={x}
+              y={y}
+              width={1}
+              height={1}
+              className={(x + y) % 2 ? "fill-[var(--board-dark)]" : "fill-[var(--board-light)]"}
+            />
+          ),
         )}
         {dots.map((d, i) => (
           <motion.circle

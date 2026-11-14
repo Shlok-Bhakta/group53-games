@@ -54,7 +54,11 @@ export function say(e: Ev, name: Name): string | null {
         case "jail":
           return `${name(e.from)} paid ${amt} to get out of jail.`;
         case "card":
-          return e.from >= 0 && e.to >= 0 ? `${name(e.from)} paid ${name(e.to)} ${amt}.` : e.from >= 0 ? `${name(e.from)} paid ${amt}.` : `${name(e.to)} collected ${amt}.`;
+          return e.from >= 0 && e.to >= 0
+            ? `${name(e.from)} paid ${name(e.to)} ${amt}.`
+            : e.from >= 0
+              ? `${name(e.from)} paid ${amt}.`
+              : `${name(e.to)} collected ${amt}.`;
         case "trade":
           return null;
         case "bankrupt":
@@ -66,7 +70,13 @@ export function say(e: Ev, name: Name): string | null {
       return `${name(e.seat)} drew ${e.deck === "chance" ? "Chance" : "Community Chest"}: ${DECKS[e.deck][e.card].text}`;
     case "jail":
       if (e.in) return e.how === "three" ? `${name(e.seat)} rolled three doubles and went to jail.` : `${name(e.seat)} went to jail.`;
-      return e.how === "doubles" ? `${name(e.seat)} rolled doubles out of jail.` : e.how === "card" ? `${name(e.seat)} used a get-out-of-jail card.` : e.how === "third" ? `${name(e.seat)} paid their way out of jail.` : null;
+      return e.how === "doubles"
+        ? `${name(e.seat)} rolled doubles out of jail.`
+        : e.how === "card"
+          ? `${name(e.seat)} used a get-out-of-jail card.`
+          : e.how === "third"
+            ? `${name(e.seat)} paid their way out of jail.`
+            : null;
     case "build":
       return e.houses === 5 ? `A hotel went up on ${squareName(e.pos)}.` : null;
     case "auction":

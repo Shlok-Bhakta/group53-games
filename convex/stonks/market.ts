@@ -7,8 +7,26 @@ export type Range = (typeof RANGES)[number];
 
 // Full closures and 1pm closes, through 2027.
 const HOLIDAYS = new Set([
-  "2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03", "2026-05-25", "2026-06-19", "2026-07-03", "2026-09-07", "2026-11-26", "2026-12-25",
-  "2027-01-01", "2027-01-18", "2027-02-15", "2027-03-26", "2027-05-31", "2027-06-18", "2027-07-05", "2027-09-06", "2027-11-25", "2027-12-24",
+  "2026-01-01",
+  "2026-01-19",
+  "2026-02-16",
+  "2026-04-03",
+  "2026-05-25",
+  "2026-06-19",
+  "2026-07-03",
+  "2026-09-07",
+  "2026-11-26",
+  "2026-12-25",
+  "2027-01-01",
+  "2027-01-18",
+  "2027-02-15",
+  "2027-03-26",
+  "2027-05-31",
+  "2027-06-18",
+  "2027-07-05",
+  "2027-09-06",
+  "2027-11-25",
+  "2027-12-24",
 ]);
 const EARLY = new Set(["2026-11-27", "2026-12-24", "2027-11-26"]);
 
@@ -74,7 +92,14 @@ export function nextOpen(ms: number): number {
 export type Clock = { state: "open" | "pre" | "post" | "closed"; day: Day; nextOpen: number };
 export function marketClock(ms: number): Clock {
   const day = sessionDay(ms);
-  const state = ms >= day.open && ms < day.close ? "open" : ms < day.open && ms >= day.open - 5.5 * 3600_000 ? "pre" : ms >= day.close && ms < day.close + 4 * 3600_000 ? "post" : "closed";
+  const state =
+    ms >= day.open && ms < day.close
+      ? "open"
+      : ms < day.open && ms >= day.open - 5.5 * 3600_000
+        ? "pre"
+        : ms >= day.close && ms < day.close + 4 * 3600_000
+          ? "post"
+          : "closed";
   return { state, day, nextOpen: nextOpen(ms) };
 }
 
@@ -84,9 +109,35 @@ export const display = (symbol: string) => (symbol === INDEX ? "S&P 500" : symbo
 // ---- Everything else on Yahoo ----
 
 // Yahoo's codes for New York's markets, which run on the clock above. Anywhere else, its own quote says.
-const NEW_YORK = new Set(["NMS", "NYQ", "NGM", "NCM", "ASE", "PCX", "BTS", "NAS", "PNK", "OQB", "OQX", "PIN", "SNP", "DJI", "NIM", "WCB", "CXI"]);
+const NEW_YORK = new Set([
+  "NMS",
+  "NYQ",
+  "NGM",
+  "NCM",
+  "ASE",
+  "PCX",
+  "BTS",
+  "NAS",
+  "PNK",
+  "OQB",
+  "OQX",
+  "PIN",
+  "SNP",
+  "DJI",
+  "NIM",
+  "WCB",
+  "CXI",
+]);
 
-export type Instrument = { type?: string; exchange?: string; state?: string; periodOpen?: number; periodClose?: number; time?: number; recv?: number };
+export type Instrument = {
+  type?: string;
+  exchange?: string;
+  state?: string;
+  periodOpen?: number;
+  periodClose?: number;
+  time?: number;
+  recv?: number;
+};
 export type Market = {
   kind: "newYork" | "always" | "other";
   open: boolean;
@@ -108,6 +159,9 @@ export function marketOf(q: Instrument | null | undefined, now: number): Market 
     return { kind: "newYork", open: clock.state === "open", day: clock.day, clock, late };
   }
   const open = q?.state === "REGULAR";
-  const session = q?.type !== "CURRENCY" && q?.type !== "FUTURE" && q?.type !== "MUTUALFUND" && q?.periodOpen && q.periodClose ? { open: q.periodOpen, close: q.periodClose } : null;
+  const session =
+    q?.type !== "CURRENCY" && q?.type !== "FUTURE" && q?.type !== "MUTUALFUND" && q?.periodOpen && q.periodClose
+      ? { open: q.periodOpen, close: q.periodClose }
+      : null;
   return { kind: "other", open, day: session, clock: null, late };
 }

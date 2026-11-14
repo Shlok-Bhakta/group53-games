@@ -89,29 +89,157 @@ const moveTime = (def: number, none = true): Setting => ({
   key: "moveTime",
   label: "Time to move",
   short: "{} to move",
-  options: [...(none ? [{ value: 0, label: "No limit" }] : []), { value: 24, label: "1 day" }, { value: 48, label: "2 days" }, { value: 72, label: "3 days" }],
+  options: [
+    ...(none ? [{ value: 0, label: "No limit" }] : []),
+    { value: 24, label: "1 day" },
+    { value: 48, label: "2 days" },
+    { value: 72, label: "3 days" },
+  ],
   default: def,
 });
 const REALTIME_CHESS: Setting[] = [
-  { key: "cooldown", label: "Cooldown", short: "{} cooldown", options: [{ value: 2, label: "2s" }, { value: 3, label: "3s" }, { value: 5, label: "5s" }, { value: 10, label: "10s" }], default: 5 },
-  { key: "speed", label: "Piece speed", short: "{} pieces", options: [{ value: 45, label: "Slow" }, { value: 30, label: "Normal" }, { value: 15, label: "Fast" }], default: 30 },
+  {
+    key: "cooldown",
+    label: "Cooldown",
+    short: "{} cooldown",
+    options: [
+      { value: 2, label: "2s" },
+      { value: 3, label: "3s" },
+      { value: 5, label: "5s" },
+      { value: 10, label: "10s" },
+    ],
+    default: 5,
+  },
+  {
+    key: "speed",
+    label: "Piece speed",
+    short: "{} pieces",
+    options: [
+      { value: 45, label: "Slow" },
+      { value: 30, label: "Normal" },
+      { value: 15, label: "Fast" },
+    ],
+    default: 30,
+  },
 ];
 const SCRABBLE: Setting[] = [
-  { key: "rack", label: "Tiles in hand", short: "{} tiles", options: [{ value: 5, label: "5" }, { value: 7, label: "7" }, { value: 9, label: "9" }], default: 7 },
-  { key: "bag", label: "Tiles in the bag", short: "{} bag", options: [{ value: 50, label: "Half" }, { value: 100, label: "100" }, { value: 150, label: "150" }, { value: 200, label: "200" }], default: 100 },
-  { key: "board", label: "Board", short: "{} board", options: [{ value: 15, label: "15×15" }, { value: 21, label: "21×21" }], default: 15 },
+  {
+    key: "rack",
+    label: "Tiles in hand",
+    short: "{} tiles",
+    options: [
+      { value: 5, label: "5" },
+      { value: 7, label: "7" },
+      { value: 9, label: "9" },
+    ],
+    default: 7,
+  },
+  {
+    key: "bag",
+    label: "Tiles in the bag",
+    short: "{} bag",
+    options: [
+      { value: 50, label: "Half" },
+      { value: 100, label: "100" },
+      { value: 150, label: "150" },
+      { value: 200, label: "200" },
+    ],
+    default: 100,
+  },
+  {
+    key: "board",
+    label: "Board",
+    short: "{} board",
+    options: [
+      { value: 15, label: "15×15" },
+      { value: 21, label: "21×21" },
+    ],
+    default: 15,
+  },
   // Scrabble's official rules, or Letter League's (see convex/scrabble/engine.ts for what changes).
-  { key: "rules", label: "Rules", short: "{} rules", options: [{ value: 0, label: "Scrabble" }, { value: 1, label: "Letter League" }], default: 0 },
-  { key: "rounds", label: "Rounds", short: "{} rounds", options: [{ value: 0, label: "No limit" }, { value: 5, label: "5" }, { value: 10, label: "10" }, { value: 15, label: "15" }], default: 0 },
+  {
+    key: "rules",
+    label: "Rules",
+    short: "{} rules",
+    options: [
+      { value: 0, label: "Scrabble" },
+      { value: 1, label: "Letter League" },
+    ],
+    default: 0,
+  },
+  {
+    key: "rounds",
+    label: "Rounds",
+    short: "{} rounds",
+    options: [
+      { value: 0, label: "No limit" },
+      { value: 5, label: "5" },
+      { value: 10, label: "10" },
+      { value: 15, label: "15" },
+    ],
+    default: 0,
+  },
 ];
 // Poker: a run of hands with rising blinds, until one player has every chip (or the last hand, if there's a
 // limit). Blinds start at 10/20 whatever the stack (convex/poker/engine.ts). Betting: 0 no limit, 1 pot limit.
 const poker = (betting: number): Setting[] => [
-  { key: "stack", label: "Chips", short: "{} chips", options: [{ value: 500, label: "500" }, { value: 1000, label: "1,000" }, { value: 2000, label: "2,000" }], default: 1000 },
-  { key: "hands", label: "Hands", short: "{} hands", options: [{ value: 0, label: "No limit" }, { value: 5, label: "5" }, { value: 10, label: "10" }, { value: 20, label: "20" }], default: 0 },
-  { key: "blinds", label: "Blinds go up every", short: "Blinds up: {}", options: [{ value: 2, label: "2 hands" }, { value: 3, label: "3 hands" }, { value: 5, label: "5 hands" }, { value: 0, label: "Never" }], default: 3 },
-  { key: "blindsBy", label: "Blinds multiply by", short: "Blinds {}", options: [{ value: 1.25, label: "×1.25" }, { value: 1.5, label: "×1.5" }, { value: 2, label: "×2" }, { value: 3, label: "×3" }], default: 2 },
-  { key: "betting", label: "Betting", short: "{}", options: [{ value: 0, label: "No limit" }, { value: 1, label: "Pot limit" }], default: betting },
+  {
+    key: "stack",
+    label: "Chips",
+    short: "{} chips",
+    options: [
+      { value: 500, label: "500" },
+      { value: 1000, label: "1,000" },
+      { value: 2000, label: "2,000" },
+    ],
+    default: 1000,
+  },
+  {
+    key: "hands",
+    label: "Hands",
+    short: "{} hands",
+    options: [
+      { value: 0, label: "No limit" },
+      { value: 5, label: "5" },
+      { value: 10, label: "10" },
+      { value: 20, label: "20" },
+    ],
+    default: 0,
+  },
+  {
+    key: "blinds",
+    label: "Blinds go up every",
+    short: "Blinds up: {}",
+    options: [
+      { value: 2, label: "2 hands" },
+      { value: 3, label: "3 hands" },
+      { value: 5, label: "5 hands" },
+      { value: 0, label: "Never" },
+    ],
+    default: 3,
+  },
+  {
+    key: "blindsBy",
+    label: "Blinds multiply by",
+    short: "Blinds {}",
+    options: [
+      { value: 1.25, label: "×1.25" },
+      { value: 1.5, label: "×1.5" },
+      { value: 2, label: "×2" },
+      { value: 3, label: "×3" },
+    ],
+    default: 2,
+  },
+  {
+    key: "betting",
+    label: "Betting",
+    short: "{}",
+    options: [
+      { value: 0, label: "No limit" },
+      { value: 1, label: "Pot limit" },
+    ],
+    default: betting,
+  },
   moveTime(24),
 ];
 
@@ -119,31 +247,213 @@ const poker = (betting: number): Setting[] => [
 // and whether balls knock into each other. `items` is a bit per item in POWERS' order.
 const GENERATED = { key: "course", is: [0] } as const;
 const golf = (holes: number): Setting[] => [
-  { key: "course", label: "Course", short: "{}", options: [{ value: 0, label: "Generated" }, { value: 1, label: "Bumper Plains" }, { value: 2, label: "Cold Start" }], default: 0 },
-  { key: "holes", label: "Holes", short: "{} holes", options: [{ value: 3, label: "3" }, { value: 6, label: "6" }, { value: 9, label: "9" }, { value: 18, label: "18" }], default: holes },
-  { key: "terrain", label: "Terrain", short: "{}", options: [{ value: 0, label: "Grass" }, { value: 1, label: "Ice" }, { value: 2, label: "Both" }], default: 0, when: GENERATED },
-  { key: "style", label: "Holes like", short: "{} holes", options: [{ value: 0, label: "Mini golf" }, { value: 1, label: "Fairways" }, { value: 2, label: "Both" }], default: 2, when: GENERATED },
-  { key: "hazards", label: "Hazards", short: "{} hazards", options: [{ value: 0, label: "Few" }, { value: 1, label: "Some" }, { value: 2, label: "Lots" }], default: 1, when: GENERATED },
+  {
+    key: "course",
+    label: "Course",
+    short: "{}",
+    options: [
+      { value: 0, label: "Generated" },
+      { value: 1, label: "Bumper Plains" },
+      { value: 2, label: "Cold Start" },
+    ],
+    default: 0,
+  },
+  {
+    key: "holes",
+    label: "Holes",
+    short: "{} holes",
+    options: [
+      { value: 3, label: "3" },
+      { value: 6, label: "6" },
+      { value: 9, label: "9" },
+      { value: 18, label: "18" },
+    ],
+    default: holes,
+  },
+  {
+    key: "terrain",
+    label: "Terrain",
+    short: "{}",
+    options: [
+      { value: 0, label: "Grass" },
+      { value: 1, label: "Ice" },
+      { value: 2, label: "Both" },
+    ],
+    default: 0,
+    when: GENERATED,
+  },
+  {
+    key: "style",
+    label: "Holes like",
+    short: "{} holes",
+    options: [
+      { value: 0, label: "Mini golf" },
+      { value: 1, label: "Fairways" },
+      { value: 2, label: "Both" },
+    ],
+    default: 2,
+    when: GENERATED,
+  },
+  {
+    key: "hazards",
+    label: "Hazards",
+    short: "{} hazards",
+    options: [
+      { value: 0, label: "Few" },
+      { value: 1, label: "Some" },
+      { value: 2, label: "Lots" },
+    ],
+    default: 1,
+    when: GENERATED,
+  },
   { key: "seed", label: "Seed", short: "Seed {}", options: [], default: 0, kind: "seed", when: GENERATED },
-  { key: "boxes", label: "Item boxes", short: "{} boxes", options: [{ value: 0, label: "None" }, { value: 1, label: "Few" }, { value: 2, label: "Normal" }, { value: 3, label: "Lots" }], default: 2 },
-  { key: "items", label: "Items", short: "{} items", options: POWERS.map((p, i) => ({ value: i, label: POWER_NAMES[p] })), default: 2 ** POWERS.length - 1, kind: "mask", when: { key: "boxes", is: [1, 2, 3] } },
-  { key: "collide", label: "Ball hits", short: "Ball hits {}", options: [{ value: 1, label: "On" }, { value: 0, label: "Off" }], default: 1 },
-  { key: "mark", label: "Safe near the cup", short: "Safe near the cup: {}", options: [{ value: 1, label: "On" }, { value: 0, label: "Off" }], default: 1, when: { key: "collide", is: [1] } },
+  {
+    key: "boxes",
+    label: "Item boxes",
+    short: "{} boxes",
+    options: [
+      { value: 0, label: "None" },
+      { value: 1, label: "Few" },
+      { value: 2, label: "Normal" },
+      { value: 3, label: "Lots" },
+    ],
+    default: 2,
+  },
+  {
+    key: "items",
+    label: "Items",
+    short: "{} items",
+    options: POWERS.map((p, i) => ({ value: i, label: POWER_NAMES[p] })),
+    default: 2 ** POWERS.length - 1,
+    kind: "mask",
+    when: { key: "boxes", is: [1, 2, 3] },
+  },
+  {
+    key: "collide",
+    label: "Ball hits",
+    short: "Ball hits {}",
+    options: [
+      { value: 1, label: "On" },
+      { value: 0, label: "Off" },
+    ],
+    default: 1,
+  },
+  {
+    key: "mark",
+    label: "Safe near the cup",
+    short: "Safe near the cup: {}",
+    options: [
+      { value: 1, label: "On" },
+      { value: 0, label: "Off" },
+    ],
+    default: 1,
+    when: { key: "collide", is: [1] },
+  },
 ];
 
 // Landlord (convex/landlord.ts): the official rules by default, then the common house rules, the speed die, and
 // the official short game. There's no time limit: turns wait, with a push every few hours.
 const LANDLORD: Setting[] = [
-  { key: "cash", label: "Starting cash", short: "{} to start", options: [1000, 1500, 2000, 2500, 3000].map((v) => ({ value: v, label: `$${v.toLocaleString("en-US")}` })), default: 1500 },
-  { key: "game", label: "Game", short: "{}", options: [{ value: 0, label: "Classic" }, { value: 1, label: "Short game" }], default: 0 },
-  { key: "rounds", label: "Rounds", short: "{} rounds", options: [{ value: 0, label: "No limit" }, { value: 10, label: "10" }, { value: 20, label: "20" }, { value: 30, label: "30" }], default: 0 },
-  { key: "auctions", label: "Auctions", short: "Auctions {}", options: [{ value: 1, label: "On" }, { value: 0, label: "Off" }], default: 1 },
-  { key: "pot", label: "Free Parking jackpot", short: "Jackpot: {}", options: [{ value: 0, label: "Off" }, { value: 1, label: "Taxes and fines" }, { value: 2, label: "Plus $500" }], default: 0 },
-  { key: "goDouble", label: "Landing on GO", short: "Landing on GO pays {}", options: [{ value: 0, label: "$200" }, { value: 1, label: "$400" }], default: 0 },
-  { key: "jailRent", label: "Rent from jail", short: "Rent from jail: {}", options: [{ value: 1, label: "Yes" }, { value: 0, label: "No" }], default: 1 },
-  { key: "firstLap", label: "Buying on the first lap", short: "First-lap buying: {}", options: [{ value: 0, label: "Yes" }, { value: 1, label: "No" }], default: 0 },
-  { key: "speed", label: "Speed die", short: "Speed die {}", options: [{ value: 0, label: "Off" }, { value: 1, label: "On" }], default: 0 },
-  { key: "limited", label: "Houses and hotels", short: "{} buildings", options: [{ value: 1, label: "32 and 12" }, { value: 0, label: "Unlimited" }], default: 1 },
+  {
+    key: "cash",
+    label: "Starting cash",
+    short: "{} to start",
+    options: [1000, 1500, 2000, 2500, 3000].map((v) => ({ value: v, label: `$${v.toLocaleString("en-US")}` })),
+    default: 1500,
+  },
+  {
+    key: "game",
+    label: "Game",
+    short: "{}",
+    options: [
+      { value: 0, label: "Classic" },
+      { value: 1, label: "Short game" },
+    ],
+    default: 0,
+  },
+  {
+    key: "rounds",
+    label: "Rounds",
+    short: "{} rounds",
+    options: [
+      { value: 0, label: "No limit" },
+      { value: 10, label: "10" },
+      { value: 20, label: "20" },
+      { value: 30, label: "30" },
+    ],
+    default: 0,
+  },
+  {
+    key: "auctions",
+    label: "Auctions",
+    short: "Auctions {}",
+    options: [
+      { value: 1, label: "On" },
+      { value: 0, label: "Off" },
+    ],
+    default: 1,
+  },
+  {
+    key: "pot",
+    label: "Free Parking jackpot",
+    short: "Jackpot: {}",
+    options: [
+      { value: 0, label: "Off" },
+      { value: 1, label: "Taxes and fines" },
+      { value: 2, label: "Plus $500" },
+    ],
+    default: 0,
+  },
+  {
+    key: "goDouble",
+    label: "Landing on GO",
+    short: "Landing on GO pays {}",
+    options: [
+      { value: 0, label: "$200" },
+      { value: 1, label: "$400" },
+    ],
+    default: 0,
+  },
+  {
+    key: "jailRent",
+    label: "Rent from jail",
+    short: "Rent from jail: {}",
+    options: [
+      { value: 1, label: "Yes" },
+      { value: 0, label: "No" },
+    ],
+    default: 1,
+  },
+  {
+    key: "firstLap",
+    label: "Buying on the first lap",
+    short: "First-lap buying: {}",
+    options: [
+      { value: 0, label: "Yes" },
+      { value: 1, label: "No" },
+    ],
+    default: 0,
+  },
+  {
+    key: "speed",
+    label: "Speed die",
+    short: "Speed die {}",
+    options: [
+      { value: 0, label: "Off" },
+      { value: 1, label: "On" },
+    ],
+    default: 0,
+  },
+  {
+    key: "limited",
+    label: "Houses and hotels",
+    short: "{} buildings",
+    options: [
+      { value: 1, label: "32 and 12" },
+      { value: 0, label: "Unlimited" },
+    ],
+    default: 1,
+  },
 ];
 
 // What every mode has. `draws`: players can offer each other a draw (two-player only). `wants`: how a push
@@ -242,7 +552,19 @@ export const MODES = {
     blurb: "Everyone on at once, with a timer on every turn.",
     settings: [
       ...SCRABBLE,
-      { key: "turnTime", label: "Turn timer", short: "{} turns", options: [{ value: 30, label: "30s" }, { value: 60, label: "1m" }, { value: 90, label: "90s" }, { value: 120, label: "2m" }, { value: 180, label: "3m" }], default: 90 },
+      {
+        key: "turnTime",
+        label: "Turn timer",
+        short: "{} turns",
+        options: [
+          { value: 30, label: "30s" },
+          { value: 60, label: "1m" },
+          { value: 90, label: "90s" },
+          { value: 120, label: "2m" },
+          { value: 180, label: "3m" },
+        ],
+        default: 90,
+      },
     ],
   },
   "poker:holdem": {
@@ -302,12 +624,25 @@ export const MODES = {
     minPlayers: 2,
     board: "golf",
     slug: "turns",
-    blurb: "One course, one shot at a time: whoever's farthest from the cup goes next. Knock each other about, and keep your items from hole to hole.",
+    blurb:
+      "One course, one shot at a time: whoever's farthest from the cup goes next. Knock each other about, and keep your items from hole to hole.",
     wants: "a round of golf",
     settings: [
       // Six holes and four hours a shot, so a round of one shot at a time fits in about a day.
       ...golf(6),
-      { key: "shotTime", label: "Time to shoot", short: "{} to shoot", options: [{ value: 0, label: "No limit" }, { value: 60, label: "1 hour" }, { value: 240, label: "4 hours" }, { value: 480, label: "8 hours" }, { value: 1440, label: "1 day" }], default: 0 },
+      {
+        key: "shotTime",
+        label: "Time to shoot",
+        short: "{} to shoot",
+        options: [
+          { value: 0, label: "No limit" },
+          { value: 60, label: "1 hour" },
+          { value: 240, label: "4 hours" },
+          { value: 480, label: "8 hours" },
+          { value: 1440, label: "1 day" },
+        ],
+        default: 0,
+      },
     ],
   },
   "golf:live": {
@@ -319,11 +654,22 @@ export const MODES = {
     minPlayers: 2,
     board: "golf",
     slug: "live",
-    blurb: "Everyone on the same hole at once. Shoot whenever you like, knock each other into the water, and sink it before the hole clock runs out.",
+    blurb:
+      "Everyone on the same hole at once. Shoot whenever you like, knock each other into the water, and sink it before the hole clock runs out.",
     wants: "a live round of golf",
     settings: [
       ...golf(9),
-      { key: "holeTime", label: "Hole clock", short: "{} a hole", options: [{ value: 2, label: "2 min" }, { value: 3, label: "3 min" }, { value: 5, label: "5 min" }], default: 3 },
+      {
+        key: "holeTime",
+        label: "Hole clock",
+        short: "{} a hole",
+        options: [
+          { value: 2, label: "2 min" },
+          { value: 3, label: "3 min" },
+          { value: 5, label: "5 min" },
+        ],
+        default: 3,
+      },
     ],
   },
   "landlord:classic": {
@@ -401,7 +747,11 @@ export const settingLabel = (mode: string, key: string, value: number) => {
   if (s?.kind === "seed") return value ? String(value) : "Random";
   if (s?.kind === "mask") {
     const on = s.options.filter((o) => maskOn(value, o.value)).length;
-    return on === s.options.length ? "All" : on === 1 ? s.options.find((o) => maskOn(value, o.value))!.label : `${on} of ${s.options.length}`;
+    return on === s.options.length
+      ? "All"
+      : on === 1
+        ? s.options.find((o) => maskOn(value, o.value))!.label
+        : `${on} of ${s.options.length}`;
   }
   return s?.options.find((o) => o.value === value)?.label ?? String(value);
 };

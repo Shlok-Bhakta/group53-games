@@ -52,7 +52,8 @@ function check(g: Game, before: MonoState) {
       if (group.some((j) => s.props[j]!.owner !== prop.owner)) fail("Buildings without the whole group");
       if (group.some((j) => s.props[j]!.mortgaged)) fail("Buildings on a mortgaged group");
       const hs = group.map((j) => s.props[j]!.houses);
-      if (Math.max(...hs) - Math.min(...hs) > 1 && !(s.rules.short && Math.max(...hs) === 5 && Math.min(...hs) === 3)) fail(`Uneven buildings ${hs}`);
+      if (Math.max(...hs) - Math.min(...hs) > 1 && !(s.rules.short && Math.max(...hs) === 5 && Math.min(...hs) === 3))
+        fail(`Uneven buildings ${hs}`);
     }
     if (prop.owner < 0 && (prop.mortgaged || prop.houses)) fail("The bank's property is mortgaged or built on");
   }
@@ -68,7 +69,8 @@ function check(g: Game, before: MonoState) {
     // interest on what they got.
     if (s.players[s.current].out && s.phase.k !== "auction" && s.phase.k !== "debt") fail("An out player's turn");
     if (s.phase.k === "auction" && s.phase.leader >= 0 && !s.phase.in.includes(s.phase.leader)) fail("Auction leader dropped");
-    if (s.phase.k === "debt" && s.phase.from >= 0 && s.players[s.phase.from].cash >= s.phase.amount) fail("A debt left unpaid that could be paid");
+    if (s.phase.k === "debt" && s.phase.from >= 0 && s.players[s.phase.from].cash >= s.phase.amount)
+      fail("A debt left unpaid that could be paid");
     if (alive(s).length < 2) fail("One left and not over");
   }
   for (const t of s.trades) if (s.players[t.from].out || s.players[t.to].out) fail("A trade with someone out");

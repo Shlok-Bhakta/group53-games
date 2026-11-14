@@ -26,7 +26,10 @@ const api = anyApi;
 
 const stats = { rtMove: [], propagation: [], classicMove: [], errors: new Map(), rejected: 0, finished: 0, results: new Map() };
 const err = (label, e) => {
-  const msg = `${label}: ${(e?.message ?? String(e)).split("\n")[0].replace(/\[Request ID: \w+\] /, "").slice(0, 120)}`;
+  const msg = `${label}: ${(e?.message ?? String(e))
+    .split("\n")[0]
+    .replace(/\[Request ID: \w+\] /, "")
+    .slice(0, 120)}`;
   stats.errors.set(msg, (stats.errors.get(msg) ?? 0) + 1);
 };
 const pct = (xs, p) => {
@@ -71,8 +74,15 @@ async function player(name) {
     if (!best || rtt < best.rtt) best = { rtt, offset: server - (sent + rtt / 2) };
   }
   const quiet = process.argv.includes("--no-presence");
-  const beat = quiet ? null : setInterval(() => client.mutation(api.presence.heartbeat, { path: "/load", online: true }).catch((e) => err("heartbeat", e)), 10_000);
-  const tap = quiet ? null : setInterval(() => client.mutation(api.presence.tap, { x: Math.random(), y: Math.random() * 800, path: "/load" }).catch((e) => err("tap", e)), 900 + Math.random() * 600);
+  const beat = quiet
+    ? null
+    : setInterval(() => client.mutation(api.presence.heartbeat, { path: "/load", online: true }).catch((e) => err("heartbeat", e)), 10_000);
+  const tap = quiet
+    ? null
+    : setInterval(
+        () => client.mutation(api.presence.tap, { x: Math.random(), y: Math.random() * 800, path: "/load" }).catch((e) => err("tap", e)),
+        900 + Math.random() * 600,
+      );
   return { ...p, name, client, offset: best.offset, timers: [beat, tap].filter(Boolean) };
 }
 
@@ -124,8 +134,13 @@ async function realtimeGame(i, deadline) {
       const moves = mine.flatMap((piece) => legalTargets(state.pieces, piece).map((to) => ({ piece, to })));
       if (!moves.length) continue;
       // Lean towards captures so games actually end.
-      const captures = moves.filter(({ to }) => state.pieces.some((x) => x.color !== me && x.status !== "moving" && x.x === to[0] && x.y === to[1]));
-      const { piece, to } = (captures.length && Math.random() < 0.8 ? captures : moves)[Math.floor(Math.random() * (captures.length && Math.random() < 0.8 ? captures.length : moves.length))] ?? moves[0];
+      const captures = moves.filter(({ to }) =>
+        state.pieces.some((x) => x.color !== me && x.status !== "moving" && x.x === to[0] && x.y === to[1]),
+      );
+      const { piece, to } =
+        (captures.length && Math.random() < 0.8 ? captures : moves)[
+          Math.floor(Math.random() * (captures.length && Math.random() < 0.8 ? captures.length : moves.length))
+        ] ?? moves[0];
       const t0 = Date.now();
       // Record before sending: the opponent can hear about the move before the mover's own reply lands.
       sentAt.set(`${me}:${piece.id}:${to[0]}:${to[1]}`, t0);
@@ -185,13 +200,20 @@ async function classicGame(i, deadline) {
 const started = Date.now();
 const deadline = started + SECONDS * 1000;
 // Last line of defence: whatever happens, clean up and switch test helpers off.
-const watchdog = setTimeout(async () => {
-  console.log("WATCHDOG: run overran, cleaning up");
-  try { await within("cleanup", admin.mutation(api.testing.removeTestData, {}), 30_000); } catch (e) { console.log("cleanup failed", e.message); }
-  if (PROD) execFileSync("npx", ["convex", "env", "remove", "ALLOW_TEST_HELPERS"], { env, stdio: "ignore" });
-  else stopBackend(target.name);
-  process.exit(1);
-}, (SECONDS + 120) * 1000);
+const watchdog = setTimeout(
+  async () => {
+    console.log("WATCHDOG: run overran, cleaning up");
+    try {
+      await within("cleanup", admin.mutation(api.testing.removeTestData, {}), 30_000);
+    } catch (e) {
+      console.log("cleanup failed", e.message);
+    }
+    if (PROD) execFileSync("npx", ["convex", "env", "remove", "ALLOW_TEST_HELPERS"], { env, stdio: "ignore" });
+    else stopBackend(target.name);
+    process.exit(1);
+  },
+  (SECONDS + 120) * 1000,
+);
 try {
   console.log(`Running ${GAMES} real-time and ${CLASSIC} classic games for ${SECONDS}s (${(GAMES + CLASSIC) * 2} players)...`);
   await Promise.all([
@@ -221,8 +243,12 @@ try {
   else stopBackend(target.name);
 
   console.log(`\n=== Load test (${PROD ? "prod" : "local"}) ===`);
-  console.log(`real-time moves:   ${stats.rtMove.length}  latency p50 ${pct(stats.rtMove, 50)}ms  p95 ${pct(stats.rtMove, 95)}ms  max ${pct(stats.rtMove, 100)}ms`);
-  console.log(`reach opponent:    ${stats.propagation.length}  p50 ${pct(stats.propagation, 50)}ms  p95 ${pct(stats.propagation, 95)}ms  max ${pct(stats.propagation, 100)}ms`);
+  console.log(
+    `real-time moves:   ${stats.rtMove.length}  latency p50 ${pct(stats.rtMove, 50)}ms  p95 ${pct(stats.rtMove, 95)}ms  max ${pct(stats.rtMove, 100)}ms`,
+  );
+  console.log(
+    `reach opponent:    ${stats.propagation.length}  p50 ${pct(stats.propagation, 50)}ms  p95 ${pct(stats.propagation, 95)}ms  max ${pct(stats.propagation, 100)}ms`,
+  );
   console.log(`classic moves:     ${stats.classicMove.length}  p50 ${pct(stats.classicMove, 50)}ms  p95 ${pct(stats.classicMove, 95)}ms`);
   console.log(`real-time results: ${[...stats.results].map(([k, v]) => `${k} ${v}`).join(", ")}  (${stats.finished}/${GAMES} finished)`);
   console.log(`server conflict retries in logs: ${occ}`);

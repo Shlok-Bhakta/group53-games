@@ -47,7 +47,13 @@ export function ConfirmButton({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>{keep}</AlertDialogCancel>
-          <Button variant={tone} size="lg" disabled={pending} aria-busy={pending} onClick={() => void run(async () => (await onConfirm(), setOpen(false)))}>
+          <Button
+            variant={tone}
+            size="lg"
+            disabled={pending}
+            aria-busy={pending}
+            onClick={() => void run(async () => (await onConfirm(), setOpen(false)))}
+          >
             {pending && <SpinnerGapIcon className="animate-spin" weight="bold" />}
             {confirm}
           </Button>

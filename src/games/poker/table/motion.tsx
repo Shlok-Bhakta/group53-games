@@ -21,14 +21,30 @@ export function toward(el: HTMLElement, selector: string) {
 // A card dealt to where it belongs. It's the real card from the first frame, in its final place, and flies
 // there from the deck, so there's nothing to swap at the end of the flight. The rotation of a fan belongs to
 // whatever's inside.
-export function Flying({ width, fly, spin = -14, className, children }: { width: number; fly: boolean; spin?: number; className?: string; children: ReactNode }) {
+export function Flying({
+  width,
+  fly,
+  spin = -14,
+  className,
+  children,
+}: {
+  width: number;
+  fly: boolean;
+  spin?: number;
+  className?: string;
+  children: ReactNode;
+}) {
   const ref = useRef<HTMLSpanElement>(null);
   const still = useReducedMotion();
   useLayoutEffect(() => {
     if (!fly || still || !ref.current) return;
     const from = toward(ref.current, "[data-deck]");
     if (!from) return;
-    const flight = animate(ref.current, { x: [from.x, 0], y: [from.y, 0], scale: [DECK_W / width, 1], rotate: [spin, 0] }, { duration: 0.34 * PACE, ease: FLIGHT });
+    const flight = animate(
+      ref.current,
+      { x: [from.x, 0], y: [from.y, 0], scale: [DECK_W / width, 1], rotate: [spin, 0] },
+      { duration: 0.34 * PACE, ease: FLIGHT },
+    );
     return () => flight.cancel();
     // Only ever on arriving.
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

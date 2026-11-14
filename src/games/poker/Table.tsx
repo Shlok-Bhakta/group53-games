@@ -69,24 +69,53 @@ export function Table({
           <Deck hand={s.hand} shuffling={show.dealtCards === 0} />
         </div>
         <Board show={show} rung={rung} />
-        <p aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-[44px] whitespace-nowrap text-center text-caption font-bold tracking-[0.14em] opacity-20">
+        <p
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 bottom-[44px] whitespace-nowrap text-center text-caption font-bold tracking-[0.14em] opacity-20"
+        >
           FORCE PUSH PAYS 2 TO 1
         </p>
       </div>
 
       <div className="relative z-[1] -mt-[18px] flex justify-center gap-1 px-1.5">
         {others.map((seat) => (
-          <Seat key={seat} player={match.players[seat]} seat={seat} show={show} avatar={avatar} tight={crowd >= 6} room={Math.min(92, 345 / Math.max(1, crowd) - 4)} active={match.status === "active"} rung={rung} />
+          <Seat
+            key={seat}
+            player={match.players[seat]}
+            seat={seat}
+            show={show}
+            avatar={avatar}
+            tight={crowd >= 6}
+            room={Math.min(92, 345 / Math.max(1, crowd) - 4)}
+            active={match.status === "active"}
+            rung={rung}
+          />
         ))}
       </div>
 
       <AnimatePresence>{show.spell && <SpellOut key={show.spell.word} spell={show.spell} />}</AnimatePresence>
-      {show.paying?.map(({ seat }) => Array.from({ length: 5 }, (_, i) => <PayChip key={`${s.hand}:${seat}:${i}`} seat={seat} i={i} color={seatColor(match.players[seat])} />))}
+      {show.paying?.map(({ seat }) =>
+        Array.from({ length: 5 }, (_, i) => (
+          <PayChip key={`${s.hand}:${seat}:${i}`} seat={seat} i={i} color={seatColor(match.players[seat])} />
+        )),
+      )}
 
       {me ? (
         <>
           <MyTile match={match} player={me} seat={mySeat} show={show} picking={picking} />
-          {!over && <MyHand show={show} seat={mySeat} color={seatColor(me)} cards={cards} picking={picking} swap={swap} onPick={onPick} rung={rung} madeName={show.folded[mySeat] || isOut(s, mySeat) ? null : (made?.name ?? null)} />}
+          {!over && (
+            <MyHand
+              show={show}
+              seat={mySeat}
+              color={seatColor(me)}
+              cards={cards}
+              picking={picking}
+              swap={swap}
+              onPick={onPick}
+              rung={rung}
+              madeName={show.folded[mySeat] || isOut(s, mySeat) ? null : (made?.name ?? null)}
+            />
+          )}
         </>
       ) : (
         <div className="mt-2.5 flex h-11 items-center justify-center">
@@ -104,7 +133,13 @@ function SpellOut({ spell }: { spell: Spell }) {
   let at = 0;
   const lastAt = spell.word.replace(/ /g, "").length - 1;
   return (
-    <motion.div role="img" aria-label={spell.word} className="pointer-events-none absolute inset-x-2 top-[64px] z-20 flex flex-wrap justify-center gap-x-2 gap-y-1 font-display" exit={{ opacity: 0 }} transition={{ duration: 0.2 * PACE }}>
+    <motion.div
+      role="img"
+      aria-label={spell.word}
+      className="pointer-events-none absolute inset-x-2 top-[64px] z-20 flex flex-wrap justify-center gap-x-2 gap-y-1 font-display"
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 * PACE }}
+    >
       {words.map((word) => (
         <span key={word} className="flex gap-1">
           {[...word].map((ch, k) => {
@@ -113,7 +148,14 @@ function SpellOut({ spell }: { spell: Spell }) {
             return (
               <motion.span
                 key={k}
-                className={cn("grid place-items-center rounded-sm shadow-md", hit ? "bg-[var(--tile-hit)] text-[var(--tile-hit-ink)]" : spell.tone === "green" ? "bg-[var(--tile-green)] text-[var(--tile-ink)]" : "bg-[var(--tile-yellow)] text-[var(--tile-yellow-ink,var(--tile-ink))]")}
+                className={cn(
+                  "grid place-items-center rounded-sm shadow-md",
+                  hit
+                    ? "bg-[var(--tile-hit)] text-[var(--tile-hit-ink)]"
+                    : spell.tone === "green"
+                      ? "bg-[var(--tile-green)] text-[var(--tile-ink)]"
+                      : "bg-[var(--tile-yellow)] text-[var(--tile-yellow-ink,var(--tile-ink))]",
+                )}
                 style={{ width: size, height: size, fontSize: size * 0.58, rotate: hit ? -8 : 0 }}
                 initial={{ opacity: 0, y: -28, scale: 0.8 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}

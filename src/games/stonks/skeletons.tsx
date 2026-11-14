@@ -168,7 +168,13 @@ export function StockSkeleton() {
         <Skeleton className={`${S.segmented} w-full rounded-md`} />
       </section>
       <StatsSkeleton />
-      <div className="sticky bottom-0 -mx-4 flex gap-2.5 bg-background px-4 pt-5" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)", marginBottom: "calc(-1 * (env(safe-area-inset-bottom) + 16px))" }}>
+      <div
+        className="sticky bottom-0 -mx-4 flex gap-2.5 bg-background px-4 pt-5"
+        style={{
+          paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)",
+          marginBottom: "calc(-1 * (env(safe-area-inset-bottom) + 16px))",
+        }}
+      >
         <Skeleton className="h-14 flex-1 rounded-lg" />
         <Skeleton className="h-14 flex-1 rounded-lg" />
       </div>

@@ -31,7 +31,12 @@ export function Rack({
   const items: (Tile | null)[] = [...shown];
   if (slot !== null) items.splice(Math.min(slot, items.length), 0, null);
   return (
-    <div ref={ref} className="grid h-[62px] items-center gap-1.5 rounded-lg bg-muted/60 px-2" style={{ gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))` }} aria-label="Your tiles">
+    <div
+      ref={ref}
+      className="grid h-[62px] items-center gap-1.5 rounded-lg bg-muted/60 px-2"
+      style={{ gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))` }}
+      aria-label="Your tiles"
+    >
       {items.map((t, i) =>
         t === null ? (
           <span key="slot" className="aspect-square rounded-sm border-2 border-dashed border-primary/50" />
@@ -50,7 +55,12 @@ export function Rack({
             onPointerDown={(e) => onDown(t.id, e)}
           >
             {/* Shuffling makes every tile hop; a picked-up tile jiggles until you put it somewhere. */}
-            <motion.span key={hop} className="grid w-full place-items-center" animate={hop ? { y: [0, -14, 0] } : undefined} transition={{ duration: 0.35, delay: i * 0.035, ease: "easeOut" }}>
+            <motion.span
+              key={hop}
+              className="grid w-full place-items-center"
+              animate={hop ? { y: [0, -14, 0] } : undefined}
+              transition={{ duration: 0.35, delay: i * 0.035, ease: "easeOut" }}
+            >
               <motion.span
                 className="grid w-full place-items-center"
                 animate={selected === t.id ? { rotate: [0, -5, 5, -4, 4, 0] } : { rotate: 0 }}
@@ -65,9 +75,11 @@ export function Rack({
                     aspectRatio: "1",
                     // Keeps the tile's own edge and shadow, and adds the ring.
                     boxShadow:
-                      selected === t.id ? "inset 0 -3px 0 #cdb07c, 0 0 0 3px var(--primary), 0 8px 14px rgb(0 0 0 / 0.28)"
-                      : swapping?.includes(t.id) ? "inset 0 -3px 0 #cdb07c, 0 0 0 3px var(--tile-hit)"
-                      : undefined,
+                      selected === t.id
+                        ? "inset 0 -3px 0 #cdb07c, 0 0 0 3px var(--primary), 0 8px 14px rgb(0 0 0 / 0.28)"
+                        : swapping?.includes(t.id)
+                          ? "inset 0 -3px 0 #cdb07c, 0 0 0 3px var(--tile-hit)"
+                          : undefined,
                   }}
                 />
               </motion.span>

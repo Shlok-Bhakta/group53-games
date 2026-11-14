@@ -1,10 +1,6 @@
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
-import {
-  CheckIcon,
-  DiceFiveIcon,
-  SlidersHorizontalIcon,
-} from "@phosphor-icons/react";
+import { CheckIcon, DiceFiveIcon, SlidersHorizontalIcon } from "@phosphor-icons/react";
 import {
   MODES,
   SEED_MAX,
@@ -37,30 +33,18 @@ function SettingsFields({
   onChange: (next: Settings) => void;
   preview?: ReactNode;
 }) {
-  const defs = (MODES[mode].settings as readonly Setting[]).filter((s) =>
-    settingApplies(s, value),
-  );
+  const defs = (MODES[mode].settings as readonly Setting[]).filter((s) => settingApplies(s, value));
   const after = (defs.find((s) => s.kind === "seed") ?? defs[0])?.key;
   return (
     <div className="flex flex-col gap-4">
       {defs.map((s) => (
         <Fragment key={s.key}>
           <div className="flex flex-col gap-1.5">
-            <span className="px-1 text-footnote font-semibold text-muted-foreground">
-              {s.label}
-            </span>
+            <span className="px-1 text-footnote font-semibold text-muted-foreground">{s.label}</span>
             {s.kind === "seed" ? (
-              <SeedField
-                label={s.label}
-                value={value[s.key] ?? 0}
-                onChange={(v) => onChange({ ...value, [s.key]: v })}
-              />
+              <SeedField label={s.label} value={value[s.key] ?? 0} onChange={(v) => onChange({ ...value, [s.key]: v })} />
             ) : s.kind === "mask" ? (
-              <MaskField
-                setting={s}
-                value={value[s.key] ?? s.default}
-                onChange={(v) => onChange({ ...value, [s.key]: v })}
-              />
+              <MaskField setting={s} value={value[s.key] ?? s.default} onChange={(v) => onChange({ ...value, [s.key]: v })} />
             ) : (
               <Segmented
                 label={s.label}
@@ -82,22 +66,11 @@ function SettingsFields({
 
 // A seed: blank (or 0) rolls a new one when the game's made; type one in to play the same holes again.
 // Changes go out when you're done typing, not on every key.
-function SeedField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-}) {
+function SeedField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
   const [text, setText] = useState(value ? String(value) : "");
   useEffect(() => setText(value ? String(value) : ""), [value]);
   const commit = () => {
-    const n = Math.min(
-      SEED_MAX,
-      Math.max(0, Math.floor(Number(text.replace(/\D/g, "")) || 0)),
-    );
+    const n = Math.min(SEED_MAX, Math.max(0, Math.floor(Number(text.replace(/\D/g, "")) || 0)));
     if (n !== value) onChange(n);
     else setText(n ? String(n) : "");
   };
@@ -111,9 +84,7 @@ function SeedField({
         value={text}
         onChange={(e) => setText(e.target.value.replace(/\D/g, "").slice(0, 6))}
         onBlur={commit}
-        onKeyDown={(e) =>
-          e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()
-        }
+        onKeyDown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()}
         className="h-11 min-w-0 flex-1 rounded-md bg-muted px-3 font-display text-body tabular-nums outline-none placeholder:font-sans placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
       />
       <button
@@ -132,26 +103,14 @@ function SeedField({
 }
 
 // Tick any of them; at least one stays on. "All" turns everything back on.
-function MaskField({
-  setting,
-  value,
-  onChange,
-}: {
-  setting: Setting;
-  value: number;
-  onChange: (v: number) => void;
-}) {
+function MaskField({ setting, value, onChange }: { setting: Setting; value: number; onChange: (v: number) => void }) {
   const all = 2 ** setting.options.length - 1;
   const toggle = (bit: number) => {
     const next = maskOn(value, bit) ? value - 2 ** bit : value + 2 ** bit;
     if (next > 0) onChange(next);
   };
   return (
-    <div
-      className="flex flex-wrap gap-1.5"
-      role="group"
-      aria-label={setting.label}
-    >
+    <div className="flex flex-wrap gap-1.5" role="group" aria-label={setting.label}>
       <button
         type="button"
         aria-pressed={value === all}
@@ -191,8 +150,7 @@ function MaskField({
 // remembered.
 const remembered = (mode: ModeKey, s: Settings) => {
   const out = changedSettings(mode, s);
-  for (const d of MODES[mode].settings as readonly Setting[])
-    if (d.kind === "seed") delete out[d.key];
+  for (const d of MODES[mode].settings as readonly Setting[]) if (d.kind === "seed") delete out[d.key];
   return out;
 };
 
@@ -206,10 +164,7 @@ export function useModeSettings(mode: ModeKey) {
   const [value, setValue] = useState<Settings>(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey) ?? "{}");
-      return settingsOf(
-        mode,
-        linked ? { ...saved, ...JSON.parse(linked) } : saved,
-      );
+      return settingsOf(mode, linked ? { ...saved, ...JSON.parse(linked) } : saved);
     } catch {
       return settingsOf(mode);
     }
@@ -248,20 +203,11 @@ export function SettingsSection({
         defaultOpen={defaultOpen}
         onOpenChange={setOpen}
         trailing={
-          summary.length > 0 && (
-            <span className="max-w-[55%] truncate text-footnote font-semibold text-primary">
-              {summary.join(", ")}
-            </span>
-          )
+          summary.length > 0 && <span className="max-w-[55%] truncate text-footnote font-semibold text-primary">{summary.join(", ")}</span>
         }
       >
         <div className="pb-2 pt-2">
-          <SettingsFields
-            mode={mode}
-            value={value}
-            onChange={onChange}
-            preview={open ? preview : undefined}
-          />
+          <SettingsFields mode={mode} value={value} onChange={onChange} preview={open ? preview : undefined} />
         </div>
       </Disclosure>
       {!open && preview && <div className="pt-4">{preview}</div>}

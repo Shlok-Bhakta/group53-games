@@ -19,7 +19,11 @@ export function WaitDock({ match, state, seat }: { match: MatchView; state: Poke
       match={match}
       variant="card"
       size="dock"
-      detail={match.players.length > 2 ? "You fold, your chips leave with you, and you place below everyone still playing." : "You fold and your opponent gets the win."}
+      detail={
+        match.players.length > 2
+          ? "You fold, your chips leave with you, and you place below everyone still playing."
+          : "You fold and your opponent gets the win."
+      }
     />
   );
   const inIt = state.dealt[seat] && !state.folded[seat];
@@ -38,9 +42,19 @@ export function WaitDock({ match, state, seat }: { match: MatchView; state: Poke
     { kind: "checkfold" as const, amount: 0, label: "Check/Fold", Icon: HandPalmIcon as Icon },
     owe === 0
       ? { kind: "check" as const, amount: 0, label: "Check", Icon: HandTapIcon as Icon }
-      : { kind: "call" as const, amount: owe, label: owe >= state.stacks[seat] ? "Call all in" : `Call ${chips(owe)}`, Icon: CoinsIcon as Icon },
+      : {
+          kind: "call" as const,
+          amount: owe,
+          label: owe >= state.stacks[seat] ? "Call all in" : `Call ${chips(owe)}`,
+          Icon: CoinsIcon as Icon,
+        },
   ];
-  const armed = (o: (typeof options)[number]) => !!plan && plan.hand === state.hand && plan.street === state.street && plan.kind === o.kind && (o.kind !== "call" || plan.amount === o.amount);
+  const armed = (o: (typeof options)[number]) =>
+    !!plan &&
+    plan.hand === state.hand &&
+    plan.street === state.street &&
+    plan.kind === o.kind &&
+    (o.kind !== "call" || plan.amount === o.amount);
   return (
     <div className="grid grid-cols-3 gap-2.5">
       {options.map((o) => {
@@ -52,7 +66,9 @@ export function WaitDock({ match, state, seat }: { match: MatchView; state: Poke
             size="dock"
             aria-pressed={on}
             icon={<o.Icon weight={on ? "fill" : "bold"} />}
-            onClick={() => setPlan({ id: match._id, hand: state.hand, street: state.street, ...(on ? {} : { kind: o.kind, amount: o.amount }) })}
+            onClick={() =>
+              setPlan({ id: match._id, hand: state.hand, street: state.street, ...(on ? {} : { kind: o.kind, amount: o.amount }) })
+            }
           >
             {o.label}
           </AsyncButton>

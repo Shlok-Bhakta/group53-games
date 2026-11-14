@@ -49,7 +49,11 @@ export function HostedGame({ game, title }: { game: string; title: string }) {
           sandbox="allow-scripts allow-same-origin"
           allow="autoplay; fullscreen"
           className="absolute inset-x-0 w-full border-0"
-          style={{ top: TOP_CLEAR, bottom: "env(safe-area-inset-bottom)", height: `calc(100% - (${TOP_CLEAR}) - env(safe-area-inset-bottom))` }}
+          style={{
+            top: TOP_CLEAR,
+            bottom: "env(safe-area-inset-bottom)",
+            height: `calc(100% - (${TOP_CLEAR}) - env(safe-area-inset-bottom))`,
+          }}
         />
       )}
       {!ready && (

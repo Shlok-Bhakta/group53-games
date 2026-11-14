@@ -69,7 +69,13 @@ export function Home() {
                   key={m._id}
                   match={m}
                   meId={meId}
-                  status={m.status === "waiting" ? <Chip tone="quiet">{m.players.length > 1 || m.invited.length === 0 ? "Open" : "Sent"}</Chip> : <TurnChip match={m} meId={meId} />}
+                  status={
+                    m.status === "waiting" ? (
+                      <Chip tone="quiet">{m.players.length > 1 || m.invited.length === 0 ? "Open" : "Sent"}</Chip>
+                    ) : (
+                      <TurnChip match={m} meId={meId} />
+                    )
+                  }
                 />
               ))}
             </Section>
@@ -77,7 +83,13 @@ export function Home() {
           {inbox.watch.length > 0 && (
             <Section title="Happening now">
               {inbox.watch.map((m) => (
-                <MatchRow key={m._id} match={m} meId={meId} vs status={<Chip tone={MODES[m.mode as keyof typeof MODES]?.kind === "realtime" ? "live" : "quiet"}>Watch</Chip>} />
+                <MatchRow
+                  key={m._id}
+                  match={m}
+                  meId={meId}
+                  vs
+                  status={<Chip tone={MODES[m.mode as keyof typeof MODES]?.kind === "realtime" ? "live" : "quiet"}>Watch</Chip>}
+                />
               ))}
             </Section>
           )}
@@ -136,8 +148,15 @@ function Stats() {
 
 function StatCard({ to, label, value, delay, children }: { to: string; label: string; value: number; delay: number; children: ReactNode }) {
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", bounce: 0, duration: 0.4, delay }}>
-      <Link to={to} className="flex min-h-[88px] flex-col justify-between rounded-lg bg-card p-3.5 transition-[transform,background-color] duration-100 ease-out active:scale-[0.97] active:bg-muted">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: "spring", bounce: 0, duration: 0.4, delay }}
+    >
+      <Link
+        to={to}
+        className="flex min-h-[88px] flex-col justify-between rounded-lg bg-card p-3.5 transition-[transform,background-color] duration-100 ease-out active:scale-[0.97] active:bg-muted"
+      >
         <span className="truncate text-footnote font-semibold text-muted-foreground">{label}</span>
         <span className="flex items-end justify-between gap-2">
           <span className="font-display text-title tabular-nums">{value}</span>

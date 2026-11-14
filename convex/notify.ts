@@ -26,8 +26,14 @@ export async function notify(ctx: MutationCtx, userId: Id<"users">, push: Push) 
 // The number on the app icon: games where it's my move plus challenges waiting for an answer. Pushes carry
 // it so the icon updates while the app is closed; the open app keeps it current from matches.attention.
 export async function badgeCount(ctx: MutationCtx, userId: Id<"users">) {
-  const active = await ctx.db.query("matches").withIndex("by_status", (q) => q.eq("status", "active")).collect();
-  const waiting = await ctx.db.query("matches").withIndex("by_status", (q) => q.eq("status", "waiting")).collect();
+  const active = await ctx.db
+    .query("matches")
+    .withIndex("by_status", (q) => q.eq("status", "active"))
+    .collect();
+  const waiting = await ctx.db
+    .query("matches")
+    .withIndex("by_status", (q) => q.eq("status", "waiting"))
+    .collect();
   const myTurn = active.filter((m) => m.turn === userId).length;
   const invites = waiting.filter((m) => m.invited.includes(userId) && !m.players.some((p) => p.userId === userId)).length;
   return myTurn + invites;
@@ -37,7 +43,12 @@ export async function badgeCount(ctx: MutationCtx, userId: Id<"users">) {
 export const matchTag = (match: { _id: string }) => `match:${match._id}`;
 
 // A push about a game, opening it (or `url`).
-export async function notifyMatch(ctx: MutationCtx, userId: Id<"users">, match: { _id: string; mode: string }, push: { title: string; body: string; url?: string }) {
+export async function notifyMatch(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  match: { _id: string; mode: string },
+  push: { title: string; body: string; url?: string },
+) {
   await notify(ctx, userId, { title: push.title, body: push.body, url: push.url ?? matchPath(match), tag: matchTag(match) });
 }
 

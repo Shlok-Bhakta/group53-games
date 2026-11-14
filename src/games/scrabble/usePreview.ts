@@ -5,7 +5,17 @@ import { evaluate, type Placed, type Placement, type Rules, type Tile } from "..
 import { sfx } from "@/sound";
 
 // The live preview of what I've laid out: its words, its score, and whether the dictionary knows them.
-export function usePreview({ placed, rack, tiles, rules }: { placed: Placement[]; rack: Tile[] | null | undefined; tiles: Placed[]; rules: Rules }) {
+export function usePreview({
+  placed,
+  rack,
+  tiles,
+  rules,
+}: {
+  placed: Placement[];
+  rack: Tile[] | null | undefined;
+  tiles: Placed[];
+  rules: Rules;
+}) {
   const evaluation = useMemo(() => (placed.length && rack ? evaluate(tiles, placed, rack, rules) : null), [placed, rack, tiles, rules]);
   const words = evaluation?.ok ? evaluation.words.map((w) => w.word) : [];
   const unknown = useQuery(api.scrabble.check, words.length ? { words } : "skip");

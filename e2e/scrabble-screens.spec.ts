@@ -8,7 +8,17 @@ for (const scheme of ["dark", "light"] as const) {
   test(`scrabble screens ${scheme}`, async ({ browser }) => {
     const names = ["WashableBowl700", "chrisis14", "Boiler", "Wes"];
     const players = await Promise.all(names.map((n) => createPlayer(n)));
-    const ctxs = await Promise.all(players.map(() => browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: scheme })));
+    const ctxs = await Promise.all(
+      players.map(() =>
+        browser.newContext({
+          viewport: { width: 393, height: 852 },
+          deviceScaleFactor: 3,
+          isMobile: true,
+          hasTouch: true,
+          colorScheme: scheme,
+        }),
+      ),
+    );
     const pages = await Promise.all(players.map((p, i) => phone(ctxs[i], { player: p, notifications: "granted" })));
     for (const p of pages) {
       await p.goto("/");
@@ -39,7 +49,12 @@ for (const scheme of ["dark", "light"] as const) {
     // Play a few words so the board has something on it.
     const m = await admin().query(anyApi.testing.getMatch, { id });
     const pageOf = (seat: number) => pages[players.findIndex((p) => p.userId === m.players[seat].userId)];
-    const words: [string, number, number, boolean][] = [["QUIZ", 6, 7, false], ["ZONE", 9, 7, true], ["OX", 9, 8, false], ["TEN", 7, 9, false]];
+    const words: [string, number, number, boolean][] = [
+      ["QUIZ", 6, 7, false],
+      ["ZONE", 9, 7, true],
+      ["OX", 9, 8, false],
+      ["TEN", 7, 9, false],
+    ];
     for (const [seat, [word, x, y, down]] of words.entries()) {
       const id2 = id;
       await admin().mutation(anyApi.testing.setRack, { id: id2, userId: m.players[seat].userId, letters: word.padEnd(7, "E") });
@@ -66,7 +81,10 @@ for (const scheme of ["dark", "light"] as const) {
     await expect(next.getByText("Your turn")).toBeVisible();
     await shot("game", next);
     for (const [l, x, y] of [["B", 8, 6]] as const) {
-      await next.getByRole("button", { name: `Tile ${l}` }).first().click();
+      await next
+        .getByRole("button", { name: `Tile ${l}` })
+        .first()
+        .click();
       const pt = await next.getByRole("group", { name: "Board" }).evaluate(
         (el, [x, y]) => {
           const layer = el.firstElementChild as HTMLElement;

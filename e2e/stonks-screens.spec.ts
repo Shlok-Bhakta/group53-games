@@ -13,13 +13,26 @@ test.skip(!process.env.SCREENS || !existsSync(BIN), "Set SCREENS=1 and build the
 test("stonks screens", async ({ browser }) => {
   test.setTimeout(480_000);
   const { url, adminKey } = JSON.parse(readFileSync("e2e/.state/backend.json", "utf8"));
-  const sidecar = spawn(BIN, [], { env: { ...process.env, CONVEX_URL: url, ADMIN_KEY: adminKey }, stdio: ["ignore", "inherit", "inherit"] });
+  const sidecar = spawn(BIN, [], {
+    env: { ...process.env, CONVEX_URL: url, ADMIN_KEY: adminKey },
+    stdio: ["ignore", "inherit", "inherit"],
+  });
   try {
     const a = admin();
     // The sidecar reads the holdings, then works through every symbol's history.
     await expect.poll(async () => (await a.query(anyApi.stonks.board, {})).rows.length, { timeout: 120_000, intervals: [2000] }).toBe(20);
-    await expect.poll(async () => (await a.query(anyApi.stonks.profile, { symbol: "NVDA" })).stats?.marketCap ?? 0, { timeout: 120_000, intervals: [2000] }).toBeGreaterThan(0);
-    await expect.poll(async () => (await a.query(anyApi.stonks.chart, { symbol: "NVDA", range: "5Y" })).points.length, { timeout: 240_000, intervals: [3000] }).toBeGreaterThan(100);
+    await expect
+      .poll(async () => (await a.query(anyApi.stonks.profile, { symbol: "NVDA" })).stats?.marketCap ?? 0, {
+        timeout: 120_000,
+        intervals: [2000],
+      })
+      .toBeGreaterThan(0);
+    await expect
+      .poll(async () => (await a.query(anyApi.stonks.chart, { symbol: "NVDA", range: "5Y" })).points.length, {
+        timeout: 240_000,
+        intervals: [3000],
+      })
+      .toBeGreaterThan(100);
     const player = await createPlayer("Shlok");
     // A crew with money in the market: orders from two friends, filled by a trade.
     const friend = async (name: string, symbol: string, side: string, dollars: number) => {
@@ -35,7 +48,14 @@ test("stonks screens", async ({ browser }) => {
       const board = await a.query(anyApi.stonks.board, {});
       const now = Date.now() + 1000;
       await a.mutation(anyApi.stonks.ingest, {
-        ticks: board.rows.map((r: { symbol: string; price: number }) => ({ symbol: r.symbol, price: r.price, time: now, recv: now, source: "yahoo", session: "regular" })),
+        ticks: board.rows.map((r: { symbol: string; price: number }) => ({
+          symbol: r.symbol,
+          price: r.price,
+          time: now,
+          recv: now,
+          source: "yahoo",
+          session: "regular",
+        })),
       });
     };
     await fills();
@@ -84,7 +104,10 @@ test("stonks screens", async ({ browser }) => {
         await page.getByRole("radio", { name: "1D" }).click();
         await page.getByRole("button", { name: "Buy", exact: true }).click();
         await shot("trade-sheet");
-        await page.getByRole("dialog").getByRole("button", { name: /^Buy \$/ }).click();
+        await page
+          .getByRole("dialog")
+          .getByRole("button", { name: /^Buy \$/ })
+          .click();
         await shot("order-waiting");
         await fills();
         await page.waitForTimeout(600);
@@ -108,7 +131,10 @@ test("stonks screens", async ({ browser }) => {
         await page.waitForTimeout(5000);
         await shot("bitcoin");
         await page.getByRole("button", { name: "Buy", exact: true }).click();
-        await page.getByRole("dialog").getByRole("button", { name: /^Buy \$/ }).click();
+        await page
+          .getByRole("dialog")
+          .getByRole("button", { name: /^Buy \$/ })
+          .click();
         await expect(page.getByRole("region", { name: "Your position" })).toBeVisible({ timeout: 30_000 });
         await shot("bitcoin-bought");
         await page.goto("/stonks/NVDA");

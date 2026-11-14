@@ -1,11 +1,24 @@
 import { describe, expect, test } from "vitest";
-import { BINGO, bagLetters, centre, evaluate, layout, nextSeat, premiumAt, standings, type Placed, type ScrabbleState, type Tile } from "./engine";
+import {
+  BINGO,
+  bagLetters,
+  centre,
+  evaluate,
+  layout,
+  nextSeat,
+  premiumAt,
+  standings,
+  type Placed,
+  type ScrabbleState,
+  type Tile,
+} from "./engine";
 import { isWord } from "./dictionary";
 
 const rules = { size: 15, rack: 7, league: false };
 const rackOf = (letters: string): Tile[] => [...letters].map((letter, i) => ({ id: i, letter }));
 // Lays `word` out from (x, y), across or down, using rack tiles in order.
-const lay = (word: string, x: number, y: number, down = false, from = 0) => [...word].map((_, i) => ({ id: from + i, x: down ? x : x + i, y: down ? y + i : y }));
+const lay = (word: string, x: number, y: number, down = false, from = 0) =>
+  [...word].map((_, i) => ({ id: from + i, x: down ? x : x + i, y: down ? y + i : y }));
 const onBoard = (word: string, x: number, y: number, down = false): Placed[] =>
   [...word].map((letter, i) => ({ letter, x: down ? x : x + i, y: down ? y + i : y, seat: 0, turn: 0 }));
 
@@ -24,10 +37,11 @@ describe("board", () => {
     const rows = layout(21);
     expect(rows.every((r) => r.length === 21)).toBe(true);
     expect(premiumAt(21, centre(21), centre(21))).toBe("*");
-    for (let y = 0; y < 21; y++) for (let x = 0; x < 21; x++) {
-      expect(rows[y][x]).toBe(rows[x][y]);
-      expect(rows[y][x]).toBe(rows[20 - y][x]);
-    }
+    for (let y = 0; y < 21; y++)
+      for (let x = 0; x < 21; x++) {
+        expect(rows[y][x]).toBe(rows[x][y]);
+        expect(rows[y][x]).toBe(rows[20 - y][x]);
+      }
   });
 
   test("the bag is the standard 100 tiles, and scales with at least one of each", () => {
@@ -37,7 +51,9 @@ describe("board", () => {
     const half = bagLetters(50);
     expect(half).toHaveLength(54);
     const count = (bag: string[], l: string) => bag.filter((x) => x === l).length;
-    expect([count(half, "?"), count(half, "E"), count(half, "A"), count(half, "Q"), count(half, "Z"), count(half, "S")]).toEqual([1, 6, 5, 1, 1, 2]);
+    expect([count(half, "?"), count(half, "E"), count(half, "A"), count(half, "Q"), count(half, "Z"), count(half, "S")]).toEqual([
+      1, 6, 5, 1, 1, 2,
+    ]);
     expect(bagLetters(150)).toHaveLength(154);
     expect(bagLetters(200)).toHaveLength(200);
   });
@@ -59,8 +75,28 @@ describe("evaluate", () => {
   test("tiles in one line, no gaps, built off what's there", () => {
     const board = onBoard("CAT", 6, 7);
     const rack = rackOf("SHOE");
-    expect(evaluate(board, [{ id: 0, x: 0, y: 0 }, { id: 1, x: 1, y: 1 }], rack, rules)).toMatchObject({ error: "Keep your tiles in one line." });
-    expect(evaluate(board, [{ id: 0, x: 0, y: 3 }, { id: 1, x: 2, y: 3 }], rack, rules)).toMatchObject({ error: "Leave no gaps between your tiles." });
+    expect(
+      evaluate(
+        board,
+        [
+          { id: 0, x: 0, y: 0 },
+          { id: 1, x: 1, y: 1 },
+        ],
+        rack,
+        rules,
+      ),
+    ).toMatchObject({ error: "Keep your tiles in one line." });
+    expect(
+      evaluate(
+        board,
+        [
+          { id: 0, x: 0, y: 3 },
+          { id: 1, x: 2, y: 3 },
+        ],
+        rack,
+        rules,
+      ),
+    ).toMatchObject({ error: "Leave no gaps between your tiles." });
     expect(evaluate(board, lay("SH", 0, 0), rack, rules)).toMatchObject({ error: "Build off a word that's already down." });
     expect(evaluate(board, [{ id: 0, x: 6, y: 7 }], rack, rules)).toMatchObject({ error: "That square is taken." });
   });
@@ -71,7 +107,15 @@ describe("evaluate", () => {
     const r = evaluate(board, [{ id: 0, x: 9, y: 7 }], rackOf("S"), rules);
     expect(r).toMatchObject({ ok: true, score: 6 });
     // Playing H-A-T down through the A of CAT: the A is reused.
-    const down = evaluate(board, [{ id: 0, x: 7, y: 6 }, { id: 1, x: 7, y: 8 }], rackOf("HT"), rules);
+    const down = evaluate(
+      board,
+      [
+        { id: 0, x: 7, y: 6 },
+        { id: 1, x: 7, y: 8 },
+      ],
+      rackOf("HT"),
+      rules,
+    );
     expect(down.ok && down.words.map((w) => w.word)).toEqual(["HAT"]);
   });
 
@@ -98,9 +142,29 @@ describe("evaluate", () => {
 
   test("a single tile next to a word extends it, either way it's read", () => {
     const across = evaluate(onBoard("CAT", 6, 7), [{ id: 0, x: 9, y: 7 }], rackOf("S"), rules);
-    expect(across.ok && across.words.map((w) => [w.word, w.cells])).toEqual([["CATS", [[6, 7], [7, 7], [8, 7], [9, 7]]]]);
+    expect(across.ok && across.words.map((w) => [w.word, w.cells])).toEqual([
+      [
+        "CATS",
+        [
+          [6, 7],
+          [7, 7],
+          [8, 7],
+          [9, 7],
+        ],
+      ],
+    ]);
     const down = evaluate(onBoard("CAT", 7, 6, true), [{ id: 0, x: 7, y: 9 }], rackOf("S"), rules);
-    expect(down.ok && down.words.map((w) => [w.word, w.cells])).toEqual([["CATS", [[7, 6], [7, 7], [7, 8], [7, 9]]]]);
+    expect(down.ok && down.words.map((w) => [w.word, w.cells])).toEqual([
+      [
+        "CATS",
+        [
+          [7, 6],
+          [7, 7],
+          [7, 8],
+          [7, 9],
+        ],
+      ],
+    ]);
   });
 
   test("a bigger rack makes a bingo only when all of it goes down", () => {
@@ -109,10 +173,29 @@ describe("evaluate", () => {
   });
 
   test("blanks play as any letter and score nothing", () => {
-    const r = evaluate([], [{ id: 0, x: 7, y: 7, letter: "c" }, { id: 1, x: 8, y: 7 }, { id: 2, x: 9, y: 7 }], rackOf("?AT"), rules);
+    const r = evaluate(
+      [],
+      [
+        { id: 0, x: 7, y: 7, letter: "c" },
+        { id: 1, x: 8, y: 7 },
+        { id: 2, x: 9, y: 7 },
+      ],
+      rackOf("?AT"),
+      rules,
+    );
     expect(r).toMatchObject({ ok: true, score: 4 });
     expect(r.ok && r.words[0].word).toBe("CAT");
-    expect(evaluate([], [{ id: 0, x: 7, y: 7 }, { id: 1, x: 8, y: 7 }], rackOf("?A"), rules)).toMatchObject({ error: "Pick a letter for your blank." });
+    expect(
+      evaluate(
+        [],
+        [
+          { id: 0, x: 7, y: 7 },
+          { id: 1, x: 8, y: 7 },
+        ],
+        rackOf("?A"),
+        rules,
+      ),
+    ).toMatchObject({ error: "Pick a letter for your blank." });
   });
 
   test("using the whole rack is a bingo", () => {
@@ -123,11 +206,26 @@ describe("evaluate", () => {
 
   test("one tile can't go down on two squares", () => {
     // TOO with the same O twice: a real word, so only the duplicate check stands in the way.
-    const twice = [{ id: 1, x: 6, y: 7 }, { id: 0, x: 7, y: 7 }, { id: 0, x: 8, y: 7 }];
+    const twice = [
+      { id: 1, x: 6, y: 7 },
+      { id: 0, x: 7, y: 7 },
+      { id: 0, x: 8, y: 7 },
+    ];
     expect(evaluate([], twice, rackOf("OT"), rules)).toEqual({ ok: false, error: "That tile is down twice." });
     expect(evaluate([], twice, rackOf("OTO"), rules)).toEqual({ ok: false, error: "That tile is down twice." });
     // With two different O tiles it's fine.
-    expect(evaluate([], [{ id: 1, x: 6, y: 7 }, { id: 0, x: 7, y: 7 }, { id: 2, x: 8, y: 7 }], rackOf("OTO"), rules)).toMatchObject({ ok: true, score: 6 });
+    expect(
+      evaluate(
+        [],
+        [
+          { id: 1, x: 6, y: 7 },
+          { id: 0, x: 7, y: 7 },
+          { id: 2, x: 8, y: 7 },
+        ],
+        rackOf("OTO"),
+        rules,
+      ),
+    ).toMatchObject({ ok: true, score: 6 });
   });
 
   test("tiles not in the rack are refused", () => {

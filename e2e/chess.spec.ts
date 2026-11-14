@@ -91,12 +91,17 @@ test.describe("chess", () => {
     // be settling, so measure once it holds still.
     const boardY = () => grid.evaluate((el) => el.getBoundingClientRect().y + window.scrollY);
     let pendingY = NaN;
-    await expect.poll(async () => {
-      const y = await boardY();
-      const steady = Math.abs(y - pendingY) < 0.5;
-      pendingY = y;
-      return steady;
-    }, { intervals: [250] }).toBe(true);
+    await expect
+      .poll(
+        async () => {
+          const y = await boardY();
+          const steady = Math.abs(y - pendingY) < 0.5;
+          pendingY = y;
+          return steady;
+        },
+        { intervals: [250] },
+      )
+      .toBe(true);
     expect((await getMatch(g.id)).state.moves).toHaveLength(0);
     await expect.poll(() => pieceOn(g.black, "wP", "e2")).toBe(true);
     await expect(g.black.getByRole("button", { name: /^Confirm/ })).toHaveCount(0);
@@ -237,10 +242,14 @@ test.describe("chess", () => {
     test.setTimeout(60_000);
     const g = await startClassic(phones);
     for (const [page, from, to] of [
-      [g.white, "a2", "a4"], [g.black, "h7", "h5"],
-      [g.white, "a4", "a5"], [g.black, "h5", "h4"],
-      [g.white, "a5", "a6"], [g.black, "h4", "h3"],
-      [g.white, "a6", "b7"], [g.black, "h3", "g2"],
+      [g.white, "a2", "a4"],
+      [g.black, "h7", "h5"],
+      [g.white, "a4", "a5"],
+      [g.black, "h5", "h4"],
+      [g.white, "a5", "a6"],
+      [g.black, "h4", "h3"],
+      [g.white, "a6", "b7"],
+      [g.black, "h3", "g2"],
     ] as const) {
       await classicMove(page, from, to);
       await expect.poll(async () => (await getMatch(g.id)).state.moves.at(-1)?.lan.slice(2, 4)).toBe(to);
@@ -390,12 +399,16 @@ test.describe("chess", () => {
     const a = await phones.open({ player: shlok, push: "on" });
     await a.goto("/chess/mode/classic");
     const find = a.getByRole("button", { name: "Find a game" });
-    await find.evaluate((el: HTMLElement) => { for (let i = 0; i < 8; i++) el.click(); });
+    await find.evaluate((el: HTMLElement) => {
+      for (let i = 0; i < 8; i++) el.click();
+    });
     await a.waitForURL(/\/chess\/[a-z0-9]+$/);
     await a.goto("/chess/mode/realtime");
     const row = a.getByRole("button", { name: "Challenge Chris" });
     await expect(row).toBeVisible();
-    await row.evaluate((el: HTMLElement) => { for (let i = 0; i < 8; i++) el.click(); });
+    await row.evaluate((el: HTMLElement) => {
+      for (let i = 0; i < 8; i++) el.click();
+    });
     await a.waitForURL(/\/chess\/[a-z0-9]+$/);
     // Once the last of the taps has landed.
     const count = async () => {

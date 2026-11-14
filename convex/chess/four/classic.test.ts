@@ -1,6 +1,17 @@
 import { describe, expect, test } from "vitest";
 import { onBoard, type Color4, type Kind } from "./board";
-import { initialFour, inCheck, legalMoves, legalTargetsFrom, liveColors, move4, retire4, fourBoards, type FourState, type Piece4 } from "./classic";
+import {
+  initialFour,
+  inCheck,
+  legalMoves,
+  legalTargetsFrom,
+  liveColors,
+  move4,
+  retire4,
+  fourBoards,
+  type FourState,
+  type Piece4,
+} from "./classic";
 
 // "redK@h1"-style specs; files a..n, ranks 1..14.
 const sq = (s: string): [number, number] => [s.charCodeAt(0) - 97, Number(s.slice(1)) - 1];
@@ -26,7 +37,12 @@ describe("setup", () => {
     expect(s.pieces).toHaveLength(64);
     for (const c of ["red", "blue", "yellow", "green"] as const) expect(s.pieces.filter((p) => p.color === c)).toHaveLength(16);
     const kings = s.pieces.filter((p) => p.kind === "K").map((p) => [p.color, p.x, p.y]);
-    expect(kings).toEqual([["red", 7, 0], ["blue", 0, 6], ["yellow", 6, 13], ["green", 13, 7]]);
+    expect(kings).toEqual([
+      ["red", 7, 0],
+      ["blue", 0, 6],
+      ["yellow", 6, 13],
+      ["green", 13, 7],
+    ]);
     expect(onBoard(0, 0)).toBe(false);
     expect(onBoard(2, 11)).toBe(false);
     expect(onBoard(3, 13)).toBe(true);
@@ -106,7 +122,20 @@ describe("pieces", () => {
 
 describe("going out", () => {
   // Yellow's king is boxed in by its own pawns; red's rook swings to the 14th rank.
-  const mateSetup = () => custom("red", "redK@h1", "redR@d5", "blueK@a7", "blueP@b9", "yellowK@g14", "yellowP@f13", "yellowP@g13", "yellowP@h13", "greenK@n8", "greenP@m6");
+  const mateSetup = () =>
+    custom(
+      "red",
+      "redK@h1",
+      "redR@d5",
+      "blueK@a7",
+      "blueP@b9",
+      "yellowK@g14",
+      "yellowP@f13",
+      "yellowP@g13",
+      "yellowP@h13",
+      "greenK@n8",
+      "greenP@m6",
+    );
 
   test("checkmate takes a player out on their turn and scores 20 for the mater", () => {
     let s = mateSetup();
@@ -190,7 +219,7 @@ describe("history", () => {
   // A long scrappy game with a resignation out of turn and a timeout on turn, played with a seeded random.
   function scrappyGame() {
     let seed = 7;
-    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     let s = initialFour();
     for (let ply = 0; ply < 160 && s.turn; ply++) {
       if (ply === 40) s = retire4(s, "yellow", "resign");

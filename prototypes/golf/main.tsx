@@ -36,10 +36,15 @@ document.documentElement.classList.toggle("dark", saved.dark ?? true);
 createRoot(document.getElementById("root")!).render(<GolfExplorer />);
 
 // For review screenshots: a whole hole as one picture.
-(window as unknown as { __golfStill: unknown }).__golfStill = (i: number, width: number) => still([...HOLES, SANDBOX][i], width).toDataURL("image/png");
+(window as unknown as { __golfStill: unknown }).__golfStill = (i: number, width: number) =>
+  still([...HOLES, SANDBOX][i], width).toDataURL("image/png");
 (window as unknown as { __golfAssets: unknown }).__golfAssets = () => {
   const cs = getComputedStyle(document.documentElement);
-  return assetSheet(cs.getPropertyValue("--background").trim(), cs.getPropertyValue("--foreground").trim(), cs.getPropertyValue("--muted-foreground").trim()).toDataURL("image/png");
+  return assetSheet(
+    cs.getPropertyValue("--background").trim(),
+    cs.getPropertyValue("--foreground").trim(),
+    cs.getPropertyValue("--muted-foreground").trim(),
+  ).toDataURL("image/png");
 };
 
 // For recordings: the sounds logged in `window.__golfSounds`, rendered offline from `t0` (the log's
@@ -47,7 +52,8 @@ createRoot(document.getElementById("root")!).render(<GolfExplorer />);
 (window as unknown as { __golfRenderSounds: unknown }).__golfRenderSounds = async (t0: number, seconds: number) => {
   const log = (window as unknown as { __golfSounds: Parameters<typeof renderOffline>[0] }).__golfSounds;
   const buf = await renderOffline(log, t0, seconds);
-  const l = buf.getChannelData(0), r = buf.getChannelData(1);
+  const l = buf.getChannelData(0),
+    r = buf.getChannelData(1);
   const pcm = new Int16Array(l.length * 2);
   for (let i = 0; i < l.length; i++) {
     pcm[i * 2] = Math.max(-1, Math.min(1, l[i])) * 32767;

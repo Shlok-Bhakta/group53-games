@@ -65,7 +65,15 @@ const BOARDS: Record<GameKey, Board> = {
       points: null,
       board: [],
       toMove: m.status === "active" && st && st.turn >= 0 ? (players[st.turn]?.color ?? null) : null,
-      poker: st ? { hand: st.hand, board: st.board, stacks: st.stacks, pot: m.status === "active" ? potOf(st) + st.bets.reduce((a, b) => a + b, 0) : 0, out: st.out.map((o) => o.seat) } : null,
+      poker: st
+        ? {
+            hand: st.hand,
+            board: st.board,
+            stacks: st.stacks,
+            pot: m.status === "active" ? potOf(st) + st.bets.reduce((a, b) => a + b, 0) : 0,
+            out: st.out.map((o) => o.seat),
+          }
+        : null,
     };
   },
   golf: async (_ctx, m, players) => {
@@ -78,7 +86,19 @@ const BOARDS: Record<GameKey, Board> = {
       board: [],
       toMove: m.status === "active" && m.turn ? (players.find((p) => p.userId === m.turn)?.color ?? null) : null,
       golf: st
-        ? { hole: st.hole + 1, total: st.total, name: hole?.name ?? null, par: hole?.par ?? null, theme: hole?.theme ?? "hills", totals: t, par0: parSoFar(st), played: st.scores.length, out: st.out, last: st.last ?? null, seed: m.settings?.seed ?? null }
+        ? {
+            hole: st.hole + 1,
+            total: st.total,
+            name: hole?.name ?? null,
+            par: hole?.par ?? null,
+            theme: hole?.theme ?? "hills",
+            totals: t,
+            par0: parSoFar(st),
+            played: st.scores.length,
+            out: st.out,
+            last: st.last ?? null,
+            seed: m.settings?.seed ?? null,
+          }
         : null,
     };
   },
@@ -108,7 +128,9 @@ const BOARDS: Record<GameKey, Board> = {
     // four-player board's cut corners).
     const four = m.mode === "chess:four" || m.mode === "chess:realtime4";
     const size = four ? SIZE4 : 8;
-    let board: (string | null)[][] = Array.from({ length: size }, (_, r) => Array.from({ length: size }, (_, c) => (four && !onBoard4(c, size - 1 - r) ? null : "")));
+    let board: (string | null)[][] = Array.from({ length: size }, (_, r) =>
+      Array.from({ length: size }, (_, c) => (four && !onBoard4(c, size - 1 - r) ? null : "")),
+    );
     const code = (color: string, kind: string, dead?: boolean) => (four ? `four/${dead ? "dead" : color}${kind}` : `${color}${kind}`);
     const place = (x: number, y: number, c: string) => {
       if (board[size - 1 - y]?.[x] === "") board[size - 1 - y][x] = c;
@@ -124,13 +146,19 @@ const BOARDS: Record<GameKey, Board> = {
       toMove = m.status === "active" ? state.turn : null;
     } else if (m.state?.kind === "realtime" && m.state.startAt !== null) {
       const tick = Math.max(0, Math.floor((Date.now() - m.state.startAt) / TICK_MS));
-      const snap = await ctx.db.query("rtSnapshots").withIndex("by_match", (q) => q.eq("matchId", m._id)).unique();
+      const snap = await ctx.db
+        .query("rtSnapshots")
+        .withIndex("by_match", (q) => q.eq("matchId", m._id))
+        .unique();
       const from = (snap?.state as State | undefined) ?? undefined;
       const rows = await ctx.db
         .query("rtCommands")
         .withIndex("by_match_tick", (q) => q.eq("matchId", m._id).gte("tick", from?.tick ?? 0))
         .collect();
-      const commands: Command[] = [...((m.state.commands ?? []) as Command[]), ...rows.map((r) => ({ tick: r.tick, color: r.color, pieceId: r.pieceId, toX: r.toX, toY: r.toY, kind: r.kind }))];
+      const commands: Command[] = [
+        ...((m.state.commands ?? []) as Command[]),
+        ...rows.map((r) => ({ tick: r.tick, color: r.color, pieceId: r.pieceId, toX: r.toX, toY: r.toY, kind: r.kind })),
+      ];
       const sim = simulate(commands, tick, m.state.commands?.length ? undefined : (from ?? (four ? "four" : "two")));
       for (const p of sim.pieces) {
         const pos = positionAt(p, sim.result ? sim.endTick! : tick);
@@ -166,7 +194,16 @@ export const match = internalQuery({
       moveCount: m.moveCount,
       ...(await BOARDS[gameOf(m.mode)](ctx, m, players)),
       result: m.result
-        ? { draw: m.result.draw, reason: m.result.reason, how: reasonOf(m.result.reason, m.mode).won ?? "", winner: players.filter((p) => winners.includes(p.userId)).map((p) => p.name).join(" and ") || null }
+        ? {
+            draw: m.result.draw,
+            reason: m.result.reason,
+            how: reasonOf(m.result.reason, m.mode).won ?? "",
+            winner:
+              players
+                .filter((p) => winners.includes(p.userId))
+                .map((p) => p.name)
+                .join(" and ") || null,
+          }
         : null,
     };
   },

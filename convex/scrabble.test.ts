@@ -16,10 +16,13 @@ type Player = Awaited<ReturnType<typeof signedIn>>;
 
 const scheduled = (t: T) => t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
 const pushes = async (t: T) =>
-  (await scheduled(t)).filter((s) => s.name === "push:sendToUser" && s.state.kind === "pending").map((s) => s.args[0] as { userId: Id<"users">; title: string; body: string; url: string });
+  (await scheduled(t))
+    .filter((s) => s.name === "push:sendToUser" && s.state.kind === "pending")
+    .map((s) => s.args[0] as { userId: Id<"users">; title: string; body: string; url: string });
 const clearPushes = (t: T) =>
   t.run(async (ctx) => {
-    for (const s of await ctx.db.system.query("_scheduled_functions").collect()) if (s.name === "push:sendToUser" && s.state.kind === "pending") await ctx.scheduler.cancel(s._id);
+    for (const s of await ctx.db.system.query("_scheduled_functions").collect())
+      if (s.name === "push:sendToUser" && s.state.kind === "pending") await ctx.scheduler.cancel(s._id);
   });
 const get = (t: T, id: Id<"matches">) => t.run((ctx) => ctx.db.get(id));
 const stateOf = async (t: T, id: Id<"matches">) => (await get(t, id))!.state as ScrabbleState;
@@ -34,11 +37,15 @@ async function crew(t: T, n: number) {
 // Gives a player exactly these tiles (ids 0, 1, 2... in order).
 async function setRack(t: T, id: Id<"matches">, userId: Id<"users">, letters: string) {
   await t.run(async (ctx) => {
-    const row = await ctx.db.query("secrets").withIndex("by_match_user", (q) => q.eq("matchId", id).eq("userId", userId)).unique();
+    const row = await ctx.db
+      .query("secrets")
+      .withIndex("by_match_user", (q) => q.eq("matchId", id).eq("userId", userId))
+      .unique();
     await ctx.db.patch(row!._id, { data: { rack: [...letters].map((letter, i) => ({ id: i, letter })) } });
   });
 }
-const lay = (word: string, x: number, y: number, down = false) => [...word].map((_, i) => ({ id: i, x: down ? x : x + i, y: down ? y + i : y }));
+const lay = (word: string, x: number, y: number, down = false) =>
+  [...word].map((_, i) => ({ id: i, x: down ? x : x + i, y: down ? y + i : y }));
 
 // A started game, seats in turn order.
 async function game(t: T, n = 2, mode: "scrabble:classic" | "scrabble:live" = "scrabble:classic", settings?: Record<string, number>) {
@@ -75,7 +82,9 @@ describe("lobby with a flexible seat count", () => {
     expect(m.turn).toBe(m.players[0].userId);
     const s = m.state as ScrabbleState;
     expect(s).toMatchObject({ kind: "scrabble", size: 15, racks: [7, 7, 7], bag: 79, turn: 0, round: 1, tiles: [] });
-    expect((await pushes(t)).map((p) => [p.userId, p.title])).toEqual(m.players.map((p, i) => [p.userId, i === 0 ? "You go first" : "Classic Scrabble is on"]));
+    expect((await pushes(t)).map((p) => [p.userId, p.title])).toEqual(
+      m.players.map((p, i) => [p.userId, i === 0 ? "You go first" : "Classic Scrabble is on"]),
+    );
   });
 
   test("the eighth player starts it on their own", async () => {
@@ -90,7 +99,10 @@ describe("lobby with a flexible seat count", () => {
     const [a, b, c, d] = await crew(t, 4);
     const id = await a.as.mutation(api.matches.challenge, { mode: "scrabble:classic", opponents: [b.userId, c.userId] });
     expect((await pushes(t)).map((p) => p.userId).sort()).toEqual([b.userId, c.userId].sort());
-    expect((await pushes(t)).map((p) => p.body).sort()).toEqual(["Scrabble with Chris. Tap to accept.", "Scrabble with Sam. Tap to accept."]);
+    expect((await pushes(t)).map((p) => p.body).sort()).toEqual([
+      "Scrabble with Chris. Tap to accept.",
+      "Scrabble with Sam. Tap to accept.",
+    ]);
     await clearPushes(t);
     // Someone not invited can still take a seat.
     await d.as.mutation(api.matches.join, { id });
@@ -129,7 +141,12 @@ describe("racks are secret", () => {
   test("each player reads only their own rack, and the public state has no letters", async () => {
     const t = setup();
     const { id, seats } = await game(t, 2);
-    const rows = await t.run((ctx) => ctx.db.query("secrets").withIndex("by_match_user", (q) => q.eq("matchId", id)).collect());
+    const rows = await t.run((ctx) =>
+      ctx.db
+        .query("secrets")
+        .withIndex("by_match_user", (q) => q.eq("matchId", id))
+        .collect(),
+    );
     const secret = (userId?: Id<"users">) => rows.find((r) => r.userId === userId)!.data as { rack: { id: number; letter: string }[] };
     // Each player's rack query returns exactly their own tiles, never the other player's.
     for (const p of seats) {
@@ -137,7 +154,9 @@ describe("racks are secret", () => {
       expect(got).toEqual(secret(p.userId).rack);
       expect(got).toHaveLength(7);
     }
-    expect(secret(seats[0].userId).rack.map((x) => x.id)).not.toEqual(expect.arrayContaining(secret(seats[1].userId).rack.map((x) => x.id)));
+    expect(secret(seats[0].userId).rack.map((x) => x.id)).not.toEqual(
+      expect.arrayContaining(secret(seats[1].userId).rack.map((x) => x.id)),
+    );
     // Someone not in the game, or signed out, gets nothing.
     const outsider = await signedIn(t, "Lurker");
     expect(await outsider.as.query(api.scrabble.rack, { id })).toBeNull();
@@ -162,9 +181,16 @@ describe("playing", () => {
     expect(s.tiles.map((x) => x.letter).join("")).toBe("CAT");
     expect(s.moves.at(-1)).toMatchObject({ seat: 0, kind: "play", score: 10, words: [{ word: "CAT", score: 10 }] });
     const rack = await seats[0].as.query(api.scrabble.rack, { id });
-    expect(rack!.map((x) => x.letter).slice(0, 4).join("")).toBe("SXYZ");
+    expect(
+      rack!
+        .map((x) => x.letter)
+        .slice(0, 4)
+        .join(""),
+    ).toBe("SXYZ");
     const name = (await t.run((ctx) => ctx.db.get(seats[0].userId)))!.name;
-    expect((await pushes(t)).map((p) => [p.userId, p.title, p.body])).toEqual([[seats[1].userId, `${name} played CAT for 10`, "Your move."]]);
+    expect((await pushes(t)).map((p) => [p.userId, p.title, p.body])).toEqual([
+      [seats[1].userId, `${name} played CAT for 10`, "Your move."],
+    ]);
     expect((await get(t, id))!.turn).toBe(seats[1].userId);
   });
 
@@ -172,7 +198,9 @@ describe("playing", () => {
     const t = setup();
     const { id, seats } = await game(t, 2);
     await setRack(t, id, seats[0].userId, "ZORPABC");
-    await expect(seats[0].as.mutation(api.scrabble.play, { id, tiles: lay("ZORP", 5, 7) })).rejects.toThrow("ZORP isn't in the dictionary.");
+    await expect(seats[0].as.mutation(api.scrabble.play, { id, tiles: lay("ZORP", 5, 7) })).rejects.toThrow(
+      "ZORP isn't in the dictionary.",
+    );
     expect((await stateOf(t, id)).tiles).toEqual([]);
   });
 
@@ -199,16 +227,29 @@ describe("playing", () => {
     for (let i = 0; i < 4; i++) await seats[i % 2].as.mutation(api.scrabble.pass, { id });
     const m = (await get(t, id))!;
     expect(m.status).toBe("finished");
-    expect(m.result).toMatchObject({ reason: "passes", draw: false, winners: [seats[1].userId], standings: [[seats[1].userId], [seats[0].userId]] });
+    expect(m.result).toMatchObject({
+      reason: "passes",
+      draw: false,
+      winners: [seats[1].userId],
+      standings: [[seats[1].userId], [seats[0].userId]],
+    });
     expect((m.state as ScrabbleState).scores).toEqual([-20, -2]);
-    expect(m.ratingChanges!.map((c) => [c.userId, c.after])).toEqual(expect.arrayContaining([[seats[1].userId, 1216], [seats[0].userId, 1184]]));
+    expect(m.ratingChanges!.map((c) => [c.userId, c.after])).toEqual(
+      expect.arrayContaining([
+        [seats[1].userId, 1216],
+        [seats[0].userId, 1184],
+      ]),
+    );
   });
 
   test("going out with an empty bag ends it, and earns what everyone else is holding", async () => {
     const t = setup();
     const { id, seats } = await game(t, 2);
     await t.run(async (ctx) => {
-      const row = await ctx.db.query("secrets").withIndex("by_match_user", (q) => q.eq("matchId", id).eq("userId", undefined)).unique();
+      const row = await ctx.db
+        .query("secrets")
+        .withIndex("by_match_user", (q) => q.eq("matchId", id).eq("userId", undefined))
+        .unique();
       await ctx.db.patch(row!._id, { data: { bag: [], nextId: 500 } });
     });
     await setRack(t, id, seats[0].userId, "CAT");
@@ -226,7 +267,12 @@ describe("playing", () => {
     await setRack(t, id, seats[0].userId, "QQQAEIO");
     await seats[0].as.mutation(api.scrabble.swap, { id, tileIds: [0, 1, 2] });
     const rack = await seats[0].as.query(api.scrabble.rack, { id });
-    expect(rack!.map((x) => x.letter).slice(0, 4).join("")).toBe("AEIO");
+    expect(
+      rack!
+        .map((x) => x.letter)
+        .slice(0, 4)
+        .join(""),
+    ).toBe("AEIO");
     expect(rack).toHaveLength(7);
     expect(await stateOf(t, id)).toMatchObject({ turn: 1, scoreless: 1, bag: 86 });
     expect((await stateOf(t, id)).moves.at(-1)).toMatchObject({ kind: "swap", count: 3 });
@@ -238,10 +284,32 @@ describe("plans", () => {
     const t = setup();
     const { id, seats } = await game(t, 2);
     await setRack(t, id, seats[0].userId, "CATSXYZ");
-    await seats[1].as.mutation(api.scrabble.saveDraft, { id, placed: [{ id: 0, x: 3, y: 3 }, { id: 1, x: 4, y: 3 }], order: [3, 2, 1, 0] });
-    expect(await seats[1].as.query(api.scrabble.draft, { id })).toEqual({ placed: [{ id: 0, x: 3, y: 3 }, { id: 1, x: 4, y: 3 }], order: [3, 2, 1, 0] });
+    await seats[1].as.mutation(api.scrabble.saveDraft, {
+      id,
+      placed: [
+        { id: 0, x: 3, y: 3 },
+        { id: 1, x: 4, y: 3 },
+      ],
+      order: [3, 2, 1, 0],
+    });
+    expect(await seats[1].as.query(api.scrabble.draft, { id })).toEqual({
+      placed: [
+        { id: 0, x: 3, y: 3 },
+        { id: 1, x: 4, y: 3 },
+      ],
+      order: [3, 2, 1, 0],
+    });
     expect(await seats[0].as.query(api.scrabble.draft, { id })).toBeNull();
-    expect((await seats[0].as.query(api.scrabble.planning, { id })).map((p) => [p.userId, p.count, p.cells])).toEqual([[seats[1].userId, 2, [[3, 3], [4, 3]]]]);
+    expect((await seats[0].as.query(api.scrabble.planning, { id })).map((p) => [p.userId, p.count, p.cells])).toEqual([
+      [
+        seats[1].userId,
+        2,
+        [
+          [3, 3],
+          [4, 3],
+        ],
+      ],
+    ]);
     // Where, but never which letters.
     expect(JSON.stringify(await seats[0].as.query(api.scrabble.planning, { id }))).not.toMatch(/"id"|letter/);
     await seats[0].as.mutation(api.scrabble.saveDraft, { id, placed: lay("CAT", 6, 7), order: [] });
@@ -284,7 +352,9 @@ describe("timers", () => {
     expect(await stateOf(t, id)).toMatchObject({ turn: 1 });
     // Each strike is a reminder armed 8 hours (in minutes here) out, so three are the day: the
     // start's, the one the first strike re-armed, and the next player's first after the skip.
-    const reminders = (await scheduled(t)).filter((f) => f.name === "matches:remind").map((f) => [f.args[0], Math.round((f.scheduledTime - Date.now()) / 60_000)]);
+    const reminders = (await scheduled(t))
+      .filter((f) => f.name === "matches:remind")
+      .map((f) => [f.args[0], Math.round((f.scheduledTime - Date.now()) / 60_000)]);
     expect(reminders).toEqual([
       [{ id, moveCount: 0, strikes: 0 }, 8 * 60],
       [{ id, moveCount: 0, strikes: 2 }, 8 * 60],
@@ -303,7 +373,11 @@ describe("resigning", () => {
     await seats[2].as.mutation(api.matches.resign, { id });
     const m = (await get(t, id))!;
     expect(m.status).toBe("finished");
-    expect(m.result).toMatchObject({ reason: "last_player", winners: [seats[1].userId], standings: [[seats[1].userId], [seats[2].userId], [seats[0].userId]] });
+    expect(m.result).toMatchObject({
+      reason: "last_player",
+      winners: [seats[1].userId],
+      standings: [[seats[1].userId], [seats[2].userId], [seats[0].userId]],
+    });
   });
 });
 
@@ -331,13 +405,18 @@ describe("notifications", () => {
     // The game starting tells everyone, and the first player it's on them.
     const start = (await pushes(t)).filter((p) => !p.title.includes("wants") && !p.title.includes("joined"));
     expect(start.find((p) => p.userId === seats[0].userId)).toMatchObject({ title: "You go first", url });
-    expect(start.filter((p) => p.userId !== seats[0].userId).map((p) => p.title)).toEqual(["Classic Scrabble is on", "Classic Scrabble is on"]);
+    expect(start.filter((p) => p.userId !== seats[0].userId).map((p) => p.title)).toEqual([
+      "Classic Scrabble is on",
+      "Classic Scrabble is on",
+    ]);
     await clearPushes(t);
 
     await setRack(t, id, seats[0].userId, "CATSXYZ");
     await seats[0].as.mutation(api.scrabble.play, { id, tiles: lay("CAT", 6, 7) });
     const name = (await t.run((ctx) => ctx.db.get(seats[0].userId)))!.name;
-    expect(await pushes(t)).toEqual([expect.objectContaining({ userId: seats[1].userId, title: `${name} played CAT for 10`, body: "Your move.", url })]);
+    expect(await pushes(t)).toEqual([
+      expect.objectContaining({ userId: seats[1].userId, title: `${name} played CAT for 10`, body: "Your move.", url }),
+    ]);
     await clearPushes(t);
 
     // The reminder for this move is armed 8 hours out and nags the right person.
@@ -358,7 +437,9 @@ describe("notifications", () => {
     const t = setup();
     const { id, seats } = await game(t, 2);
     await clearPushes(t);
-    await t.run((ctx) => ctx.db.insert("presence", { userId: seats[1].userId, online: true, lastSeen: Date.now(), path: `/scrabble/${id}` }));
+    await t.run((ctx) =>
+      ctx.db.insert("presence", { userId: seats[1].userId, online: true, lastSeen: Date.now(), path: `/scrabble/${id}` }),
+    );
     await seats[0].as.mutation(api.scrabble.pass, { id });
     expect(await pushes(t)).toEqual([]);
   });
@@ -386,16 +467,27 @@ describe("notifications", () => {
     const [a, b] = await crew(t, 2);
     await clearPushes(t);
     const cid = await a.as.mutation(api.matches.challenge, { mode: "scrabble:classic", opponents: [b.userId] });
-    expect(await pushes(t)).toEqual([expect.objectContaining({ userId: b.userId, title: "Shlok challenged you", url: `/scrabble/${cid}?accept=1` })]);
+    expect(await pushes(t)).toEqual([
+      expect.objectContaining({ userId: b.userId, title: "Shlok challenged you", url: `/scrabble/${cid}?accept=1` }),
+    ]);
   });
 });
 
 describe("plays the server refuses or records specially", () => {
   const bagOf = (t: T, id: Id<"matches">) =>
-    t.run(async (ctx) => (await ctx.db.query("secrets").withIndex("by_match_user", (q) => q.eq("matchId", id).eq("userId", undefined)).unique())!.data as { bag: string[]; nextId: number });
+    t.run(
+      async (ctx) =>
+        (await ctx.db
+          .query("secrets")
+          .withIndex("by_match_user", (q) => q.eq("matchId", id).eq("userId", undefined))
+          .unique())!.data as { bag: string[]; nextId: number },
+    );
   const setBag = (t: T, id: Id<"matches">, bag: string[]) =>
     t.run(async (ctx) => {
-      const row = await ctx.db.query("secrets").withIndex("by_match_user", (q) => q.eq("matchId", id).eq("userId", undefined)).unique();
+      const row = await ctx.db
+        .query("secrets")
+        .withIndex("by_match_user", (q) => q.eq("matchId", id).eq("userId", undefined))
+        .unique();
       await ctx.db.patch(row!._id, { data: { bag, nextId: 500 } });
     });
 
@@ -406,7 +498,16 @@ describe("plays the server refuses or records specially", () => {
     const rack = await seats[0].as.query(api.scrabble.rack, { id });
     const before = await get(t, id);
     // TOO, with tile 0 (the only O) used for both Os.
-    await expect(seats[0].as.mutation(api.scrabble.play, { id, tiles: [{ id: 1, x: 6, y: 7 }, { id: 0, x: 7, y: 7 }, { id: 0, x: 8, y: 7 }] })).rejects.toThrow("That tile is down twice.");
+    await expect(
+      seats[0].as.mutation(api.scrabble.play, {
+        id,
+        tiles: [
+          { id: 1, x: 6, y: 7 },
+          { id: 0, x: 7, y: 7 },
+          { id: 0, x: 8, y: 7 },
+        ],
+      }),
+    ).rejects.toThrow("That tile is down twice.");
     expect(await seats[0].as.query(api.scrabble.rack, { id })).toEqual(rack);
     expect(await get(t, id)).toEqual(before);
     expect(await stateOf(t, id)).toMatchObject({ scores: [0, 0], tiles: [], turn: 0 });
@@ -439,13 +540,30 @@ describe("plays the server refuses or records specially", () => {
     const tiles = lay("RETAINS", 4, 7).map((p) => (p.id === 0 ? { ...p, letter: "r" } : p));
     expect(await seats[0].as.mutation(api.scrabble.play, { id, tiles })).toBe(62);
     const s = await stateOf(t, id);
-    expect(s.tiles.map((x) => [x.letter, x.blank ?? false])).toEqual([["R", true], ["E", false], ["T", false], ["A", false], ["I", false], ["N", false], ["S", false]]);
+    expect(s.tiles.map((x) => [x.letter, x.blank ?? false])).toEqual([
+      ["R", true],
+      ["E", false],
+      ["T", false],
+      ["A", false],
+      ["I", false],
+      ["N", false],
+      ["S", false],
+    ]);
     expect(s.tiles[0]).toEqual({ x: 4, y: 7, letter: "R", blank: true, seat: 0, turn: 0 });
     expect(s.scores).toEqual([62, 0]);
-    expect(s.moves.at(-1)).toMatchObject({ seat: 0, kind: "play", score: 62, bingo: true, count: 7, words: [{ word: "RETAINS", score: 12 }] }); // the word itself, the 50 on top
+    expect(s.moves.at(-1)).toMatchObject({
+      seat: 0,
+      kind: "play",
+      score: 62,
+      bingo: true,
+      count: 7,
+      words: [{ word: "RETAINS", score: 12 }],
+    }); // the word itself, the 50 on top
     expect(s.racks).toEqual([7, 7]);
     // A blank with no letter picked is refused.
     await setRack(t, id, seats[1].userId, "?TZZZZZ");
-    await expect(seats[1].as.mutation(api.scrabble.play, { id, tiles: [{ id: 0, x: 4, y: 8 }] })).rejects.toThrow("Pick a letter for your blank.");
+    await expect(seats[1].as.mutation(api.scrabble.play, { id, tiles: [{ id: 0, x: 4, y: 8 }] })).rejects.toThrow(
+      "Pick a letter for your blank.",
+    );
   });
 });

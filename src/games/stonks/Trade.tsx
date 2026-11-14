@@ -45,7 +45,9 @@ export function useFillNotice(me: Portfolio | null | undefined) {
     seen.current = id;
     if (!fill) return;
     sfx("land");
-    toast.success(`${DID[fill.side][0].toUpperCase()}${DID[fill.side].slice(1)} ${price(fill.amount)} of ${display(fill.symbol)} at ${price(fill.price, fill.currency)}`);
+    toast.success(
+      `${DID[fill.side][0].toUpperCase()}${DID[fill.side].slice(1)} ${price(fill.amount)} of ${display(fill.symbol)} at ${price(fill.price, fill.currency)}`,
+    );
   }, [fill, loaded]);
 }
 
@@ -57,7 +59,11 @@ export function Money({ me, crew }: { me: Portfolio; crew: Crew }) {
       <div className={`flex ${S.heroTop} items-center justify-between gap-3`}>
         <span className="text-callout font-semibold text-muted-foreground">Your money</span>
         {mine && (
-          <Link to={playerPath(mine.userId)} aria-label="Your profile" className="-mr-1 flex h-11 items-center gap-0.5 pl-3 text-footnote font-medium text-muted-foreground active:scale-[0.97]">
+          <Link
+            to={playerPath(mine.userId)}
+            aria-label="Your profile"
+            className="-mr-1 flex h-11 items-center gap-0.5 pl-3 text-footnote font-medium text-muted-foreground active:scale-[0.97]"
+          >
             {crew.length > 1 ? `#${place} of ${crew.length}` : "Your profile"}
             <CaretRightIcon weight="bold" aria-hidden />
           </Link>
@@ -69,7 +75,9 @@ export function Money({ me, crew }: { me: Portfolio; crew: Crew }) {
       <div className={`flex ${S.heroLine} items-center`}>
         <Change change={me.gain} base={me.start} label="All time" />
       </div>
-      <div className={`flex ${S.heroLine} items-center text-footnote text-muted-foreground`}>{price(Math.max(0, me.free))} free to invest</div>
+      <div className={`flex ${S.heroLine} items-center text-footnote text-muted-foreground`}>
+        {price(Math.max(0, me.free))} free to invest
+      </div>
     </section>
   );
 }

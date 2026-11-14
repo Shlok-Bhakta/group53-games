@@ -13,4 +13,5 @@ export const SEAT_COLORS: Record<string, string> = {
 };
 
 // A player's seat color, grey once they're out or if they haven't got a seat color.
-export const seatColor = (player: { color?: string } | undefined, out = false) => SEAT_COLORS[out ? "dead" : (player?.color ?? "dead")] ?? SEAT_COLORS.dead;
+export const seatColor = (player: { color?: string } | undefined, out = false) =>
+  SEAT_COLORS[out ? "dead" : (player?.color ?? "dead")] ?? SEAT_COLORS.dead;

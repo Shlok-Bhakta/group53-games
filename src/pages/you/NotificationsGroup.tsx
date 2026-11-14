@@ -15,7 +15,10 @@ export function NotificationsGroup() {
     }
   };
   // Only when there's something to do about it.
-  const footer = push.state === "blocked" ? "Notifications are blocked for Group 53. Turn them on in your phone's settings, then reopen the app." : undefined;
+  const footer =
+    push.state === "blocked"
+      ? "Notifications are blocked for Group 53. Turn them on in your phone's settings, then reopen the app."
+      : undefined;
   return (
     <Section title="Notifications" footer={footer}>
       <SettingsRow icon={BellRingingIcon} tint={TINT.red} label="Notifications" htmlFor="push-switch">

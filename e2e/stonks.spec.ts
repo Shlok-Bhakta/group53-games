@@ -19,22 +19,55 @@ async function seed() {
   const { day } = marketClock(Date.now());
   const start = day.open - 5.5 * 3600_000;
   // Only what's happened by now, so a trade stamped now is the latest whenever the suite runs.
-  const walk = (base: number, k: number) => Array.from({ length: 16 * 60 }, (_, i) => [start + i * 60_000, +(base * (1 + 0.01 * Math.sin(i / (40 + k)) + i * 0.00001 * (k - 1))).toFixed(2)]).filter((p) => p[0] < Date.now());
+  const walk = (base: number, k: number) =>
+    Array.from({ length: 16 * 60 }, (_, i) => [
+      start + i * 60_000,
+      +(base * (1 + 0.01 * Math.sin(i / (40 + k)) + i * 0.00001 * (k - 1))).toFixed(2),
+    ]).filter((p) => p[0] < Date.now());
   await a.mutation(anyApi.stonks.holdings, { asOf: "2026-10-29", holdings: HOLDINGS, indexBase: 6000 });
-  const series = [["^GSPC", 6000, "S&P 500", 5990], ["NVDA", 200, "NVIDIA Corporation", 199], ["AAPL", 270, "Apple Inc.", 268], ["MSFT", 520, "Microsoft Corporation", 521]] as const;
+  const series = [
+    ["^GSPC", 6000, "S&P 500", 5990],
+    ["NVDA", 200, "NVIDIA Corporation", 199],
+    ["AAPL", 270, "Apple Inc.", 268],
+    ["MSFT", 520, "Microsoft Corporation", 521],
+  ] as const;
   for (const [i, [symbol, base, name, prevClose]] of series.entries()) {
     const points = walk(base, i);
     await a.mutation(anyApi.stonks.series, { symbol, range: "1D", points, prevClose, name });
-    await a.mutation(anyApi.stonks.series, { symbol, range: "1W", points: points.filter((_, j) => j % 5 === 0).map(([t, p], j) => [t - (400 - j) * 3_600_000, p * 0.97]) });
+    await a.mutation(anyApi.stonks.series, {
+      symbol,
+      range: "1W",
+      points: points.filter((_, j) => j % 5 === 0).map(([t, p], j) => [t - (400 - j) * 3_600_000, p * 0.97]),
+    });
     const last = points.at(-1)!;
     if (symbol !== "^GSPC")
       await a.mutation(anyApi.stonks.setProfile, {
         symbol,
-        stats: { marketCap: base * 1e10, trailingPE: 31.4, avgVolume: 40_000_000, targetLow: base * 0.8, targetMean: base * 1.1, targetHigh: base * 1.3, analysts: 38, rating: "buy", sector: "Technology", summary: `${name} makes things.` },
-        news: [{ title: `${name} does a thing`, publisher: "Yahoo Finance", link: "https://example.com/news", time: Date.now() - 3600_000 }],
+        stats: {
+          marketCap: base * 1e10,
+          trailingPE: 31.4,
+          avgVolume: 40_000_000,
+          targetLow: base * 0.8,
+          targetMean: base * 1.1,
+          targetHigh: base * 1.3,
+          analysts: 38,
+          rating: "buy",
+          sector: "Technology",
+          summary: `${name} makes things.`,
+        },
+        news: [
+          { title: `${name} does a thing`, publisher: "Yahoo Finance", link: "https://example.com/news", time: Date.now() - 3600_000 },
+        ],
       });
-    else await a.mutation(anyApi.stonks.setProfile, { symbol, news: [{ title: "Stocks do stock things", publisher: "Reuters", link: "https://example.com/market", time: Date.now() - 600_000 }] });
-    await a.mutation(anyApi.stonks.ingest, { ticks: [{ symbol, price: last[1], time: last[0], recv: Date.now(), source: "yahoo", session: "post" }], feeds: [{ source: "yahoo", state: "live" }] });
+    else
+      await a.mutation(anyApi.stonks.setProfile, {
+        symbol,
+        news: [{ title: "Stocks do stock things", publisher: "Reuters", link: "https://example.com/market", time: Date.now() - 600_000 }],
+      });
+    await a.mutation(anyApi.stonks.ingest, {
+      ticks: [{ symbol, price: last[1], time: last[0], recv: Date.now(), source: "yahoo", session: "post" }],
+      feeds: [{ source: "yahoo", state: "live" }],
+    });
   }
   return a;
 }
@@ -51,7 +84,13 @@ async function intoStonks(phones: Phones, player: Player) {
 // backend has answered it, so it's in the client's cache for the next tap.
 async function warmed(page: Page, ...prefixes: string[]) {
   await expect
-    .poll(() => page.evaluate((prefixes) => prefixes.filter((p) => !((window as unknown as { __stonksWarmed?: string[] }).__stonksWarmed ?? []).some((k) => k.startsWith(p))), prefixes))
+    .poll(() =>
+      page.evaluate(
+        (prefixes) =>
+          prefixes.filter((p) => !((window as unknown as { __stonksWarmed?: string[] }).__stonksWarmed ?? []).some((k) => k.startsWith(p))),
+        prefixes,
+      ),
+    )
     .toEqual([]);
   await convexIdle(page);
 }
@@ -70,7 +109,8 @@ const watchForSkeletons = (page: Page) =>
   });
 const sawSkeleton = (page: Page) => page.evaluate(() => (window as unknown as { __skeleton: string | false }).__skeleton);
 
-const rowOrder = (page: Page) => page.getByRole("link", { name: /^(NVDA|AAPL|MSFT),/ }).evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")!.split(",")[0]));
+const rowOrder = (page: Page) =>
+  page.getByRole("link", { name: /^(NVDA|AAPL|MSFT),/ }).evaluateAll((els) => els.map((e) => e.getAttribute("aria-label")!.split(",")[0]));
 
 test("Stonks has a card on Games, and Play opens the board", async ({ phones }) => {
   await seed();
@@ -92,7 +132,18 @@ test("a trade from the sidecar moves the board live, and the ranking follows the
   await expect.poll(() => rowOrder(page)).toEqual(["NVDA", "AAPL", "MSFT"]);
   const now = Date.now();
   // Apple jumps 10%: its share of the index passes NVIDIA's.
-  await a.mutation(anyApi.stonks.ingest, { ticks: [{ symbol: "AAPL", price: 297, time: now, recv: now, source: "yahoo", session: marketClock(now).state === "open" ? "regular" : "post" }] });
+  await a.mutation(anyApi.stonks.ingest, {
+    ticks: [
+      {
+        symbol: "AAPL",
+        price: 297,
+        time: now,
+        recv: now,
+        source: "yahoo",
+        session: marketClock(now).state === "open" ? "regular" : "post",
+      },
+    ],
+  });
   const apple = page.getByRole("link", { name: /^AAPL,/ });
   await expect(apple).toContainText("$297.00");
   await expect.poll(() => rowOrder(page)).toEqual(["AAPL", "NVDA", "MSFT"]);
@@ -133,7 +184,9 @@ test("everything you can tap is already loaded: no skeleton from the Games card,
   await page.goto("/games");
   await page.getByRole("heading", { name: "Stonks" }).scrollIntoViewIfNeeded();
   // The card on screen starts loading the board: its code and its data.
-  await expect.poll(() => page.evaluate(() => performance.getEntriesByType("resource").some((e) => /\/Stonks-[\w-]+\.js$/.test(e.name)))).toBe(true);
+  await expect
+    .poll(() => page.evaluate(() => performance.getEntriesByType("resource").some((e) => /\/Stonks-[\w-]+\.js$/.test(e.name))))
+    .toBe(true);
   await warmed(page, "stonks:board:", "stonks:chart:");
   await watchForSkeletons(page);
   await page.getByRole("link", { name: "Play Stonks" }).click();
@@ -225,7 +278,9 @@ test("everyone starts with $10,000: buy on one phone, it fills on the next trade
   await expect(crew.getByRole("link", { name: /'s profile$/ }).first()).toHaveAccessibleName("Shlok's profile");
 });
 
-test("a friend's profile: everyone on one chart, then what they hold, what's waiting and what they've done, and Buy one tap away", async ({ phones }) => {
+test("a friend's profile: everyone on one chart, then what they hold, what's waiting and what they've done, and Buy one tap away", async ({
+  phones,
+}) => {
   await seed();
   const [a, b] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
   const [page, other] = await Promise.all([intoStonks(phones, a), intoStonks(phones, b)]);
@@ -275,7 +330,10 @@ test("a friend's profile: everyone on one chart, then what they hold, what's wai
   await expect(page.getByRole("region", { name: "Crew in this stock" }).getByRole("link", { name: "Chris's profile" })).toBeVisible();
   await page.getByRole("button", { name: "Buy", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "10%" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: /^Buy \$/ }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: /^Buy \$/ })
+    .click();
   await expect(page.getByRole("region", { name: "Waiting to fill" })).toContainText("of NVDA");
 
   // And my own profile is one tap from my money, where I can cancel what's waiting.
@@ -325,7 +383,9 @@ test("short, cover at a profit; and a waiting order can be cancelled", async ({ 
 test("search finds anything, even what Yahoo has to be asked about, and it trades in its own currency", async ({ phones }) => {
   const a = await seed();
   const page = await intoStonks(phones, await createPlayer("Shlok"));
-  await a.mutation(anyApi.stonks.addSymbols, { rows: [{ symbol: "TM", name: "Toyota Motor Corporation", type: "EQUITY", exchange: "NYSE" }] });
+  await a.mutation(anyApi.stonks.addSymbols, {
+    rows: [{ symbol: "TM", name: "Toyota Motor Corporation", type: "EQUITY", exchange: "NYSE" }],
+  });
   const box = page.getByRole("searchbox", { name: "Search anything" });
   // Tapping in shows there's more than stocks, and the board steps aside.
   await box.click();
@@ -338,7 +398,10 @@ test("search finds anything, even what Yahoo has to be asked about, and it trade
   // Yahoo answers, and Tokyo joins the list live.
   await a.mutation(anyApi.stonks.lookedUp, {
     q: "toyota",
-    rows: [{ symbol: "TM", name: "Toyota Motor Corporation", type: "EQUITY", exchange: "NYSE" }, { symbol: "7203.T", name: "Toyota Motor Corporation", type: "EQUITY", exchange: "Tokyo Stock Exchange" }],
+    rows: [
+      { symbol: "TM", name: "Toyota Motor Corporation", type: "EQUITY", exchange: "NYSE" },
+      { symbol: "7203.T", name: "Toyota Motor Corporation", type: "EQUITY", exchange: "Tokyo Stock Exchange" },
+    ],
   });
   const tokyo = page.getByRole("link", { name: /^7203\.T,/ });
   await expect(tokyo).toContainText("Tokyo Stock Exchange");
@@ -348,7 +411,17 @@ test("search finds anything, even what Yahoo has to be asked about, and it trade
   await a.mutation(anyApi.stonks.snapshot, {
     rows: [
       { symbol: "JPYUSD=X", price: 0.005, time: now - 1000, type: "CURRENCY", currency: "USD" },
-      { symbol: "7203.T", price: 3000, time: now - 900_000, prevClose: 2900, currency: "JPY", type: "EQUITY", exchange: "JPX", state: "REGULAR", name: "TOYOTA MOTOR CORP" },
+      {
+        symbol: "7203.T",
+        price: 3000,
+        time: now - 900_000,
+        prevClose: 2900,
+        currency: "JPY",
+        type: "EQUITY",
+        exchange: "JPX",
+        state: "REGULAR",
+        name: "TOYOTA MOTOR CORP",
+      },
     ],
   });
   await expect(tokyo).toContainText("¥3,000.00");
@@ -379,7 +452,21 @@ test("crypto never shuts, and a feed that runs late says so", async ({ phones })
   const a = await seed();
   const page = await intoStonks(phones, await createPlayer("Shlok"));
   const now = Date.now();
-  await a.mutation(anyApi.stonks.snapshot, { rows: [{ symbol: "BTC-USD", price: 78000, time: now - 2000, prevClose: 77000, currency: "USD", type: "CRYPTOCURRENCY", exchange: "CCC", state: "REGULAR", name: "Bitcoin USD" }] });
+  await a.mutation(anyApi.stonks.snapshot, {
+    rows: [
+      {
+        symbol: "BTC-USD",
+        price: 78000,
+        time: now - 2000,
+        prevClose: 77000,
+        currency: "USD",
+        type: "CRYPTOCURRENCY",
+        exchange: "CCC",
+        state: "REGULAR",
+        name: "Bitcoin USD",
+      },
+    ],
+  });
   await page.goto("/stonks/BTC-USD");
   await expect(page.getByRole("region", { name: "Bitcoin USD chart" })).toContainText("Open 24/7");
   await expect(page.getByRole("region", { name: "Bitcoin USD chart" })).toContainText("$78,000.00");
@@ -387,8 +474,23 @@ test("crypto never shuts, and a feed that runs late says so", async ({ phones })
   await expect(page.getByRole("dialog")).toContainText("Next trade");
   await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
 
-  await a.mutation(anyApi.stonks.ingest, { ticks: [{ symbol: "7203.T", price: 3000, time: now - 900_000, recv: now, source: "yahoo", session: "regular" }] });
-  await a.mutation(anyApi.stonks.snapshot, { rows: [{ symbol: "7203.T", price: 3000, time: now - 900_000, currency: "USD", type: "EQUITY", exchange: "JPX", state: "REGULAR", name: "Toyota" }] });
+  await a.mutation(anyApi.stonks.ingest, {
+    ticks: [{ symbol: "7203.T", price: 3000, time: now - 900_000, recv: now, source: "yahoo", session: "regular" }],
+  });
+  await a.mutation(anyApi.stonks.snapshot, {
+    rows: [
+      {
+        symbol: "7203.T",
+        price: 3000,
+        time: now - 900_000,
+        currency: "USD",
+        type: "EQUITY",
+        exchange: "JPX",
+        state: "REGULAR",
+        name: "Toyota",
+      },
+    ],
+  });
   await page.goto("/stonks/7203.T");
   await expect(page.getByRole("region", { name: "Toyota chart" })).toContainText("15 min late");
   await page.getByRole("button", { name: "Buy", exact: true }).click();

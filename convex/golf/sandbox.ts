@@ -20,7 +20,8 @@ function smooth(pts: Vec[], rounds = 3): Vec[] {
   for (let r = 0; r < rounds; r++) {
     const out: Vec[] = [];
     for (let i = 0; i < p.length; i++) {
-      const a = p[i], b = p[(i + 1) % p.length];
+      const a = p[i],
+        b = p[(i + 1) % p.length];
       out.push(v(a.x * 0.75 + b.x * 0.25, a.y * 0.75 + b.y * 0.25), v(a.x * 0.25 + b.x * 0.75, a.y * 0.25 + b.y * 0.75));
     }
     p = out;
@@ -29,12 +30,61 @@ function smooth(pts: Vec[], rounds = 3): Vec[] {
 }
 const pts = (...n: number[]) => Array.from({ length: n.length / 2 }, (_, i) => v(n[i * 2], n[i * 2 + 1]));
 const plate = (x: number, y: number, size: number) => rect(x - size / 2, y - size / 2, size, size);
-const boost = (x: number, y: number, dx: number, dy: number): Zone => ({ kind: "boost", poly: plate(x, y, 2.6), dir: v(dx, dy), strength: 45 });
-const ramp = (x: number, y: number, dx: number, dy: number, lift = 0.6): Zone => ({ kind: "ramp", poly: plate(x, y, 3), dir: v(dx, dy), lift });
+const boost = (x: number, y: number, dx: number, dy: number): Zone => ({
+  kind: "boost",
+  poly: plate(x, y, 2.6),
+  dir: v(dx, dy),
+  strength: 45,
+});
+const ramp = (x: number, y: number, dx: number, dy: number, lift = 0.6): Zone => ({
+  kind: "ramp",
+  poly: plate(x, y, 3),
+  dir: v(dx, dy),
+  lift,
+});
 const bump = (x: number, y: number, r = 0.85): Bumper => ({ at: v(x, y), r, kick: 5 });
 const rail = (...n: number[]): Wall => ({ pts: pts(...n), w: 0.5, h: 0.6, style: "wood" });
 
-const ISLAND = smooth(pts(16, 12, 32, 7, 50, 9, 64, 5, 80, 9, 90, 18, 88, 32, 92, 40, 92, 52, 86, 62, 76, 74, 60, 79, 44, 75, 28, 80, 14, 72, 8, 58, 12, 44, 6, 30));
+const ISLAND = smooth(
+  pts(
+    16,
+    12,
+    32,
+    7,
+    50,
+    9,
+    64,
+    5,
+    80,
+    9,
+    90,
+    18,
+    88,
+    32,
+    92,
+    40,
+    92,
+    52,
+    86,
+    62,
+    76,
+    74,
+    60,
+    79,
+    44,
+    75,
+    28,
+    80,
+    14,
+    72,
+    8,
+    58,
+    12,
+    44,
+    6,
+    30,
+  ),
+);
 const ISLET = circle(99, 46, 4.6, 28);
 const LAGOON = blob(48, 40, 11.5, 7.5, 7, 0.07, 36);
 const BRIDGE = rect(34.5, 38.2, 27, 3.6);
@@ -105,13 +155,23 @@ export const SANDBOX: Course = {
   props: [],
   bumpers: [
     // The pinball park round the north-west flag.
-    bump(15.5, 20.5), bump(24.5, 21), bump(20, 24.5), bump(14, 27.5, 0.7), bump(27, 27, 0.7), bump(20.5, 31), bump(30, 16, 0.7), bump(16.5, 14.5, 0.7),
+    bump(15.5, 20.5),
+    bump(24.5, 21),
+    bump(20, 24.5),
+    bump(14, 27.5, 0.7),
+    bump(27, 27, 0.7),
+    bump(20.5, 31),
+    bump(30, 16, 0.7),
+    bump(16.5, 14.5, 0.7),
     // Goalposts at the plaza.
-    bump(41.5, 58.5, 0.7), bump(54.5, 58.5, 0.7),
+    bump(41.5, 58.5, 0.7),
+    bump(54.5, 58.5, 0.7),
     // A couple guarding the beach flag.
-    bump(21.5, 54.5, 0.7), bump(14.5, 60.5, 0.7),
+    bump(21.5, 54.5, 0.7),
+    bump(14.5, 60.5, 0.7),
     // Two on the ice rink.
-    bump(23.5, 38.5, 0.7), bump(28.5, 40.5, 0.7),
+    bump(23.5, 38.5, 0.7),
+    bump(28.5, 40.5, 0.7),
     // And the island's cup.
     bump(96.5, 43, 0.6),
   ],
@@ -125,10 +185,20 @@ export const SANDBOX: Course = {
   wells: [],
   lamps: [],
   boxes: [
-    v(36, 55), v(60, 55), v(48, 51.5), v(30, 40), v(66, 40), v(48, 26),
-    v(20, 36), v(36, 15), v(58, 15),
-    v(70, 22.5), v(79, 26), v(66, 30),
-    v(12, 37), v(101, 49),
+    v(36, 55),
+    v(60, 55),
+    v(48, 51.5),
+    v(30, 40),
+    v(66, 40),
+    v(48, 26),
+    v(20, 36),
+    v(36, 15),
+    v(58, 15),
+    v(70, 22.5),
+    v(79, 26),
+    v(66, 30),
+    v(12, 37),
+    v(101, 49),
   ],
   mines: [v(66, 16.5), v(70, 19), v(74, 15.5), v(78, 21), v(68, 26.5), v(75, 28), v(82, 19), v(63.5, 22), v(72, 31), v(76, 24.5)],
 };

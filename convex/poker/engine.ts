@@ -88,7 +88,8 @@ export type PokerState = {
 
 export type Hidden = { deck: Card[]; muck: Card[]; holes: Card[][] };
 export type Table = { state: PokerState; hidden: Hidden };
-export type Action = { kind: "fold" } | { kind: "check" } | { kind: "call" } | { kind: "raise"; to: number } | { kind: "draw"; discard: number[] };
+export type Action =
+  { kind: "fold" } | { kind: "check" } | { kind: "call" } | { kind: "raise"; to: number } | { kind: "draw"; discard: number[] };
 
 const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
@@ -203,7 +204,10 @@ export function deal(state: PokerState, blinds: { sb: number; bb: number }, deck
   // Heads-up the button is the small blind and acts first before the flop.
   const sbSeat = live.length === 2 ? s.button : nextOf(s, s.button, (i) => live.includes(i));
   const bbSeat = nextOf(s, sbSeat, (i) => live.includes(i));
-  for (const [seat, amount] of [[sbSeat, blinds.sb], [bbSeat, blinds.bb]]) {
+  for (const [seat, amount] of [
+    [sbSeat, blinds.sb],
+    [bbSeat, blinds.bb],
+  ]) {
     const put = pay(s, seat, amount);
     s.log.push({ seat, kind: "blind", amount: put, street: 0, ...(s.stacks[seat] === 0 ? { allIn: true } : {}) });
   }
@@ -323,7 +327,8 @@ export function act(table: Table, seat: number, action: Action, random: () => nu
     const b = raiseBounds(s, seat);
     if (!b) throw new Error("You can't raise here.");
     const to = Math.floor(action.to);
-    if (!(to >= b.min && to <= b.max)) throw new Error(b.min === b.max ? `You can only raise to ${b.min}.` : `Raise to between ${b.min} and ${b.max}.`);
+    if (!(to >= b.min && to <= b.max))
+      throw new Error(b.min === b.max ? `You can only raise to ${b.min}.` : `Raise to between ${b.min} and ${b.max}.`);
     const bet = s.current === 0;
     const size = to - s.current;
     pay(s, seat, to - s.bets[seat]);
@@ -474,7 +479,8 @@ export function standings(s: PokerState): number[][] {
   }
   let prev: Exit | null = null;
   for (const e of [...s.out].reverse()) {
-    if (prev && prev.reason === "bust" && e.reason === "bust" && prev.hand === e.hand && prev.stack === e.stack) groups.at(-1)!.push(e.seat);
+    if (prev && prev.reason === "bust" && e.reason === "bust" && prev.hand === e.hand && prev.stack === e.stack)
+      groups.at(-1)!.push(e.seat);
     else groups.push([e.seat]);
     prev = e;
   }

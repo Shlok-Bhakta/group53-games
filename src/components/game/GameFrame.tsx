@@ -14,5 +14,7 @@ export function GameFrame({ children, dock, tight }: { children: ReactNode; dock
 
 // A line in the dock instead of buttons ("Folded", "You're out"), the same height as the buttons it replaces.
 export function DockNote({ children, className }: { children: ReactNode; className?: string }) {
-  return <p className={cn("flex h-[60px] items-center justify-center text-center text-callout text-muted-foreground", className)}>{children}</p>;
+  return (
+    <p className={cn("flex h-[60px] items-center justify-center text-center text-callout text-muted-foreground", className)}>{children}</p>
+  );
 }

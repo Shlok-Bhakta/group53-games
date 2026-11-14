@@ -65,7 +65,9 @@ export function Crew() {
         {open && (
           <div className="mx-auto w-full max-w-sm pt-3">
             <PlayerCard player={open} online={isOnline(open._id)} size="hero" />
-            <DrawerDescription className="mt-4 text-center">{lastSeenText(isOnline(open._id), byUser.get(open._id)?.lastSeen)}</DrawerDescription>
+            <DrawerDescription className="mt-4 text-center">
+              {lastSeenText(isOnline(open._id), byUser.get(open._id)?.lastSeen)}
+            </DrawerDescription>
             <Button size="xl" variant="secondary" className="mt-4 w-full" asChild>
               <Link to={`/stonks/u/${open._id}`}>
                 <ChartLineUpIcon weight="bold" /> Stonks profile
