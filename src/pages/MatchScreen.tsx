@@ -40,7 +40,7 @@ export function MatchScreen({ game }: { game: GameUI }) {
 
   const mode = MODES[match.mode as ModeKey];
   const Game = game.Game;
-  if (match.status === "active" && game.fullscreen?.(match))
+  if (match.status !== "waiting" && match.status !== "cancelled" && game.fullscreen?.(match))
     return (
       <GameCrash>
         <Game match={match} meId={me?._id} />

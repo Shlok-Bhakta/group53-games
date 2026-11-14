@@ -64,6 +64,13 @@ for (let i = 0; i < 3; i++) {
   await p.client.mutation(anyApi.poker.move, { id: pid, hand: pm.state.hand, street: pm.state.street, kind: owe > 0 ? "call" : "check" });
 }
 
+// A three-way Landlord game a few dozen moves in, bots playing every seat.
+const lid = await a.client.mutation(anyApi.matches.queue, { mode: "landlord:classic" });
+await c.client.mutation(anyApi.matches.queue, { mode: "landlord:classic" });
+await s4.client.mutation(anyApi.matches.queue, { mode: "landlord:classic" });
+await a.client.mutation(anyApi.matches.startGame, { id: lid });
+await admin.mutation(anyApi.testing.landlordBots, { id: lid, steps: 120 });
+
 // Stonks: the index and a stock with a day of prices.
 const day = Date.parse("2026-10-30T08:00:00Z");
 const walk = (base, k) => Array.from({ length: 16 * 60 }, (_, i) => [day + i * 60_000, +(base * (1 + 0.012 * Math.sin(i / (30 + k)) + i * 0.00002 * (k - 1))).toFixed(2)]);
@@ -99,6 +106,11 @@ try {
   console.log(htmlP.split("\n").filter((l) => /og:(title|description)"/.test(l)).join("\n"));
   const imgP = htmlP.match(/og\/match\/[a-z0-9]+\.png\?v=[a-z0-9]+/)[0];
   writeFileSync("e2e/.state/og-poker-match.png", Buffer.from(await (await fetch(`http://127.0.0.1:8788/${imgP}`)).arrayBuffer()));
+  const htmlL = await (await fetch(`http://127.0.0.1:8788/landlord/${lid}`)).text();
+  console.log(htmlL.split("\n").filter((l) => /og:(title|description)"/.test(l)).join("\n"));
+  const imgL = htmlL.match(/og\/match\/[a-z0-9]+\.png\?v=[a-z0-9]+/)[0];
+  writeFileSync("e2e/.state/og-landlord-match.png", Buffer.from(await (await fetch(`http://127.0.0.1:8788/${imgL}`)).arrayBuffer()));
+  writeFileSync("e2e/.state/og-landlord.png", Buffer.from(await (await fetch("http://127.0.0.1:8788/og/image/landlord.png")).arrayBuffer()));
   writeFileSync("e2e/.state/og-poker.png", Buffer.from(await (await fetch("http://127.0.0.1:8788/og/image/poker.png")).arrayBuffer()));
   writeFileSync("e2e/.state/og-scrabble.png", Buffer.from(await (await fetch("http://127.0.0.1:8788/og/image/scrabble.png")).arrayBuffer()));
   for (const [path, file] of [["/stonks", "og-stonks.png"], ["/stonks/NVDA", "og-stonks-nvda.png"]]) {

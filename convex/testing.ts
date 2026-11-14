@@ -3,6 +3,10 @@
 import { v } from "convex/values";
 import { initialFour } from "./chess/four/classic";
 import { playTiles } from "./scrabble";
+import { play as landlordPlay } from "./landlord";
+import { addPlayer } from "./matches";
+import { botMove } from "./landlord/bot";
+import { actor as landlordActor, type MonoState } from "./landlord/engine";
 import { SignJWT, importPKCS8 } from "jose";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
@@ -187,6 +191,48 @@ export const playAs = internalMutation({
   handler: async (ctx, { id, userId, tiles }) => {
     assertTestDeployment();
     return await playTiles(ctx, id, tiles, userId);
+  },
+});
+
+// Seats a test player in a waiting lobby, as if they'd tapped its link: bots joining a game a phone opened.
+export const joinAs = internalMutation({
+  args: { id: v.id("matches"), userId: v.id("users") },
+  handler: async (ctx, { id, userId }) => {
+    assertTestDeployment();
+    const match = (await ctx.db.get(id))!;
+    if (match.status === "waiting" && !match.players.some((p) => p.userId === userId)) await addPlayer(ctx, match, userId);
+  },
+});
+
+// Landlord: bots play for everyone except `human` until the game waits on them (or `steps` moves), so a test
+// or playtest can play one phone against the bots. Returns how many moves they made.
+export const landlordBots = internalMutation({
+  args: { id: v.id("matches"), human: v.optional(v.id("users")), steps: v.optional(v.number()) },
+  handler: async (ctx, { id, human, steps = 200 }) => {
+    assertTestDeployment();
+    let made = 0;
+    for (; made < steps; made++) {
+      const m = (await ctx.db.get(id))!;
+      if (m.status !== "active") break;
+      const s = m.state as MonoState;
+      const offers = s.trades.filter((t) => m.players[t.to].userId !== human);
+      const seat = offers.length ? offers[0].to : landlordActor(s);
+      if (m.players[seat].userId === human) break;
+      const a = botMove(s, seat, Math.random);
+      if (!a) break;
+      await landlordPlay(ctx, id, a, m.players[seat].userId);
+    }
+    return made;
+  },
+});
+
+// Landlord: change the public state directly, for a test's setup (who owns what, cash, where everyone is).
+export const landlordPatch = internalMutation({
+  args: { id: v.id("matches"), state: v.any() },
+  handler: async (ctx, { id, state }) => {
+    assertTestDeployment();
+    const m = (await ctx.db.get(id))!;
+    await ctx.db.patch(id, { state: { ...(m.state as MonoState), ...state } });
   },
 });
 

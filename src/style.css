@@ -1045,3 +1045,60 @@ html, body { min-height: 100%; }
     z-index: 60;
   }
 }
+
+/* Landlord's board (src/games/landlord/Board.tsx): a physical board, cream squares and fixed group colors in
+   every theme, like the cards and tiles. Sizes are board pixels: the camera scales the whole thing. */
+.ll-board { background: #cfe0d0; border-radius: 12px; box-shadow: 0 12px 40px rgb(0 0 0 / 0.35), inset 0 0 0 2px rgb(0 0 0 / 0.25); color: #1d1d1f; font-family: var(--app-font); user-select: none; -webkit-user-select: none; }
+.ll-sq { background: #fbf8ef; box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.25); overflow: hidden; padding: 0; color: inherit; transition: box-shadow 0.2s; }
+.ll-sq.ll-lit { box-shadow: inset 0 0 0 4px #1d1d1f; z-index: 1; }
+.ll-sq.ll-pickable { cursor: pointer; }
+.ll-sq.ll-pickable:active { background: #fff2bf; }
+.ll-band, .ll-swatch { background: var(--group); }
+.ll-band { position: absolute; display: flex; align-items: center; justify-content: center; gap: 3px; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.25); }
+.ll-band[data-side="top"] { inset: 0 0 auto 0; height: 24px; }
+.ll-band[data-side="bottom"] { inset: auto 0 0 0; height: 24px; }
+.ll-band[data-side="left"] { inset: 0 auto 0 0; width: 24px; flex-direction: column; }
+.ll-band[data-side="right"] { inset: 0 0 0 auto; width: 24px; flex-direction: column; }
+:is(.ll-band, .ll-swatch)[data-group="brown"] { --group: #8b5a3c; }
+:is(.ll-band, .ll-swatch)[data-group="sky"] { --group: #8ccbec; }
+:is(.ll-band, .ll-swatch)[data-group="pink"] { --group: #d4508f; }
+:is(.ll-band, .ll-swatch)[data-group="orange"] { --group: #ee9a2f; }
+:is(.ll-band, .ll-swatch)[data-group="red"] { --group: #d9433a; }
+:is(.ll-band, .ll-swatch)[data-group="yellow"] { --group: #edc935; }
+:is(.ll-band, .ll-swatch)[data-group="green"] { --group: #2f9a58; }
+:is(.ll-band, .ll-swatch)[data-group="navy"] { --group: #2b4c9b; }
+.ll-house { width: 12px; height: 12px; border-radius: 2px; background: #3fae5c; box-shadow: 0 0 0 1.5px #fbf8ef, 0 1px 2px rgb(0 0 0 / 0.4); }
+.ll-hotel { width: 24px; height: 14px; border-radius: 2px; background: #e0473c; box-shadow: 0 0 0 1.5px #fbf8ef, 0 1px 2px rgb(0 0 0 / 0.4); }
+.ll-band[data-side="left"] .ll-hotel, .ll-band[data-side="right"] .ll-hotel { width: 14px; height: 24px; }
+.ll-face { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 5px; text-align: center; }
+.ll-banded-bottom { top: 24px; }
+.ll-banded-top { bottom: 24px; }
+.ll-banded-left { right: 24px; }
+.ll-banded-right { left: 24px; }
+.ll-name { font-size: 12px; font-weight: 650; line-height: 1.1; text-wrap: balance; }
+.ll-icon { font-size: 22px; line-height: 1; opacity: 0.8; }
+.ll-corner .ll-icon { font-size: 36px; }
+.ll-corner .ll-name { font-size: 15px; }
+.ll-price { font-size: 12px; line-height: 1; opacity: 0.75; font-variant-numeric: tabular-nums; }
+.ll-owner { position: absolute; }
+.ll-owner[data-side="bottom"], .ll-owner[data-side="corner"] { inset: auto 0 0 0; height: 6px; }
+.ll-owner[data-side="top"] { inset: 0 0 auto 0; height: 6px; }
+.ll-owner[data-side="left"] { inset: 0 auto 0 0; width: 6px; }
+.ll-owner[data-side="right"] { inset: 0 0 0 auto; width: 6px; }
+.ll-owner-face { position: absolute; display: flex; }
+.ll-owner-face[data-side="bottom"] { right: 4px; bottom: 9px; }
+.ll-owner-face[data-side="top"] { right: 4px; top: 9px; }
+.ll-owner-face[data-side="left"] { left: 9px; bottom: 4px; }
+.ll-owner-face[data-side="right"] { right: 9px; bottom: 4px; }
+.ll-mortgaged { position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 3px; background: repeating-linear-gradient(135deg, transparent 0 7px, rgb(0 0 0 / 0.07) 7px 10px); font-size: 10px; font-weight: 750; letter-spacing: 0.05em; text-transform: uppercase; color: #b3261e; }
+.ll-sq:has(.ll-mortgaged) .ll-face { opacity: 0.5; }
+.ll-middle { color: #1d1d1f; }
+.ll-die { display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); place-items: center; width: 52px; height: 52px; padding: 7px; border-radius: 12px; background: linear-gradient(#fffdf8, #efe9dc); color: #1d1d1f; box-shadow: 0 2px 3px rgb(0 0 0 / 0.3), 0 8px 18px rgb(0 0 0 / 0.25), inset 0 -3px 0 rgb(0 0 0 / 0.08); }
+.ll-die-speed { display: grid; place-items: center; background: linear-gradient(#e8524a, #c63a33); color: #fffdf8; }
+.ll-die-speed .ll-pip { background: #fffdf8; }
+.ll-pip { width: 9px; height: 9px; border-radius: 9999px; background: #1d1d1f; }
+.ll-card { display: flex; flex-direction: column; gap: 8px; padding: 18px 20px; border-radius: 16px; background: linear-gradient(#fffdf8, #f2ecdf); color: #1d1d1f; box-shadow: 0 4px 8px rgb(0 0 0 / 0.25), 0 18px 40px rgb(0 0 0 / 0.3), inset 0 0 0 6px var(--deck); text-align: center; }
+.ll-card[data-deck="chance"] { --deck: #ee9a2f; }
+.ll-card[data-deck="chest"] { --deck: #4a8fd4; }
+.ll-deed { border-radius: 6px; background: linear-gradient(#fffdf8, #f4efe4); color: #1d1d1f; box-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 3px 6px rgb(0 0 0 / 0.12), inset 0 0 0 1px rgb(0 0 0 / 0.08); }
+.ll-house-art { width: 26px; height: 22px; background: #3fae5c; clip-path: polygon(50% 0, 100% 45%, 100% 100%, 0 100%, 0 45%); filter: drop-shadow(0 2px 2px rgb(0 0 0 / 0.35)); }

@@ -5,6 +5,7 @@ import { chessHooks } from "./chess";
 import { scrabbleHooks } from "./scrabble";
 import { pokerHooks } from "./poker";
 import { golfHooks } from "./golf";
+import { landlordHooks } from "./landlord";
 
 // What convex/matches.ts needs from each game. Everything else (lobbies, challenges, seats, results,
 // ratings, rematches, reminders) is shared. A new game writes these and adds its modes to convex/modes.ts.
@@ -27,6 +28,6 @@ export type GameHooks = {
 // Looked up when called, not when this module loads: the game files import matches.ts, which
 // imports this, so the hooks may not exist yet at load time.
 export const hooksFor = (mode: string): GameHooks => {
-  const hooks: Record<GameKey, GameHooks> = { chess: chessHooks, scrabble: scrabbleHooks, poker: pokerHooks, golf: golfHooks };
+  const hooks: Record<GameKey, GameHooks> = { chess: chessHooks, scrabble: scrabbleHooks, poker: pokerHooks, golf: golfHooks, landlord: landlordHooks };
   return hooks[gameOf(mode)];
 };

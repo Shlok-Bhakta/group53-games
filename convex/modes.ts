@@ -54,6 +54,14 @@ export const GAMES = {
     path: "/golf",
     reasons: { holes: { label: "Last hole played", push: "the last hole", won: "with the fewest strokes" } },
   },
+  landlord: {
+    name: "Landlord",
+    path: "/landlord",
+    reasons: {
+      richest: { label: "Richest at the end", push: "the richest at the end", won: "as the richest" },
+      last_player: { label: "Last one standing", push: "everyone else went bankrupt", won: "as the last one standing" },
+    },
+  },
 } as const satisfies Record<string, { name: string; path: string; reasons: Record<string, Reason> }>;
 export type GameKey = keyof typeof GAMES;
 
@@ -121,6 +129,21 @@ const golf = (holes: number): Setting[] => [
   { key: "items", label: "Items", short: "{} items", options: POWERS.map((p, i) => ({ value: i, label: POWER_NAMES[p] })), default: 2 ** POWERS.length - 1, kind: "mask", when: { key: "boxes", is: [1, 2, 3] } },
   { key: "collide", label: "Ball hits", short: "Ball hits {}", options: [{ value: 1, label: "On" }, { value: 0, label: "Off" }], default: 1 },
   { key: "mark", label: "Safe near the cup", short: "Safe near the cup: {}", options: [{ value: 1, label: "On" }, { value: 0, label: "Off" }], default: 1, when: { key: "collide", is: [1] } },
+];
+
+// Landlord (convex/landlord.ts): the official rules by default, then the common house rules, the speed die, and
+// the official short game. There's no time limit: turns wait, with a push every few hours.
+const LANDLORD: Setting[] = [
+  { key: "cash", label: "Starting cash", short: "{} to start", options: [1000, 1500, 2000, 2500, 3000].map((v) => ({ value: v, label: `$${v.toLocaleString("en-US")}` })), default: 1500 },
+  { key: "game", label: "Game", short: "{}", options: [{ value: 0, label: "Classic" }, { value: 1, label: "Short game" }], default: 0 },
+  { key: "rounds", label: "Rounds", short: "{} rounds", options: [{ value: 0, label: "No limit" }, { value: 10, label: "10" }, { value: 20, label: "20" }, { value: 30, label: "30" }], default: 0 },
+  { key: "auctions", label: "Auctions", short: "Auctions {}", options: [{ value: 1, label: "On" }, { value: 0, label: "Off" }], default: 1 },
+  { key: "pot", label: "Rest Stop jackpot", short: "Jackpot: {}", options: [{ value: 0, label: "Off" }, { value: 1, label: "Taxes and fines" }, { value: 2, label: "Plus $500" }], default: 0 },
+  { key: "goDouble", label: "Landing on Start", short: "Landing on Start pays {}", options: [{ value: 0, label: "$200" }, { value: 1, label: "$400" }], default: 0 },
+  { key: "jailRent", label: "Rent from jail", short: "Rent from jail: {}", options: [{ value: 1, label: "Yes" }, { value: 0, label: "No" }], default: 1 },
+  { key: "firstLap", label: "Buying on the first lap", short: "First-lap buying: {}", options: [{ value: 0, label: "Yes" }, { value: 1, label: "No" }], default: 0 },
+  { key: "speed", label: "Speed die", short: "Speed die {}", options: [{ value: 0, label: "Off" }, { value: 1, label: "On" }], default: 0 },
+  { key: "limited", label: "Houses and hotels", short: "{} buildings", options: [{ value: 1, label: "32 and 12" }, { value: 0, label: "Unlimited" }], default: 1 },
 ];
 
 // What every mode has. `draws`: players can offer each other a draw (two-player only). `wants`: how a push
@@ -302,6 +325,19 @@ export const MODES = {
       ...golf(9),
       { key: "holeTime", label: "Hole clock", short: "{} a hole", options: [{ value: 2, label: "2 min" }, { value: 3, label: "3 min" }, { value: 5, label: "5 min" }], default: 3 },
     ],
+  },
+  "landlord:classic": {
+    game: "landlord",
+    name: "Classic",
+    title: "Landlord",
+    kind: "async",
+    players: 8,
+    minPlayers: 2,
+    board: "landlord",
+    slug: "classic",
+    blurb: "Buy streets, build houses, bankrupt your friends. Take your turn whenever; trade and build any time.",
+    wants: "a game of Landlord",
+    settings: LANDLORD,
   },
 } as const satisfies Record<string, ModeDef>;
 

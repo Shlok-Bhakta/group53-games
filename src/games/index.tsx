@@ -22,6 +22,8 @@ import type { ConvexReactClient } from "convex/react";
 import { PokerBanner, PokerModeArt } from "./poker/art";
 import { PokerGame } from "./poker/PokerGame";
 import { pokerRules } from "./poker/rules";
+import { LandlordBanner, LandlordModeArt } from "./landlord/art";
+import { landlordRules } from "./landlord/rules";
 
 // Everything the shared screens need from a game: its card on Games, its mode art, rules, and the screen
 // for a game in progress. The lobby, results, rematches, mode pages and hub are shared (src/pages).
@@ -35,7 +37,8 @@ export type GameUI = {
   rules: (mode: ModeKey, settings: Settings) => string[];
   // A game that's started or finished, below the nav bar.
   Game: ComponentType<{ match: MatchView; meId: Id<"users"> | undefined }>;
-  // Games that draw their own top bar and take the whole screen while they're on.
+  // Games that draw their own top bar and take the whole screen: asked of any game that's started or finished
+  // (most say only while it's on; Landlord keeps its board up for the result too).
   fullscreen?: (match: MatchView) => boolean;
   // More on the game's page, under the modes (golf's practice holes).
   extra?: () => ReactNode;
@@ -50,6 +53,16 @@ function GolfGame(props: { match: MatchView; meId: Id<"users"> | undefined }) {
   return (
     <Suspense fallback={<div className="h-[100dvh]" aria-busy="true" />}>
       <GolfScreen {...props} />
+    </Suspense>
+  );
+}
+
+// Landlord's board, camera and show only download once a game's opened, like golf's.
+const LandlordScreen = lazy(() => import("./landlord/LandlordGame"));
+function LandlordGame(props: { match: MatchView; meId: Id<"users"> | undefined }) {
+  return (
+    <Suspense fallback={<div className="h-[100dvh]" aria-busy="true" />}>
+      <LandlordScreen {...props} />
     </Suspense>
   );
 }
@@ -98,6 +111,17 @@ export const GAME_UI: Record<GameKey, GameUI> = {
     fullscreen: (m) => m.status === "active",
     extra: () => <GolfPractice />,
     setup: (p) => <GolfHoles {...p} />,
+  },
+  landlord: {
+    key: "landlord",
+    path: GAMES.landlord.path,
+    name: GAMES.landlord.name,
+    blurb: "Buy streets, build hotels, trade and bankrupt each other, 2 to 8 of you over a few days. Every official rule, the common house rules, and the speed die.",
+    banner: () => <LandlordBanner />,
+    modeArt: () => <LandlordModeArt />,
+    rules: landlordRules,
+    Game: LandlordGame,
+    fullscreen: (m) => m.status === "active" || m.status === "finished",
   },
 };
 

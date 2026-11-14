@@ -195,7 +195,7 @@ async function create(ctx: MutationCtx, userId: Id<"users">, mode: ModeKey, invi
   return id;
 }
 
-async function addPlayer(ctx: MutationCtx, match: Doc<"matches">, userId: Id<"users">) {
+export async function addPlayer(ctx: MutationCtx, match: Doc<"matches">, userId: Id<"users">) {
   const players = [...match.players, { userId }];
   await ctx.db.patch(match._id, { players, lastActivityAt: Date.now() });
   const updated = { ...match, players };

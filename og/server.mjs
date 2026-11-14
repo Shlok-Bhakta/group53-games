@@ -76,6 +76,11 @@ const PAGES = {
     description: () => "Handmade and generated courses, up to 8 of you. Knock each other into the water and keep your items from hole to hole.",
     card: "golf",
   },
+  "/landlord": {
+    title: () => "Landlord",
+    description: () => "Buy streets, build hotels, trade and bankrupt each other, 2 to 8 of you over a few days.",
+    card: "landlord",
+  },
   "/stonks": {
     title: () => "Stonks",
     description: () => "The S&P 500's top 20, ranked by their share of the index, every trade live.",
@@ -211,6 +216,16 @@ const CARDS = {
       ),
       h("div", { alignItems: "center", justifyContent: "space-between" }, crewRow(crew, images, 84), h("div", { color: EMBED_COLOR, fontSize: 34, fontWeight: 800 }, "Tap to play")),
     ),
+  landlord: (crew, images) =>
+    frame(
+      h(
+        "div",
+        { flexDirection: "column", gap: 28 },
+        tiles("LANDLORD", ["green", "yellow", "green", "gray", "green", "yellow", "green", "hit"], 104),
+        h("div", { fontSize: 40, fontWeight: 500, color: "#cfe9dd", maxWidth: 940, lineHeight: 1.25 }, "Buy streets, build hotels, bankrupt your friends."),
+      ),
+      h("div", { alignItems: "center", justifyContent: "space-between" }, crewRow(crew, images, 84), h("div", { color: EMBED_COLOR, fontSize: 34, fontWeight: 800 }, "Tap to play")),
+    ),
   stonks: (crew, images) =>
     frame(
       h(
@@ -268,6 +283,7 @@ const MODE_TITLES = {
   "scrabble:live": "Live Scrabble",
   "golf:turns": "Golf",
   "golf:live": "Live golf",
+  "landlord:classic": "Landlord",
 };
 const vsPar = (s, par) => (s === par ? "E" : s > par ? `+${s - par}` : `${s - par}`);
 const COLOR_NAMES = { w: "White", b: "Black", red: "Red", blue: "Blue", yellow: "Yellow", green: "Green" };
@@ -289,6 +305,14 @@ function matchText(m) {
     }
     const mover = m.players.find((p) => p.color === m.toMove);
     return { title, status: `Hand ${m.poker?.hand ?? 1}, ${(m.poker?.pot ?? 0).toLocaleString("en-US")} in the pot. ${mover?.name ?? "Someone"} to act.`, mode };
+  }
+  if (m.mode.startsWith("landlord:")) {
+    const l = m.landlord;
+    if (m.status === "waiting") return { title: `${names[0]} wants a game of Landlord`, status: `${m.players.length} in so far. Tap to take a seat.`, mode };
+    if (m.status === "cancelled") return { title, status: "This game was called off.", mode };
+    if (m.status === "finished") return { title, status: `${m.result.winner ?? "Someone"} won ${m.result.how || ""}`.trim() + ".", mode };
+    const mover = m.players.find((p) => p.color === m.toMove);
+    return { title, status: `Round ${l?.round ?? 1}. ${mover?.name ?? "Someone"} to move.`, mode };
   }
   if (m.mode.startsWith("golf:")) {
     const g = m.golf;
@@ -391,6 +415,29 @@ function pokerTable(p, side) {
   );
 }
 
+// A Landlord board: the forty squares round the edge, each owned one in its owner's seat color (with a dot per
+// house, a bar for a hotel), and the round in the middle.
+function landlordBoard(l, colors, side) {
+  const cell = side / 11;
+  const at = (i) => (i <= 10 ? [10 - i, 10] : i <= 20 ? [0, 20 - i] : i <= 30 ? [i - 20, 0] : [10, i - 30]);
+  const squares = (l?.owners ?? Array(40).fill(-2)).map((owner, i) => {
+    const [x, y] = at(i);
+    const color = owner >= 0 ? (SEAT_COLORS[colors[owner]] ?? "#9aa0a6") : owner === -1 ? "#fbf8ef" : "#e8e2d2";
+    const houses = l?.houses?.[i] ?? 0;
+    return h(
+      "div",
+      { position: "absolute", left: x * cell + 1, top: y * cell + 1, width: cell - 2, height: cell - 2, borderRadius: 4, background: color, alignItems: "center", justifyContent: "center", gap: 2 },
+      houses === 5 ? h("div", { width: cell * 0.5, height: cell * 0.22, borderRadius: 3, background: "#e0473c", border: "2px solid #fbf8ef" }) : Array.from({ length: houses }, () => h("div", { width: cell * 0.14, height: cell * 0.14, borderRadius: 2, background: "#3fae5c", border: "1.5px solid #fbf8ef" })),
+    );
+  });
+  return h(
+    "div",
+    { position: "relative", width: side, height: side, flexShrink: 0, borderRadius: 18, background: "#cfe0d0", boxShadow: "0 18px 40px rgba(0,0,0,0.4)" },
+    ...squares,
+    h("div", { position: "absolute", left: cell, top: cell, width: cell * 9, height: cell * 9, flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }, tiles("LANDLORD", ["green", "yellow", "green", "gray", "green", "yellow", "green", "hit"], 40), h("div", { fontSize: 34, fontWeight: 800, color: "#1d1d1f" }, l ? `Round ${l.round}` : "Waiting")),
+  );
+}
+
 // A golf hole: a little green in the hole's own colors, with its number, name and par.
 function golfGreen(g, side) {
   const ice = g?.theme === "ice";
@@ -407,7 +454,8 @@ function golfGreen(g, side) {
 async function renderMatch(m) {
   if (m.scrabble) m.scrabble.colors = m.players.map((p) => p.color);
   const golf = m.mode.startsWith("golf:");
-  const size = m.scrabble || m.mode.startsWith("poker:") || golf ? 0 : m.board.length;
+  const landlord = m.mode.startsWith("landlord:");
+  const size = m.scrabble || m.mode.startsWith("poker:") || golf || landlord ? 0 : m.board.length;
   const cell = 512 / size;
   const rows = [];
   for (let r = 0; r < size; r++) {
@@ -433,7 +481,7 @@ async function renderMatch(m) {
   const tree = h(
     "div",
     { width: 1200, height: 630, padding: 55, gap: 56, alignItems: "center", backgroundImage: "linear-gradient(140deg, #1f6b4f 0%, #134232 55%, #0b261d 100%)", color: "#f2fbf6", fontFamily: "Rubik" },
-    golf ? golfGreen(m.golf, 512) : m.mode.startsWith("poker:") ? pokerTable(m.poker, 512) : m.scrabble ? scrabbleBoard(m.scrabble, 512) : h("div", { width: 512, height: 512, flexShrink: 0, flexDirection: "column", borderRadius: four ? 6 : 18, overflow: "hidden", boxShadow: four ? "none" : "0 18px 40px rgba(0,0,0,0.4)" }, rows),
+    landlord ? landlordBoard(m.landlord, m.players.map((p) => p.color), 512) : golf ? golfGreen(m.golf, 512) : m.mode.startsWith("poker:") ? pokerTable(m.poker, 512) : m.scrabble ? scrabbleBoard(m.scrabble, 512) : h("div", { width: 512, height: 512, flexShrink: 0, flexDirection: "column", borderRadius: four ? 6 : 18, overflow: "hidden", boxShadow: four ? "none" : "0 18px 40px rgba(0,0,0,0.4)" }, rows),
     h(
       "div",
       { flexDirection: "column", gap: four ? 18 : 26, flex: 1, minWidth: 0 },
@@ -451,6 +499,7 @@ async function renderMatch(m) {
             avatar({ name: p.name, frame: "none" }, big ? 64 : 48, images[i]),
             h("div", { fontSize: big ? 40 : 32, fontWeight: 800, flexShrink: 1, minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }, p.name),
             golf && m.golf && m.golf.played > 0 ? h("div", { fontSize: 24, color: "#9fcbb6", fontWeight: 500, flexShrink: 0, whiteSpace: "nowrap" }, m.golf.out.includes(i) ? "out" : `${m.golf.totals[i]} (${vsPar(m.golf.totals[i], m.golf.par0)})`)
+            : m.landlord && m.status !== "waiting" ? h("div", { fontSize: 24, color: "#9fcbb6", fontWeight: 500, flexShrink: 0, whiteSpace: "nowrap" }, m.landlord.out[i] ? "bankrupt" : `$${(m.landlord.cash[i] ?? 0).toLocaleString("en-US")}`)
             : m.poker && m.status !== "waiting" ? h("div", { fontSize: 24, color: "#9fcbb6", fontWeight: 500, flexShrink: 0, whiteSpace: "nowrap" }, m.poker.out.includes(i) ? "out" : `${(m.poker.stacks[i] ?? 0).toLocaleString("en-US")} chips`)
             : m.scrabble && m.status !== "waiting" ? h("div", { fontSize: 24, color: "#9fcbb6", fontWeight: 500, flexShrink: 0, whiteSpace: "nowrap" }, `${m.scrabble.scores[i] ?? 0} pts`)
             : m.points && p.color ? h("div", { fontSize: 24, color: "#9fcbb6", fontWeight: 500 }, `${m.points[p.color]} pts`) : p.color ? h("div", { fontSize: 24, color: "#9fcbb6", fontWeight: 500 }, COLOR_NAMES[p.color] ?? "") : [],
@@ -570,7 +619,7 @@ const escape = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", 
 
 async function pageHtml(pathname, search) {
   let title, description, image;
-  const game = pathname.match(/^\/(?:chess|scrabble|poker|golf)\/([a-z0-9]+)$/);
+  const game = pathname.match(/^\/(?:chess|scrabble|poker|golf|landlord)\/([a-z0-9]+)$/);
   const m = game ? await convex.query(anyApi.previews.match, { id: game[1] }) : null;
   const stonk = pathname.match(/^\/stonks(?:\/([A-Za-z0-9.%^-]+))?\/?$/);
   const symbol = stonk ? decodeURIComponent(stonk[1] ?? INDEX) : null;
@@ -590,7 +639,7 @@ async function pageHtml(pathname, search) {
     const text = matchText(m);
     title = text.title;
     description = `${text.mode}. ${text.status}`;
-    image = `${SITE}/og/match/${game[1]}.png?v=${version([m.status, m.moveCount, m.board, m.scrabble?.tiles.length ?? 0, m.poker?.hand ?? 0, m.golf?.hole ?? 0, m.golf?.played ?? 0])}`;
+    image = `${SITE}/og/match/${game[1]}.png?v=${version([m.status, m.moveCount, m.board, m.scrabble?.tiles.length ?? 0, m.poker?.hand ?? 0, m.golf?.hole ?? 0, m.golf?.played ?? 0, m.landlord?.round ?? 0])}`;
   } else {
     // A game we don't draw a board for (a poker table) still gets its game's card.
     const page = PAGES[pathname] ?? PAGES[`/${pathname.split("/")[1]}`] ?? PAGES["/"];

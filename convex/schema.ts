@@ -147,6 +147,10 @@ export default defineSchema({
     .index("by_hole_user", ["hole", "userId"]),
   // What players mustn't see: a player's own hand (`userId` set; a Scrabble rack) or the game's (no
   // `userId`; the tile bag). Only ever returned to its owner.
+  // Landlord's history: one row per move, with what it did (`events`, numbered from `seq`), who did it (a seat,
+  // or -1 for the game) and the public state after it, so a phone can play back everything since it last
+  // looked. Only ever inserted.
+  landlordLog: defineTable({ matchId: v.id("matches"), seq: v.number(), by: v.number(), events: v.any(), state: v.any(), at: v.number() }).index("by_match", ["matchId", "seq"]),
   secrets: defineTable({ matchId: v.id("matches"), userId: v.optional(v.id("users")), data: v.any() }).index("by_match_user", ["matchId", "userId"]),
   // A player's plan for their next turn (tiles laid out on the board, rack order), saved as they go so it's
   // there when they come back. Private to them; others only see that they're planning.
