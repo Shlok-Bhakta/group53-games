@@ -154,6 +154,32 @@ test("a trade: offered on one phone, accepted on the other", async ({ phones }) 
   await expect.poll(async () => (await stateOf(id)).props[1]?.owner).toBe(1 - seatA);
 });
 
+test("mortgaging asks first, from the properties list and the deed", async ({ phones }) => {
+  test.setTimeout(120_000);
+  const { id, pa, a } = await startGame(phones);
+  const m = await getMatch(id);
+  const seatA = m.players.findIndex((p: { userId: string }) => p.userId === a.userId);
+  const props = (m.state as Mono).props.map((p, i) => (i === 1 || i === 3 ? { owner: seatA, houses: 0, mortgaged: false } : p));
+  await admin().mutation(anyApi.testing.landlordPatch, { id, state: { props } });
+  await settledOn(pa);
+  await pa.getByRole("button", { name: "Properties" }).click();
+  await pa.getByRole("button", { name: "Mortgage Mediterranean Avenue for $30" }).click();
+  const ask = pa.getByRole("alertdialog", { name: "Mortgage Mediterranean Avenue?" });
+  await expect(ask).toBeVisible();
+  // Backing out does nothing.
+  await ask.getByRole("button", { name: "Keep it" }).click();
+  await expect(ask).toHaveCount(0);
+  expect((await stateOf(id)).props[1]?.mortgaged).toBe(false);
+  await pa.getByRole("button", { name: "Mortgage Mediterranean Avenue for $30" }).click();
+  await ask.getByRole("button", { name: "Mortgage +$30" }).click();
+  await expect.poll(async () => (await stateOf(id)).props[1]?.mortgaged).toBe(true);
+  // The deed asks too.
+  await pa.getByRole("button", { name: "Baltic Avenue", exact: false }).first().click();
+  await pa.getByRole("button", { name: "Mortgage +$30" }).click();
+  await pa.getByRole("alertdialog", { name: "Mortgage Baltic Avenue?" }).getByRole("button", { name: "Mortgage +$30" }).click();
+  await expect.poll(async () => (await stateOf(id)).props[3]?.mortgaged).toBe(true);
+});
+
 // Review shots of a game well under way: owners, houses, a hotel, a mortgage, the whole board, the menu and
 // your properties. Only with SCREENS=1.
 test("landlord-screens", async ({ phones }) => {

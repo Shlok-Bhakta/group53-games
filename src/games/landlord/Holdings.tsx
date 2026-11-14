@@ -5,8 +5,9 @@ import { money } from "../../../convex/landlord/text";
 import type { MatchView } from "../../../convex/matches";
 import { AsyncButton } from "@/components/AsyncButton";
 import { Group } from "@/components/parts";
+import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
-import { useLandlordMove } from "./Deed";
+import { ConfirmMortgage, useLandlordMove } from "./Deed";
 
 // Everything you own, by group, with building and mortgaging one tap away: how you raise money for a debt,
 // and how you build up between turns.
@@ -68,9 +69,15 @@ export function HoldingsSheet({ open, onClose, match, state, seat, busy, onDeed 
                     Lift {money(unmortgageOf(pos))}
                   </AsyncButton>
                 ) : (
-                  <AsyncButton variant="secondary" size="sm" disabled={busy || !!cantMortgage(state, seat, pos)} onClick={() => act({ k: "mortgage", pos })}>
-                    +{money(mortgageOf(pos))}
-                  </AsyncButton>
+                  <ConfirmMortgage
+                    pos={pos}
+                    onConfirm={() => act({ k: "mortgage", pos })}
+                    trigger={
+                      <Button variant="secondary" size="sm" aria-label={`Mortgage ${sq.name} for ${money(mortgageOf(pos))}`} disabled={busy || !!cantMortgage(state, seat, pos)}>
+                        +{money(mortgageOf(pos))}
+                      </Button>
+                    }
+                  />
                 )}
               </div>
             );

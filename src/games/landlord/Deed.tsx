@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { BOARD, groupOf, houseCostOf, mortgageOf, unmortgageOf, type Square } from "../../../convex/landlord/board";
@@ -5,6 +6,7 @@ import { cantBuild, cantMortgage, cantSell, cantUnmortgage, hotelAt, ownsGroup, 
 import { money } from "../../../convex/landlord/text";
 import type { MatchView } from "../../../convex/matches";
 import { AsyncButton } from "@/components/AsyncButton";
+import { ConfirmButton } from "@/components/ConfirmButton";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { Sheet } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -77,7 +79,18 @@ function DeedBody({ pos, sq, match, state, mySeat, busy, onTrade }: { pos: numbe
           {prop.mortgaged ? (
             <Act label={`Lift mortgage ${money(unmortgageOf(pos))}`} why={why!.lift} disabled={busy} onClick={() => act({ k: "unmortgage", pos })} wide />
           ) : (
-            <Act label={`Mortgage +${money(mortgageOf(pos))}`} why={why!.mortgage} disabled={busy} onClick={() => act({ k: "mortgage", pos })} secondary wide />
+            <div className="col-span-2 flex flex-col gap-1">
+              <ConfirmMortgage
+                pos={pos}
+                onConfirm={() => act({ k: "mortgage", pos })}
+                trigger={
+                  <Button size="xl" variant="secondary" className="w-full" disabled={!!why!.mortgage || busy}>
+                    Mortgage +{money(mortgageOf(pos))}
+                  </Button>
+                }
+              />
+              {why!.mortgage && <p className="px-1 text-footnote text-muted-foreground">{why!.mortgage}</p>}
+            </div>
           )}
         </div>
       )}
@@ -87,6 +100,21 @@ function DeedBody({ pos, sq, match, state, mySeat, busy, onTrade }: { pos: numbe
         </Button>
       )}
     </>
+  );
+}
+
+// Mortgaging asks first, from the deed or the properties list: it's easy to tap by mistake while building.
+export function ConfirmMortgage({ pos, trigger, onConfirm }: { pos: number; trigger: ReactNode; onConfirm: () => Promise<unknown> }) {
+  return (
+    <ConfirmButton
+      trigger={trigger}
+      title={`Mortgage ${BOARD[pos].name}?`}
+      detail={`The bank gives you ${money(mortgageOf(pos))}. It charges no rent while it's mortgaged, and lifting it costs ${money(unmortgageOf(pos))}.`}
+      keep="Keep it"
+      confirm={`Mortgage +${money(mortgageOf(pos))}`}
+      tone="default"
+      onConfirm={onConfirm}
+    />
   );
 }
 

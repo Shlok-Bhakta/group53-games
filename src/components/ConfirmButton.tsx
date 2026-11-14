@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 
-// Anything destructive goes behind this: the trigger opens a question, and only the red button does it. The
+// Anything destructive goes behind this: the trigger opens a question, and only the confirm button does it. The
 // action runs once however often it's tapped, and an error becomes a toast.
 export function ConfirmButton({
   trigger,
@@ -21,6 +21,7 @@ export function ConfirmButton({
   detail,
   keep,
   confirm,
+  tone = "destructive",
   onConfirm,
 }: {
   // The button that asks, usually a Button.
@@ -30,6 +31,8 @@ export function ConfirmButton({
   // What the two buttons say: "Keep playing" and "Resign".
   keep: string;
   confirm: string;
+  // Red for what can't be undone; "default" for a choice worth a second look that can be (a mortgage).
+  tone?: "destructive" | "default";
   onConfirm: () => Promise<unknown> | unknown;
 }) {
   const [open, setOpen] = useState(false);
@@ -44,7 +47,7 @@ export function ConfirmButton({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>{keep}</AlertDialogCancel>
-          <Button variant="destructive" size="lg" disabled={pending} aria-busy={pending} onClick={() => void run(async () => (await onConfirm(), setOpen(false)))}>
+          <Button variant={tone} size="lg" disabled={pending} aria-busy={pending} onClick={() => void run(async () => (await onConfirm(), setOpen(false)))}>
             {pending && <SpinnerGapIcon className="animate-spin" weight="bold" />}
             {confirm}
           </Button>
