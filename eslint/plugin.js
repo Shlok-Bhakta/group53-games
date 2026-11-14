@@ -445,6 +445,158 @@ const tailwindCss = {
   },
 };
 
+const SUBTEXT_PROPS = new Set(["subtitle", "subtext", "description", "caption", "helperText", "hint", "blurb", "lede", "summary"]);
+const PROSE_WORDS = 3;
+const words = (text) => text.trim().split(/\s+/).filter(Boolean).length;
+const staticText = (node) => {
+  if (!node) return null;
+  if (node.type === "Literal" && typeof node.value === "string") return node.value;
+  if (node.type === "TemplateLiteral" && node.expressions.length === 0) return node.quasis[0].value.cooked;
+  if (node.type === "JSXExpressionContainer") return staticText(node.expression);
+  return null;
+};
+const elementName = (node) => {
+  const n = node.openingElement?.name;
+  if (!n) return "";
+  if (n.type === "JSXIdentifier") return n.name;
+  if (n.type === "JSXMemberExpression") return `${n.object.name}.${n.property.name}`;
+  return "";
+};
+const attrOf = (node, name) => node.openingElement.attributes.find((a) => a.type === "JSXAttribute" && a.name.name === name);
+const classText = (node) => {
+  const attr = attrOf(node, "className");
+  if (!attr?.value) return "";
+  if (attr.value.type === "Literal") return String(attr.value.value);
+  const expr = attr.value.expression;
+  if (!expr) return "";
+  const parts = [];
+  const walk = (e) => {
+    if (!e) return;
+    if (e.type === "Literal" && typeof e.value === "string") parts.push(e.value);
+    else if (e.type === "TemplateLiteral") e.quasis.forEach((q) => parts.push(q.value.cooked ?? ""));
+    else if (e.type === "CallExpression") e.arguments.forEach(walk);
+    else if (e.type === "LogicalExpression" || e.type === "BinaryExpression") (walk(e.left), walk(e.right));
+    else if (e.type === "ConditionalExpression") (walk(e.consequent), walk(e.alternate));
+  };
+  walk(expr);
+  return parts.join(" ");
+};
+const onlyStaticText = (node) => {
+  const kids = node.children.filter((c) => !(c.type === "JSXText" && c.value.trim() === ""));
+  if (kids.length === 0) return null;
+  if (!kids.every((c) => c.type === "JSXText" || (c.type === "JSXExpressionContainer" && staticText(c) !== null))) return null;
+  return kids
+    .map((c) => (c.type === "JSXText" ? c.value : staticText(c)))
+    .join(" ")
+    .trim();
+};
+const HEADING_TAG = /^h[1-6]$/;
+const HEADING_COMPONENT = /(Title|Heading)$/;
+const HEADING_CLASS = /(^|\s|:)(text-title-lg|text-title|text-heading)(\s|$)/;
+const isHeading = (node) => {
+  const name = elementName(node);
+  if (/^AlertDialog/.test(name)) return false;
+  return HEADING_TAG.test(name) || HEADING_COMPONENT.test(name) || HEADING_CLASS.test(classText(node));
+};
+const PROSE_TAGS = new Set(["p", "span", "div", "small", "li"]);
+const EMPTY_STATE = /^(no|nothing|nobody|none|there (is|are) no|you (have no|haven't)|not yet)\b/i;
+const DESCRIPTION_COMPONENT = /^(Drawer|Dialog|Sheet|Card)Description$/;
+
+const noSubtext = {
+  meta: {
+    type: "problem",
+    messages: {
+      prop: "No filler subtext: `{{prop}}` is a hard-coded sentence. Say it with the title or the control. Real information (a name, a rating, a count) is fine as an expression.",
+      under: 'No filler subtext under a heading: "{{text}}". The heading and the controls say it; drop the sentence.',
+      empty: 'No empty-state prose ("{{text}}"). Render the section only when it has something in it.',
+      description:
+        'No filler description: "{{text}}". Sheets and dialogs are titled; if screen readers need a description, it must carry real information.',
+    },
+  },
+  create(context) {
+    const file = rel(context.filename);
+    if (file.startsWith(UI_DIR)) return {};
+    const clip = (t) => t.replace(/\s+/g, " ").slice(0, 50);
+    return {
+      JSXAttribute(node) {
+        if (!SUBTEXT_PROPS.has(node.name.name)) return;
+        const text = staticText(node.value);
+        if (text !== null && words(text) >= 2) context.report({ node, messageId: "prop", data: { prop: node.name.name } });
+      },
+      JSXElement(node) {
+        const name = elementName(node);
+        const text = onlyStaticText(node);
+        if (text && DESCRIPTION_COMPONENT.test(name) && words(text) >= PROSE_WORDS) {
+          context.report({ node, messageId: "description", data: { text: clip(text) } });
+        }
+        if (text && PROSE_TAGS.has(name) && EMPTY_STATE.test(text) && words(text) >= 2)
+          context.report({ node, messageId: "empty", data: { text: clip(text) } });
+        const siblings = node.children.filter((c) => c.type === "JSXElement");
+        siblings.forEach((child, i) => {
+          const next = siblings[i + 1];
+          if (!next || !isHeading(child) || !PROSE_TAGS.has(elementName(next))) return;
+          const prose = onlyStaticText(next);
+          if (prose && words(prose) >= PROSE_WORDS) context.report({ node: next, messageId: "under", data: { text: clip(prose) } });
+        });
+      },
+    };
+  },
+};
+
+const CARD_COMPONENTS = new Set([
+  "Group",
+  "Card",
+  "InviteCard",
+  "PlayerCard",
+  "StatCard",
+  "ModeCard",
+  "GameCard",
+  "DeedCard",
+  "HoleCard",
+  "BoardCard",
+]);
+const isCard = (node) => {
+  const name = elementName(node);
+  if (CARD_COMPONENTS.has(name)) return true;
+  if (name === "Button") {
+    const variant = attrOf(node, "variant");
+    return staticText(variant?.value) === "card";
+  }
+  if (!/^[a-z]/.test(name)) return false;
+  const tokens = classTokens(classText(node)).map(stripVariants);
+  return tokens.includes("bg-card") && tokens.some((t) => /^rounded(-|$)/.test(t) && t !== "rounded-full" && t !== "rounded-none");
+};
+
+const noNestedCards = {
+  meta: {
+    type: "problem",
+    messages: {
+      nested:
+        "A card inside a card (`{{inner}}` inside `{{outer}}`). Never nest cards: make the inner one rows of the outer Group, or lift it out as its own section.",
+    },
+  },
+  create(context) {
+    const file = rel(context.filename);
+    if (file.startsWith(UI_DIR)) return {};
+    const stack = [];
+    return {
+      JSXElement(node) {
+        const card = isCard(node);
+        if (card && stack.length)
+          context.report({
+            node: node.openingElement,
+            messageId: "nested",
+            data: { inner: elementName(node), outer: elementName(stack[stack.length - 1]) },
+          });
+        if (card) stack.push(node);
+      },
+      "JSXElement:exit"(node) {
+        if (stack[stack.length - 1] === node) stack.pop();
+      },
+    };
+  },
+};
+
 export default {
   meta: { name: "group53" },
   rules: {
@@ -457,5 +609,7 @@ export default {
     "no-async-onclick": noAsyncOnClick,
     "e2e-waits": e2eWaits,
     "tailwind-css": tailwindCss,
+    "no-subtext": noSubtext,
+    "no-nested-cards": noNestedCards,
   },
 };

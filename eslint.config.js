@@ -117,6 +117,8 @@ export default tseslint.config(
       "group53/no-raw-avatar": "error",
       "group53/design-tokens": "error",
       "group53/no-async-onclick": "error",
+      "group53/no-subtext": "error",
+      "group53/no-nested-cards": "error",
     },
   },
   {
