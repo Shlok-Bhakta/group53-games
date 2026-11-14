@@ -30,7 +30,7 @@ import { DECKS, FREE_CARD, type Deck } from "./cards";
 
 export type { Deck } from "./cards";
 
-// Money goes to and from players (seats), the bank, or the Rest Stop jackpot (a house rule).
+// Money goes to and from players (seats), the bank, or the Free Parking jackpot (a house rule).
 export const BANK = -1;
 export const POT = -2;
 
@@ -38,10 +38,10 @@ export type Rules = {
   cash: number;
   // Turn down a property and it's auctioned (official), or it stays with the bank.
   auctions: boolean;
-  // House rule: taxes and fines go in a jackpot on the Rest Stop, and whoever lands there takes it. 2 also
+  // House rule: taxes and fines go in a jackpot on the Free Parking, and whoever lands there takes it. 2 also
   // puts $500 in at the start and every time it's taken.
   pot: 0 | 1 | 2;
-  // House rule: landing right on Start pays double.
+  // House rule: landing right on GO pays double.
   goDouble: boolean;
   // Collect rent while you're in jail (official), or not.
   jailRent: boolean;
@@ -67,7 +67,7 @@ export type Player = {
   jail: number;
   // Get-out-of-jail cards held, by the deck they came from.
   free: Deck[];
-  // Been past Start at least once (the speed die and the first-lap house rule).
+  // Been past GO at least once (the speed die and the first-lap house rule).
   lapped: boolean;
   out: boolean;
 };
@@ -734,7 +734,7 @@ function toJail(g: Game, seat: number, how?: "three") {
   }
 }
 
-// Forward to `to`, collecting a salary for passing or landing on Start.
+// Forward to `to`, collecting a salary for passing or landing on GO.
 function advance(g: Game, seat: number, to: number, how: "walk" | "jump" = "walk") {
   const s = g.s;
   const p = s.players[seat];

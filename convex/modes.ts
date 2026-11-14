@@ -55,7 +55,7 @@ export const GAMES = {
     reasons: { holes: { label: "Last hole played", push: "the last hole", won: "with the fewest strokes" } },
   },
   landlord: {
-    name: "Landlord",
+    name: "Monopoly",
     path: "/landlord",
     reasons: {
       richest: { label: "Richest at the end", push: "the richest at the end", won: "as the richest" },
@@ -138,8 +138,8 @@ const LANDLORD: Setting[] = [
   { key: "game", label: "Game", short: "{}", options: [{ value: 0, label: "Classic" }, { value: 1, label: "Short game" }], default: 0 },
   { key: "rounds", label: "Rounds", short: "{} rounds", options: [{ value: 0, label: "No limit" }, { value: 10, label: "10" }, { value: 20, label: "20" }, { value: 30, label: "30" }], default: 0 },
   { key: "auctions", label: "Auctions", short: "Auctions {}", options: [{ value: 1, label: "On" }, { value: 0, label: "Off" }], default: 1 },
-  { key: "pot", label: "Rest Stop jackpot", short: "Jackpot: {}", options: [{ value: 0, label: "Off" }, { value: 1, label: "Taxes and fines" }, { value: 2, label: "Plus $500" }], default: 0 },
-  { key: "goDouble", label: "Landing on Start", short: "Landing on Start pays {}", options: [{ value: 0, label: "$200" }, { value: 1, label: "$400" }], default: 0 },
+  { key: "pot", label: "Free Parking jackpot", short: "Jackpot: {}", options: [{ value: 0, label: "Off" }, { value: 1, label: "Taxes and fines" }, { value: 2, label: "Plus $500" }], default: 0 },
+  { key: "goDouble", label: "Landing on GO", short: "Landing on GO pays {}", options: [{ value: 0, label: "$200" }, { value: 1, label: "$400" }], default: 0 },
   { key: "jailRent", label: "Rent from jail", short: "Rent from jail: {}", options: [{ value: 1, label: "Yes" }, { value: 0, label: "No" }], default: 1 },
   { key: "firstLap", label: "Buying on the first lap", short: "First-lap buying: {}", options: [{ value: 0, label: "Yes" }, { value: 1, label: "No" }], default: 0 },
   { key: "speed", label: "Speed die", short: "Speed die {}", options: [{ value: 0, label: "Off" }, { value: 1, label: "On" }], default: 0 },
@@ -329,14 +329,14 @@ export const MODES = {
   "landlord:classic": {
     game: "landlord",
     name: "Classic",
-    title: "Landlord",
+    title: "Monopoly",
     kind: "async",
     players: 8,
     minPlayers: 2,
     board: "landlord",
     slug: "classic",
     blurb: "Buy streets, build houses, bankrupt your friends. Take your turn whenever; trade and build any time.",
-    wants: "a game of Landlord",
+    wants: "a game of Monopoly",
     settings: LANDLORD,
   },
 } as const satisfies Record<string, ModeDef>;

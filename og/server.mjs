@@ -77,7 +77,7 @@ const PAGES = {
     card: "golf",
   },
   "/landlord": {
-    title: () => "Landlord",
+    title: () => "Monopoly",
     description: () => "Buy streets, build hotels, trade and bankrupt each other, 2 to 8 of you over a few days.",
     card: "landlord",
   },
@@ -221,7 +221,7 @@ const CARDS = {
       h(
         "div",
         { flexDirection: "column", gap: 28 },
-        tiles("LANDLORD", ["green", "yellow", "green", "gray", "green", "yellow", "green", "hit"], 104),
+        tiles("MONOPOLY", ["green", "yellow", "green", "gray", "green", "yellow", "green", "hit"], 104),
         h("div", { fontSize: 40, fontWeight: 500, color: "#cfe9dd", maxWidth: 940, lineHeight: 1.25 }, "Buy streets, build hotels, bankrupt your friends."),
       ),
       h("div", { alignItems: "center", justifyContent: "space-between" }, crewRow(crew, images, 84), h("div", { color: EMBED_COLOR, fontSize: 34, fontWeight: 800 }, "Tap to play")),
@@ -283,7 +283,7 @@ const MODE_TITLES = {
   "scrabble:live": "Live Scrabble",
   "golf:turns": "Golf",
   "golf:live": "Live golf",
-  "landlord:classic": "Landlord",
+  "landlord:classic": "Monopoly",
 };
 const vsPar = (s, par) => (s === par ? "E" : s > par ? `+${s - par}` : `${s - par}`);
 const COLOR_NAMES = { w: "White", b: "Black", red: "Red", blue: "Blue", yellow: "Yellow", green: "Green" };
@@ -308,7 +308,7 @@ function matchText(m) {
   }
   if (m.mode.startsWith("landlord:")) {
     const l = m.landlord;
-    if (m.status === "waiting") return { title: `${names[0]} wants a game of Landlord`, status: `${m.players.length} in so far. Tap to take a seat.`, mode };
+    if (m.status === "waiting") return { title: `${names[0]} wants a game of Monopoly`, status: `${m.players.length} in so far. Tap to take a seat.`, mode };
     if (m.status === "cancelled") return { title, status: "This game was called off.", mode };
     if (m.status === "finished") return { title, status: `${m.result.winner ?? "Someone"} won ${m.result.how || ""}`.trim() + ".", mode };
     const mover = m.players.find((p) => p.color === m.toMove);
@@ -434,7 +434,7 @@ function landlordBoard(l, colors, side) {
     "div",
     { position: "relative", width: side, height: side, flexShrink: 0, borderRadius: 18, background: "#cfe0d0", boxShadow: "0 18px 40px rgba(0,0,0,0.4)" },
     ...squares,
-    h("div", { position: "absolute", left: cell, top: cell, width: cell * 9, height: cell * 9, flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }, tiles("LANDLORD", ["green", "yellow", "green", "gray", "green", "yellow", "green", "hit"], 40), h("div", { fontSize: 34, fontWeight: 800, color: "#1d1d1f" }, l ? `Round ${l.round}` : "Waiting")),
+    h("div", { position: "absolute", left: cell, top: cell, width: cell * 9, height: cell * 9, flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10 }, tiles("MONOPOLY", ["green", "yellow", "green", "gray", "green", "yellow", "green", "hit"], 40), h("div", { fontSize: 34, fontWeight: 800, color: "#1d1d1f" }, l ? `Round ${l.round}` : "Waiting")),
   );
 }
 

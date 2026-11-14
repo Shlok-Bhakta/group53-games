@@ -117,8 +117,8 @@ const ICONS: Partial<Record<Square["kind"], ReactNode>> = {
 function Face({ sq, box }: { sq: Square; box: Box }) {
   const corner = box.edge === "corner";
   const icon =
-    sq.kind === "util" ? (sq.name === "Reservoir" ? <DropIcon weight="fill" /> : <LightningIcon weight="fill" />)
-    : sq.kind === "go" ? <span className="font-display text-heading">START</span>
+    sq.kind === "util" ? (sq.name === "Water Works" ? <DropIcon weight="fill" /> : <LightningIcon weight="fill" />)
+    : sq.kind === "go" ? <span className="font-display text-heading">GO</span>
     : sq.kind === "jail" ? <LockIcon weight="fill" />
     : sq.kind === "parking" ? <CarIcon weight="fill" />
     : sq.kind === "gotojail" ? <SirenIcon weight="fill" />
@@ -142,7 +142,7 @@ function Middle({ state }: { state: MonoState }) {
   const inner = SIDE - 2 * 116;
   return (
     <div className="ll-middle absolute flex flex-col items-center justify-center gap-6" style={{ left: 116, top: 116, width: inner, height: inner }}>
-      <Tiles word="LANDLORD" states={["green", "yellow", "green", "gray", "green", "yellow", "green", "hit"]} size="lg" label="Landlord" />
+      <Tiles word="MONOPOLY" states={["green", "yellow", "green", "gray", "green", "yellow", "green", "hit"]} size="lg" label="Monopoly" />
       <div className="flex gap-8 text-center">
         {state.rules.pot > 0 && (
           <div>

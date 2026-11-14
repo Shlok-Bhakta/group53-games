@@ -20,6 +20,51 @@ const own = (g: Game, seat: number, ...pos: number[]) => {
 const cash = (g: Game) => g.s.players.map((p) => p.cash);
 const card = (deck: "chance" | "chest", k: string) => DECKS[deck].findIndex((c) => JSON.stringify(c.effect).includes(k));
 
+test("the board uses the classic US Monopoly names in board order", () => {
+  expect(BOARD.map((sq) => sq.name)).toEqual([
+    "GO",
+    "Mediterranean Avenue",
+    "Community Chest",
+    "Baltic Avenue",
+    "Income Tax",
+    "Reading Railroad",
+    "Oriental Avenue",
+    "Chance",
+    "Vermont Avenue",
+    "Connecticut Avenue",
+    "Jail",
+    "St. Charles Place",
+    "Electric Company",
+    "States Avenue",
+    "Virginia Avenue",
+    "Pennsylvania Railroad",
+    "St. James Place",
+    "Community Chest",
+    "Tennessee Avenue",
+    "New York Avenue",
+    "Free Parking",
+    "Kentucky Avenue",
+    "Chance",
+    "Indiana Avenue",
+    "Illinois Avenue",
+    "B. & O. Railroad",
+    "Atlantic Avenue",
+    "Ventnor Avenue",
+    "Water Works",
+    "Marvin Gardens",
+    "Go to Jail",
+    "Pacific Avenue",
+    "North Carolina Avenue",
+    "Community Chest",
+    "Pennsylvania Avenue",
+    "Short Line",
+    "Chance",
+    "Park Place",
+    "Luxury Tax",
+    "Boardwalk",
+  ]);
+});
+
 describe("moving round the board", () => {
   test("a roll moves you and offers what you land on", () => {
     const g = roll(game(), 0, 1, 2);
@@ -34,7 +79,7 @@ describe("moving round the board", () => {
     expect(g.s.current).toBe(1);
     expect(g.s.phase.k).toBe("roll");
   });
-  test("passing Start pays $200, landing on it double with the house rule", () => {
+  test("passing GO pays $200, landing on it double with the house rule", () => {
     let g = game();
     g.s.players[0].pos = 38;
     g = roll(g, 0, 1, 2);
@@ -63,7 +108,7 @@ describe("moving round the board", () => {
     expect(g.s.players[0].jail).toBe(0);
     expect(g.s.current).toBe(1);
   });
-  test("Go to Jail doesn't pay for passing Start and ends the turn, even on doubles", () => {
+  test("Go to Jail doesn't pay for passing GO and ends the turn, even on doubles", () => {
     let g = game();
     g.s.players[0].pos = 26;
     g = roll(g, 0, 2, 2);
@@ -154,14 +199,14 @@ describe("rent", () => {
 });
 
 describe("cards", () => {
-  const onFortune = (top: number) => {
+  const onChance = (top: number) => {
     const g = game();
     g.s.players[0].pos = 4;
     g.decks.chance = [top, ...g.decks.chance.filter((c) => c !== top)];
     return g;
   };
   test("the nearest station, owned, costs double", () => {
-    const g = onFortune(card("chance", '"rail"'));
+    const g = onChance(card("chance", '"rail"'));
     own(g, 1, 15);
     const h = roll(g, 0, 1, 2);
     expect(h.s.players[0].pos).toBe(15);
@@ -169,20 +214,20 @@ describe("cards", () => {
     expect(h.decks.chance.at(-1)).toBe(card("chance", '"rail"'));
   });
   test("the nearest utility, owned, is ten times a fresh roll", () => {
-    const g = onFortune(card("chance", '"util"'));
+    const g = onChance(card("chance", '"util"'));
     own(g, 1, 12);
     const h = roll(g, 0, 1, 2, 3, 4);
     expect(h.s.players[0].pos).toBe(12);
     expect(cash(h)).toEqual([1430, 1570]);
   });
   test("back three lands you on what's there", () => {
-    const g = onFortune(card("chance", '"back"'));
+    const g = onChance(card("chance", '"back"'));
     const h = roll(g, 0, 1, 2);
     expect(h.s.players[0].pos).toBe(4);
     expect(h.s.players[0].cash).toBe(1300);
   });
   test("chair of the board pays everyone, a birthday collects from everyone", () => {
-    const g = onFortune(card("chance", "payEach"));
+    const g = onChance(card("chance", "payEach"));
     const three = newGame(3, DEFAULT_RULES, () => 0.5);
     three.decks = g.decks;
     three.s.players[0].pos = 4;
@@ -193,14 +238,14 @@ describe("cards", () => {
     expect(cash(roll(b, 0, 1, 1)).slice(0, 3)).toEqual([1520, 1490, 1490]);
   });
   test("repairs charge for every house and hotel", () => {
-    const g = onFortune(card("chance", "repairs"));
+    const g = onChance(card("chance", "repairs"));
     own(g, 0, 1, 3);
     g.s.props[1]!.houses = 5;
     g.s.props[3]!.houses = 4;
     expect(roll(g, 0, 1, 2).s.players[0].cash).toBe(1500 - 100 - 4 * 25);
   });
   test("a get-out-of-jail card stays with you and leaves the deck", () => {
-    const g = onFortune(card("chance", "free"));
+    const g = onChance(card("chance", "free"));
     const h = roll(g, 0, 1, 2);
     expect(h.s.players[0].free).toEqual(["chance"]);
     expect(h.decks.chance).not.toContain(card("chance", "free"));
@@ -358,7 +403,7 @@ describe("debts and bankruptcy", () => {
     expect(g.s.players[0].out).toBe(true);
     expect(g.s.props[1]!.owner).toBe(1);
     expect(g.s.props[12]!.owner).toBe(1);
-    // 100 cash, the utility isn't mortgaged; 10% of Cinder Lane's $30 is $3.
+    // 100 cash, the utility isn't mortgaged; 10% of Mediterranean Avenue's $30 is $3.
     expect(g.s.players[1].cash).toBe(1500 + 100 - 3);
     expect(g.s.current).toBe(1);
     expect(standings(g.s).at(-1)).toEqual([0]);
@@ -454,7 +499,7 @@ describe("the speed die", () => {
     g.s.players[0].lapped = true;
     return g;
   };
-  test("isn't rolled until you've been past Start", () => {
+  test("isn't rolled until you've been past GO", () => {
     const g = roll(game(2, { speed: true }), 0, 1, 2);
     expect(g.s.dice).toEqual([1, 2]);
   });
@@ -476,7 +521,7 @@ describe("the speed die", () => {
     for (const i of g.s.props.keys()) if (g.s.props[i]) g.s.props[i]!.owner = i === 5 ? 0 : 1;
     g.s.props[6]!.mortgaged = true;
     g = roll(g, 0, 1, 2, 5);
-    // Rent on Tanner Row, then past the station (mine) and Harbor Walk (mortgaged) to Pier Street.
+    // Rent on Baltic Avenue, then past the station (mine) and Oriental Avenue (mortgaged) to Vermont Avenue.
     expect(g.events.filter((e) => e.t === "move").at(-1)).toMatchObject({ to: 8 });
   });
   test("the bus moves by either die or both", () => {
@@ -514,7 +559,7 @@ describe("the speed die", () => {
 });
 
 describe("house rules", () => {
-  test("the jackpot takes taxes and fines and pays out on the Rest Stop", () => {
+  test("the jackpot takes taxes and fines and pays out on Free Parking", () => {
     let g = roll(game(2, { pot: 1 }), 0, 2, 2);
     expect(g.s.pot).toBe(200);
     g.s.players[0].pos = 15;

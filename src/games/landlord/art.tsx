@@ -3,11 +3,11 @@ import { motion } from "motion/react";
 // The Landlord card's art: a hand of deeds dealt into a fan, then a house dropped on the last. About a second,
 // once.
 const DEEDS = [
-  { group: "sky", name: "Pier Street", price: "$100" },
-  { group: "orange", name: "Kiln Avenue", price: "$200" },
-  { group: "red", name: "Crown Avenue", price: "$240" },
-  { group: "green", name: "Ivy Terrace", price: "$300" },
-  { group: "navy", name: "Summit Heights", price: "$400" },
+  { group: "sky", name: "Vermont Avenue", price: "$100" },
+  { group: "orange", name: "New York Avenue", price: "$200" },
+  { group: "red", name: "Illinois Avenue", price: "$240" },
+  { group: "green", name: "North Carolina Avenue", price: "$300" },
+  { group: "navy", name: "Boardwalk", price: "$400" },
 ];
 
 function DeedCard({ group, name, price, width }: { group: string; name: string; price: string; width: number }) {
@@ -28,7 +28,7 @@ function DeedCard({ group, name, price, width }: { group: string; name: string; 
 
 export function LandlordBanner() {
   return (
-    <div className="relative mx-auto flex h-[150px] w-full max-w-[320px] items-end justify-center" aria-label="Landlord" role="img">
+    <div className="relative mx-auto flex h-[150px] w-full max-w-[320px] items-end justify-center" aria-label="Monopoly" role="img">
       {DEEDS.map((d, i) => (
         <motion.span
           key={d.name}

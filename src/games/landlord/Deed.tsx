@@ -116,7 +116,7 @@ function rentRows(sq: Square, state: MonoState, pos: number) {
     return rows;
   }
   const n = prop.owner >= 0 ? groupOf(pos).filter((i) => state.props[i]!.owner === prop.owner).length : 0;
-  if (sq.kind === "rail") return [1, 2, 3, 4].map((k) => ({ label: `${k} station${k > 1 ? "s" : ""}`, value: money(25 * 2 ** (k - 1)), now: live && n === k }));
+  if (sq.kind === "rail") return [1, 2, 3, 4].map((k) => ({ label: `${k} railroad${k > 1 ? "s" : ""}`, value: money(25 * 2 ** (k - 1)), now: live && n === k }));
   return [
     { label: "1 utility", value: "4 × the roll", now: live && n === 1 },
     { label: "Both", value: "10 × the roll", now: live && n === 2 },
@@ -132,7 +132,7 @@ function about(sq: Square) {
     case "parking":
       return "Nothing happens here, unless you're playing with the jackpot.";
     case "gotojail":
-      return "Straight to jail, without passing Start.";
+      return "Straight to jail, without passing GO.";
     case "tax":
       return `Pay ${money(sq.amount)}.`;
     case "chance":

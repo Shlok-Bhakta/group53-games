@@ -15,7 +15,7 @@ export function sideText(side: Side): string {
   return parts.length ? parts.join(", ") : "nothing";
 }
 
-// "Chris's Crown Avenue and $50 for your Kiln Avenue", read by whoever it's offered to.
+// "Chris's Illinois Avenue and $50 for your New York Avenue", read by whoever it's offered to.
 export const tradeText = (t: Trade, name: Name) => `${name(t.from)} offers ${sideText(t.give)} for ${sideText(t.get)}`;
 
 // A sentence for an event, or null for the ones that only move things along (a turn starting).
@@ -32,7 +32,7 @@ export function say(e: Ev, name: Name): string | null {
         case "tax":
           return `${name(e.from)} paid ${amt} tax.`;
         case "go":
-          return `${name(e.to)} collected ${amt} for passing Start.`;
+          return `${name(e.to)} collected ${amt} for passing GO.`;
         case "buy":
           return `${name(e.from)} bought${where} for ${amt}.`;
         case "build":
@@ -63,7 +63,7 @@ export function say(e: Ev, name: Name): string | null {
       return null;
     }
     case "card":
-      return `${name(e.seat)} drew ${e.deck === "chance" ? "Fortune" : "Treasury"}: ${DECKS[e.deck][e.card].text}`;
+      return `${name(e.seat)} drew ${e.deck === "chance" ? "Chance" : "Community Chest"}: ${DECKS[e.deck][e.card].text}`;
     case "jail":
       if (e.in) return e.how === "three" ? `${name(e.seat)} rolled three doubles and went to jail.` : `${name(e.seat)} went to jail.`;
       return e.how === "doubles" ? `${name(e.seat)} rolled doubles out of jail.` : e.how === "card" ? `${name(e.seat)} used a get-out-of-jail card.` : e.how === "third" ? `${name(e.seat)} paid their way out of jail.` : null;

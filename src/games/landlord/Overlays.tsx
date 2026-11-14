@@ -22,7 +22,7 @@ function Die({ n, i, speed }: { n: number; i: number; speed?: boolean }) {
       animate={{ rotate: 0, scale: 1, y: 0, opacity: 1 }}
       transition={{ type: "spring", stiffness: 260, damping: 16, delay: i * 0.06 }}
       role="img"
-      aria-label={speed ? (n <= 3 ? `Speed die ${n}` : n === 6 ? "Speed die: bus" : "Speed die: the boss") : `${n}`}
+      aria-label={speed ? (n <= 3 ? `Speed die ${n}` : n === 6 ? "Speed die: bus" : "Speed die: Mr. Monopoly") : `${n}`}
     >
       {speed && n > 3 ? (
         n === 6 ? <BusIcon weight="fill" size={30} /> : <CrownSimpleIcon weight="fill" size={30} />
@@ -61,7 +61,7 @@ export function Overlays({ shown, top, bottom }: { shown: Shown; top: number; bo
             transition={{ type: "spring", stiffness: 220, damping: 22 }}
             role="status"
           >
-            <div className="font-display text-heading">{shown.card.deck === "chance" ? "Fortune" : "Treasury"}</div>
+            <div className="font-display text-heading">{shown.card.deck === "chance" ? "Chance" : "Community Chest"}</div>
             <p className="text-body">{shown.card.text}</p>
           </motion.div>
         )}

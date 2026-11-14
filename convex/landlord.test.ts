@@ -37,8 +37,8 @@ async function game(t: T, n = 2, settings?: Record<string, number>) {
   return { id, players, seats };
 }
 
-describe("a game of Landlord", () => {
-  test("starts with everyone on Start, the decks secret, and the first player pushed", async () => {
+describe("a game of Monopoly", () => {
+  test("starts with everyone on GO, the decks secret, and the first player pushed", async () => {
     const t = setup();
     const { id, seats } = await game(t, 3, { cash: 2000 });
     const m = (await get(t, id))!;
@@ -54,7 +54,7 @@ describe("a game of Landlord", () => {
     expect(JSON.stringify(s)).not.toContain("decks");
     const secret = await t.run((ctx) => ctx.db.query("secrets").withIndex("by_match_user", (q) => q.eq("matchId", id).eq("userId", undefined)).unique());
     expect((secret!.data as { chance: number[] }).chance).toHaveLength(16);
-    const p = (await pushes(t)).filter((x) => x.title === "Landlord is on");
+    const p = (await pushes(t)).filter((x) => x.title === "Monopoly is on");
     expect(p.find((x) => x.userId === seats[0].userId)?.body).toBe("You roll first.");
     expect(p.find((x) => x.userId === seats[1].userId)?.body).toMatch(/rolls first/);
   });

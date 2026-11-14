@@ -1075,7 +1075,7 @@ html, body { min-height: 100%; }
 .ll-banded-top { bottom: 24px; }
 .ll-banded-left { right: 24px; }
 .ll-banded-right { left: 24px; }
-.ll-name { font-size: 12px; font-weight: 650; line-height: 1.1; text-wrap: balance; }
+.ll-name { font-size: 12px; font-weight: 650; line-height: 1.1; text-wrap: balance; overflow-wrap: anywhere; }
 .ll-icon { font-size: 22px; line-height: 1; opacity: 0.8; }
 .ll-corner .ll-icon { font-size: 36px; }
 .ll-corner .ll-name { font-size: 15px; }

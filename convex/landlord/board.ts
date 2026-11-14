@@ -1,6 +1,6 @@
 // The board: forty squares round a square, the standard property-trading layout, with every price and rent of
-// the classic US board (2008 and later: $200 income tax, $100 luxury tax). Names are our own and live only
-// here, so the board can be renamed in one place. Shared by the server and phones.
+// the classic US Monopoly board (2008 and later: $200 income tax, $100 luxury tax).
+// Shared by the server and phones.
 
 export type Group = "brown" | "sky" | "pink" | "orange" | "red" | "yellow" | "green" | "navy";
 
@@ -22,50 +22,50 @@ const street = (name: string, group: Group, price: number, house: number, ...ren
 });
 const rail = (name: string): Square => ({ kind: "rail", name, price: 200 });
 const util = (name: string): Square => ({ kind: "util", name, price: 150 });
-const chance: Square = { kind: "chance", name: "Fortune" };
-const chest: Square = { kind: "chest", name: "Treasury" };
+const chance: Square = { kind: "chance", name: "Chance" };
+const chest: Square = { kind: "chest", name: "Community Chest" };
 
 export const BOARD: readonly Square[] = [
-  { kind: "go", name: "Start" },
-  street("Cinder Lane", "brown", 60, 50, 2, 10, 30, 90, 160, 250),
+  { kind: "go", name: "GO" },
+  street("Mediterranean Avenue", "brown", 60, 50, 2, 10, 30, 90, 160, 250),
   chest,
-  street("Tanner Row", "brown", 60, 50, 4, 20, 60, 180, 320, 450),
+  street("Baltic Avenue", "brown", 60, 50, 4, 20, 60, 180, 320, 450),
   { kind: "tax", name: "Income Tax", amount: 200 },
-  rail("Northgate Station"),
-  street("Harbor Walk", "sky", 100, 50, 6, 30, 90, 270, 400, 550),
+  rail("Reading Railroad"),
+  street("Oriental Avenue", "sky", 100, 50, 6, 30, 90, 270, 400, 550),
   chance,
-  street("Pier Street", "sky", 100, 50, 6, 30, 90, 270, 400, 550),
-  street("Lighthouse Road", "sky", 120, 50, 8, 40, 100, 300, 450, 600),
+  street("Vermont Avenue", "sky", 100, 50, 6, 30, 90, 270, 400, 550),
+  street("Connecticut Avenue", "sky", 120, 50, 8, 40, 100, 300, 450, 600),
   { kind: "jail", name: "Jail" },
-  street("Rose Court", "pink", 140, 100, 10, 50, 150, 450, 625, 750),
-  util("Power Plant"),
-  street("Orchard Way", "pink", 140, 100, 10, 50, 150, 450, 625, 750),
-  street("Blossom Avenue", "pink", 160, 100, 12, 60, 180, 500, 700, 900),
-  rail("Eastgate Station"),
-  street("Copper Street", "orange", 180, 100, 14, 70, 200, 550, 750, 950),
+  street("St. Charles Place", "pink", 140, 100, 10, 50, 150, 450, 625, 750),
+  util("Electric Company"),
+  street("States Avenue", "pink", 140, 100, 10, 50, 150, 450, 625, 750),
+  street("Virginia Avenue", "pink", 160, 100, 12, 60, 180, 500, 700, 900),
+  rail("Pennsylvania Railroad"),
+  street("St. James Place", "orange", 180, 100, 14, 70, 200, 550, 750, 950),
   chest,
-  street("Foundry Road", "orange", 180, 100, 14, 70, 200, 550, 750, 950),
-  street("Kiln Avenue", "orange", 200, 100, 16, 80, 220, 600, 800, 1000),
-  { kind: "parking", name: "Rest Stop" },
-  street("Market Square", "red", 220, 150, 18, 90, 250, 700, 875, 1050),
+  street("Tennessee Avenue", "orange", 180, 100, 14, 70, 200, 550, 750, 950),
+  street("New York Avenue", "orange", 200, 100, 16, 80, 220, 600, 800, 1000),
+  { kind: "parking", name: "Free Parking" },
+  street("Kentucky Avenue", "red", 220, 150, 18, 90, 250, 700, 875, 1050),
   chance,
-  street("Guild Street", "red", 220, 150, 18, 90, 250, 700, 875, 1050),
-  street("Crown Avenue", "red", 240, 150, 20, 100, 300, 750, 925, 1100),
-  rail("Southgate Station"),
-  street("Saffron Street", "yellow", 260, 150, 22, 110, 330, 800, 975, 1150),
-  street("Amber Gardens", "yellow", 260, 150, 22, 110, 330, 800, 975, 1150),
-  util("Reservoir"),
-  street("Goldleaf Avenue", "yellow", 280, 150, 24, 120, 360, 850, 1025, 1200),
+  street("Indiana Avenue", "red", 220, 150, 18, 90, 250, 700, 875, 1050),
+  street("Illinois Avenue", "red", 240, 150, 20, 100, 300, 750, 925, 1100),
+  rail("B. & O. Railroad"),
+  street("Atlantic Avenue", "yellow", 260, 150, 22, 110, 330, 800, 975, 1150),
+  street("Ventnor Avenue", "yellow", 260, 150, 22, 110, 330, 800, 975, 1150),
+  util("Water Works"),
+  street("Marvin Gardens", "yellow", 280, 150, 24, 120, 360, 850, 1025, 1200),
   { kind: "gotojail", name: "Go to Jail" },
-  street("Fern Avenue", "green", 300, 200, 26, 130, 390, 900, 1100, 1275),
-  street("Ivy Terrace", "green", 300, 200, 26, 130, 390, 900, 1100, 1275),
+  street("Pacific Avenue", "green", 300, 200, 26, 130, 390, 900, 1100, 1275),
+  street("North Carolina Avenue", "green", 300, 200, 26, 130, 390, 900, 1100, 1275),
   chest,
-  street("Evergreen Way", "green", 320, 200, 28, 150, 450, 1000, 1200, 1400),
-  rail("Westgate Station"),
+  street("Pennsylvania Avenue", "green", 320, 200, 28, 150, 450, 1000, 1200, 1400),
+  rail("Short Line"),
   chance,
-  street("Skyline Drive", "navy", 350, 200, 35, 175, 500, 1100, 1300, 1500),
+  street("Park Place", "navy", 350, 200, 35, 175, 500, 1100, 1300, 1500),
   { kind: "tax", name: "Luxury Tax", amount: 100 },
-  street("Summit Heights", "navy", 400, 200, 50, 200, 600, 1400, 1700, 2000),
+  street("Boardwalk", "navy", 400, 200, 50, 200, 600, 1400, 1700, 2000),
 ];
 
 export const SIZE = BOARD.length;

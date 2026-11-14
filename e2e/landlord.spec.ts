@@ -53,19 +53,19 @@ async function startGame(phones: Phones, settings: Record<string, string> = {}) 
   const { pa, pb, a, b } = await twoPhones(phones);
   const id = await openLobby(pa, "landlord", "classic", settings);
   await fillLobby(pa, [pb]);
-  for (const p of [pa, pb]) await expect(p.getByRole("button", { name: /^Cinder Lane/ })).toBeVisible({ timeout: 20_000 });
+  for (const p of [pa, pb]) await expect(p.getByRole("button", { name: /^Mediterranean Avenue/ })).toBeVisible({ timeout: 20_000 });
   const m = await getMatch(id);
   const [up, other] = m.turn === a.userId ? [pa, pb] : [pb, pa];
   return { id, pa, pb, a, b, up, other };
 }
 
-test("Landlord has a card on Games and a mode page with its house rules", async ({ phones }) => {
+test("Monopoly has a card on Games and a mode page with its house rules", async ({ phones }) => {
   const page = await phones.open({ player: await createPlayer("Shlok"), push: "on" });
   await page.goto("/games");
-  await expect(page.getByRole("heading", { name: "Landlord" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Monopoly" })).toBeVisible();
   await page.goto("/landlord/mode/classic");
   await page.getByRole("button", { name: "Settings" }).click();
-  for (const group of ["Starting cash", "Auctions", "Rest Stop jackpot", "Speed die", "Game"]) await expect(page.getByRole("radiogroup", { name: group })).toBeVisible();
+  for (const group of ["Starting cash", "Auctions", "Free Parking jackpot", "Speed die", "Game"]) await expect(page.getByRole("radiogroup", { name: group })).toBeVisible();
   await shot(page, "mode");
 });
 
@@ -79,7 +79,7 @@ test("a game on two phones: roll, buy, and the other phone sees it happen", asyn
   const before = await stateOf(id);
   expect(before.players.map((p) => p.cash)).toEqual([2000, 2000]);
   await up.getByRole("button", { name: "Roll" }).click();
-  // The piece leaves Start on both phones, and lands where the server has it.
+  // The piece leaves GO on both phones, and lands where the server has it.
   await expect.poll(async () => (await stateOf(id)).seq).toBeGreaterThan(before.seq);
   const s = await stateOf(id);
   const seat = before.current;
@@ -131,7 +131,7 @@ test("coming back plays what you missed, then it's live", async ({ phones }) => 
   for (const [i, p] of s.players.entries()) await expect(pb.locator(`[data-token="${i}"]`)).toHaveAttribute("data-pos", String(p.pos));
   // Nothing new: straight to live.
   await pb.reload();
-  await expect(pb.getByRole("button", { name: /^Cinder Lane/ })).toBeVisible({ timeout: 20_000 });
+  await expect(pb.getByRole("button", { name: /^Mediterranean Avenue/ })).toBeVisible({ timeout: 20_000 });
   await expect(pb.getByText("Catching up")).toHaveCount(0);
 });
 
@@ -144,7 +144,7 @@ test("a trade: offered on one phone, accepted on the other", async ({ phones }) 
   await admin().mutation(anyApi.testing.landlordPatch, { id, state: { props } });
   await settledOn(pa);
   await pa.getByRole("button", { name: "Trade" }).click();
-  await pa.getByRole("region", { name: "You give" }).getByRole("button", { name: /Cinder Lane/ }).click();
+  await pa.getByRole("region", { name: "You give" }).getByRole("button", { name: /Mediterranean Avenue/ }).click();
   await pa.getByRole("textbox", { name: /gives: cash/ }).fill("100");
   await shot(pa, "trade");
   await pa.getByRole("button", { name: /^Send to/ }).click();
@@ -199,11 +199,11 @@ test("landlord-soak", async ({ phones }) => {
   const page = await phones.open({ player: me, push: "on" });
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  const id = await openLobby(page, "landlord", "classic", process.env.SOAK_SHORT ? { "Starting cash": "$1,000", Game: "Short game" } : { "Speed die": "On", "Rest Stop jackpot": "Plus $500" });
+  const id = await openLobby(page, "landlord", "classic", process.env.SOAK_SHORT ? { "Starting cash": "$1,000", Game: "Short game" } : { "Speed die": "On", "Free Parking jackpot": "Plus $500" });
   // The bots take their seats on the server, then the host starts it.
   for (const b of [b1, b2]) await admin().mutation(anyApi.testing.joinAs, { id, userId: b.userId });
   await page.getByRole("button", { name: "Start with 3" }).click();
-  await expect(page.getByRole("button", { name: /^Cinder Lane/ })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("button", { name: /^Mediterranean Avenue/ })).toBeVisible({ timeout: 20_000 });
   const rounds = Number(process.env.SOAK) > 1 ? Number(process.env.SOAK) : 40;
   for (let i = 0; i < rounds; i++) {
     const m = await getMatch(id);

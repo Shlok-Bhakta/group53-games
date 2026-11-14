@@ -64,7 +64,7 @@ async function commit(ctx: MutationCtx, match: Doc<"matches">, g: Game, by: Id<"
   const { match: after, fresh } = await passTurn(ctx, match, { state: g.s, turn, by, timer: { at: Date.now() + REMIND_MS, fn: internal.landlord.remind } });
   if (first) {
     const name = await displayName(ctx, turn);
-    await startPushes(ctx, match, (p) => ({ title: "Landlord is on", body: p.userId === turn ? "You roll first." : `${name} rolls first.` }));
+    await startPushes(ctx, match, (p) => ({ title: "Monopoly is on", body: p.userId === turn ? "You roll first." : `${name} rolls first.` }));
     return;
   }
   await tell(ctx, after, g, by, fresh);

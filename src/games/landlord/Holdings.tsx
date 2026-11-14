@@ -42,7 +42,7 @@ export function HoldingsSheet({ open, onClose, match, state, seat, busy, onDeed 
                 <button type="button" className="flex min-w-0 flex-1 touch-manipulation items-center gap-3 text-left" onClick={() => onDeed(pos)}>
                   <span className="ll-swatch size-8 shrink-0 rounded-sm" data-group={sq.kind === "street" ? sq.group : undefined} style={sq.kind === "street" ? undefined : { background: "var(--muted)" }} />
                   <span className="min-w-0">
-                    <span className="block truncate font-semibold">{sq.name}</span>
+                    <span className="block wrap-anywhere font-semibold">{sq.name}</span>
                     <span className="block truncate text-footnote text-muted-foreground">{status}</span>
                   </span>
                 </button>

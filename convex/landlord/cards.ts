@@ -6,7 +6,7 @@ export type Deck = "chance" | "chest";
 
 export type Effect =
   | { k: "advance"; to: number }
-  // To the next station or utility ahead, where rent is doubled (a station) or ten times a fresh roll (a utility).
+  // To the next railroad or utility ahead, where rent is doubled (a railroad) or ten times a fresh roll (a utility).
   | { k: "nearest"; kind: "rail" | "util" }
   | { k: "back"; n: number }
   | { k: "collect"; amount: number }
@@ -21,30 +21,30 @@ export type Card = { text: string; effect: Effect };
 
 export const DECKS: Record<Deck, readonly Card[]> = {
   chance: [
-    { text: "Take a stroll up to Summit Heights.", effect: { k: "advance", to: 39 } },
-    { text: "Back to Start. Collect $200.", effect: { k: "advance", to: 0 } },
-    { text: "Head to Crown Avenue. Collect $200 if you pass Start.", effect: { k: "advance", to: 24 } },
-    { text: "Head to Rose Court. Collect $200 if you pass Start.", effect: { k: "advance", to: 11 } },
-    { text: "Catch the next train: on to the nearest station. If it's owned, pay double rent; if not, you can buy it.", effect: { k: "nearest", kind: "rail" } },
-    { text: "Catch the next train: on to the nearest station. If it's owned, pay double rent; if not, you can buy it.", effect: { k: "nearest", kind: "rail" } },
+    { text: "Take a stroll up to Boardwalk.", effect: { k: "advance", to: 39 } },
+    { text: "Advance to GO. Collect $200.", effect: { k: "advance", to: 0 } },
+    { text: "Head to Illinois Avenue. Collect $200 if you pass GO.", effect: { k: "advance", to: 24 } },
+    { text: "Head to St. Charles Place. Collect $200 if you pass GO.", effect: { k: "advance", to: 11 } },
+    { text: "Catch the next train: on to the nearest railroad. If it's owned, pay double rent; if not, you can buy it.", effect: { k: "nearest", kind: "rail" } },
+    { text: "Catch the next train: on to the nearest railroad. If it's owned, pay double rent; if not, you can buy it.", effect: { k: "nearest", kind: "rail" } },
     { text: "On to the nearest utility. If it's owned, roll and pay ten times the roll; if not, you can buy it.", effect: { k: "nearest", kind: "util" } },
     { text: "Your shares paid out. Collect $50.", effect: { k: "collect", amount: 50 } },
     { text: "Get out of jail free. Keep this until you need it, or sell it.", effect: { k: "free" } },
     { text: "Missed your stop. Go back three squares.", effect: { k: "back", n: 3 } },
-    { text: "Straight to jail. Don't pass Start, don't collect $200.", effect: { k: "jail" } },
+    { text: "Straight to jail. Don't pass GO, don't collect $200.", effect: { k: "jail" } },
     { text: "Upkeep on everything you've built: $25 a house, $100 a hotel.", effect: { k: "repairs", house: 25, hotel: 100 } },
     { text: "Caught speeding. Pay $15.", effect: { k: "pay", amount: 15 } },
-    { text: "Take a ride out to Northgate Station. Collect $200 if you pass Start.", effect: { k: "advance", to: 5 } },
+    { text: "Take a ride out to Reading Railroad. Collect $200 if you pass GO.", effect: { k: "advance", to: 5 } },
     { text: "You've been made chair of the board. Pay everyone $50.", effect: { k: "payEach", amount: 50 } },
     { text: "Your building loan matured. Collect $150.", effect: { k: "collect", amount: 150 } },
   ],
   chest: [
-    { text: "Back to Start. Collect $200.", effect: { k: "advance", to: 0 } },
+    { text: "Advance to GO. Collect $200.", effect: { k: "advance", to: 0 } },
     { text: "The bank made a mistake in your favor. Collect $200.", effect: { k: "collect", amount: 200 } },
     { text: "A trip to the doctor. Pay $50.", effect: { k: "pay", amount: 50 } },
     { text: "You sold some shares. Collect $50.", effect: { k: "collect", amount: 50 } },
     { text: "Get out of jail free. Keep this until you need it, or sell it.", effect: { k: "free" } },
-    { text: "Straight to jail. Don't pass Start, don't collect $200.", effect: { k: "jail" } },
+    { text: "Straight to jail. Don't pass GO, don't collect $200.", effect: { k: "jail" } },
     { text: "Your holiday fund matured. Collect $100.", effect: { k: "collect", amount: 100 } },
     { text: "A tax refund. Collect $20.", effect: { k: "collect", amount: 20 } },
     { text: "It's your birthday! Everyone gives you $10.", effect: { k: "collectEach", amount: 10 } },
