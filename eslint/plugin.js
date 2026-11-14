@@ -390,6 +390,61 @@ const e2eWaits = {
   },
 };
 
+const TAILWIND_AT_RULES = new Set([
+  "utility",
+  "keyframes",
+  "theme",
+  "custom-variant",
+  "variant",
+  "layer",
+  "property",
+  "font-face",
+  "media",
+  "supports",
+  "container",
+  "import",
+  "source",
+  "plugin",
+]);
+
+const tailwindCss = {
+  meta: {
+    type: "problem",
+    language: "css/css",
+    messages: {
+      file: "The only stylesheet is src/style.css. Style with Tailwind classes in the component; put shared pieces in a component under src/components.",
+      selector:
+        "`{{selector}}` is a hand-written class. Style with Tailwind classes in the component. Something Tailwind can't say inline (a frame effect, a physical tile) becomes `@utility <name> { ... }`; an animation becomes `--animate-<name>` in @theme plus its @keyframes; anything interactive or interruptible uses Motion (motion/react).",
+    },
+  },
+  create(context) {
+    const file = rel(context.filename);
+    if (file !== "src/style.css") {
+      return {
+        StyleSheet(node) {
+          context.report({ node, messageId: "file" });
+        },
+      };
+    }
+    const stack = [];
+    return {
+      Atrule(node) {
+        stack.push(node.name);
+      },
+      "Atrule:exit"() {
+        stack.pop();
+      },
+      Rule(node) {
+        if (stack.some((n) => n === "utility" || n === "keyframes")) return;
+        if (!stack.every((n) => TAILWIND_AT_RULES.has(n))) return;
+        const selector = context.sourceCode.getText(node.prelude);
+        if (/(^|[\s,>+~(])\.[a-zA-Z_-]/.test(selector.replace(/\.dark\b/g, "")))
+          context.report({ node: node.prelude, messageId: "selector", data: { selector: selector.slice(0, 60) } });
+      },
+    };
+  },
+};
+
 export default {
   meta: { name: "group53" },
   rules: {
@@ -401,5 +456,6 @@ export default {
     "package-boundaries": packageBoundaries,
     "no-async-onclick": noAsyncOnClick,
     "e2e-waits": e2eWaits,
+    "tailwind-css": tailwindCss,
   },
 };

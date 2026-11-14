@@ -3,6 +3,7 @@ import tseslint from "typescript-eslint";
 import reactHooks from "eslint-plugin-react-hooks";
 import jsxA11y from "eslint-plugin-jsx-a11y";
 import globals from "globals";
+import css from "@eslint/css";
 import group53 from "./eslint/plugin.js";
 
 const NON_PORTABLE_MATH = [
@@ -63,8 +64,8 @@ export default tseslint.config(
   {
     linterOptions: { noInlineConfig: true, reportUnusedDisableDirectives: "off" },
   },
-  js.configs.recommended,
-  ...tseslint.configs.recommended,
+  { ...js.configs.recommended, files: ["**/*.{ts,tsx,js,mjs}"] },
+  ...tseslint.configs.recommended.map((c) => ({ ...c, files: ["**/*.{ts,tsx,js,mjs}"] })),
   {
     files: ["**/*.{ts,tsx,js,mjs}"],
     languageOptions: { globals: { ...globals.browser, ...globals.node } },
@@ -157,6 +158,13 @@ export default tseslint.config(
         },
       ],
     },
+  },
+  {
+    files: ["**/*.css"],
+    language: "css/css",
+    languageOptions: { tolerant: true },
+    plugins: { css, group53 },
+    rules: { "group53/tailwind-css": "error" },
   },
   {
     files: ["e2e/**/*.ts"],
