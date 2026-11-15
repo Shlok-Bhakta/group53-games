@@ -352,6 +352,36 @@ const packageBoundaries = {
   },
 };
 
+const isAsyncFunction = (fn) =>
+  Boolean(fn) &&
+  (fn.type === "ArrowFunctionExpression" || fn.type === "FunctionExpression" || fn.type === "FunctionDeclaration") &&
+  fn.async;
+
+const findVariable = (scope, name) => {
+  for (let at = scope; at; at = at.upper) {
+    const found = at.set.get(name);
+    if (found) return found;
+  }
+  return null;
+};
+
+const isAsyncHandler = (expression, scope) => {
+  if (isAsyncFunction(expression)) return true;
+  if (expression.type !== "Identifier") return false;
+  const definition = findVariable(scope, expression.name)?.defs[0];
+  if (!definition) return false;
+  if (definition.node.type === "FunctionDeclaration") return isAsyncFunction(definition.node);
+  if (definition.node.type !== "VariableDeclarator") return false;
+  const init = definition.node.init;
+  if (isAsyncFunction(init)) return true;
+  return (
+    init?.type === "CallExpression" &&
+    init.callee.type === "Identifier" &&
+    init.callee.name === "useCallback" &&
+    isAsyncFunction(init.arguments[0])
+  );
+};
+
 const noAsyncOnClick = {
   meta: {
     type: "problem",
@@ -366,9 +396,7 @@ const noAsyncOnClick = {
         if (node.name.name !== "onClick" || node.value?.type !== "JSXExpressionContainer") return;
         const owner = node.parent.name;
         if (owner?.type === "JSXIdentifier" && /^Async[A-Z]/.test(owner.name)) return;
-        const fn = node.value.expression;
-        if ((fn.type === "ArrowFunctionExpression" || fn.type === "FunctionExpression") && fn.async)
-          context.report({ node, messageId: "async" });
+        if (isAsyncHandler(node.value.expression, context.sourceCode.getScope(node))) context.report({ node, messageId: "async" });
       },
     };
   },

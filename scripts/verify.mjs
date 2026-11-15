@@ -59,7 +59,17 @@ const red = (s) => `\x1b[31m${s}\x1b[0m`;
 const green = (s) => `\x1b[32m${s}\x1b[0m`;
 
 const started = Date.now();
+const unchanged = () => git("rev-parse", "HEAD^{tree}") === tree && (git("status", "--porcelain") === "") === clean;
+const stopIfChanged = () => {
+  if (unchanged()) return;
+  console.error(
+    red("\nThe checkout changed while verify was running (a commit, a checkout or an edit), so this run proves nothing. Run it again."),
+  );
+  process.exit(1);
+};
+
 for (const [i, step] of steps.entries()) {
+  stopIfChanged();
   const missing = (step.needs ?? []).filter((b) => !has(b));
   if (missing.length) {
     console.error(red(`\n${step.title} needs ${missing.join(", ")} installed. Nothing is skipped: install it and run again.`));
@@ -79,7 +89,7 @@ for (const [i, step] of steps.entries()) {
 const total = Math.round((Date.now() - started) / 1000);
 if (only) {
   console.log(green(`\n✔ ${steps.map((s) => s.key).join(", ")} passed in ${total}s. Partial runs don't count for a push.`));
-} else if (clean && git("status", "--porcelain") === "") {
+} else if (clean && unchanged()) {
   fs.mkdirSync(stampDir, { recursive: true });
   fs.writeFileSync(path.join(stampDir, tree), new Date().toISOString());
   console.log(green(`\n✔ Everything passed in ${total}s. This commit can be pushed.`));

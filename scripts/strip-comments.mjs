@@ -7,15 +7,39 @@ const parseFile = (code, file) => parse(code, { comment: true, range: true, loc:
 
 const isEmptyJsxContainer = (node) => node?.type === "JSXExpressionContainer" && node.expression.type === "JSXEmptyExpression";
 
-const shape = (node) => {
-  if (Array.isArray(node)) {
-    return node.filter((child) => !isEmptyJsxContainer(child) && !(child?.type === "JSXText" && child.value.trim() === "")).map(shape);
+const jsxText = (value) => {
+  const lines = value.split(/\r\n|\n|\r/);
+  const lastFilled = lines.reduce((at, line, i) => (/[^ \t]/.test(line) ? i : at), -1);
+  return lines
+    .map((line, i) => {
+      let text = line.replace(/\t/g, " ");
+      if (i !== 0) text = text.replace(/^ +/, "");
+      if (i !== lines.length - 1) text = text.replace(/ +$/, "");
+      return text && i !== lastFilled ? `${text} ` : text;
+    })
+    .join("");
+};
+
+const shapeChildren = (children) => {
+  const merged = [];
+  for (const child of children) {
+    if (isEmptyJsxContainer(child)) continue;
+    const previous = merged.at(-1);
+    if (child?.type === "JSXText" && previous?.type === "JSXText") previous.value += child.value;
+    else merged.push(child?.type === "JSXText" ? { type: "JSXText", value: child.value } : child);
   }
+  return merged
+    .map((child) => (child?.type === "JSXText" ? { type: "JSXText", text: jsxText(child.value) } : shape(child)))
+    .filter((child) => !(child?.type === "JSXText" && child.text === ""));
+};
+
+const shape = (node) => {
+  if (Array.isArray(node)) return node.map(shape);
   if (!node || typeof node !== "object") return node;
   const out = {};
   for (const [key, value] of Object.entries(node)) {
     if (key === "range" || key === "loc" || key === "parent" || key === "comments" || key === "tokens") continue;
-    out[key] = node.type === "JSXText" && (key === "value" || key === "raw") ? String(value).trim().replace(/\s+/g, " ") : shape(value);
+    out[key] = key === "children" && Array.isArray(value) ? shapeChildren(value) : shape(value);
   }
   return out;
 };
@@ -29,16 +53,19 @@ const strip = (code, file) => {
     if (KEEP.test(comment.value)) continue;
     const container = containers.find(([s, e]) => comment.range[0] > s && comment.range[1] < e);
     const range = container ?? comment.range;
-    cuts.set(range[0], range);
+    cuts.set(range[0], { range, jsx: Boolean(container) });
   }
   let out = code;
-  for (const [start, end] of [...cuts.values()].sort((a, b) => b[0] - a[0])) {
+  for (const { range, jsx } of [...cuts.values()].sort((a, b) => b.range[0] - a.range[0])) {
+    const [start, end] = range;
     const lineStart = out.lastIndexOf("\n", start - 1) + 1;
     const nextNewline = out.indexOf("\n", end);
     const lineEnd = nextNewline === -1 ? out.length : nextNewline;
     const aloneOnLine = out.slice(lineStart, start).trim() === "" && out.slice(end, lineEnd).trim() === "";
     if (aloneOnLine) {
       out = out.slice(0, lineStart) + out.slice(nextNewline === -1 ? out.length : nextNewline + 1);
+    } else if (jsx) {
+      out = out.slice(0, start) + out.slice(end);
     } else {
       const trimmedStart = out.slice(0, start).replace(/[ \t]+$/, "").length;
       out = out.slice(0, trimmedStart) + out.slice(end);
