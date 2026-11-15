@@ -19,7 +19,7 @@ export function MatchScreen({ game }: { game: GameUI }) {
   const me = useQuery(api.users.me);
   const navigate = useNavigate();
   const [menu, setMenu] = useState(false);
-  useHoldUpdates(match?.status === "active");
+  useHoldUpdates(true);
 
   if (match === undefined) {
     return (

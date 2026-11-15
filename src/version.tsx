@@ -49,7 +49,14 @@ function update(latest: string) {
   }
   sessionStorage.setItem(TARGET_KEY, latest);
   set("updating");
-  setTimeout(() => location.reload(), SHOW_MS);
+  setTimeout(() => {
+    if (holds > 0 && document.visibilityState === "visible") {
+      sessionStorage.removeItem(TARGET_KEY);
+      set("idle");
+      return;
+    }
+    location.reload();
+  }, SHOW_MS);
 }
 
 async function check() {

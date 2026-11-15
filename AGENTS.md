@@ -163,7 +163,7 @@ Work happens one agent at a time on `main`. When a feature is done: run both tes
 
 CI (`.github/workflows/ci.yml`) runs on every PR and push to `main`: the typecheck, `npm test` (with Bun, so golf's cross-engine check runs), the build, the sidecar's `cargo test`, and the full e2e suite, with one retry on CI (a test that only passed on its retry shows as flaky). It never deploys.
 
-Collaborators (Chrisis147, AIsJump, Boiler31) run it with `dekit`, work on branches and open PRs. `main` is protected and `.github/CODEOWNERS` makes Shlok the only approval that counts; a new push drops it. Shlok's direct pushes still work because admins bypass the rule (`enforce_admins` off), so leave that off. Merging a PR doesn't deploy it: pull `main` and run `npm run deploy`.
+Collaborators (Chrisis147, AIsJump, Boiler31) run it with `dekit`, work on branches and open PRs. `main` is protected and `.github/CODEOWNERS` makes Shlok the only approval that counts; a new push drops it. Shlok's direct pushes still work because admins bypass the rule (`enforce_admins` off), so leave that off. Whatever lands on `main` deploys itself (below).
 
 ### Before the first deploy
 
@@ -173,22 +173,7 @@ Collaborators (Chrisis147, AIsJump, Boiler31) run it with `dekit`, work on branc
 
 ### Deploy
 
-```sh
-npm test && npm run test:e2e   # both must pass
-git add -A && git commit && git push origin main
-npm run deploy
-```
-
-`npm run deploy` (`scripts/deploy.sh`) refuses to run with uncommitted changes (`-- --dirty` overrides; don't use it for real releases). It then:
-
-1. pushes the Convex functions (`npx convex deploy -y`);
-2. rsyncs the repo to `kiwi:~/Services/group53/`, skipping `node_modules`, `dist`, `.git`, `secrets`, `.env*`, `.convex` and test output;
-3. rebuilds and restarts the `web`, `og` and `stonks` containers (`docker compose up -d --build web og stonks`);
-4. prunes the untagged images each rebuild leaves behind, plus build cache older than a week;
-5. checks `/`, `/version.json` and `/sw.js` on `https://group53.shlokbhakta.dev` answer 200;
-6. checks `/version.json` now names a different build than before the deploy, and fails if it doesn't. That new ID is what makes phones show "Updating" and reload.
-
-It's done when it prints `Build <old> -> <new>` and `Live: {"id":"..."}`, and the log shows `✔ Deployed Convex functions`. Phones pick up the new build on their own (`src/version.tsx`): an "Updating" overlay, a reload, then "You're up to date".
+Whatever lands on `main` deploys itself: the `deployer` container on kiwi fetches `main` every minute and, when it moves, runs that commit's `deploy/run.mjs` (Convex functions first, then the web app published in place with no downtime, then og and stonks where their code changed, then checks with an automatic rollback). Watch it with `ssh kiwi 'cd Services/group53 && docker compose logs -f deployer'`; the last result is `kiwi:~/Services/group53/deploy-status.json`. Everything about it, including retrying and rolling back, is in `deploy/README.md`. There's no manual deploy command.
 
 ### Order of changes
 
@@ -221,7 +206,7 @@ Set on the deployment, not in files: `npx convex env list`, `npx convex env set 
 
 ### Rolling back
 
-Revert the bad commit (`git revert <sha>`), push, and run `npm run deploy` again. It's a full redeploy of that tree, backend included, so the same ordering rules apply: if the bad commit removed a function the old app needs, reverting brings it back.
+Revert the bad commit on `main` (`git revert <sha>`); the deployer deploys the revert like any other commit. It's a full redeploy of that tree, backend included, so the same ordering rules apply: if the bad commit removed a function the old app needs, reverting brings it back.
 
 ### Link previews
 
