@@ -13,7 +13,7 @@ import type { Player } from "@/games/types";
 import { cn } from "@/lib/utils";
 import { chips } from "../format";
 import { PACE, cardsHeld, type Show } from "../show";
-import { usePhoneLandscape } from "../landscape";
+import { usePhoneLandscape } from "@/components/game/landscape";
 import { Flying, Roll, SPRING } from "./motion";
 import { Bet, Dealer, Float, NameLine, statusOf } from "./Seat";
 

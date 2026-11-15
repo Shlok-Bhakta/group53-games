@@ -13,7 +13,7 @@ import { Result } from "@/components/match";
 import { sfx } from "@/sound";
 import { BetDock, type Move } from "./BetDock";
 import { chips } from "./format";
-import { usePhoneLandscape } from "./landscape";
+import { usePhoneLandscape } from "@/components/game/landscape";
 import { LastHand } from "./LastHand";
 import { useShow } from "./show";
 import { Table } from "./Table";

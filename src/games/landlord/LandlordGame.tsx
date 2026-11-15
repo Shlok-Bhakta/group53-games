@@ -19,7 +19,7 @@ import { DeedSheet, useLandlordMove } from "./Deed";
 import { Dock } from "./Dock";
 import { centerOf } from "./geometry";
 import { HoldingsSheet } from "./Holdings";
-import { usePhoneLandscape } from "./landscape";
+import { usePhoneLandscape } from "@/components/game/landscape";
 import { LandlordMenu, PlayerSheet } from "./LandlordMenu";
 import { Overlays } from "./Overlays";
 import { useShow } from "./show";

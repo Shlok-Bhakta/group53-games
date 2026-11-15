@@ -1,14 +1,6 @@
-import { useSyncExternalStore, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
-const PHONE_LANDSCAPE = "(orientation: landscape) and (max-height: 500px)";
-
-const subscribe = (onChange: () => void) => {
-  const media = window.matchMedia(PHONE_LANDSCAPE);
-  media.addEventListener("change", onChange);
-  return () => media.removeEventListener("change", onChange);
-};
-
-export const usePhoneLandscape = () => useSyncExternalStore(subscribe, () => window.matchMedia(PHONE_LANDSCAPE).matches);
+export { usePhoneLandscape } from "@/components/game/landscape";
 
 export function BesideTheBoard({ children }: { children: ReactNode }) {
   return <div className="flex flex-col gap-1">{children}</div>;
