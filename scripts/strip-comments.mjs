@@ -1,26 +1,39 @@
 import fs from "node:fs";
-import { parse } from "@typescript-eslint/typescript-estree";
+import { parse, simpleTraverse } from "@typescript-eslint/typescript-estree";
 
 const KEEP = /^\s*(platform:|@vite-ignore|[#@]__PURE__|@refresh|webpackChunkName|\/ <reference)/;
 
+const parseFile = (code, file) => parse(code, { comment: true, range: true, loc: false, jsx: /\.(tsx|jsx|mjs|js)$/.test(file) });
+
+const isEmptyJsxContainer = (node) => node?.type === "JSXExpressionContainer" && node.expression.type === "JSXEmptyExpression";
+
+const shape = (node) => {
+  if (Array.isArray(node)) {
+    return node.filter((child) => !isEmptyJsxContainer(child) && !(child?.type === "JSXText" && child.value.trim() === "")).map(shape);
+  }
+  if (!node || typeof node !== "object") return node;
+  const out = {};
+  for (const [key, value] of Object.entries(node)) {
+    if (key === "range" || key === "loc" || key === "parent" || key === "comments" || key === "tokens") continue;
+    out[key] =
+      key === "value" || key === "raw" ? (node.type === "JSXText" ? String(value).trim().replace(/\s+/g, " ") : value) : shape(value);
+  }
+  return out;
+};
+
 const strip = (code, file) => {
-  const { comments } = parse(code, {
-    comment: true,
-    range: true,
-    jsx: file.endsWith("x") || file.endsWith(".mjs") || file.endsWith(".js"),
-    loc: false,
-  });
-  const doomed = comments.filter((c) => !KEEP.test(c.value)).sort((a, b) => b.range[0] - a.range[0]);
+  const ast = parseFile(code, file);
+  const containers = [];
+  simpleTraverse(ast, { enter: (node) => isEmptyJsxContainer(node) && containers.push(node.range) });
+  const cuts = new Map();
+  for (const comment of ast.comments) {
+    if (KEEP.test(comment.value)) continue;
+    const container = containers.find(([s, e]) => comment.range[0] > s && comment.range[1] < e);
+    const range = container ?? comment.range;
+    cuts.set(range[0], range);
+  }
   let out = code;
-  for (const c of doomed) {
-    let [start, end] = c.range;
-    const before = out.slice(0, start);
-    const after = out.slice(end);
-    const jsx = before.match(/\{\s*$/) && after.match(/^\s*\}/);
-    if (jsx) {
-      start = before.search(/\{\s*$/);
-      end = end + after.search(/\}/) + 1;
-    }
+  for (const [start, end] of [...cuts.values()].sort((a, b) => b[0] - a[0])) {
     const lineStart = out.lastIndexOf("\n", start - 1) + 1;
     const nextNewline = out.indexOf("\n", end);
     const lineEnd = nextNewline === -1 ? out.length : nextNewline;
@@ -32,7 +45,11 @@ const strip = (code, file) => {
       out = out.slice(0, trimmedStart) + out.slice(end);
     }
   }
-  return out.replace(/\n{3,}/g, "\n\n").replace(/^\n+/, "");
+  out = out.replace(/\n{3,}/g, "\n\n").replace(/^\n+/, "");
+  if (JSON.stringify(shape(parseFile(out, file))) !== JSON.stringify(shape(ast))) {
+    throw new Error(`${file}: stripping comments would change the code, so it was left alone. Remove these comments by hand.`);
+  }
+  return out;
 };
 
 const files = process.argv.slice(2);
