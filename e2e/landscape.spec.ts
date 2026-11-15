@@ -12,6 +12,10 @@ test.describe("landscape", () => {
     for (const path of ["/", "/games", "/crew", "/you"]) {
       await page.goto(path);
       await ready(page);
+      expect(
+        await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--safe-left")),
+        `safe areas on ${path}`,
+      ).toBe(`${SAFE_LANDSCAPE.left}px`);
       await expectFitsScreen(page);
     }
   });

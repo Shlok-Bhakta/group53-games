@@ -17,7 +17,14 @@ export async function simulateSafeAreas(page: Page, insets: Insets) {
       const saved = sessionStorage.getItem(key);
       if (!saved) return;
       const insets = JSON.parse(saved) as Record<string, number>;
-      for (const side of sides) document.documentElement.style.setProperty(`--safe-${side}`, `${insets[side]}px`);
+      const apply = () => {
+        const root = document.documentElement;
+        if (!root) return false;
+        for (const side of sides) root.style.setProperty(`--safe-${side}`, `${insets[side]}px`);
+        return true;
+      };
+      if (apply()) return;
+      new MutationObserver((_, observer) => apply() && observer.disconnect()).observe(document, { childList: true });
     },
     [SAFE_KEY, SIDES] as const,
   );
