@@ -5,7 +5,7 @@ description: The chess package's feature map. Use when working on any chess mode
 
 # Chess
 
-AGENTS.md (Games framework, Real-time netcode) is the overview and the `framework` skill covers matches, turns, pushes and the harness. This is what you need on top of them to change chess.
+AGENTS.md is the overview and the `framework` skill covers matches, turns, pushes and the harness. This is what you need on top of them to change chess.
 
 ## Modes
 
@@ -26,7 +26,7 @@ Four modes, all `game: "chess"`, defined in `convex/chess/modes.ts` (`CHESS_GAME
 - `convex/chess/realtime.ts`: the real-time engine (both variants). Pure, shared by server and phones.
 - `convex/chess/four/board.ts`: four-player geometry (shared by both four-player engines). `convex/chess/four/classic.ts`: the turn-based four-player engine (`initialFour`, `move4`, `retire4`, `legalTargetsFrom`, `inCheck`, `liveColors`, `fourBoards`).
 - `convex/chess/schema.ts`: `rtCommands` (index `by_match_tick`) and `rtSnapshots` (index `by_match`, one row per real-time game). `convex/chess/preview.ts`: `chessPreview` for `BOARDS`. `convex/chess/modes.ts`.
-- `src/games/chess/`: `ChessMatch.tsx` (`ChessGame`, the screen for every mode: player bars, the four-player seats and status line, the dock's Controls), `ClassicGame.tsx`, `FourGame.tsx`, `RealtimeGame.tsx` (each owns its `GameFrame`), `Board.tsx` (turn-based board for 8x8 and 14x14), `rt/RtBoard.tsx`, `rt/useEngine.ts`, `rt/Overlay.tsx` (real-time), `dock.tsx` (the confirm-before-send move), `history.tsx` (the move line), `geometry.ts` (`View`, `viewFor`, taps), `landscape.tsx` (`usePhoneLandscape`, `BesideTheBoard`), `palette.ts` (board colors that don't follow the theme), `ChessBanner.tsx` and `ModeArt.tsx` (card art), `rules.ts`, `summary.ts`, `text.ts` (`COLOR_NAMES`).
+- `src/games/chess/`: `ChessMatch.tsx` (`ChessGame`, the screen for every mode: player bars, the four-player seats and status line, the dock's Controls), `ClassicGame.tsx`, `FourGame.tsx`, `RealtimeGame.tsx` (each owns its `GameFrame`), `Board.tsx` (turn-based board for 8x8 and 14x14), `rt/RtBoard.tsx`, `rt/useEngine.ts`, `rt/Overlay.tsx` (real-time), `dock.tsx` (the confirm-before-send move), `history.tsx` (the move line), `geometry.ts` (`View`, `viewFor`, taps), `landscape.tsx` (`BesideTheBoard`, and `usePhoneLandscape` re-exported from `src/components/game/landscape.ts`), `palette.ts` (board colors that don't follow the theme), `ChessBanner.tsx` and `ModeArt.tsx` (card art), `rules.ts`, `summary.ts`, `text.ts` (`COLOR_NAMES`).
 - `og/games/chess.mjs` (link preview card; pieces fetched from `PIECES_URL`, the `web` container's `/pieces`), colors under `CHESS` in `og/palette.mjs`.
 - Pieces: `public/pieces/{w,b}{K,Q,R,B,N,P}.svg`, and `public/pieces/four/{red,blue,yellow,green,dead}X.svg` made by `node scripts/gen-four-pieces.mjs` (recolors the white set). The four armies' colors are `SEAT_COLORS` (`src/games/palette.ts`) and match the piece art, so they're the same in every theme.
 - Tests: `convex/chess/realtime.test.ts`, `realtime4.test.ts`, `four.test.ts` (server, convex-test), `four/classic.test.ts`; `e2e/chess.spec.ts`, `e2e/four.spec.ts`, `e2e/chess-screens.spec.ts`. Chess also drives `e2e/load.mjs`, `e2e/og-preview.mjs` and much of the framework's regression tests.

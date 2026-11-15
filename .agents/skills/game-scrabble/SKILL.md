@@ -5,7 +5,7 @@ description: The Scrabble package's feature map. Use for any Scrabble work: its 
 
 # Scrabble
 
-AGENTS.md (Scrabble, and the Scrabble screen) is the overview; the `framework` skill covers matches, turns, secrets, drafts and the harness; the `ui` skill covers `FullscreenStage`, `FloatingTopBar` and landscape. This is what you need on top of them to change Scrabble.
+AGENTS.md is the overview; the `framework` skill covers matches, turns, secrets, drafts and the harness; the `ui` skill covers `FullscreenStage`, `FloatingTopBar` and landscape. This is what you need on top of them to change Scrabble.
 
 ## Modes
 
@@ -73,7 +73,7 @@ Plans work any time, survive reloads and show on any phone. `useScrabbleDraft` t
 - Test: "on its side, the board sits between the side rail and the dock..." in `e2e/scrabble.spec.ts`: `expectFitsScreen`, the rail taller than wide, the dock right of it, the corner squares (0,0) and (14,14) panned into the open part (`panBoard`, `[data-floating-bar]`, `[data-dock]`), then a word played.
 
 ### The show
-Every phone animates the latest play: its tiles (`fresh`, the cells of the last move) drop in tile by tile in reading order, 70ms apart in time with the play sound's notes, with a bounce, and stay washed in the player's color; the score floats up in the player's color off the last tile (`scored`, white ink from `palette.ts`, since seat colors are the same in every theme); BINGO is spelled in tiles over the board for 2.2s on a bingo. Sounds (`sfx`): "pick", "place", "recall", "shuffle", "play"/"bingo" (with the tile count and score) on your own play; "land"/"bingo" when someone else's word lands, "turn" when it comes round to you (650ms after a play), "ghost", "invalid", "win"/"lose" at the end, "tick" in the last 5 seconds (`Countdown`). Shuffle makes the rack hop; held tiles jiggle; placing springs. The top pill is edged in the color of whoever's turn it is and shows the last move ("Wes: TEN +3").
+Every phone animates the latest play: its tiles (`fresh`, the cells of the last move) drop in tile by tile in reading order, 70ms apart in time with the play sound's notes, with a bounce, and stay washed in the player's color; the score floats up in the player's color off the last tile (`scored`, white ink from `palette.ts`, since seat colors are the same in every theme); BINGO is spelled in tiles over the board for 2.2s on a bingo. Sounds (`sfx`): "pick", "place", "recall", "shuffle", "play"/"bingo" (with the tile count and score) on your own play; "land"/"bingo" when someone else's word lands, "turn" when it comes round to you (650ms after a play), "ghost", "invalid", "win"/"lose" at the end, "tick" in the last 5 seconds (`Countdown`). Shuffle makes the rack hop; held tiles jiggle; placing springs. The top pill is edged in the color of whoever's turn it is and shows their avatar with its frame, the last move ("Wes: TEN +3") and, live, the clock. Tiles on the board are physical cream tiles in every theme, edged in the color of whoever played them (`--seat` on `LetterTile`).
 - `e2e` reads `window.__sfx` (`sounds(page)`) and `window.__music`.
 
 ### Menu, bag, live clock

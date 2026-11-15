@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Adding a game
 
-AGENTS.md (Games framework, Design system, Testing) is the overview, and the `framework` skill covers matches, turns, pushes and the test harness in depth. Read both first. This guide is the order to build a game in and every place it has to be registered.
+AGENTS.md (Layout, Rules, Testing) is the overview, the `framework` skill covers matches, turns, pushes and the test harness in depth, and the `ui` skill the design system. Read all three first. This guide is the order to build a game in and every place it has to be registered.
 
 A game is a package. Its parts live only in these places, and games never import each other:
 
@@ -115,7 +115,7 @@ Add the game to `GAME_UI` in `src/games/index.tsx` (`Record<GameKey, GameUI>`; r
 
 A game announced before it's built has a coming-soon card in `SOON` (PvP Wordle does, and a page-only `og/games/wordle.mjs`): drop it from `SOON` once the game's in `GAME_UI`, and give its og module the match parts.
 
-The lobby, settings picker, result, standings, rematch, resign confirmation, game menu (`GameMenu`), mode pages and hub are shared; don't rebuild them. Build the screen from the design system (AGENTS.md, Design system): `GameFrame` and `DockNote` (or `FullscreenStage`, `FloatingTopBar`, `FloatButton`, `FloatPill` for fullscreen), `TurnText`, `PlayerAvatar`, `Button`/`IconButton` (no naked `<button>`), `AsyncButton`/`usePending` for every async tap, `ConfirmButton` for anything destructive, `Sheet` for small focused things, `Segmented` for a few options. Theme tokens only; colors that must not follow the theme (a physical board, a canvas) go in `src/games/<game>/palette.ts`. Phones first: 44px tap targets, 56px primary actions, heights under the board fixed so nothing shifts it, nothing sticky at the top, reduced motion respected. Make it live: other players' moves, presence ("is on it") and animations triggered by someone else's action, because every Convex query is a live subscription. Sounds go through `sfx(...)` from `src/sound.ts`, never louder than the pack's own.
+The lobby, settings picker, result, standings, rematch, resign confirmation, game menu (`GameMenu`), mode pages and hub are shared; don't rebuild them. Build the screen from the design system (the `ui` skill): `GameFrame` and `DockNote` (or `FullscreenStage`, `FloatingTopBar`, `FloatButton`, `FloatPill` for fullscreen), `TurnText`, `PlayerAvatar`, `Button`/`IconButton` (no naked `<button>`), `AsyncButton`/`usePending` for every async tap, `ConfirmButton` for anything destructive, `Sheet` for small focused things, `Segmented` for a few options. Theme tokens only; colors that must not follow the theme (a physical board, a canvas) go in `src/games/<game>/palette.ts`. Phones first: 44px tap targets, 56px primary actions, heights under the board fixed so nothing shifts it, nothing sticky at the top, reduced motion respected. Make it live: other players' moves, presence ("is on it") and animations triggered by someone else's action, because every Convex query is a live subscription. Sounds go through `sfx(...)` from `src/sound.ts`, never louder than the pack's own.
 
 ## 7. Tests
 
@@ -124,13 +124,13 @@ All of these are required before the game ships.
 - **Engine unit tests**, `convex/<game>/engine.test.ts`: every rule and edge case, pure. For a game with bots, a simulation that plays hundreds of whole games under every mix of settings and checks the invariants after every action (see `convex/landlord/sim.test.ts`).
 - **Server tests**, `convex/<game>/server.test.ts` (convex-test, `setup()` and `signedIn()` from `convex/test.setup.ts`, fake timers): a game through `matches.queue` and `matches.startGame` (which run the real start hook), moves, refusing moves off turn and stale taps, secrets never in `matches.state` and only returned to their owner, pushes (pending `push:sendToUser` jobs), timeouts and reminders, resigning, the result and standings, and the preview (`internal.previews.match`). `convex/test.setup.ts` globs `./**/*.ts`, so files in the package are found without changes.
 - **e2e on two phones**, `e2e/<game>.spec.ts`: the Games card and mode page with its settings, a game opened with `openLobby` and filled with `fillLobby` (never `testing:startMatch`, which builds chess only), moves on one phone appearing on the other, both phones agreeing, the result. Wait on what you can observe (`ready`, `holdsStill`, `settled`, `expect.poll` on `testing:getMatch`, `data-*` attributes the screen exposes), never on time. Add `testing:*` helpers in `convex/testing.ts` when a test needs a known setup (`setRack`, `landlordBots`); each starts with `assertTestDeployment()`.
-- **Landscape**: check the screen with `e2e/landscape.ts` once it exists.
+- **Landscape**: a test that rotates the game's screen (`simulateSafeAreas(page, SAFE_LANDSCAPE)`, `rotate(page, "landscape")`, `ready`, `expectFitsScreen` from `e2e/landscape.ts`), with portrait unchanged; the `ui` skill's Landscape section says how to lay a game out on its side.
 - **Review screenshots**: `e2e/<game>-screens.spec.ts` behind `SCREENS=1`, dark and light, and look at them.
 - **Link preview**: `node e2e/og-preview.mjs` (add the game to it) and look at the card.
 
 ## 8. The feature map: `.agents/skills/game-<game>/SKILL.md`
 
-Frontmatter `name: game-<game>` and a `description` saying when to use it. Then, in plain dense prose: what the game is and its modes; the file map across `convex/`, `src/games/`, `e2e/`, `og/`; the rules and invariants that must never break; each user-facing feature with how to reach it as a user, how to drive it in tests (fixtures, `testing:*` helpers, `data-*` attributes, `window.__` hooks) and what proves it works; the gotchas; the tests and how to run them. Add the game's paragraph to AGENTS.md too.
+Frontmatter `name: game-<game>` and a `description` saying when to use it. Then, in plain dense prose: what the game is and its modes; the file map across `convex/`, `src/games/`, `e2e/`, `og/`; the rules and invariants that must never break; each user-facing feature with how to reach it as a user, how to drive it in tests (fixtures, `testing:*` helpers, `data-*` attributes, `window.__` hooks) and what proves it works; the gotchas; the tests and how to run them. Then add the game to AGENTS.md: a line in the list of games under Layout and a row in Skills. Per-game detail goes in the skill, never AGENTS.md.
 
 ## 9. Verify and ship
 

@@ -5,7 +5,7 @@ description: The shared game framework and its test harness. Use when working on
 
 # Framework
 
-AGENTS.md (Games framework, Testing) is the overview. This is what you need on top of it to change the framework or test through it.
+AGENTS.md (Layout, Rules, Testing) is the overview and `new-game` walks through every registry. This is what you need on top of them to change the framework or test through it.
 
 ## Match lifecycle
 
@@ -16,6 +16,7 @@ AGENTS.md (Games framework, Testing) is the overview. This is what you need on t
 - `openSeats` is set when a challenge invites fewer than `players - 1`. Fixed-size games (chess) ping the crew about the leftover seats; flexible ones (`minPlayers < players`) just leave them open with no push, and their challenge pushes don't count empty seats ("with Chris" not "with Chris and 2 more").
 - `queue`: returns my own open game of that mode if I have one (a challenge I sent isn't a lobby, so queueing beside it opens one), else joins the oldest open game someone else waits in (with their settings), else opens one with mine and pings the crew.
 - `challenge` is idempotent: the same mode and the same set of invitees as one of my waiting games returns that game (double taps, slow networks). It only reads my own waiting games so challenges between other players can't conflict with it.
+- **Settings**: the host picks them on the mode page (`useModeSettings`, remembered per mode in localStorage, seeds never) and can still change them in the lobby: `configure` (host only, `waiting` only) merges just the keys sent over the stored ones, so everyone in the lobby sees them change live. Rematches keep them. Read them anywhere with `settingsOf(mode, match.settings)`.
 - `addPlayer` pushes everyone already in, and starts the game once full. `startGame` (host only, flexible games, at least `minPlayers`) starts it early; invitees not in yet miss it. The game's own start pushes tell everyone it's on, so `startGame` sends none.
 - `decline`: two-player cancels and tells the host (pointing at the mode page). Flexible games drop the invite and tell the host. Fixed bigger games open the seat (`openSeats: true`), tell the players in, and ping the crew, skipping the decliner.
 - `leave` (not the host; the host cancels) also drops your invite and opens your seat if the game had invites.
@@ -55,6 +56,22 @@ Invariants: `matches.ts` never names a game (hooks via `hooksFor`, looked up at 
 - Test players (`users.isTest`) never get a real push. Off the test backend (`ALLOW_TEST_HELPERS` unset) `notify` returns before any reads; on it, what they'd have got (after the looking-at-it check, with the badge) goes in `testPushes`. A test player creating a game never pings the crew (`pingCrew` checks `isTestUser`).
 - `push.ts` runs in Node (web-push) and reads subscriptions through `notifications.subscriptionsFor`; a 404 or 410 from the push service deletes that subscription. Missing VAPID vars log and send nothing. `notifications.subscribe` upserts by endpoint and sends a "Notifications are on" push; `hasEndpoint` lets the client check the server holds this device's subscription.
 - Service worker: every push event stays in `waitUntil` until the notification shows (iOS drops silent subscriptions). A tap posts `{ type: "navigate", url }` to an open window and also stores the URL in the Cache API (`group53-pending`, `/__pending-navigation`) for `src/deepLinks.ts`; with no window it opens one.
+
+## The client side of a match
+
+- Routes are generated from `GAME_UI` in `src/App.tsx`: `/<game>` (`GameHub`), `/<game>/mode/:slug` (`ModePage`), `/<game>/:id` (`MatchScreen`, which shows the shared lobby from `src/components/match/` while `waiting`, then the game's `Game`). Every one is wrapped in `NotificationsRequired`, so a link from Discord still enforces push; golf's practice routes and hosted games too (`golfRoute`).
+- `?accept=1` on a match URL (`acceptPath`) makes the lobby take the seat on opening (`Lobby.tsx`, `autoJoin`) and drops the parameter.
+- `MatchScreen` holds updates while it's open (`useHoldUpdates`, below).
+- App badge: `useAppBadge` (`src/shell.tsx`, mounted in `App`) keeps `navigator.setAppBadge` at `matches.attention` while the app is open; pushes carry `badgeCount` for when it isn't. It works on iOS 16.4+ home screen apps once notifications are allowed.
+
+## Deep links on the phone
+
+- Notification taps reach the app through `public/sw.js`, which posts `{type: "navigate"}` to an open window (iOS standalone apps ignore `WindowClient.navigate()`) and leaves the URL in the Cache API, which `src/deepLinks.ts` picks up when the app opens fresh at its start page.
+- Links shared in Discord open in a browser, not the app: iOS can't open a home screen web app from a link at all, Android only sometimes (Discord's in-app browser usually keeps the link), and that browser isn't signed in. So a game link opened outside the app shows `LinkHandoff` (above the install steps): the game, then the crew's faces under "Which one's you?". Tapping yours calls `links.handoff`, which pushes the game to your phone; the notification opens the app in it and takes the seat. Android also gets an "Open in the app" `intent://` link, and the manifest asks Chrome to capture links into the installed app (`handle_links`, `launch_handler`).
+
+## Updates (`src/version.tsx`)
+
+Every phone runs the newest build. `version.json` carries the build ID; the app checks it on launch, every minute, on coming back to the foreground and on navigation. A new build covers the app with an animated "Updating" overlay, reloads, and shows "You're up to date" from the bottom once it's back. `useHoldUpdates(true)` holds it: `MatchScreen` holds for as long as a game screen is open, golf's practice holes and open world (`HoldUpdates`) while you're on them, and real-time chess while its game is active, and a held update applies once nothing holds it or the app goes to the background. If a reload doesn't land on the new build (a stale cache) it offers an Update toast instead of looping. Nothing is lost by reloading: games are on the server and plans save within a fraction of a second.
 
 ## Presence
 
@@ -107,8 +124,8 @@ Fixtures (`e2e/fixtures.ts`), import `test` and `expect` from there:
 
 ### Tools
 
-- `node --experimental-strip-types e2e/load.mjs [--games 6 --classic 3 --seconds 60 --no-presence] [--prod]`: real websocket clients play real-time and classic chess with presence and taps, measuring move latency, time to reach the opponent, errors and OCC retries from the backend logs. `--prod` turns test helpers on at kiwi for the run and off after (a watchdog does it if the run overruns), and removes its test players.
-- `PLAYWRIGHT_BROWSERS_PATH=0 node --experimental-strip-types e2e/playtest.ts`: a staging table for agents on `127.0.0.1:4600`: `GET /p/:name` (the screen as an aria snapshot, URL, errors since last look, and `settled`), `GET /p/:name/wait` (up to 25s until it's their move or the game's over, then waits for the screen to catch up), `POST /p/:name/tap {"role","name","exact"}`, `POST /p/:name/shot`, `GET /status`. Games are listed in `GAMES` at its top. It stops once every game ends (or 40 min), leaves 90s to look at results, and writes `e2e/.state/playtest.json`.
+- `node --experimental-strip-types e2e/load.mjs [--games 6 --classic 3 --seconds 60 --no-presence] [--prod]`: real websocket clients play real-time and classic chess with presence and taps, measuring move latency, time to reach the opponent, errors and OCC retries from the backend logs. Baseline on prod, 2026-10-25, 12 players: real-time move p50 115ms, p95 207ms; reaching the opponent p50 115ms, p95 209ms. `--prod` turns test helpers on at kiwi for the run and off after (a watchdog does it if the run overruns), and removes its test players.
+- `PLAYWRIGHT_BROWSERS_PATH=0 node --experimental-strip-types e2e/playtest.ts`: a staging table for agents on `127.0.0.1:4600`: `GET /p/:name` (the screen as an aria snapshot, URL, errors since last look, and `settled`), `GET /p/:name/wait` (up to 25s until it's their move or the game's over, then waits for the screen to catch up), `POST /p/:name/tap {"role","name","exact"}`, `POST /p/:name/shot`, `GET /status`. Games are listed in `GAMES` at its top. It stops once every game ends (or 40 min), leaves 90s to look at results, and writes `e2e/.state/playtest.json`. Give each player to a cheap agent (Haiku) with curl and a play style, and have them report bugs and confusion; it found the sheets with no close button and a flash that never cleared.
 - `node e2e/og-preview.mjs`: renders link previews for live chess, four-player, Scrabble, poker, Landlord and Stonks games into `e2e/.state/og-*.png`.
 - load, playtest and og-preview start their own backend through `startBackend`, so don't run them alongside an e2e run.
 - `npm run game:publish -- <game> <dir>`: publishes a hosted game to whatever `.env.local` (or `CONVEX_SELF_HOSTED_*`) points at.

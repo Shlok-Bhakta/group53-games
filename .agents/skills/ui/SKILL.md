@@ -5,7 +5,7 @@ description: The shared UI system (design tokens, shadcn kit, shared parts, land
 
 # UI
 
-AGENTS.md (Look and feel, Design system) is the overview. This is the catalogue and the rules you need to build a screen without reinventing anything.
+AGENTS.md (Rules) has the short list. This is the catalogue and the rules you need to build a screen without reinventing anything.
 
 ## What to use for what
 
@@ -13,7 +13,7 @@ Everything in `src/components/ui/` is shadcn (style `radix-nova`, Radix from the
 
 - **Pressable anything**: `Button` (`@/components/ui/button`). Never a raw `<button>` or `motion.button`. Defaults to `type="button"`; `pending` sets `aria-busy`, disables it and swaps the icon for a spinner; `icon` is the leading icon; `asChild` styles a `Link`. Focus ring is `ring-ring` (the theme's primary) offset on the background, so it shows in every theme.
   - Variants: `default` (primary), `secondary`, `outline`, `ghost`, `destructive`, `link`, `card` (a card surface; gets `data-slot="card"`), `float` (see-through over a fullscreen game), `row` (a list row), `bare` (no surface of its own: the child is the surface, like a `PlayerCard`, a colour swatch styled inline, or a theme preview).
-  - Sizes: `default`/`sm` (44 tall), `lg` (48), `xl` (56, primary actions), `dock` (60, icon over label), `dock-square` (56 square tool), `icon` (44 round), `icon-lg` (48 round), `icon-square` (44, rounded-md), `icon-xl` (56, rounded-lg), `float` (44 round, over a game), `pill` (FloatPill as a button), `row` (ListRow, min 44), `tile` (a face over a name, LinkHandoff), `card` (a block wrapping a card, press 0.97), `choice` (a grid choice tile, press 0.92), `option` (a full-width option row, press 0.98), `swatch` (44 round colour dot, press 0.88).
+  - Sizes: `default`/`sm` (44 tall), `lg` (48), `xl` (56, primary actions), `dock` (60, icon over label), `dock-square` (56 square tool), `icon` (44 round), `icon-lg` (48 round), `icon-square` (44, rounded-md), `icon-xl` (56, rounded-lg), `float` (44 round, over a game), `pill` (FloatPill as a button), `row` (ListRow, min 44), `tile` (a face over a name, LinkHandoff), `card` (a block wrapping a card, press 0.97), `choice` (a grid choice tile, press 0.92), `option` (a full-width option row, press 0.98), `swatch` (44 round colour dot, press 0.88), `chip` (a left-aligned row of a chip and its text, min 44: Landlord's property rows), `piece` (a game piece or card you pick, min 44, `rounded-sm`: poker's draw), `overlay` (`block` and no size of its own, sized by where it's put: a Landlord square, a paragraph that expands on tap).
 - **Icon-only**: `IconButton` with a required `label` (becomes `aria-label`); the icon is its child. Defaults `variant="ghost" size="icon"`.
 - **Async taps**: `AsyncButton` / `AsyncIconButton` (`@/components/AsyncButton`), same props plus an async `onClick`; or `usePending()` → `[pending, run]` and pass `pending` to `Button`. They lock while running and toast errors. Lint refuses an inline `async` arrow in any `onClick` (even on AsyncButton): write `() => join(...).then(() => navigate(...))`.
 - **Destructive**: `ConfirmButton` (an AlertDialog). Resign: `ResignButton` (`components/match`).
@@ -24,18 +24,30 @@ Everything in `src/components/ui/` is shadcn (style `radix-nova`, Radix from the
 - **Sheets**: `Sheet` (`ui/sheet`) is the only bottom sheet: `title`, `hideTitle` (screen readers only), `closable` (an X, for sheets over a dock), `bodyClassName`, `pinned` (a block between the title and the scrolling body that stays put, e.g. CardEditor's live preview; never `sticky`). Small focused things only. Game menus are `GameMenu` (a right drawer). Scrim is `bg-scrim`.
 - **How much**: `AmountSheet`. **Rules**: `Rules`. **Headers**: `LargeTitle` (tabs), `NavBar` (pushed screens; `className` lets a screen hide it), `useGoBack(fallback)`.
 - **Game screens**: `GameFrame`, `ActionRail`, `DockNote`, `GameChrome` (`components/game/GameFrame.tsx`); `FullscreenStage`, `FloatingTopBar`, `FloatButton`, `FloatPill`, `floatPill`, `useFullbleed` (`components/game/floating.tsx`); `TurnText`, `SeatDot`, `Countdown`.
+- **Hooks and helpers**: `src/presence.tsx` (`usePresence`, `useHere`, `usePlayingIn`, `OnlineDot`, `ThinkingDots`, `TapLayer`), `src/lib/time.ts` (`ago`, `useNow`), `src/lib/serverClock.ts` (`useServerClock`, for anything real-time), `src/lib/text.ts` (`listNames`, `ordinal`, `reasonText`), `src/games/seats.ts` (`SEAT_COLORS`, `seatColor`), `src/games/types.ts` (`Player`), `src/Tiles.tsx` (`Tiles`).
+- The lobby, result with standings and points, rating change, rematch and resign confirmation are shared in `src/components/match/`; the game menu is `GameMenu`. Games never rebuild them.
 - Need something twice, or a second game needs it? Move it into `src/components/` (or `game/`) instead of copying.
 
 ## Design system rules
 
 - Type: `text-title-lg` 36, `text-title` 28, `text-heading` 20, `text-body` 17, `text-callout` 15, `text-footnote` 13, `text-caption` 11. Nothing else. `cn()` knows these so they merge with colours correctly. Headings and numbers use `font-display` (the heading font chosen on You); body is the phone's font.
 - Radius: `rounded-sm` 8, `rounded-md` 12, `rounded-lg` 16, `rounded-3xl` 28, `rounded-full` (avatars, chips, icon buttons), `rounded-xs` 3 (board cells and pieces only). A ring concentric with a 16px card: `rounded-lg outline-3` on an inset-0 element (outline radius grows with it), not `rounded-[19px]`.
+- Themes (Catppuccin, Gruvbox, Nord and the rest) are listed in `src/themes.ts`; each defines light and dark tokens plus tile colours in the generated block of `src/style.css`.
 - Colours: tokens only (`bg-card`, `text-muted-foreground`, `var(--tile-green)`, `bg-scrim`, `shadow-shade/25`, `bg-discord text-discord-ink`, `bg-online`). Add tokens in `scripts/gen-themes.py` (`SHARED_LIGHT`/`SHARED_DARK` for theme-independent ones), run `python3 scripts/gen-themes.py` (it rewrites the block between the `gen-themes.py` markers in style.css), then `npx vitest run src/themes.test.ts` (every token present, WCAG AA text, 3:1 chart lines, the poker felt mix). Colours that must not follow the theme live in a `palette.ts` (lint allows hex only there): `src/games/palette.ts` (seat colours), `src/pages/you/palette.ts` (iOS Settings tints), `src/components/palette.ts` (the custom-colour rainbow), `convex/palette.ts` (frame colours). Physical objects in CSS (cards, tiles, Landlord's board) use `@theme static` colours (`--color-paper`, `--color-ll-*`...).
+- Groups: rows go in one flat `Group` (`bg-card`, `rounded-lg`, dividers, no outer border, no shadow). Section headings are `font-display text-heading` (`Section`, `SectionTitle`), never small grey labels.
 - Surfaces: card surfaces carry `data-slot="card"` (Group, Leaderboard, InviteCard, mode cards, rating tiles, `Button variant="card"`...). Never a card inside a card: e2e (`watchForNestedCards` in fixtures) and lint (`no-nested-cards`) both fail on it.
 - No filler: no subtitles, no sentences under headings, no empty-state prose. A state the user must know ("It isn't up yet.") is information.
 - Nothing `sticky`/`fixed` with text at the top: iOS 26 blurs ~30pt under the status bar; keep text below `TOP_CLEAR`. Headers start at `var(--safe-top) + 34px` or more.
 - Press feedback is `active:scale-[0.97]` over 100ms (Button does it). Nothing loops while idle except live signals, chosen card frames, the real-time countdown and a held tile.
 - 44px minimum targets (56 for primary actions). A visually smaller control (Switch, slider thumb) gets an `after:absolute after:-inset-*` hit area; `expectFitsScreen` counts it.
+- Fonts: body text is the phone's own (SF Pro on iOS, Roboto on Android); `font-display` is the heading font picked on the You tab (Oxanium by default, `src/themes.ts`) for titles, headings, numbers and tiles.
+- Icons: Phosphor (`@phosphor-icons/react`, `*Icon` exports; lint refuses lucide and react-icons), `weight="fill"` for active states.
+- Motif: Wordle-style letter tiles (`Tiles`). A crooked red "hit" tile marks a PvP attack. Results are spelled in tiles: WON in green, LOST with a crooked red hit tile, DRAW in yellow, places for bigger games.
+- Status: online is a steady green dot (`bg-online`); offline shows no dot, since red reads as an error. Turn state is a chip (`TurnChip`): `Your move` in the primary colour, everything else quiet.
+- Layout: tabs open with `LargeTitle`; pushed screens use `NavBar` (back, centred title, one action). Primary actions sit where thumbs reach. Game screens are a compact bar on top, the board and its players as one block in the middle, and actions docked at the bottom; heights under the board stay fixed so nothing shifts it.
+- Motion: screens and sheets use springs with no bounce; a little bounce only for celebrations. Games should feel alive when something happens; idle screens stay still. No shared-layout (`layoutId`) moves for things that would cross the board: they catch taps on the way.
+- Sheets dim the screen (`bg-scrim`), never blur it, and hold small focused things (a player's card, promotion, an amount). Game menus are full pages (`GameMenu`), never sheets.
+- Anything destructive confirms (`ConfirmButton`): Resign, Cancel game, Sign out.
 
 ## CSS (src/style.css)
 
@@ -78,6 +90,28 @@ Phones rotate; iOS ignores the manifest's `"orientation": "portrait"` (kept for 
 - Chromium doesn't emulate `env(safe-area-inset-*)`: tests set `--safe-*` instead.
 - Playwright's `toBeVisible` needs a non-empty box: an absolutely-positioned anchor with only absolute children reads as invisible (the tap ripple has a real 36px box for this).
 - In-app browsers (Discord, Instagram) can't add to the home screen: WKWebViews without "Safari/", Android WebViews with "; wv)".
+
+## The app's screens
+
+- `src/shell.tsx` makes it feel like a native stack: tabs switch instantly, pushed screens slide in from the right and out on Back, a swipe from the left edge (24px) goes back (iOS standalone apps have no swipe-back of their own), and each history entry keeps its scroll position. `useGoBack(fallback)` steps back through in-app history; a screen opened fresh from a push or link has none and goes to its fallback, which for games is Home.
+- Four tabs (`TabBar.tsx`, a full-width bar whose active pill slides between tabs): **Home** (`src/pages/Home.tsx`, built on `matches.inbox` across every mode: Challenges answered in place, Your turn, Open seats, Your ratings (stat cards from `ratings.mine`, only modes you've played), Waiting, Happening now; a section only appears with something in it, and with nothing going on an IDLE tile row and Find a game), **Games** (`Games.tsx`: one card per game with its art playing in once, who's playing it now, and Play, which opens the game's own pages; nothing about starting a game is a drawer), **Crew**, and **You** (profile and settings, `src/pages/you/`).
+- Routes come from `GAME_UI` in `App.tsx`: `/<game>` is `GameHub` (the mode cards from `ModePicker`, grouped Async and Real-time with art, a badge when something waits there and my Elo, two side by side for a game with one of each; then the crew's recent games, `matches.recent`; `GameUI.extra` below), `/<game>/mode/:slug` is `ModePage` (Find a game, or "Open a game" where the host starts it; Settings, with `GameUI.setup` under them; Challenge, the crew inline: two-player modes send on one tap, bigger games pick several; How to play; open seats, your games, happening now; the mode's leaderboard; recent games), and `/<game>/:id` is `MatchScreen` (the shared lobby, or the game's screen; it puts `GameMenu` in the nav bar's action slot unless the game is `fullscreen`). Old `/chess?mode=` and `/?new=` links land on the mode page.
+- Leaderboards live on each mode's page, never on Crew, so adding games never piles tabs or pills onto one screen.
+- Each mode has one name everywhere (`MODES[mode].name`: Classic, 4-Player, Real-time, Live...). Lists that mix games use `fullModeLabel` ("Chess Classic", "Scrabble Live").
+- `GameMenu` (sliding in from the right) is the same on every game: whatever the game adds on top, then every setting the game is played with (changed ones in the primary colour), how to play, and Share. A fullscreen game opens it from its own button with its own sections (`ScrabbleMenu`, `GolfMenu`, `LandlordMenu`).
+
+## Players
+
+- Presence (`convex/presence.ts`, `src/presence.tsx`): a heartbeat, the screen each player is on, and their latest tap. Online dots and other players' taps show on the main tabs; game screens use the path to say who has that game open ("here now", "is on it").
+- Cosmetics (frame, frame colour, glow, effect, badge, tagline) are in the `profiles` table, options in `convex/profileOptions.ts`, edited in `CardEditor`. Name and avatar come from Discord on every sign-in and aren't editable. Show a person only through `PlayerAvatar`/`AvatarStack`/`PlayerCard`, which carry all of it.
+
+## Sound (`src/sound.ts`)
+
+- Effects are synthesized with Web Audio, no files. Packs (Wood, the default, Thock, Kalimba, Felt piano, Glass, Bubbles, Soft, Arcade, or Off) are each three voices (click, note, thump) that every sound is built from (`sfx("place")`, `"play"`, `"land"`, `"turn"`, `"invalid"`, `"bingo"`, `"tick"`, `"win"`, `"lose"`, `"ghost"`, and for tables and cards `"deal"`, `"flip"`, `"chips"`, `"knock"`, `"sweep"`, `"slam"`, `"payout"`), so swapping packs changes the whole game. `live: true` drops a sound if audio isn't running yet, instead of playing it once it is. Effects run through a small room reverb, with a send per pack. Picking a pack plays a two-second little game in it (`"preview"`).
+- The only music is **53_1 by Alex** (one of the crew; credit him wherever it's named), under "Made by a human" on You, or Off: `src/assets/music/53_1.m4a` (AAC so every phone decodes it, from his 112s FL Studio bounce), fetched when music starts, decoded once per context and looped sample for sample (`RECORDINGS`; it was bounced to loop, so a crossfade would double the drums), fading in over a couple of seconds, skipping the reverb. A phone that saved a track that's gone gets 53_1. It plays all over the app once signed in (`wantMusic` in `App.tsx`; `HostedGame` turns it off). The volume slider (`volume`, 0 to 1, default 0.6) is squared into the gain and glides live.
+- "Play on silent" (on by default) sets the audio session to `playback` (plays with the ringer off, pauses other audio); off, `ambient` (mixes with other apps, silent with the switch). iOS only unlocks audio from a whole tap and wants a sound started in it, so `wake()` plays a silent buffer and resumes the context on every tap until it runs; music starts from the context's `statechange`. Settings are remembered per phone.
+- A new sound sits no louder than its pack's own (`e2e/poker.spec.ts` checks poker's). New packs stay at Wood's level: soft envelopes, filtered noise for anything percussive, a few sine partials for anything tonal, reverb rather than loudness.
+- Tests read `window.__sfx` (effects asked for), `window.__music` (the track playing) and `__audio.musicGain()`; `window.__soundLab` renders any sound or the music offline, and `e2e/scrabble.spec.ts` checks every one for silence and clipping, 53_1's level at the default volume and at the slider's ends, and that it decodes to its exact length so the loop is seamless.
 
 ## Parity
 
