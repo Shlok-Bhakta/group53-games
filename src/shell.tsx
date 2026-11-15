@@ -183,13 +183,15 @@ export function useViewportGap() {
     let disposed = false;
     let touches = 0;
     let lastScroll = -Infinity;
-    const busy = () => touches > 0 || performance.now() - lastScroll < QUIET_MS;
+    const later = () => {
+      clearTimeout(retry);
+      retry = setTimeout(() => requestAnimationFrame(apply), QUIET_MS);
+    };
     const apply = () => {
       if (disposed) return;
-      if (busy()) {
+      if (touches > 0 || performance.now() - lastScroll < QUIET_MS) {
         root.dataset.viewportSettling = "";
-        clearTimeout(retry);
-        retry = setTimeout(() => requestAnimationFrame(apply), QUIET_MS);
+        if (touches === 0) later();
         return;
       }
       delete root.dataset.viewportSettling;
@@ -215,6 +217,7 @@ export function useViewportGap() {
     };
     const onTouch = (e: TouchEvent) => {
       touches = e.touches.length;
+      if (touches === 0 && root.dataset.viewportSettling !== undefined) later();
     };
     const vv = window.visualViewport;
     const onWindow = ["resize", "orientationchange", "pageshow", "focusout"] as const;
