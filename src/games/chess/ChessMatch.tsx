@@ -13,7 +13,7 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { AsyncButton } from "@/components/AsyncButton";
 import { Chip } from "@/components/parts";
 import { ResignButton, Result } from "@/components/match";
-import { DockNote, GameFrame } from "@/components/game/GameFrame";
+import { ActionRail, DockNote } from "@/components/game/GameFrame";
 import { SeatDot } from "@/components/game/SeatDot";
 import { TurnText } from "@/components/game/TurnText";
 import { useHere } from "@/presence";
@@ -26,7 +26,6 @@ import { RealtimeGame } from "./RealtimeGame";
 import type { Dock } from "./dock";
 import { COLOR_NAMES } from "./text";
 
-// A chess game in progress or finished.
 export function ChessGame({ match, meId }: { match: MatchView; meId: Id<"users"> | undefined }) {
   const mode = MODES[match.mode as ModeKey];
   const four = mode.players > 2;
@@ -40,7 +39,6 @@ export function ChessGame({ match, meId }: { match: MatchView; meId: Id<"users">
   ) : (
     <FourStatus match={match} meId={meId} />
   );
-  // The dock under the board. In async games a move waiting for Confirm takes the place of draw and resign.
   const dock: Dock = (confirm) =>
     match.status === "finished" ? (
       <Result match={match} meId={meId} />
@@ -54,9 +52,7 @@ export function ChessGame({ match, meId }: { match: MatchView; meId: Id<"users">
   ) : match.mode === "chess:four" ? (
     <FourGame match={match} meId={meId} overlay={seats} below={bottom} dock={dock} />
   ) : (
-    <GameFrame dock={dock()}>
-      <RealtimeGame match={match} meId={meId} above={top} below={bottom} overlay={seats} />
-    </GameFrame>
+    <RealtimeGame match={match} meId={meId} above={top} below={bottom} overlay={seats} dock={dock()} />
   );
 }
 
@@ -86,7 +82,6 @@ function PlayerBar({ player, match, meId }: { player: Player; match: MatchView; 
           {!isMe && here && match.status === "active" ? `${color}, here now` : color}
         </p>
       </div>
-      {/* Fades in where it sits: a chip flying between the bars would cross the board and catch taps. */}
       {toMove &&
         (isMe ? (
           <motion.span
@@ -109,8 +104,6 @@ function PlayerBar({ player, match, meId }: { player: Player; match: MatchView; 
 }
 
 const SEAT_ORDER = ["red", "blue", "yellow", "green"];
-// Where each army sits on screen, counting clockwise from mine at the bottom, and the empty corner of the
-// cross board its player sits in (the one on that army's left).
 const SIDES = ["bottom", "left", "top", "right"] as const;
 const CORNER: Record<(typeof SIDES)[number], CSSProperties> = {
   bottom: { left: 0, bottom: 0 },
@@ -119,13 +112,11 @@ const CORNER: Record<(typeof SIDES)[number], CSSProperties> = {
   right: { right: 0, bottom: 0 },
 };
 
-// Who's out in a real-time four-player game, from the settled snapshot (it trails live play by under a second).
 function useRtOut(match: MatchView) {
   const rt = useQuery(api.chess.rtState, match.mode === "chess:realtime4" ? { id: match._id } : "skip");
   return ((rt?.snapshot as RtState | null)?.out ?? []).map((o) => o.color);
 }
 
-// The four players, each in the empty 3x3 corner next to their own army: avatar, points, who's up, who's out.
 function FourSeats({ match, meId }: { match: MatchView; meId: Id<"users"> | undefined }) {
   const rtOut = useRtOut(match);
   const classic = match.mode === "chess:four" ? (match.state as FourState) : null;
@@ -186,8 +177,6 @@ function Seat({
       style={style}
     >
       <span
-        // flex, so the box is exactly the avatar: an inline avatar adds a line's descender below it and the
-        // turn ring comes out an oval.
         className={cn("relative flex rounded-full transition-shadow duration-300", out && "opacity-50 grayscale")}
         style={{ boxShadow: toMove ? `0 0 0 2.5px var(--background), 0 0 0 5px ${color}` : undefined }}
       >
@@ -206,7 +195,6 @@ function Seat({
   );
 }
 
-// The line under a four-player board: whose move it is, live.
 function FourStatus({ match, meId }: { match: MatchView; meId: Id<"users"> | undefined }) {
   const classic = match.mode === "chess:four" ? (match.state as FourState) : null;
   const up = classic && match.status === "active" ? match.players.find((p) => p.color === classic.turn) : undefined;
@@ -222,8 +210,6 @@ function FourStatus({ match, meId }: { match: MatchView; meId: Id<"users"> | und
 const outText = (reason: string) =>
   ({ checkmate: "Mated", stalemate: "Stalemated", resign: "Resigned", timeout: "Timed out", king: "King fell" })[reason] ?? "Out";
 
-// The bar at the bottom of a game in progress: draw and resign, each a full-height thumb target, or Confirm
-// while a move waits.
 function Controls({ match, meId, confirm }: { match: MatchView; meId: Id<"users">; confirm?: ReactNode }) {
   const offerDraw = useMutation(api.matches.offerDraw);
   const declineDraw = useMutation(api.matches.declineDraw);
@@ -247,7 +233,7 @@ function Controls({ match, meId, confirm }: { match: MatchView; meId: Id<"users"
       }
     />
   );
-  if (four) return confirm ?? <div className="grid">{resignButton}</div>;
+  if (four) return confirm ?? <ActionRail>{resignButton}</ActionRail>;
   return (
     <div className="flex flex-col gap-2.5">
       {theyOffered && (
@@ -263,7 +249,7 @@ function Controls({ match, meId, confirm }: { match: MatchView; meId: Id<"users"
         </div>
       )}
       {confirm ?? (
-        <div className="grid grid-cols-2 gap-2.5">
+        <ActionRail className="gap-2.5">
           <AsyncButton
             variant="card"
             size="dock"
@@ -274,7 +260,7 @@ function Controls({ match, meId, confirm }: { match: MatchView; meId: Id<"users"
             {iOffered ? "Draw offered" : "Offer draw"}
           </AsyncButton>
           {resignButton}
-        </div>
+        </ActionRail>
       )}
     </div>
   );

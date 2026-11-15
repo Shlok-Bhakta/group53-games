@@ -1,8 +1,10 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation } from "convex/react";
+import type { OptimisticUpdate } from "convex/browser";
 import { Chess, type Square } from "chess.js";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import type { FunctionArgs } from "convex/server";
 import type { ClassicState } from "../../../convex/chess";
 import type { MatchView } from "../../../convex/matches";
 import { Board, fromName, squareName, type BoardPiece, type Sq } from "./Board";
@@ -12,10 +14,10 @@ import { Sheet } from "@/components/ui/sheet";
 import { GameFrame } from "@/components/game/GameFrame";
 import { ConfirmMove, draftTargets, realSquare, useMoveDraft, useSendMove, type Dock } from "./dock";
 import { BackToNow, MoveChip, MoveLine, useHistory, type History } from "./history";
+import { BesideTheBoard, usePhoneLandscape } from "./landscape";
 
 type Kind = BoardPiece["kind"];
 
-// Keeps a stable key per physical piece across positions, so moved pieces slide instead of popping.
 function useStableKeys(board: ReturnType<Chess["board"]>) {
   const prev = useRef<Map<string, { key: number; color: string; type: string }>>(new Map());
   const next = useRef(0);
@@ -45,6 +47,30 @@ function useStableKeys(board: ReturnType<Chess["board"]>) {
 
 type Draft = { from: Sq; to: Sq; promotion?: string };
 
+const playMoveOptimistically =
+  (meId: Id<"users"> | undefined): OptimisticUpdate<FunctionArgs<typeof api.chess.move>> =>
+  (store, { id, from, to, promotion }) => {
+    const current = store.getQuery(api.matches.get, { id });
+    if (!current) return;
+    const c = new Chess((current.state as ClassicState).fen);
+    let m;
+    try {
+      m = c.move({ from, to, promotion: promotion as "q" | undefined });
+    } catch {
+      return;
+    }
+    const next: ClassicState = {
+      kind: "classic",
+      fen: c.fen(),
+      moves: [...(current.state as ClassicState).moves, { san: m.san, lan: m.lan, at: Date.now() }],
+    };
+    store.setQuery(
+      api.matches.get,
+      { id },
+      { ...current, state: next, turn: current.players.find((p) => p.userId !== meId)?.userId, drawOffer: undefined },
+    );
+  };
+
 export function ClassicGame({
   match,
   meId,
@@ -66,14 +92,12 @@ export function ClassicGame({
   const [selected, setSelected] = useState<Sq | null>(null);
   const [draft, setDraft] = useMoveDraft<Draft & { choosing?: boolean }>(`${match._id}:${match.status}:${state.fen}`);
   const [sending, send] = useSendMove(state.moves.length);
-  // The position after the waiting move, shown on the board until it's confirmed.
   const preview = useMemo(() => {
     if (!draft || draft.choosing || !myTurn) return null;
     const after = new Chess(state.fen);
     return { chess: after, move: after.move({ from: squareName(draft.from), to: squareName(draft.to), promotion: draft.promotion }) };
   }, [draft, state.fen, myTurn]);
   const history = useHistory(match._id, state.moves.length);
-  // Stepped back through the game: the board as it stood after `history.at` moves.
   const past = useMemo(() => {
     if (history.live) return null;
     const c = new Chess();
@@ -85,26 +109,7 @@ export function ClassicGame({
   const board = useMemo(() => display.board(), [display]);
   const keys = useStableKeys(board);
 
-  const move = useMutation(api.chess.move).withOptimisticUpdate((store, { id, from, to, promotion }) => {
-    const current = store.getQuery(api.matches.get, { id });
-    if (!current) return;
-    const c = new Chess((current.state as ClassicState).fen);
-    try {
-      const m = c.move({ from, to, promotion: promotion as "q" | undefined });
-      const next: ClassicState = {
-        kind: "classic",
-        fen: c.fen(),
-        moves: [...(current.state as ClassicState).moves, { san: m.san, lan: m.lan, at: Date.now() }],
-      };
-      store.setQuery(
-        api.matches.get,
-        { id },
-        { ...current, state: next, turn: current.players.find((p) => p.userId !== meId)?.userId, drawOffer: undefined },
-      );
-    } catch {
-      // Leave it to the server to reject.
-    }
-  });
+  const move = useMutation(api.chess.move).withOptimisticUpdate(playMoveOptimistically(meId));
 
   const pieces: BoardPiece[] = [...keys.entries()].map(([sq, p]) => {
     const [x, y] = fromName(sq);
@@ -121,7 +126,6 @@ export function ClassicGame({
       ghost: true,
     });
 
-  // While a move waits you can still pick up any of your pieces, the waiting one included, and move it instead.
   const pickable = myTurn && !sending;
   const mineIn = (pos: Chess, sq: Sq) => pos.get(squareName(sq) as Square)?.color === myColor;
   const legalFrom = (sq: Sq) => chess.moves({ square: squareName(sq) as Square, verbose: true }).map((m) => fromName(m.to));
@@ -136,6 +140,7 @@ export function ClassicGame({
       : null;
   const king = display.inCheck() ? kingSquare(display, display.turn()) : null;
   const view = useMemo(() => viewFor("two", myColor), [myColor]);
+  const landscape = usePhoneLandscape();
 
   const onMove = (at: Sq, to: Sq) => {
     const from = realSquare(shown, at);
@@ -145,6 +150,7 @@ export function ClassicGame({
   };
   const confirm = (d: Draft, san: string) =>
     send(san, () => move({ id: match._id, from: squareName(d.from), to: squareName(d.to), promotion: d.promotion }));
+  const moveList = <MoveList moves={state.moves.map((m) => m.san)} history={history} />;
 
   return (
     <GameFrame
@@ -155,9 +161,18 @@ export function ClassicGame({
           <ConfirmMove move={preview.move.san} onCancel={() => setDraft(null)} onConfirm={() => void confirm(shown, preview.move.san)} />
         ) : undefined,
       )}
+      aside={
+        landscape && (
+          <BesideTheBoard>
+            {above}
+            {moveList}
+            {below}
+          </BesideTheBoard>
+        )
+      }
     >
-      {above}
-      <div className="relative">
+      {!landscape && above}
+      <div className="relative phone-landscape:square-fit">
         <Board
           label="Classic chess board"
           pieces={pieces}
@@ -173,8 +188,8 @@ export function ClassicGame({
         />
         <BackToNow history={history} />
       </div>
-      {below}
-      <MoveList moves={state.moves.map((m) => m.san)} history={history} />
+      {!landscape && below}
+      {!landscape && moveList}
       <Sheet open={!!draft?.choosing && myTurn} onClose={() => setDraft(null)} title="Promote to">
         <div className="grid grid-cols-4 gap-3">
           {(["q", "r", "b", "n"] as const).map((p) => (

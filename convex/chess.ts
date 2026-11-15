@@ -24,22 +24,16 @@ import {
 import { COLORS4, SIZE as SIZE4, type Color4 } from "./chess/four/board";
 import { initialFour, move4, retire4, type FourState } from "./chess/four/classic";
 
-// --- State shapes stored in matches.state ---
-
 export type ClassicState = {
   kind: "classic";
   fen: string;
-  // Every move, oldest first. `lan` is from+to(+promotion), e.g. "e7e8q".
   moves: { san: string; lan: string; at: number }[];
 };
 
 export type RealtimeState = {
   kind: "realtime";
-  // Players who have opened the board; the clock starts when everyone has.
   ready: Id<"users">[];
-  // Wall-clock time of tick 0 on the server.
   startAt: number | null;
-  // Only on games from before commands moved to the rtCommands table.
   commands?: Command[];
 };
 
@@ -51,7 +45,6 @@ export function initialState(mode: ModeKey): ClassicState | RealtimeState | Four
   return { kind: "classic", fen: new Chess().fen(), moves: [] };
 }
 
-// Colors in seat order: the first one moves first.
 export const seatColors = (mode: ModeKey): readonly string[] => (MODES[mode].board === "four" ? COLORS4 : ["w", "b"]);
 export const variantOf = (mode: string): Variant => (MODES[mode as ModeKey]?.board === "four" ? "four" : "two");
 const REALTIME_MODES: ModeKey[] = ["chess:realtime", "chess:realtime4"];
@@ -72,7 +65,6 @@ export const chessHooks: GameHooks = {
   resign: async (ctx, match, userId) => {
     if (match.mode === "chess:four") return await retireFour(ctx, match, userId, "resign");
     if (match.mode === "chess:realtime4") {
-      // Before the clock starts there's no game to leave behind, so it's called off for everyone.
       if (!(await resignRealtime4(ctx, match, userId))) await ctx.db.patch(match._id, { status: "cancelled", lastActivityAt: Date.now() });
       return;
     }
@@ -86,7 +78,6 @@ export const chessHooks: GameHooks = {
   unstarted: (match) => isRealtime(match.mode) && (match.state as RealtimeState | null)?.startAt === null,
 };
 
-// Called once every seat is filled.
 export async function onStart(ctx: MutationCtx, match: Doc<"matches">) {
   if (match.mode === "chess:classic") {
     const white = playerWith(match, "w");
@@ -106,8 +97,6 @@ export async function onStart(ctx: MutationCtx, match: Doc<"matches">) {
     await scheduleReminder(ctx, match._id, 0);
   }
 }
-
-// --- Classic ---
 
 export const move = mutation({
   args: { id: v.id("matches"), from: v.string(), to: v.string(), promotion: v.optional(v.string()) },
@@ -161,8 +150,6 @@ export function classicEnding(chess: Chess): { draw: boolean; reason: string } |
   return null;
 }
 
-// --- Four-player (turn-based) ---
-
 export const fourMove = mutation({
   args: { id: v.id("matches"), fromX: v.number(), fromY: v.number(), toX: v.number(), toY: v.number() },
   handler: async (ctx, { id, fromX, fromY, toX, toY }) => {
@@ -175,8 +162,6 @@ export const fourMove = mutation({
   },
 });
 
-// Saves a new four-player position, then tells whoever is affected: the next player, anyone just
-// knocked out, and everyone when it's over.
 async function applyFour(ctx: MutationCtx, match: Doc<"matches">, next: FourState, actor: Id<"users">) {
   const before = match.state as FourState;
   if (next.result) {
@@ -212,7 +197,6 @@ async function applyFour(ctx: MutationCtx, match: Doc<"matches">, next: FourStat
   }
 }
 
-// Resigning or timing out in four-player: the game carries on without you.
 export async function retireFour(ctx: MutationCtx, match: Doc<"matches">, userId: Id<"users">, reason: "resign" | "timeout") {
   const color = colorOf(match, userId) as Color4 | undefined;
   if (!color) return;
@@ -222,21 +206,16 @@ export async function retireFour(ctx: MutationCtx, match: Doc<"matches">, userId
   await applyFour(ctx, match, next, userId);
 }
 
-// --- Real-time ---
-//
-// Moves are inserts into rtCommands, stamped with the tick the player acted on (lag compensation, up to
-// MAX_LAG_TICKS back), so the mover's own screen never has to correct itself and the two players never
-// write the same document. The server doesn't re-validate moves: the shared engine ignores illegal ones
-// identically everywhere. chess:rtTick runs twice a second to advance a settled snapshot and to finish
-// the game once its result can no longer change.
-
 export const MAX_LAG_TICKS = 20;
 const FUTURE_SLACK_TICKS = 3;
 const RT_TICK_MS = 500;
+const SETTLED_MARGIN_TICKS = 2;
+
+const honouredTick = (serverTick: number, clientTick: number) =>
+  Math.min(serverTick + FUTURE_SLACK_TICKS, Math.max(serverTick - MAX_LAG_TICKS, Math.floor(clientTick)));
 
 const tickAt = (state: RealtimeState, now: number) => Math.floor((now - state.startAt!) / TICK_MS);
 
-// The board is showing for this player. Once everyone is there, the countdown starts.
 export const ready = mutation({
   args: { id: v.id("matches") },
   handler: async (ctx, { id }) => {
@@ -272,16 +251,12 @@ export const rtMove = mutation({
     const size = variantOf(match.mode) === "four" ? SIZE4 : 8;
     if (![pieceId, toX, toY].every(Number.isInteger) || toX < 0 || toX >= size || toY < 0 || toY >= size)
       throw new Error("That's not a square.");
-    // Honour the tick the player saw, within reason.
-    const tick = Math.min(serverTick + FUTURE_SLACK_TICKS, Math.max(serverTick - MAX_LAG_TICKS, Math.floor(clientTick)));
+    const tick = honouredTick(serverTick, clientTick);
     await ctx.db.insert("rtCommands", { matchId: id, tick, color: color!, pieceId, toX, toY, kind: kind ?? "move" });
     return tick;
   },
 });
 
-// Reads commands from `fromTick`, optionally stopping before `beforeTick`. The ticker reads only the
-// settled range, which new moves (stamped at least MAX_LAG_TICKS back from now) never land in, so it
-// doesn't conflict with them.
 async function commandsFrom(ctx: QueryCtx, id: Id<"matches">, fromTick: number, beforeTick?: number): Promise<Command[]> {
   const rows = await ctx.db
     .query("rtCommands")
@@ -294,8 +269,6 @@ async function commandsFrom(ctx: QueryCtx, id: Id<"matches">, fromTick: number, 
   return rows.map(({ tick, color, pieceId, toX, toY, kind }) => ({ tick, color: color as Color, pieceId, toX, toY, kind }));
 }
 
-// Four-player real-time: resigning is a command like any other, so it lands in the same timeline. The
-// game goes on for everyone else.
 export async function resignRealtime4(ctx: MutationCtx, match: Doc<"matches">, userId: Id<"users">) {
   const state = match.state as RealtimeState;
   const color = colorOf(match, userId);
@@ -305,8 +278,6 @@ export async function resignRealtime4(ctx: MutationCtx, match: Doc<"matches">, u
   return true;
 }
 
-// What clients replay: the settled snapshot plus every command since. Games from before the command
-// table kept their commands on the match itself.
 export const rtState = query({
   args: { id: v.id("matches") },
   handler: async (ctx, { id }) => {
@@ -338,8 +309,7 @@ export const rtTick = internalMutation({
       .withIndex("by_match", (q) => q.eq("matchId", id))
       .unique();
     const from = (snap?.state as State | undefined) ?? initialRtState(variantOf(match.mode), paceOfMatch(match));
-    // Nothing can be stamped earlier than this any more, so everything before it is settled.
-    const settledTick = serverTick - MAX_LAG_TICKS - 2;
+    const settledTick = serverTick - MAX_LAG_TICKS - SETTLED_MARGIN_TICKS;
     const commands = settledTick > from.tick ? await commandsFrom(ctx, id, from.tick, settledTick) : [];
     const settled = settledTick > from.tick ? simulate(commands, settledTick, from) : from;
     if (snap) await ctx.db.patch(snap._id, { state: settled });
@@ -349,7 +319,6 @@ export const rtTick = internalMutation({
       const { winner, reason, ranking } = settled.result;
       const base = winner ? { winners: [playerWith(match, winner)], draw: false, reason } : { winners: [], draw: true, reason };
       const standings = match.players.length > 2 ? { standings: ranking.map((g) => g.map((c) => playerWith(match, c))) } : {};
-      // A four-player game where the last kings fell together shares first place.
       const winners = !winner && standings.standings ? { winners: standings.standings[0] } : {};
       await finish(ctx, match, { ...base, ...standings, ...winners });
       return;
@@ -358,7 +327,6 @@ export const rtTick = internalMutation({
   },
 });
 
-// Older scheduled jobs still point here.
 export const finalize = internalMutation({
   args: { id: v.id("matches") },
   handler: async () => {},

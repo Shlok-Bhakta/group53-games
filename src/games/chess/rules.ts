@@ -5,7 +5,6 @@ const secs = (n: number) => `${n} second${n === 1 ? "" : "s"}`;
 const speed = (ticksPerSquare: number) =>
   ticksPerSquare === 30 ? "1 square a second" : ticksPerSquare < 30 ? "2 squares a second" : "1 square every 1.5 seconds";
 
-// How to play each chess mode, with the game's settings filled in.
 export function chessRules(mode: ModeKey, s: Settings): string[] {
   switch (mode) {
     case "chess:classic":

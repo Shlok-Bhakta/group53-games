@@ -1,23 +1,38 @@
 import type { Page } from "@playwright/test";
 import { anyApi } from "convex/server";
-import { admin, createPlayer, expect, getMatch, matchIdOf, onScreen, realtimePair, resign, settled, test, type Phones } from "./fixtures";
+import {
+  admin,
+  createPlayer,
+  expect,
+  getMatch,
+  holdsStill,
+  matchIdOf,
+  onScreen,
+  ready,
+  realtimePair,
+  resign,
+  settled,
+  test,
+  type Phones,
+} from "./fixtures";
+import { LANDSCAPE, SAFE_LANDSCAPE, expectFitsScreen, rotate, simulateSafeAreas } from "./landscape";
 
 const rtCommands = (id: string) => admin().query(anyApi.testing.rtCommands, { id });
 
-// Taps a piece and then its destination, the way a player would on a phone.
 async function tapMove(page: Page, from: string, to: string) {
   await page.locator(`[data-square=${from}]`).click();
   await page.locator(`[data-square=${to}]`).click();
 }
 
 async function classicMove(page: Page, from: string, to: string) {
-  // The chip under the board, not one on a game in a list sliding out behind it.
-  await expect(onScreen(page).locator("span:not(a *)", { hasText: /^Your move$/ })).toBeVisible();
+  await expect(
+    onScreen(page).locator("span:not(a *)", { hasText: /^Your move$/ }),
+    "the chip under the board, not one on a game in a list sliding out behind it",
+  ).toBeVisible();
   await tapMove(page, from, to);
   await page.getByRole("button", { name: /^Confirm/ }).click();
 }
 
-// The pieces drawn on a square (real-time pieces are placed by transform), with their status.
 function piecesOn(page: Page, piece: string, square: string) {
   return page.evaluate(
     ([piece, square]) => {
@@ -33,12 +48,9 @@ function piecesOn(page: Page, piece: string, square: string) {
   );
 }
 const pieceOn = async (page: Page, piece: string, square: string) => (await piecesOn(page, piece, square)).length > 0;
-// A real-time piece that has arrived (and may still be cooling down).
 const restsOn = async (page: Page, piece: string, square: string) => (await piecesOn(page, piece, square)).some((s) => s !== "moving");
-// A real-time piece that has arrived and cooled down, so it can move again.
 const readyOn = async (page: Page, piece: string, square: string) => (await piecesOn(page, piece, square)).includes("ready");
 
-// Two phones in a classic game made through the queue: one finds a game, the other joins it.
 async function startClassic(phones: Phones) {
   const [shlok, chris] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
   const [a, b] = await Promise.all([phones.open({ player: shlok, push: "on" }), phones.open({ player: chris, push: "on" })]);
@@ -75,49 +87,43 @@ test.describe("chess", () => {
   test("classic: find a game, play moves live on both phones, resign, and see the leaderboard", async ({ phones }) => {
     const g = await startClassic(phones);
 
-    // Picking up a piece shows where it can go, but only for whoever's move it is.
     await g.white.locator("[data-square=e2]").click();
-    await expect(g.white.locator("[data-target]")).toHaveCount(2);
+    await expect(g.white.locator("[data-target]"), "picking up a piece shows where it can go").toHaveCount(2);
     await expect(g.black.getByRole("grid")).toHaveAttribute("data-disabled", "true");
     await g.black.locator("[data-square=e7]").click();
-    await expect(g.black.locator("[data-target]")).toHaveCount(0);
+    await expect(g.black.locator("[data-target]"), "only for whoever's move it is").toHaveCount(0);
 
-    // The move waits on this phone only, and swapping the dock for Confirm doesn't shift the board.
     const grid = g.white.getByRole("grid");
     await tapMove(g.white, "e2", "e3");
     await expect(g.white.getByRole("button", { name: /^Confirm/ })).toBeVisible();
     await expect.poll(() => pieceOn(g.white, "wP", "e3")).toBe(true);
-    // Measured on the page, not the screen, since tapping Cancel can scroll it into view. The screen can still
-    // be settling, so measure once it holds still.
-    const boardY = () => grid.evaluate((el) => el.getBoundingClientRect().y + window.scrollY);
+    const boardYOnPage = () => grid.evaluate((el) => el.getBoundingClientRect().y + window.scrollY);
     let pendingY = NaN;
     await expect
       .poll(
         async () => {
-          const y = await boardY();
+          const y = await boardYOnPage();
           const steady = Math.abs(y - pendingY) < 0.5;
           pendingY = y;
           return steady;
         },
-        { intervals: [250] },
+        { intervals: [250], message: "the board holds still" },
       )
       .toBe(true);
-    expect((await getMatch(g.id)).state.moves).toHaveLength(0);
+    expect((await getMatch(g.id)).state.moves, "the move waits on this phone only").toHaveLength(0);
     await expect.poll(() => pieceOn(g.black, "wP", "e2")).toBe(true);
     await expect(g.black.getByRole("button", { name: /^Confirm/ })).toHaveCount(0);
     await g.white.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect.poll(() => pieceOn(g.white, "wP", "e2")).toBe(true);
-    expect(await boardY()).toBeCloseTo(pendingY, 0);
-    // A waiting move leaves a faint copy at home. Moving the piece back there takes the move back, and
-    // moving another piece replaces it, with no Cancel needed.
+    expect(await boardYOnPage(), "swapping the dock for Confirm doesn't shift the board").toBeCloseTo(pendingY, 0);
     const confirm = g.white.getByRole("button", { name: /^Confirm/ });
     await tapMove(g.white, "e2", "e3");
-    await expect(g.white.locator("[data-ghost]")).toHaveCount(1);
+    await expect(g.white.locator("[data-ghost]"), "a waiting move leaves a faint copy at home").toHaveCount(1);
     await tapMove(g.white, "e3", "e2");
-    await expect(confirm).toHaveCount(0);
+    await expect(confirm, "moving the piece back home takes the move back").toHaveCount(0);
     await expect(g.white.locator("[data-ghost]")).toHaveCount(0);
     await tapMove(g.white, "d2", "d4");
-    await expect(confirm).toContainText("d4");
+    await expect(confirm, "moving another piece replaces it, with no Cancel needed").toContainText("d4");
     await tapMove(g.white, "e2", "e4");
     await expect(confirm).toContainText("e4");
     await expect.poll(() => pieceOn(g.white, "wP", "d2")).toBe(true);
@@ -129,7 +135,6 @@ test.describe("chess", () => {
     await classicMove(g.black, "e7", "e5");
     await expect(g.white.getByLabel("Moves")).toContainText("e5");
 
-    // Drag a knight out on the white phone.
     const from = await g.white.locator("[data-square=g1]").boundingBox();
     const to = await g.white.locator("[data-square=f3]").boundingBox();
     await g.white.mouse.move(from!.x + from!.width / 2, from!.y + from!.height / 2);
@@ -163,7 +168,6 @@ test.describe("chess", () => {
 
   test("a game opened from a push goes back to Home, and back again from there leaves nothing stuck", async ({ phones }) => {
     const g = await startClassic(phones);
-    // The app opened cold on the game, the way a notification tap opens it.
     const cold = await g.white.context().newPage();
     await cold.goto(`/chess/${g.id}`);
     await classicMove(cold, "e2", "e4");
@@ -172,13 +176,12 @@ test.describe("chess", () => {
     await expect(cold).toHaveURL(/\/$/);
     await expect(cold.getByRole("heading", { name: "Home" })).toBeVisible();
 
-    // Opened from inside the app, Back still goes where you came from.
     await cold.goto("/chess/mode/classic");
     await cold.locator(`a[href="/chess/${g.id}"]`).first().click();
     await expect(cold).toHaveURL(new RegExp(`/chess/${g.id}`));
     await expect(cold.getByRole("button", { name: "Back" })).toHaveCount(1);
     await cold.getByRole("button", { name: "Back" }).click();
-    await expect(cold).toHaveURL(/\/chess\/mode\/classic$/);
+    await expect(cold, "opened from inside the app, Back still goes where you came from").toHaveURL(/\/chess\/mode\/classic$/);
   });
 
   test("classic: step back through the moves, stay put as a move lands, and tap the board to come back", async ({ phones }) => {
@@ -206,18 +209,16 @@ test.describe("chess", () => {
     await expect(current).toHaveText("e4");
     await expect.poll(() => pieceOn(p, "bP", "e7")).toBe(true);
 
-    // A move landing doesn't pull the board away from someone looking back.
     await classicMove(g.black, "b8", "c6");
     await expect(p.getByLabel("Moves")).toContainText("Nc6");
-    await expect(current).toHaveText("e4");
+    await expect(current, "a move landing doesn't pull the board away from someone looking back").toHaveText("e4");
     await expect.poll(() => pieceOn(p, "bN", "b8")).toBe(true);
     await next.click();
     await expect(current).toHaveText("e5");
     await expect.poll(() => pieceOn(p, "bP", "e5")).toBe(true);
 
-    // Tapping the board goes back to now, and play goes on.
     await p.getByRole("button", { name: "Back to the current position" }).click();
-    await expect(current).toHaveText("Nc6");
+    await expect(current, "tapping the board goes back to now").toHaveText("Nc6");
     await expect(next).toBeDisabled();
     await expect.poll(() => pieceOn(p, "bN", "c6")).toBe(true);
     await classicMove(p, "f1", "c4");
@@ -278,10 +279,9 @@ test.describe("chess", () => {
     await a.getByRole("button", { name: "Challenge Chris" }).click();
     await expect(a.getByRole("heading", { name: "Challenge sent" })).toBeVisible();
 
-    // The challenge shows up live on Home.
     await b.goto("/");
     const invite = b.getByRole("region", { name: "Challenge from Shlok" });
-    await expect(invite).toBeVisible();
+    await expect(invite, "the challenge shows up live on Home").toBeVisible();
     await expect(invite).toContainText("Classic");
     await invite.getByRole("button", { name: "Accept" }).click();
     await expect(b.getByRole("grid", { name: "Classic chess board" })).toBeVisible();
@@ -307,36 +307,36 @@ test.describe("chess", () => {
     const m = await getMatch(id);
     const white = m.players.find((p: { color: string }) => p.color === "w").userId === shlok.userId ? a : b;
     const black = white === a ? b : a;
-    // Once the countdown's over, both players move at the same time.
-    for (const p of [white, black]) await expect(boardOf(p)).toHaveAttribute("data-playing", "true");
+    for (const p of [white, black]) await expect(boardOf(p), "the countdown's over").toHaveAttribute("data-playing", "true");
     await tapMove(white, "e2", "e4");
     await tapMove(black, "d7", "d5");
 
-    // The white pawn lands on e4 on black's screen.
-    await expect.poll(() => pieceOn(black, "wP", "e4"), { timeout: 6000 }).toBe(true);
+    await expect
+      .poll(() => pieceOn(black, "wP", "e4"), { timeout: 6000, message: "the white pawn lands on e4 on black's screen" })
+      .toBe(true);
 
-    // Both moves are stored once each, as separate inserts.
-    await expect.poll(async () => (await rtCommands(id)).map((c: { color: string }) => c.color).sort()).toEqual(["b", "w"]);
+    await expect
+      .poll(async () => (await rtCommands(id)).map((c: { color: string }) => c.color).sort(), {
+        message: "both moves are stored once each, as separate inserts",
+      })
+      .toEqual(["b", "w"]);
 
-    // The pawn is cooling down now: picking it up offers premoves, and an arrow shows the queued one.
     await tapMove(white, "e4", "e5");
-    await expect(white.locator("[data-premove]")).toHaveCount(1);
-    // Tapping the piece again cancels it.
+    await expect(white.locator("[data-premove]"), "a cooling-down pawn takes a premove, drawn as an arrow").toHaveCount(1);
     await white.locator("[data-square=e4]").click();
-    await expect(white.locator("[data-premove]")).toHaveCount(0);
-    // Queue it again; it fires by itself the moment the cooldown ends.
+    await expect(white.locator("[data-premove]"), "tapping the piece again cancels it").toHaveCount(0);
     await tapMove(white, "e4", "e5");
-    await expect.poll(() => pieceOn(black, "wP", "e5"), { timeout: 9000 }).toBe(true);
+    await expect
+      .poll(() => pieceOn(black, "wP", "e5"), { timeout: 9000, message: "the premove fires by itself the moment the cooldown ends" })
+      .toBe(true);
 
     await resign(white);
     await expect(black.getByRole("heading", { name: "You won" })).toBeVisible();
   });
 
   test("real-time: taking the king ends the game on its own, with no further moves", async ({ phones }) => {
-    // Fast pieces and short cooldowns: each move waits only for the last one to land and cool down.
     const { id, white, black } = await realtimePair(phones, { cooldown: 2, speed: 15 });
 
-    // e4, queen out to h5, queen takes f7, queen takes the king.
     await tapMove(white, "e2", "e4");
     await expect.poll(() => restsOn(white, "wP", "e4"), { timeout: 10_000 }).toBe(true);
     await tapMove(white, "d1", "h5");
@@ -353,20 +353,29 @@ test.describe("chess", () => {
 
   test("real-time: your own move never jumps backwards on your screen", async ({ phones }) => {
     const { white } = await realtimePair(phones);
-    // The e-pawn travels two squares up the screen; sample it every 40ms (this one is about how it moves
-    // over time) and check it never goes back.
     const index = await white.locator('[data-piece="wP"]').evaluateAll((els) => {
       const sq = document.querySelector("[data-square=e2]")!.getBoundingClientRect();
       return els.findIndex((el) => Math.abs(el.getBoundingClientRect().x - sq.x) < 2 && Math.abs(el.getBoundingClientRect().y - sq.y) < 2);
     });
     expect(index).toBeGreaterThanOrEqual(0);
     const pawn = white.locator('[data-piece="wP"]').nth(index);
+    const everyFrameUntilItLands = pawn.evaluate(
+      (el) =>
+        new Promise<number[]>((resolve) => {
+          const ys: number[] = [];
+          let left = false;
+          const frame = () => {
+            ys.push(el.getBoundingClientRect().y);
+            const moving = el.getAttribute("data-status") === "moving";
+            left ||= moving;
+            if ((left && !moving) || ys.length > 600) resolve(ys);
+            else requestAnimationFrame(frame);
+          };
+          requestAnimationFrame(frame);
+        }),
+    );
     await tapMove(white, "e2", "e4");
-    const ys: number[] = [];
-    for (let i = 0; i < 40; i++) {
-      ys.push((await pawn.boundingBox())!.y);
-      await white.waitForTimeout(40);
-    }
+    const ys = await everyFrameUntilItLands;
     for (let i = 1; i < ys.length; i++) expect(ys[i], `frame ${i}: ${ys.join(",")}`).toBeLessThanOrEqual(ys[i - 1] + 0.5);
     const e4 = (await white.locator("[data-square=e4]").boundingBox())!;
     expect(Math.abs(ys.at(-1)! - e4.y)).toBeLessThan(2);
@@ -376,16 +385,14 @@ test.describe("chess", () => {
     const g = await startClassic(phones);
     const heading = g.white.getByRole("heading", { name: "Classic", exact: true, level: 1 });
     const header = g.white.locator("header", { has: heading });
-    // iOS blurs things pinned to the top edge, so nothing with text there may be sticky or fixed.
-    expect(await header.evaluate((el) => getComputedStyle(el).position)).toBe("static");
-    // The title centers on the menu button.
+    expect(await header.evaluate((el) => getComputedStyle(el).position), "nothing with text is pinned to the top, where iOS blurs").toBe(
+      "static",
+    );
     const title = (await heading.boundingBox())!;
     const block = (await heading.locator("..").boundingBox())!;
     const menu = (await g.white.getByRole("button", { name: "Menu" }).boundingBox())!;
-    expect(Math.abs(block.y + block.height / 2 - (menu.y + menu.height / 2))).toBeLessThan(4);
-    // And it starts below the strip that covers the band iOS blurs under the status bar.
-    expect(title.y).toBeGreaterThanOrEqual(32);
-    // The menu has the game's settings, how to play, and sharing.
+    expect(Math.abs(block.y + block.height / 2 - (menu.y + menu.height / 2)), "the title centers on the menu button").toBeLessThan(4);
+    expect(title.y, "the title starts below the strip covering the band iOS blurs").toBeGreaterThanOrEqual(32);
     await g.white.getByRole("button", { name: "Menu" }).click();
     const settings = g.white.getByRole("dialog").getByRole("region", { name: "Game settings" });
     await expect(settings).toContainText("Time to move");
@@ -410,7 +417,6 @@ test.describe("chess", () => {
       for (let i = 0; i < 8; i++) el.click();
     });
     await a.waitForURL(/\/chess\/[a-z0-9]+$/);
-    // Once the last of the taps has landed.
     const count = async () => {
       const all = await admin().query(anyApi.testing.allMatches, {});
       return ["chess:classic", "chess:realtime"].map((mode) => all.filter((m: { mode: string }) => m.mode === mode).length);
@@ -448,9 +454,10 @@ test.describe("chess", () => {
     await g.black.waitForURL((u) => u.toString() !== oldUrl);
     expect(g.white.url()).toBe(g.black.url());
     await expect(g.white.getByRole("grid", { name: "Classic chess board" })).toBeVisible();
-    // Colors swap: last game's black is white now.
     const next = await getMatch(matchIdOf(g.white));
-    expect(next.players.find((p: { color: string }) => p.color === "w").userId).toBe(g.blackPlayer.userId);
+    expect(next.players.find((p: { color: string }) => p.color === "w").userId, "colors swap: last game's black is white now").toBe(
+      g.blackPlayer.userId,
+    );
   });
 
   test("rematch: leaving the page declines it", async ({ phones }) => {
@@ -472,5 +479,53 @@ test.describe("chess", () => {
     await expect(c.getByRole("button", { name: "Resign" })).toHaveCount(0);
     await classicMove(g.white, "e2", "e4");
     await expect(c.getByLabel("Moves")).toContainText("e4");
+  });
+
+  test("landscape: classic, 4-player and real-time boards fill the height with everything else beside them", async ({ phones }) => {
+    const [shlok, chris, sam, alex] = await Promise.all(["Shlok", "Chris", "Sam", "Alex"].map((n) => createPlayer(n)));
+    const page = await phones.open({ player: shlok, push: "on" });
+    await page.setViewportSize(LANDSCAPE);
+    await page.goto("/");
+    await simulateSafeAreas(page, SAFE_LANDSCAPE);
+    const open = async (id: string) => {
+      await page.goto(`/chess/${id}`);
+      await rotate(page, "landscape");
+    };
+    const fitsBesideTheBoard = async (board: string) => {
+      await ready(page);
+      await expectFitsScreen(page);
+      const grid = (await page.getByRole("grid", { name: board }).boundingBox())!;
+      expect(grid.height, "the board fills the height").toBeGreaterThan(LANDSCAPE.height * 0.8);
+      const menu = (await page.getByRole("button", { name: "Menu" }).boundingBox())!;
+      expect(menu.x, "the menu sits beside the board").toBeGreaterThan(grid.x + grid.width);
+    };
+
+    const classic = await admin().action(anyApi.testing.startMatch, { mode: "chess:classic", a: shlok.userId, b: chris.userId });
+    await open(classic);
+    await fitsBesideTheBoard("Classic chess board");
+    await tapMove(page, "e2", "e4");
+    await expect(page.getByRole("button", { name: /^Confirm/ })).toBeVisible();
+    await holdsStill(page);
+    await expectFitsScreen(page);
+    await page.getByRole("button", { name: /^Confirm/ }).click();
+    await expect(page.getByLabel("Moves")).toContainText("e4");
+    await fitsBesideTheBoard("Classic chess board");
+
+    const four = await admin().action(anyApi.testing.startFour, {
+      mode: "chess:four",
+      players: [shlok, chris, sam, alex].map((p) => p.userId),
+    });
+    await open(four);
+    await fitsBesideTheBoard("4-player chess board");
+    await expect(page.getByText("Your move")).toBeVisible();
+    await tapMove(page, "e2", "e4");
+    await expect(page.getByRole("button", { name: /^Confirm/ })).toBeVisible();
+    await holdsStill(page);
+    await expectFitsScreen(page);
+
+    const realtime = await admin().action(anyApi.testing.startMatch, { mode: "chess:realtime", a: shlok.userId, b: chris.userId });
+    await open(realtime);
+    await expect(page.getByText(/Waiting for Chris/)).toBeVisible();
+    await fitsBesideTheBoard("Real-time chess board");
   });
 });

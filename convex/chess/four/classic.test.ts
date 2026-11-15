@@ -13,7 +13,6 @@ import {
   type Piece4,
 } from "./classic";
 
-// "redK@h1"-style specs; files a..n, ranks 1..14.
 const sq = (s: string): [number, number] => [s.charCodeAt(0) - 97, Number(s.slice(1)) - 1];
 function custom(turn: Color4, ...specs: string[]): FourState {
   const pieces: Piece4[] = specs.map((spec, id) => {
@@ -28,7 +27,6 @@ const go = (s: FourState, from: string, to: string) => {
   if (!next) throw new Error(`illegal: ${from}-${to}`);
   return next;
 };
-// Kings parked out of the way so each army has something to do.
 const KINGS = ["redK@h1", "blueK@a7", "yellowK@g14", "greenK@n8"];
 
 describe("setup", () => {
@@ -86,8 +84,7 @@ describe("pieces", () => {
     s = go(s, "e7", "e8");
     const q = s.pieces.find((p) => p.x === 4 && p.y === 7)!;
     expect(q).toMatchObject({ kind: "Q", promoted: true });
-    // The new queen also checks green's king along the 8th rank.
-    expect(s.moves.at(-1)?.text).toBe("e8=Q+");
+    expect(s.moves.at(-1)?.text, "the new queen also checks green's king along the 8th rank").toBe("e8=Q+");
   });
 
   test("captures score by piece, and promoted queens are worth 1", () => {
@@ -101,8 +98,10 @@ describe("pieces", () => {
 
   test("you can't move into check or leave your king in it", () => {
     const s = custom("red", "redK@h1", "redR@h2", "blueK@a7", "yellowR@h10", "yellowK@g14", "greenK@n8");
-    // The rook on h2 is pinned against the king by yellow's rook.
-    expect(legalTargetsFrom(s, ...sq("h2")).every(([x]) => x === 7)).toBe(true);
+    expect(
+      legalTargetsFrom(s, ...sq("h2")).every(([x]) => x === 7),
+      "the rook on h2 is pinned against the king by yellow's rook",
+    ).toBe(true);
     const exposed = custom("red", "redK@h1", "blueK@a7", "yellowR@i10", "yellowK@g14", "greenK@n8");
     expect(legalTargetsFrom(exposed, ...sq("h1"))).not.toContainEqual(sq("i1"));
   });
@@ -121,7 +120,6 @@ describe("pieces", () => {
 });
 
 describe("going out", () => {
-  // Yellow's king is boxed in by its own pawns; red's rook swings to the 14th rank.
   const mateSetup = () =>
     custom(
       "red",
@@ -143,8 +141,7 @@ describe("going out", () => {
     expect(inCheck(s, "yellow")).toBe(true);
     expect(s.turn).toBe("blue");
     s = go(s, "b9", "c9");
-    // Yellow has no way out, so play skips to green.
-    expect(s.turn).toBe("green");
+    expect(s.turn, "yellow has no way out, so play skips to green").toBe("green");
     expect(s.out).toEqual([{ color: "yellow", reason: "checkmate", ply: 2 }]);
     expect(s.points.red).toBe(20);
     expect(s.pieces.filter((p) => p.color === "yellow").every((p) => p.dead)).toBe(true);
@@ -161,9 +158,8 @@ describe("going out", () => {
   });
 
   test("stalemating yourself is +20 and out", () => {
-    // Green's lone king on n11 has three squares (m10, m11, n10), all covered by red's rooks, and isn't in check.
     let s = custom("red", "redK@h1", "redR@m4", "redR@f10", "blueK@a7", "yellowK@g14", "greenK@n11");
-    expect(inCheck(s, "green")).toBe(false);
+    expect(inCheck(s, "green"), "green's lone king has m10, m11 and n10, all covered by red's rooks, and isn't in check").toBe(false);
     s = go(s, "h1", "h2");
     s = go(s, "a7", "a8");
     s = go(s, "g14", "h14");
@@ -173,10 +169,9 @@ describe("going out", () => {
   });
 
   test("checking two kings at once scores +5", () => {
-    // A knight landing on f12 forks blue's king on d11 and yellow's on g14.
     let s = custom("red", "redK@h1", "redN@e10", "blueK@d11", "yellowK@g14", "greenK@n8");
     s = go(s, "e10", "f12");
-    expect(s.moves.at(-1)?.checks.sort()).toEqual(["blue", "yellow"]);
+    expect(s.moves.at(-1)?.checks.sort(), "a knight on f12 forks blue's king on d11 and yellow's on g14").toEqual(["blue", "yellow"]);
     expect(s.points.red).toBe(5);
   });
 
@@ -191,8 +186,12 @@ describe("going out", () => {
     s = retire4(s, "yellow", "resign");
     expect(s.result?.reason).toBe("last_player");
     expect(s.turn).toBeNull();
-    // Nobody scored, so the last one standing places first, then by who lasted longest.
-    expect(s.result?.standings).toEqual([["red"], ["yellow"], ["blue"], ["green"]]);
+    expect(s.result?.standings, "nobody scored: the last one standing first, then by who lasted longest").toEqual([
+      ["red"],
+      ["yellow"],
+      ["blue"],
+      ["green"],
+    ]);
   });
 
   test("most points wins even if someone else lasted longer", () => {
@@ -201,9 +200,8 @@ describe("going out", () => {
     s = go(s, "b9", "c9");
     s = retire4(s, "green", "resign");
     s = retire4(s, "red", "resign");
-    // Red resigned last-but-one with 20 points; blue is the last player standing with 0.
-    expect(s.result?.standings[0]).toEqual(["red"]);
-    expect(s.result?.standings[1]).toEqual(["blue"]);
+    expect(s.result?.standings[0], "red resigned last-but-one with 20 points").toEqual(["red"]);
+    expect(s.result?.standings[1], "blue is the last player standing with 0").toEqual(["blue"]);
   });
 
   test("fifty quiet rounds end the game and pay +10 to everyone still in", () => {
@@ -216,7 +214,6 @@ describe("going out", () => {
 });
 
 describe("history", () => {
-  // A long scrappy game with a resignation out of turn and a timeout on turn, played with a seeded random.
   function scrappyGame() {
     let seed = 7;
     const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -236,7 +233,6 @@ describe("history", () => {
   test("stepping back through a game shows each board as it stood, resignations and timeouts included", () => {
     const s = scrappyGame();
     expect(s.out.map((o) => o.reason)).toEqual(expect.arrayContaining(["resign", "timeout"]));
-    // Every position, replayed the slow, checked way.
     const slow = [initialFour()];
     for (let i = 0; i < s.moves.length; i++) {
       let p = slow[i];
@@ -245,10 +241,12 @@ describe("history", () => {
     }
     const boards = fourBoards(s);
     expect(boards).toHaveLength(s.moves.length + 1);
-    // Whoever had gone out by then, by the time the board stood there.
     const outAt = (i: number) => s.out.filter((o) => o.ply <= i).map((o) => o.color);
     boards.forEach((b, i) => {
-      expect(b.out.map((o) => o.color)).toEqual(outAt(i));
+      expect(
+        b.out.map((o) => o.color),
+        "whoever had gone out by then",
+      ).toEqual(outAt(i));
       const greyed = slow[i].pieces.map((p) => (outAt(i).includes(p.color) ? { ...p, dead: true } : p));
       expect(b.pieces).toEqual(greyed);
       if (i < s.moves.length) expect(b.turn).toBe(s.moves[i].color);
@@ -256,10 +254,8 @@ describe("history", () => {
     expect(boards.at(-1)!.pieces).toEqual(s.pieces);
     expect(boards[40].out.map((o) => o.color)).toContain("yellow");
     expect(boards[39].out).toEqual([]);
-  }, 60_000); // the slow, checked replay is about a second on a quiet machine, several when it's busy
+  }, 60_000);
 
-  // A few milliseconds normally; replaying through move4 took over a second. The bound is loose enough for a
-  // busy machine and still catches that.
   test("a long game steps back in a blink", () => {
     const s = scrappyGame();
     const t = performance.now();

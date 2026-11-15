@@ -36,7 +36,6 @@ async function crew(t: T, n = 4) {
   return out;
 }
 
-// Four players queue into one game. Returns them keyed by color.
 async function fourGame(t: T, mode: "chess:four" | "chess:realtime4" = "chess:four") {
   const players = await crew(t);
   let id: Id<"matches"> | undefined;
@@ -46,7 +45,6 @@ async function fourGame(t: T, mode: "chess:four" | "chess:realtime4" = "chess:fo
   return { id: id!, players, red: by("red"), blue: by("blue"), yellow: by("yellow"), green: by("green") };
 }
 
-// Squares by name, a..n and 1..14.
 const sq = (s: string) => ({ x: s.charCodeAt(0) - 97, y: Number(s.slice(1)) - 1 });
 const mv = (from: string, to: string) => ({ fromX: sq(from).x, fromY: sq(from).y, toX: sq(to).x, toY: sq(to).y });
 
@@ -99,8 +97,10 @@ describe("four-player lobby", () => {
       url: `/chess/${id}?accept=1`,
     });
     await expect(e.as.mutation(api.matches.join, { id })).rejects.toThrow("invite-only");
-    // Asking again with the same three, in any order, is the same challenge.
-    expect(await a.as.mutation(api.matches.challenge, { mode: "chess:four", opponents: [d.userId, b.userId, c.userId] })).toBe(id);
+    expect(
+      await a.as.mutation(api.matches.challenge, { mode: "chess:four", opponents: [d.userId, b.userId, c.userId] }),
+      "asking again with the same three, in any order, is the same challenge",
+    ).toBe(id);
     await b.as.mutation(api.matches.join, { id });
     await c.as.mutation(api.matches.join, { id });
     expect((await match(t, id))!.status).toBe("waiting");
@@ -122,8 +122,7 @@ describe("four-player lobby", () => {
         .sort(),
     ).toEqual([c.userId, d.userId, e.userId].sort());
     await c.as.mutation(api.matches.join, { id });
-    // Joining through the queue finds the open seat too.
-    expect(await d.as.mutation(api.matches.queue, { mode: "chess:four" })).toBe(id);
+    expect(await d.as.mutation(api.matches.queue, { mode: "chess:four" }), "joining through the queue finds the open seat too").toBe(id);
     await expect(e.as.mutation(api.matches.join, { id })).rejects.toThrow("full");
     await b.as.mutation(api.matches.join, { id });
     expect((await match(t, id))!.status).toBe("active");
@@ -235,8 +234,10 @@ describe("four-player chess", () => {
     const changes = m.ratingChanges!;
     expect(changes).toHaveLength(4);
     const delta = (p: Player) => changes.find((c) => c.userId === p.userId)!;
-    // Everyone started at 1200: first to last is 16, 5, -5, -16 (see multiElo).
-    expect([g.yellow, g.red, g.blue, g.green].map((p) => [delta(p).before, delta(p).after])).toEqual([
+    expect(
+      [g.yellow, g.red, g.blue, g.green].map((p) => [delta(p).before, delta(p).after]),
+      "everyone started at 1200: first to last is +16, +5, -5, -16 (multiElo)",
+    ).toEqual([
       [1200, 1216],
       [1200, 1205],
       [1200, 1195],
@@ -282,8 +283,9 @@ describe("four-player chess", () => {
     const m = (await match(t, next))!;
     expect(m.status).toBe("active");
     const colorOf = (p: Player) => m.players.find((s) => s.userId === p.userId)!.color;
-    // Blue moves up to red, red goes round to green.
-    expect([colorOf(g.blue), colorOf(g.yellow), colorOf(g.green), colorOf(g.red)]).toEqual(["red", "blue", "yellow", "green"]);
+    expect([colorOf(g.blue), colorOf(g.yellow), colorOf(g.green), colorOf(g.red)], "blue moves up to red, red goes round to green").toEqual(
+      ["red", "blue", "yellow", "green"],
+    );
   });
 });
 
@@ -352,7 +354,6 @@ describe("multiplayer Elo", () => {
     const g = await fourGame(t);
     const start = Date.now();
     const hours = (ms: number) => Math.round(ms / 3600_000);
-    // Follow the chain the way the scheduler would: each reminder runs at its time and arms the next.
     for (let strike = 0; strike < 6; strike++) {
       const next = (await scheduled(t)).find(
         (s) =>

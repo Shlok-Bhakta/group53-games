@@ -1,9 +1,9 @@
 import { motion } from "motion/react";
+import { FILES } from "./geometry";
 
-// The Chess card's art: two ranks drop in, then a knight hops in and takes a pawn. About a second, once.
 const BACK = ["R", "N", "B", "Q", "K", "B", "N", "R"] as const;
-const KNIGHT_FROM = 6; // g1
-const VICTIM = 4; // e2
+const KNIGHT_FROM = FILES.indexOf("g");
+const VICTIM = FILES.indexOf("e");
 const HOP_AT = 0.62;
 const HOP = 0.34;
 
@@ -28,7 +28,6 @@ export function ChessBanner() {
       </div>
 
       <div className="pointer-events-none absolute inset-0">
-        {/* Black pawns on the top rank */}
         {Array.from({ length: 8 }, (_, c) => (
           <motion.img
             key={`p${c}`}
@@ -45,7 +44,6 @@ export function ChessBanner() {
             }
           />
         ))}
-        {/* White back rank on the bottom */}
         {BACK.map((k, c) => {
           const knight = c === KNIGHT_FROM;
           const dx = (VICTIM - KNIGHT_FROM) * 100;
@@ -75,7 +73,6 @@ export function ChessBanner() {
             />
           );
         })}
-        {/* The hit */}
         <motion.span
           className="absolute top-[25%] size-[12.5%] -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-[var(--tile-hit)]"
           style={{ left: `${VICTIM * 12.5 + 6.25}%`, aspectRatio: "1" }}

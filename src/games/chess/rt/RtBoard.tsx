@@ -1,22 +1,9 @@
 import { memo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { CELL, positionAt, type Piece, type State } from "../../../../convex/chess/realtime";
-import { nearest, pieceSrc, pointToScreen, same, type Sq, type View } from "../geometry";
+import { FILES, TAP_REACH, nearest, pieceSrc, pointToScreen, same, type Sq, type View } from "../geometry";
+import { PIECE_IN_FLIGHT_SHADOW, RTCHESS_MARKS } from "../palette";
 import { cn } from "@/lib/utils";
-
-const FILES = "abcdefgh";
-// A finger this close to a square's center (in squares) picks it on the 14x14 board.
-const REACH = 0.85;
-
-// rtchess's board language.
-const COLORS = {
-  cooldown: "rgba(217,214,11,0.75)",
-  moveFrom: "rgba(0,16,100,0.25)",
-  moveTo: "rgba(0,16,100,0.45)",
-  selected: "rgba(42,105,50,0.6)",
-  target: "rgba(7,68,7,0.5)",
-  premove: "rgba(255,162,0,0.75)",
-};
 
 type BoardProps = {
   sim: State;
@@ -34,8 +21,6 @@ type BoardProps = {
   children?: ReactNode;
 };
 
-// The board, its highlights and the drag. It draws each piece where it rests; the game's frame loop moves them
-// in the DOM from there (`pieceEls`, `cooldownEls`), so this only re-renders when the board's structure changes.
 export function RtBoard({
   sim,
   myColor,
@@ -66,7 +51,6 @@ export function RtBoard({
     const sq = view.fromScreen(Math.floor(at[0]), Math.floor(at[1]));
     return view.onBoard(...sq) ? sq : null;
   };
-  // Where my live pieces are this instant: resting, or travelling through a square right now.
   const myPieces = () => {
     const t = displayTick();
     return sim.pieces
@@ -77,7 +61,6 @@ export function RtBoard({
         return { p, sq: [Math.round(pos.x / CELL), Math.round(pos.y / CELL)] as Sq };
       });
   };
-  // My piece under the finger, preferring one resting there. Small squares snap to the nearest piece.
   const myPieceNear = (clientX: number, clientY: number) => {
     const mine = myPieces();
     const sq = squareAt(clientX, clientY);
@@ -91,7 +74,7 @@ export function RtBoard({
         mine.map((m) => m.sq),
         at[0],
         at[1],
-        REACH,
+        TAP_REACH,
       );
     return (near && mine.find((m) => same(m.sq, near))?.p) ?? null;
   };
@@ -100,7 +83,7 @@ export function RtBoard({
     const sq = squareAt(clientX, clientY);
     if (isTarget(sq) || !small) return sq;
     const at = pointToScreen(ref.current!, n, clientX, clientY);
-    return (at && nearest(view, targets, at[0], at[1], REACH)) ?? sq;
+    return (at && nearest(view, targets, at[0], at[1], TAP_REACH)) ?? sq;
   };
 
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -162,7 +145,7 @@ export function RtBoard({
       data-playing={playing || undefined}
       className={cn(
         "board relative aspect-square w-full touch-none select-none overflow-hidden rounded-sm",
-        !small && "shadow-lg shadow-black/20",
+        !small && "shadow-lg shadow-shade/20",
       )}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -171,16 +154,15 @@ export function RtBoard({
     >
       <Squares view={view} />
 
-      {/* Highlights */}
       <div className="pointer-events-none absolute inset-0">
         {moving.flatMap((p) => [
-          <Tint key={`f${p.id}`} sq={toScreen([p.x, p.y])} color={COLORS.moveFrom} pct={pct} />,
-          <Tint key={`t${p.id}`} sq={toScreen([p.toX!, p.toY!])} color={COLORS.moveTo} pct={pct} />,
+          <Tint key={`f${p.id}`} sq={toScreen([p.x, p.y])} color={RTCHESS_MARKS.moveFrom} pct={pct} />,
+          <Tint key={`t${p.id}`} sq={toScreen([p.toX!, p.toY!])} color={RTCHESS_MARKS.moveTo} pct={pct} />,
         ])}
         {selected && (
           <Tint
             sq={toScreen(selected.status === "moving" ? [selected.toX!, selected.toY!] : [selected.x, selected.y])}
-            color={COLORS.selected}
+            color={RTCHESS_MARKS.selected}
             pct={pct}
           />
         )}
@@ -195,13 +177,19 @@ export function RtBoard({
               data-target={view.name(t)}
             >
               {focused ? (
-                <span className="absolute inset-0" style={{ background: premoving ? COLORS.premove : COLORS.target, opacity: 0.6 }} />
+                <span
+                  className="absolute inset-0"
+                  style={{ background: premoving ? RTCHESS_MARKS.premove : RTCHESS_MARKS.target, opacity: 0.6 }}
+                />
               ) : premoving ? (
-                <span className="absolute inset-[8%] rounded-md border-[3px] border-dashed" style={{ borderColor: COLORS.premove }} />
+                <span
+                  className="absolute inset-[8%] rounded-md border-[3px] border-dashed"
+                  style={{ borderColor: RTCHESS_MARKS.premove }}
+                />
               ) : restingEnemy(t) ? (
                 <span
                   className={cn("absolute inset-0 rounded-full", small ? "border-[3px]" : "border-[5px]")}
-                  style={{ borderColor: COLORS.target }}
+                  style={{ borderColor: RTCHESS_MARKS.target }}
                 />
               ) : (
                 <span
@@ -209,7 +197,7 @@ export function RtBoard({
                     "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full",
                     small ? "size-[38%]" : "size-[30%]",
                   )}
-                  style={{ background: COLORS.target }}
+                  style={{ background: RTCHESS_MARKS.target }}
                 />
               )}
             </span>
@@ -217,7 +205,6 @@ export function RtBoard({
         })}
       </div>
 
-      {/* Pieces: positioned every frame by the parent's loop */}
       <div className="pointer-events-none absolute inset-0">
         {sim.pieces.map((p) => (
           <div
@@ -231,7 +218,6 @@ export function RtBoard({
               p.status === "moving" ? "z-20" : "z-10",
               drag?.piece.id === p.id && startPt.current?.moved && "opacity-30",
             )}
-            // Where the piece rests until the frame loop takes over, so nothing starts in the corner.
             style={{
               width: `${pct}%`,
               height: `${pct}%`,
@@ -246,19 +232,19 @@ export function RtBoard({
                 else cooldownEls.current.delete(p.id);
               }}
               className="absolute inset-x-0 bottom-0"
-              style={{ background: COLORS.cooldown, height: 0 }}
+              style={{ background: RTCHESS_MARKS.cooldown, height: 0 }}
             />
             <img
               src={pieceSrc(p)}
               alt=""
               draggable={false}
-              className={cn("relative size-full", p.status === "moving" && "drop-shadow-[0_6px_6px_rgb(0_0_0/0.35)]")}
+              className="relative size-full"
+              style={{ filter: p.status === "moving" ? PIECE_IN_FLIGHT_SHADOW : undefined }}
             />
           </div>
         ))}
       </div>
 
-      {/* Premove arrows */}
       <svg className="pointer-events-none absolute inset-0 z-30 size-full" viewBox={`0 0 ${n} ${n}`} aria-hidden="true">
         {pendings.map((p) => {
           const from = toScreen(p.status === "moving" ? [p.toX!, p.toY!] : [p.x, p.y]);
@@ -267,7 +253,6 @@ export function RtBoard({
         })}
       </svg>
 
-      {/* Drag ghost */}
       <div ref={ghost} className="pointer-events-none absolute left-0 top-0 z-40 opacity-0" style={{ width: `${pct}%`, height: `${pct}%` }}>
         {drag && <img src={pieceSrc(drag.piece)} alt="" className="size-full" />}
       </div>
@@ -346,7 +331,7 @@ function Arrow({ from: [fc, fr], to: [tc, tr] }: { from: Sq; to: Sq }) {
   const by = y2 - uy * head;
   const w = head * Math.tan(Math.PI / 6);
   return (
-    <g fill={COLORS.premove} stroke={COLORS.premove} data-premove>
+    <g fill={RTCHESS_MARKS.premove} stroke={RTCHESS_MARKS.premove} data-premove>
       <line x1={x1} y1={y1} x2={bx} y2={by} strokeWidth={0.15} strokeLinecap="round" />
       <polygon points={`${x2},${y2} ${bx - uy * w},${by + ux * w} ${bx + uy * w},${by - ux * w}`} stroke="none" />
     </g>

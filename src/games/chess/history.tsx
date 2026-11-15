@@ -3,8 +3,6 @@ import { CaretLeftIcon, CaretRightIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-// Which position the board shows: `at` moves into the game, `count` being now. Now follows the game as moves
-// land; a step back stays where it is when one arrives, so the board never changes under someone looking back.
 export function useHistory(game: string, count: number) {
   const [viewing, setViewing] = useState<{ game: string; at: number } | null>(null);
   const at = viewing?.game === game ? Math.min(viewing.at, count) : count;
@@ -14,12 +12,9 @@ export function useHistory(game: string, count: number) {
 
 export type History = ReturnType<typeof useHistory>;
 
-// The moves under the board, with arrows either end to step through them. Tapping a move shows the board
-// right after it.
 export function MoveLine({ history: { at, count, go }, empty, children }: { history: History; empty: ReactNode; children: ReactNode }) {
   const list = useRef<HTMLDivElement>(null);
   const shown = useRef(false);
-  // Keeps the move on show in view: centered while stepping, the newest at the end.
   useEffect(() => {
     const el = list.current;
     if (!el) return;
@@ -28,7 +23,6 @@ export function MoveLine({ history: { at, count, go }, empty, children }: { hist
     el.scrollTo({ left, behavior: shown.current ? "smooth" : "instant" });
     shown.current = true;
   }, [at, count]);
-  // The arrow keys step too, for the odd game on a laptop.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLElement && e.target.closest("input, textarea, [contenteditable]")) return;
@@ -74,8 +68,6 @@ function Step({ label, disabled, onClick, children }: { label: string; disabled:
   );
 }
 
-// One move in the line. `ply` counts from 0, so the board after it is `ply + 1` moves in. Moves after the one
-// on show are faded.
 export function MoveChip({
   ply,
   history,
@@ -89,30 +81,31 @@ export function MoveChip({
 }) {
   const current = ply === history.at - 1;
   return (
-    <button
-      type="button"
+    <Button
+      variant="bare"
+      size="pill"
       data-current={current || undefined}
       aria-current={current ? "step" : undefined}
       onClick={() => history.go(ply + 1)}
       className={cn(
-        "flex h-full shrink-0 touch-manipulation items-center transition-opacity duration-100",
+        "flex h-full shrink-0 touch-manipulation items-center transition-opacity duration-100 phone-landscape:min-w-11 phone-landscape:justify-center",
         ply >= history.at && "opacity-40",
       )}
     >
       <span className={cn("flex items-center gap-1.5 rounded-sm", current && cn("px-1.5", currentClass))}>{children}</span>
-    </button>
+    </Button>
   );
 }
 
-// Lies over the board while it shows the past: a tap there goes back to now, where pieces move again.
 export function BackToNow({ history }: { history: History }) {
   if (history.live) return null;
   return (
-    <button
-      type="button"
+    <Button
+      variant="bare"
+      size="card"
       aria-label="Back to the current position"
       onClick={() => history.go(history.count)}
-      className="absolute inset-0 z-40 touch-manipulation"
+      className="absolute inset-0 z-40"
     />
   );
 }

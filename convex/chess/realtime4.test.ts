@@ -4,7 +4,6 @@ import { TICKS_PER_SQUARE, initialState, legalTargets, premoveTargets, simulate,
 const sq = (s: string): [number, number] => [s.charCodeAt(0) - 97, Number(s.slice(1)) - 1];
 const name = ([x, y]: [number, number]) => `${String.fromCharCode(97 + x)}${y + 1}`;
 
-// A four-player position: "redK@h1" specs, all ready, not first moves.
 function position(...specs: string[]): State {
   const pieces: Piece[] = specs.map((spec, id) => {
     const [, color, kind, square] = spec.match(/^(red|blue|yellow|green)([KQRBNP])@(\w+)$/)!;
@@ -47,7 +46,6 @@ describe("four-player real-time", () => {
   });
 
   test("pawns promote on their 8th rank, the middle line", () => {
-    // Blue walks along the ranks, so its 8th rank is the h-file.
     const s = position("redP@e7", "redK@h1", "blueK@a7", "yellowK@g14", "greenK@n8", "blueP@g9");
     const after = simulate([cmd(s, 0, "e7", "e8")], TICKS_PER_SQUARE + 1, s);
     expect(at(after, "e8")?.kind).toBe("Q");
@@ -67,12 +65,10 @@ describe("four-player real-time", () => {
     const s = position("redK@h1", "redR@a6", "blueK@a7", "blueR@b4", "yellowK@g14", "greenK@n8", "greenR@n4");
     let after = simulate([cmd(s, 0, "a6", "a7")], TICKS_PER_SQUARE + 1, s);
     const greyRook = at(after, "b4")!;
-    // Blue can't move any more.
     after = simulate([{ tick: after.tick, color: "blue", pieceId: greyRook.id, toX: 1, toY: 8 }], after.tick + 40, after);
-    expect(at(after, "b4")?.dead).toBe(true);
-    // Green's rook stops at the grey rook and can take it.
-    expect(targets(after, "n4")).toContain("b4");
-    expect(targets(after, "n4")).not.toContain("a4");
+    expect(at(after, "b4")?.dead, "blue's grey rook can't move any more").toBe(true);
+    expect(targets(after, "n4"), "green's rook can take the grey rook").toContain("b4");
+    expect(targets(after, "n4"), "green's rook stops at the grey rook").not.toContain("a4");
   });
 
   test("last king standing wins, and the rest place by how long they lasted", () => {
@@ -89,7 +85,6 @@ describe("four-player real-time", () => {
     let s = simulate([resign(10, "green")], 20, s0);
     expect(s.out).toEqual([{ color: "green", tick: 10 }]);
     expect(s.pieces.filter((p) => p.color === "green").every((p) => p.dead)).toBe(true);
-    // A grey army can't move or resign again.
     const greenPawn = s.pieces.find((p) => p.color === "green" && p.kind === "P")!;
     s = simulate(
       [

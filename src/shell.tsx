@@ -177,7 +177,9 @@ export function useViewportGap() {
     document.body.append(probe);
     let timers: ReturnType<typeof setTimeout>[] = [];
     let nudged = false;
+    let disposed = false;
     const apply = () => {
+      if (disposed) return;
       const gap = viewportGap(probe);
       if (gap > 0 && !nudged) {
         nudged = true;
@@ -203,6 +205,7 @@ export function useViewportGap() {
     vv?.addEventListener("scroll", resync);
     resync();
     return () => {
+      disposed = true;
       timers.forEach(clearTimeout);
       onWindow.forEach((e) => window.removeEventListener(e, resync));
       document.removeEventListener("visibilitychange", visible);

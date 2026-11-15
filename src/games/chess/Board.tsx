@@ -1,6 +1,7 @@
 import { useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { nearest, pieceSrc, pointToScreen, same, type Sq, type View } from "./geometry";
+import { FILES, TAP_REACH, nearest, pieceSrc, pointToScreen, same, type Sq, type View } from "./geometry";
+import { BOARD_MARKS } from "./palette";
 
 export type { Sq } from "./geometry";
 
@@ -8,22 +9,17 @@ export type BoardPiece = {
   key: string | number;
   color: string;
   kind: "P" | "N" | "B" | "R" | "Q" | "K";
-  // Fractional while a real-time piece is travelling.
   x: number;
   y: number;
-  // Four-player: an eliminated army, greyed out.
   dead?: boolean;
   moving?: boolean;
-  // A faint copy left on the square a piece came from while its move waits for Confirm. Takes no taps.
   ghost?: boolean;
 };
 
 type Props = {
   pieces: BoardPiece[];
   view: View;
-  // Squares the current player may pick up from.
   canSelect: (sq: Sq) => boolean;
-  // Every square canSelect would accept, so small-board taps can snap to the nearest one.
   selectable?: Sq[];
   selected: Sq | null;
   targets: Sq[];
@@ -33,16 +29,11 @@ type Props = {
   check?: Sq[];
   disabled?: boolean;
   label?: string;
-  // Drawn over the board, e.g. the players in a four-player board's empty corners. Doesn't take taps.
   children?: ReactNode;
 };
 
-const FILES = "abcdefgh";
 export const squareName = ([x, y]: Sq) => `${FILES[x]}${y + 1}`;
 export const fromName = (s: string): Sq => [s.charCodeAt(0) - 97, Number(s.slice(1)) - 1];
-
-// A tap this close to a square's center (in squares) counts as that square on the 14x14 board.
-const REACH = 0.85;
 
 export function Board({
   pieces,
@@ -72,12 +63,11 @@ export function Board({
     const sq = view.fromScreen(Math.floor(at[0]), Math.floor(at[1]));
     return view.onBoard(...sq) ? sq : null;
   };
-  // Small squares: snap to the nearest square that would do something.
   const snap = (clientX: number, clientY: number, candidates: Sq[]): Sq | null => {
     const exact = squareAt(clientX, clientY);
     if (!small || (exact && candidates.some((c) => same(c, exact)))) return exact;
     const at = pointToScreen(ref.current!, n, clientX, clientY);
-    return (at && nearest(view, candidates, at[0], at[1], REACH)) ?? exact;
+    return (at && nearest(view, candidates, at[0], at[1], TAP_REACH)) ?? exact;
   };
 
   const onPointerDown = (e: ReactPointerEvent) => {
@@ -126,14 +116,13 @@ export function Board({
       data-disabled={disabled || undefined}
       className={cn(
         "board relative aspect-square w-full touch-none select-none overflow-hidden rounded-sm",
-        !small && "shadow-lg shadow-black/20",
+        !small && "shadow-lg shadow-shade/20",
       )}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={() => setDrag(null)}
     >
-      {/* Squares */}
       <div className="absolute inset-0 grid" style={{ gridTemplateColumns: `repeat(${n}, 1fr)`, gridTemplateRows: `repeat(${n}, 1fr)` }}>
         {Array.from({ length: n * n }, (_, i) => {
           const c = i % n;
@@ -152,22 +141,22 @@ export function Board({
               data-square={name}
               className={cn("relative", dark ? "bg-[var(--board-dark)]" : "bg-[var(--board-light)]")}
             >
-              {(same(lastMove?.[0], sq) || same(lastMove?.[1], sq)) && <span className="absolute inset-0 bg-[oklch(0.85_0.17_95/0.42)]" />}
-              {same(selected, sq) && <span className="absolute inset-0 bg-[oklch(0.8_0.17_95/0.6)]" />}
-              {check.some((k) => same(k, sq)) && (
-                <span className="absolute inset-0 bg-[radial-gradient(circle,oklch(0.65_0.25_25/0.85)_15%,transparent_70%)]" />
+              {(same(lastMove?.[0], sq) || same(lastMove?.[1], sq)) && (
+                <span className="absolute inset-0" style={{ backgroundColor: BOARD_MARKS.lastMove }} />
               )}
+              {same(selected, sq) && <span className="absolute inset-0" style={{ backgroundColor: BOARD_MARKS.selected }} />}
+              {check.some((k) => same(k, sq)) && <span className="absolute inset-0" style={{ backgroundImage: BOARD_MARKS.check }} />}
               {isTarget &&
                 (occupied ? (
                   <span
                     data-target
-                    className={cn("absolute inset-0 rounded-full border-black/25", small ? "border-[3px]" : "border-[5px]")}
+                    className={cn("absolute inset-0 rounded-full border-shade/25", small ? "border-[3px]" : "border-[5px]")}
                   />
                 ) : (
                   <span
                     data-target
                     className={cn(
-                      "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/25",
+                      "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-shade/25",
                       small ? "size-[38%]" : "size-[30%]",
                     )}
                   />
@@ -197,7 +186,6 @@ export function Board({
         })}
       </div>
 
-      {/* Pieces */}
       <div className="pointer-events-none absolute inset-0">
         {pieces.map((p) => {
           const dragging = drag?.moved && same(drag.from, [p.x, p.y]) && !p.moving && !p.ghost;

@@ -1,13 +1,3 @@
-// Turn-based four-player chess, chess.com Free-for-all rules. Pure and deterministic; no Convex imports.
-//
-// Players move clockwise: red, blue, yellow, green. The usual chess rules apply, with check against every
-// live opponent. When it's your turn and you have no legal move you're out: checkmate gives the player who
-// delivered it +20, and stalemating yourself gives you +20. Resigning or timing out also puts you out.
-// Eliminated armies turn grey and stay on the board; capturing them scores nothing. Captures score
-// P 1, N 3, B 5, R 5, Q 9 (promoted queens 1). Checking two kings at once scores +5 (+1 with a queen),
-// three +20 (+5 with a queen). The game ends when one player is left, or after 50 rounds with no capture
-// or pawn move (+10 to everyone still in). Most points wins; ties go to whoever lasted longer.
-
 import {
   CASTLES,
   COLORS4,
@@ -47,7 +37,6 @@ export type FourState = {
   out: Out[];
   points: Record<Color4, number>;
   moves: Move4[];
-  // Plies since the last capture or pawn move.
   quiet: number;
   result: { standings: Color4[][]; reason: "last_player" | "fifty" } | null;
 };
@@ -97,7 +86,6 @@ function occupancy(pieces: Piece4[]) {
   return (x: number, y: number) => map.get(y * SIZE + x);
 }
 
-// Squares this piece attacks (for check), ignoring whose turn it is. Dead pieces attack nothing.
 function attacks(p: Piece4, at: ReturnType<typeof occupancy>): [number, number][] {
   if (p.dead) return [];
   const out: [number, number][] = [];
@@ -130,7 +118,6 @@ function attacks(p: Piece4, at: ReturnType<typeof occupancy>): [number, number][
       break;
     case "P": {
       const [fx, fy] = forward(p.color);
-      // Diagonal-forward squares: forward plus either sideways direction.
       for (const s of [-1, 1]) {
         const x = p.x + fx + (fy !== 0 ? s : 0);
         const y = p.y + fy + (fx !== 0 ? s : 0);
@@ -215,8 +202,6 @@ function play(s: FourState, m: Candidate): { pieces: Piece4[]; captured?: Piece4
   return { pieces, captured, promoted };
 }
 
-// Every legal move for this color: pseudo-legal moves that don't leave its own king attacked, and castling
-// that doesn't start in, pass through, or land in check.
 export function legalMoves(s: FourState, color: Color4): Candidate[] {
   if (isOut(s, color)) return [];
   const enemies = liveColors(s).filter((c) => c !== color);
@@ -258,14 +243,11 @@ const nextLive = (s: FourState, after: Color4): Color4 | null => {
   return null;
 };
 
-// Settles whose turn it is: skips past players with no legal move (checkmate or stalemate puts them out),
-// and ends the game when one player is left or the fifty-round rule triggers.
 function advance(s: FourState, lastMover: Color4) {
   let c = nextLive(s, lastMover);
   while (c && liveColors(s).length > 1) {
     if (legalMoves(s, c).length > 0) break;
     if (inCheck(s, c)) {
-      // Credit the mate to the most recent mover whose pieces are attacking the king, else the last mover.
       const k = king(s.pieces, c)!;
       const order = [...s.moves].reverse().map((m) => m.color);
       const by = order.find((o) => o !== c && !isOut(s, o) && squareAttackedBy(s.pieces, k.x, k.y, [o])) ?? lastMover;
@@ -290,9 +272,7 @@ function advance(s: FourState, lastMover: Color4) {
   }
 }
 
-// Final placings, best first. More points places higher; on a tie, whoever lasted longer.
 export function standings(s: FourState): Color4[][] {
-  // Position in the order players went out; still in counts as lasting longest.
   const lasted = (c: Color4) => {
     const i = s.out.findIndex((x) => x.color === c);
     return i < 0 ? Infinity : i;
@@ -307,7 +287,6 @@ export function standings(s: FourState): Color4[][] {
   return groups;
 }
 
-// Plays a move for whoever's turn it is. Returns the new state, or null if the move isn't legal.
 export function move4(s: FourState, from: [number, number], to: [number, number]): FourState | null {
   if (s.result || !s.turn) return null;
   const color = s.turn;
@@ -321,7 +300,6 @@ export function move4(s: FourState, from: [number, number], to: [number, number]
   if (captured && !captured.dead) next.points[color] += captured.promoted ? 1 : POINTS[captured.kind];
   next.quiet = captured || piece.kind === "P" ? 0 : next.quiet + 1;
 
-  // Check bonuses: kings of other live players now attacked by this player's pieces.
   const checks = liveColors(next).filter(
     (c) =>
       c !== color &&
@@ -350,7 +328,6 @@ export function move4(s: FourState, from: [number, number], to: [number, number]
   return next;
 }
 
-// Takes a player out without a move (resignation or timing out). Their army goes grey.
 export function retire4(s: FourState, color: Color4, reason: "resign" | "timeout"): FourState {
   if (s.result || isOut(s, color)) return s;
   const next: FourState = structuredClone(s);
@@ -364,10 +341,6 @@ export function retire4(s: FourState, color: Color4, reason: "resign" | "timeout
   return next;
 }
 
-// The board after each move, for stepping back through a game: `[i]` is how it stood after `i` moves, with
-// everyone who'd gone out by then greyed. It trusts the recorded moves instead of checking them (a full
-// replay through `move4` took over a second for 200 moves), so only the board, who's out and whose turn it
-// was are the position's; points and the result are the game's.
 export type FourBoard = Pick<FourState, "pieces" | "out" | "turn">;
 export function fourBoards(s: FourState): FourBoard[] {
   let pieces = initialFour().pieces;

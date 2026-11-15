@@ -28,8 +28,9 @@ import { useHoldUpdates } from "@/version";
 import { structureOf, useEngine } from "./rt/useEngine";
 import { RtBoard } from "./rt/RtBoard";
 import { Overlay } from "./rt/Overlay";
+import { GameFrame } from "@/components/game/GameFrame";
+import { BesideTheBoard, usePhoneLandscape } from "./landscape";
 
-// Remote moves arrive a little after they started; ease them into place over this many ticks.
 const CATCH_UP_TICKS = 10;
 
 export function RealtimeGame({
@@ -38,12 +39,14 @@ export function RealtimeGame({
   above,
   below,
   overlay,
+  dock,
 }: {
   match: MatchView;
   meId: Id<"users"> | undefined;
   above?: ReactNode;
   below?: ReactNode;
   overlay?: ReactNode;
+  dock: ReactNode;
 }) {
   const state = match.state as RealtimeState;
   const rt = useQuery(api.chess.rtState, { id: match._id });
@@ -52,6 +55,7 @@ export function RealtimeGame({
   const variant: Variant = MODES[match.mode as ModeKey]?.board === "four" ? "four" : "two";
   const myColor = me?.color ?? (variant === "four" ? "red" : "w");
   const view = useMemo(() => viewFor(variant, myColor), [variant, myColor]);
+  const landscape = usePhoneLandscape();
   const ready = useMutation(api.chess.ready);
   const commands = useMemo(() => rt?.commands ?? [], [rt?.commands]);
   const pace = useMemo(() => paceFromSettings(settingsOf(match.mode, match.settings)), [match.mode, match.settings]);
@@ -71,7 +75,6 @@ export function RealtimeGame({
     store.setQuery(api.chess.rtState, { id: args.id }, { ...current, commands: [...current.commands, cmd] });
   });
 
-  // Tell the server this player's board is up, and keep trying until it hears it.
   const needsReady = match.status === "active" && !!me && state.startAt === null && !state.ready.includes(me.userId);
   useEffect(() => {
     if (!needsReady) return;
@@ -91,12 +94,10 @@ export function RealtimeGame({
   }, [needsReady, match._id, ready]);
 
   const startAt = state.startAt;
-  // A reload mid-game would cost the player seconds of play; updates wait until it's over.
   useHoldUpdates(match.status === "active" && !!me);
   const live = clock.ready && startAt !== null && rt !== undefined;
   const displayTick = useCallback(() => (startAt === null ? -1 : (clock.now() - startAt) / TICK_MS), [clock, startAt]);
 
-  // React state: the board's structure, refreshed only when it changes.
   const [sim, setSim] = useState<State>(() => initialState(variant, pace));
   const [countdown, setCountdown] = useState<number | null>(null);
   const structure = useRef("");
@@ -104,8 +105,6 @@ export function RealtimeGame({
   const cooldownEls = useRef(new Map<number, HTMLDivElement>());
   const firstSeen = useRef(new Map<string, number>());
 
-  // The frame loop: advance the simulation, move pieces directly in the DOM, and only touch React when
-  // the structure changes.
   useEffect(() => {
     if (!live) return;
     let raf = 0;
@@ -163,10 +162,36 @@ export function RealtimeGame({
     );
   };
 
+  const note =
+    out && match.status === "active" ? (
+      <p className="px-1 text-center text-callout font-semibold text-destructive">
+        Your king fell. Your army is stone now; watch who survives.
+      </p>
+    ) : (
+      showHint &&
+      match.status === "active" && (
+        <p className="px-1 text-center text-footnote text-muted-foreground">
+          Move any piece any time; it rests {Math.round(pace.cooldown / 30)} seconds after landing. Drag a resting piece to premove it, tap
+          it to cancel.
+        </p>
+      )
+    );
+
   return (
-    <>
-      {above}
-      <div className={cn("relative", variant === "four" && "-mx-2.5")}>
+    <GameFrame
+      dock={dock}
+      aside={
+        landscape && (
+          <BesideTheBoard>
+            {above}
+            {below}
+            {note}
+          </BesideTheBoard>
+        )
+      }
+    >
+      {!landscape && above}
+      <div className={cn("relative phone-landscape:square-fit", variant === "four" && "-mx-2.5 phone-landscape:mx-0")}>
         <RtBoard
           sim={sim}
           myColor={myColor}
@@ -191,25 +216,12 @@ export function RealtimeGame({
         </RtBoard>
         <Overlay match={match} state={state} meId={meId} countdown={countdown} />
       </div>
-      {below}
-      {out && match.status === "active" ? (
-        <p className="px-1 text-center text-callout font-semibold text-destructive">
-          Your king fell. Your army is stone now; watch who survives.
-        </p>
-      ) : (
-        showHint &&
-        match.status === "active" && (
-          <p className="px-1 text-center text-footnote text-muted-foreground">
-            Move any piece any time; it rests {Math.round(pace.cooldown / 30)} seconds after landing. Drag a resting piece to premove it,
-            tap it to cancel.
-          </p>
-        )
-      )}
-    </>
+      {!landscape && below}
+      {!landscape && note}
+    </GameFrame>
   );
 }
 
-// The how-it-works line under a real-time board, for your first few games only.
 const HINT_KEY = "rtHintGames";
 function useFirstGamesHint(matchId: string) {
   const [show] = useState(() => {

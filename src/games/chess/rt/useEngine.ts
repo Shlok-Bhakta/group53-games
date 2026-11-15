@@ -1,7 +1,6 @@
 import { useCallback, useRef } from "react";
 import { initialState, simulate, type Command, type Pace, type State, type Variant } from "../../../../convex/chess/realtime";
 
-// Replays from the server's settled snapshot, continuing from the last frame when nothing earlier changed.
 export function useEngine(snapshot: State | null, commands: Command[], variant: Variant, pace: Pace) {
   const cache = useRef<{ base: State | null; commands: Command[]; state: State } | null>(null);
   return useCallback(
@@ -31,7 +30,6 @@ export function useEngine(snapshot: State | null, commands: Command[], variant: 
   );
 }
 
-// Everything that changes the board's structure (not just positions). React only re-renders when this does.
 export const structureOf = (s: State) =>
   JSON.stringify([
     s.pieces.map((p) => [p.id, p.kind, p.status, p.x, p.y, p.toX, p.toY, p.pending?.toX, p.pending?.toY, p.dead]),
