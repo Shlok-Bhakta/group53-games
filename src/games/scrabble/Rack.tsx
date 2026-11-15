@@ -49,13 +49,10 @@ export function Rack({
             animate={{ scale: 1, y: 0, opacity: 1 }}
             transition={{ type: "spring", bounce: 0.35, duration: 0.4, delay: i * 0.03 }}
             variant="bare"
-            size="pill"
+            size="piece"
             aria-label={t.letter === "?" ? "Blank tile" : `Tile ${t.letter}`}
             aria-pressed={swapping ? swapping.includes(t.id) : selected === t.id}
-            className={cn(
-              "grid touch-none place-items-center rounded-sm",
-              (selected === t.id || swapping?.includes(t.id)) && "-translate-y-1.5",
-            )}
+            className={cn("touch-none", (selected === t.id || swapping?.includes(t.id)) && "-translate-y-1.5")}
             style={{ transition: "translate 120ms ease-out" }}
             onPointerDown={(e) => onDown(t.id, e)}
           >

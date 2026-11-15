@@ -45,6 +45,9 @@ const buttonVariants = cva(
         choice: "relative flex min-h-11 flex-col justify-center gap-1.5 rounded-lg active:scale-[0.92]",
         option: "relative flex min-h-11 w-full justify-between gap-3 rounded-lg text-left active:scale-[0.98]",
         swatch: "relative size-11 shrink-0 rounded-full active:scale-[0.88]",
+        chip: "flex min-h-11 min-w-0 items-center gap-1.5 text-left",
+        piece: "grid min-h-11 min-w-0 place-items-center rounded-sm",
+        overlay: "block",
       },
     },
     defaultVariants: {

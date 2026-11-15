@@ -94,7 +94,7 @@ const TW_COLOR = new RegExp(
   `^(?:-?)(?:bg|text|border(?:-[trblxyse])?|ring|ring-offset|fill|stroke|from|via|to|shadow|outline|decoration|accent|caret|divide|placeholder|inset-shadow|drop-shadow)-(?:${COLOR_WORDS})(?:-\\d{2,3})?(?:\\/\\d+)?$`,
 );
 const HEX = /(?:^|[^&\w/])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})(?![0-9a-zA-Z_-])/;
-const COLOR_FN = /\b(?:rgba?|hsla?|oklch|oklab|lab|lch|hwb)\(/;
+const COLOR_FN = /(?<![a-zA-Z-])(?:rgba?|hsla?|oklch|oklab|lab|lch|hwb)\(/;
 const NAMED = new Set(
   "red orange yellow green blue purple pink brown black white gray grey cyan magenta gold silver navy teal lime maroon olive aqua fuchsia crimson coral salmon khaki ivory beige tan orchid plum violet indigo turquoise".split(
     " ",
@@ -207,6 +207,9 @@ const noRawButton = {
     if (file.startsWith(UI_DIR) || file.startsWith("prototypes/")) return {};
     return {
       JSXOpeningElement(node) {
+        if (node.name.type === "JSXMemberExpression" && node.name.property.name === "button") {
+          return context.report({ node, messageId: "button", data: { tag: `${node.name.object.name}.button` } });
+        }
         if (node.name.type !== "JSXIdentifier") return;
         const tag = node.name.name;
         if (tag === "button") return context.report({ node, messageId: "button", data: { tag } });

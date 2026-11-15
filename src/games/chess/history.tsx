@@ -83,7 +83,7 @@ export function MoveChip({
   return (
     <Button
       variant="bare"
-      size="pill"
+      size="chip"
       data-current={current || undefined}
       aria-current={current ? "step" : undefined}
       onClick={() => history.go(ply + 1)}
@@ -102,7 +102,7 @@ export function BackToNow({ history }: { history: History }) {
   return (
     <Button
       variant="bare"
-      size="card"
+      size="overlay"
       aria-label="Back to the current position"
       onClick={() => history.go(history.count)}
       className="absolute inset-0 z-40"
