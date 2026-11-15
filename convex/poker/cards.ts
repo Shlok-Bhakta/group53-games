@@ -1,14 +1,10 @@
-// Playing cards and poker hand rankings. Pure, shared by the server and phones (a phone names its own hand
-// as the board comes out). A card is two characters: rank then suit, "As", "Td", "7c".
-
 export type Card = string;
 export const RANKS = "23456789TJQKA";
 export const SUITS = "shdc";
 
-export const rankOf = (c: Card) => RANKS.indexOf(c[0]) + 2; // 2..14
+export const rankOf = (c: Card) => RANKS.indexOf(c[0]) + 2;
 export const suitOf = (c: Card) => c[1];
 
-// A full 52-card deck, or Short Deck's 36 (sixes and up).
 export function deckOf(short: boolean): Card[] {
   const ranks = short ? RANKS.slice(4) : RANKS;
   return [...ranks].flatMap((r) => [...SUITS].map((s) => r + s));
@@ -23,7 +19,6 @@ export function shuffle<T>(xs: T[], random: () => number = Math.random): T[] {
   return a;
 }
 
-// Hand categories, weakest first, as named in the standard game.
 export const CATEGORY = [
   "High card",
   "Pair",
@@ -35,8 +30,6 @@ export const CATEGORY = [
   "Four of a kind",
   "Straight flush",
 ] as const;
-// Short Deck (Triton rules): with fewer cards a flush is rarer than a full house, and a straight more common
-// than three of a kind, so those swap places. The wheel is A-6-7-8-9.
 const SHORT_ORDER = [0, 1, 2, 4, 3, 6, 5, 7, 8];
 
 export type HandRank = { score: number; category: number; name: string; cards: Card[] };
@@ -45,13 +38,10 @@ const WORD: Record<number, string> = { 14: "Ace", 13: "King", 12: "Queen", 11: "
 const one = (r: number) => WORD[r] ?? String(r);
 const many = (r: number) => (WORD[r] ? `${WORD[r]}s` : `${r}s`);
 
-// Ranks up to five cards. Fewer than five can still pair up (a phone naming "Pair of Aces" before the flop),
-// but only five make a straight or flush.
 export function rank5(cards: Card[], short = false): HandRank {
   const ranks = cards.map(rankOf).sort((a, b) => b - a);
   const counts = new Map<number, number>();
   for (const r of ranks) counts.set(r, (counts.get(r) ?? 0) + 1);
-  // Groups by size, then rank: [[K,3],[7,2]] for a full house.
   const groups = [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0]);
   const five = cards.length === 5;
   const flush = five && cards.every((c) => suitOf(c) === suitOf(cards[0]));
@@ -108,8 +98,6 @@ function bestOf(sets: Card[][], short: boolean): HandRank | null {
 
 export type Variant = "holdem" | "omaha" | "short" | "draw";
 
-// The best hand a player has: Hold'em and Short Deck use any five of their cards and the board, Omaha exactly
-// two of their four and three from the board, draw poker just their five. Null until there's enough to say.
 export function bestHand(variant: Variant, hole: Card[], board: Card[]): HandRank | null {
   if (hole.length === 0) return null;
   const short = variant === "short";
@@ -125,7 +113,6 @@ export function bestHand(variant: Variant, hole: Card[], board: Card[]): HandRan
   return bestOf(all.length <= 5 ? [all] : combos(all, 5), short);
 }
 
-// The cards that actually make a hand, to point them out: the pair, not its kickers. Nothing for a high card.
 export function madeCards(hand: HandRank | null): Card[] {
   if (!hand || hand.category === 0) return [];
   if (hand.category === 4 || hand.category === 5 || hand.category === 8) return hand.cards;

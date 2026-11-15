@@ -4,13 +4,10 @@ import { cn } from "@/lib/utils";
 import { chips } from "../format";
 import { PACE } from "../show";
 
-// What everything on the table moves with: a spring that overshoots a little, a flight that lands softly, and
-// the deck's card width, which a card flying from or to the deck scales to.
 export const SPRING = [0.34, 1.45, 0.64, 1] as const;
 export const FLIGHT = [0.2, 0.85, 0.25, 1] as const;
 export const DECK_W = 28;
 
-// How far something has to travel to reach the deck, the pile or a seat, from where it sits on the table.
 export function toward(el: HTMLElement, selector: string) {
   const there = el.closest("[data-table]")?.querySelector(selector)?.getBoundingClientRect();
   const here = el.getBoundingClientRect();
@@ -18,9 +15,6 @@ export function toward(el: HTMLElement, selector: string) {
   return { x: there.left + there.width / 2 - (here.left + here.width / 2), y: there.top + there.height / 2 - (here.top + here.height / 2) };
 }
 
-// A card dealt to where it belongs. It's the real card from the first frame, in its final place, and flies
-// there from the deck, so there's nothing to swap at the end of the flight. The rotation of a fan belongs to
-// whatever's inside.
 export function Flying({
   width,
   fly,
@@ -36,7 +30,9 @@ export function Flying({
 }) {
   const ref = useRef<HTMLSpanElement>(null);
   const still = useReducedMotion();
+  const arrival = useRef({ fly, still, width, spin });
   useLayoutEffect(() => {
+    const { fly, still, width, spin } = arrival.current;
     if (!fly || still || !ref.current) return;
     const from = toward(ref.current, "[data-deck]");
     if (!from) return;
@@ -46,8 +42,7 @@ export function Flying({
       { duration: 0.34 * PACE, ease: FLIGHT },
     );
     return () => flight.cancel();
-    // Only ever on arriving.
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
   return (
     <span ref={ref} className={cn("block", className)}>
       {children}
@@ -55,7 +50,6 @@ export function Flying({
   );
 }
 
-// A number that counts its way to a new value.
 export function Roll({ value, prefix = "" }: { value: number; prefix?: string }) {
   const ref = useRef<HTMLSpanElement>(null);
   const was = useRef(value);

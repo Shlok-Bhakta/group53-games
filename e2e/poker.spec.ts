@@ -1,19 +1,27 @@
 import type { Page } from "@playwright/test";
-import { createPlayer, expect as plain, fillLobby, getMatch, openLobby, test, type Phones } from "./fixtures";
+import { FRAME_COLOR } from "../convex/palette";
+import {
+  createPlayer,
+  expect as plain,
+  fillLobby,
+  getMatch,
+  holdsStill,
+  openLobby,
+  ready,
+  readyForShot,
+  test,
+  type Phones,
+} from "./fixtures";
+import { LANDSCAPE, SAFE_LANDSCAPE, expectFitsScreen, rotate, simulateSafeAreas } from "./landscape";
 
-// The table plays things out in order (a showdown runs about ten seconds), and everything waits its turn.
-// Tests that aren't about that show run with reduced motion, where the table jumps straight to its end.
 const expect = plain.configure({ timeout: 25_000 });
 test.describe.configure({ timeout: 180_000 });
 
-// Players at a table, each on their own phone with push on.
 async function table(phones: Phones, names: string[], opts: { reducedMotion?: boolean; profiles?: Record<string, unknown>[] } = {}) {
   const players = await Promise.all(names.map((n, i) => createPlayer(n, opts.profiles?.[i])));
   const pages = await Promise.all(players.map((player) => phones.open({ player, push: "on", reducedMotion: opts.reducedMotion })));
   return { players, pages, pageOf: (userId: string) => pages[players.findIndex((p) => p.userId === userId)] };
 }
-// Collects errors a page logs or throws. React reports render crashes with console.error, not as a page
-// error, so both are caught.
 function watchErrors(pages: Page[]) {
   const errors: string[] = [];
   for (const p of pages) {
@@ -25,7 +33,6 @@ function watchErrors(pages: Page[]) {
 const boardCards = (page: Page) =>
   page.getByRole("group", { name: "Poker table" }).getByRole("group", { name: "Board" }).locator("[data-card]");
 
-// Two phones at a started table. Returns them with whoever acts first (the button, heads-up) first.
 async function twoPlayerGame(phones: Phones, mode = "holdem", opts: { reducedMotion?: boolean } = {}) {
   const t = await table(phones, ["Shlok", "Chris"], opts);
   const [pa, pb] = t.pages;
@@ -64,7 +71,7 @@ test.describe("Poker", () => {
     const t = await table(phones, ["Shlok", "Chris"], {
       profiles: [
         { frame: "gold", badge: "🦀" },
-        { frame: "comet", frameColor: "#f38ba8", glow: true, badge: "🃏" },
+        { frame: "comet", frameColor: FRAME_COLOR.pink, glow: true, badge: "🃏" },
       ],
     });
     const [pa, pb] = t.pages;
@@ -72,13 +79,11 @@ test.describe("Poker", () => {
     const id = await openLobby(pa, "poker", "holdem");
     await fillLobby(pa, [pb]);
     const seat = (p: Page, name: RegExp) => p.getByRole("group", { name: "Poker table" }).getByRole("group", { name });
-    // Each phone sees the other's frame, glow and badge, and their own on their tile.
     const chris = seat(pa, /^Chris, /);
     await expect(chris.locator('[data-frame="comet"][data-glow="true"]')).toBeVisible();
     await expect(chris.getByText("🃏")).toBeVisible();
     await expect(seat(pa, /^You, /).locator('[data-frame="gold"]')).toBeVisible();
     await expect(seat(pb, /^Shlok, /).locator('[data-frame="gold"]')).toBeVisible();
-    // Both are here, so both show the dot; it goes when they leave.
     await expect(chris.getByRole("img", { name: "Online" })).toBeVisible();
     await expect(seat(pa, /^You, /).getByRole("img", { name: "Online" })).toBeVisible();
     await expect(pa.getByRole("group", { name: "Your cards" }).locator("[data-card]")).toHaveCount(2);
@@ -98,14 +103,12 @@ test.describe("Poker", () => {
     const levels = await page.evaluate(async () => {
       type Lab = { packs: string[]; sfx: (p: string, n: string) => Promise<{ peak: number; rms: number }> };
       const lab = (window as unknown as { __soundLab: Lab }).__soundLab;
-      // Anything with noise in it peaks a little differently every time, so each is the average of a few.
       const level = async (pack: string, name: string) => {
         const runs = await Promise.all([0, 1, 2, 3].map(() => lab.sfx(pack, name)));
         return { peak: runs.reduce((a, r) => a + r.peak, 0) / runs.length, rms: runs.reduce((a, r) => a + r.rms, 0) / runs.length };
       };
       const out: { pack: string; name: string; peak: number; rms: number; loudest: number; loudestRms: number }[] = [];
       const poker = ["deal", "flip", "chips", "knock", "sweep", "slam", "payout"];
-      // A pack at a time, every sound in it rendered at once.
       for (const pack of lab.packs) {
         const [rest, ours] = await Promise.all([
           Promise.all(["pick", "place", "recall", "shuffle", "play", "land", "turn", "win"].map((n) => level(pack, n))),
@@ -128,7 +131,6 @@ test.describe("Poker", () => {
 
   test("a hand on two phones: calls, a raise, a lined-up check, a shove and a fold", async ({ phones }) => {
     const { id, first, second } = await twoPlayerGame(phones, "holdem", { reducedMotion: true });
-    // Both see their own two cards and the blinds.
     await expect(first.page.getByRole("group", { name: "Your cards" }).locator("[data-card]")).toHaveCount(2);
     await expect(second.page.getByRole("group", { name: "Your cards" }).locator("[data-card]")).toHaveCount(2);
     await expect(first.page.getByText("Hand 1", { exact: true })).toBeVisible();
@@ -140,18 +142,15 @@ test.describe("Poker", () => {
     await expect(second.page.getByRole("heading", { name: "Raise to" })).toBeVisible();
     await second.page.getByRole("button", { name: "Min" }).click();
     await second.page.getByRole("button", { name: "Raise to 40" }).click();
-    // The raise lands on the other phone: chips in front of the seat, and 20 to call.
     await expect(first.page.getByRole("button", { name: "Call 20" })).toBeVisible();
     await first.page.getByRole("button", { name: "Call 20" }).click();
     await expect(boardCards(first.page)).toHaveCount(3);
     await expect(boardCards(second.page)).toHaveCount(3);
 
-    // After the flop the big blind acts first. The button lines up Check/Fold while it waits.
     const checkFold = first.page.getByRole("button", { name: "Check/Fold" });
     await checkFold.click();
     await expect(checkFold).toHaveAttribute("aria-pressed", "true");
     await second.page.getByRole("button", { name: "Check", exact: true }).click();
-    // The lined-up check plays itself: the turn card comes out and it's the big blind again.
     await expect(boardCards(second.page)).toHaveCount(4);
     await expect(second.page.getByText("Your move")).toBeVisible();
 
@@ -161,7 +160,6 @@ test.describe("Poker", () => {
     await expect(first.page.getByRole("button", { name: "All in 960" })).toBeVisible();
     await first.page.getByRole("button", { name: "Fold" }).click();
 
-    // The next hand is dealt straight away, and the last one is a tap away.
     await expect(first.page.getByText("Hand 2", { exact: true })).toBeVisible();
     await expect(second.page.getByText("Hand 2", { exact: true })).toBeVisible();
     const m = await getMatch(id);
@@ -176,7 +174,6 @@ test.describe("Poker", () => {
     const { pages, pageOf } = await table(phones, ["Shlok", "Chris"], { reducedMotion: true });
     const [pa, pb] = pages;
     const errors = watchErrors(pages);
-    // Five hands instead of no limit.
     const id = await openLobby(pa, "poker", "holdem", { Hands: "5" });
     await fillLobby(pa, [pb]);
     await expect(pa.getByRole("group", { name: "Poker table" })).toBeVisible();
@@ -196,12 +193,10 @@ test.describe("Poker", () => {
     expect(errors).toEqual([]);
   });
 
-  // A game that ends at a showdown once blanked the app: the street had run one past the river.
   test("an all-in that knocks someone out ends the game with the result on both phones", async ({ phones }) => {
     const { id, first, second } = await twoPlayerGame(phones);
     const errors = watchErrors([first.page, second.page]);
     const pageOf = (userId: string) => (userId === first.player.userId ? first.page : second.page);
-    // Shove and call until someone's out (a split pot just deals again).
     for (let i = 0; i < 10; i++) {
       const m = await getMatch(id);
       if (m.status === "finished") break;
@@ -220,7 +215,6 @@ test.describe("Poker", () => {
       await expect(p.getByRole("region", { name: "Result" })).toBeVisible();
       await expect(p.getByRole("group", { name: "Poker table" })).toBeVisible();
     }
-    // The win or lose sound comes after the last hand has played out, not as the news arrives.
     for (const p of [first.page, second.page]) {
       await expect
         .poll(() => p.evaluate(() => (window as unknown as { __sfx: string[] }).__sfx.filter((n) => n === "win" || n === "lose").length))
@@ -231,7 +225,6 @@ test.describe("Poker", () => {
     expect(errors).toEqual([]);
   });
 
-  // Backs a seat still shows, ignoring any that have flown off and faded out.
   const visibleBacks = (page: Page) =>
     page.locator("[data-seat] [data-back]").evaluateAll(
       (els) =>
@@ -248,7 +241,6 @@ test.describe("Poker", () => {
     await fillLobby(pa, pages.slice(1));
     for (let hand = 1; hand <= 5; hand++) {
       await expect.poll(async () => (await getMatch(id)).state?.hand).toBe(hand);
-      // Two folds end the hand; after the first, the folder's backs have gone back to the deck on every phone.
       const m = await getMatch(id);
       await pageOf(m.players[m.state.turn].userId).getByRole("button", { name: "Fold" }).click();
       const watcher = pageOf(m.players[(m.state.turn + 2) % 3].userId);
@@ -264,7 +256,6 @@ test.describe("Poker", () => {
     if (process.env.SCREENS) await pa.screenshot({ path: "e2e/.state/screens/dark-poker-finished.png", fullPage: true });
   });
 
-  // The dealer's button and their cards once shared a React key, so the dealer kept last hand's cards on top of this one's.
   test("the dealer holds only this hand's cards in the next hand", async ({ phones }) => {
     const { id, first, second } = await twoPlayerGame(phones);
     await first.page.getByRole("button", { name: /^Raise$/ }).click();
@@ -285,7 +276,6 @@ test.describe("Poker", () => {
     const id = await openLobby(pa, "poker", "holdem");
     await fillLobby(pa, pages.slice(1));
     await expect.poll(async () => (await getMatch(id)).state?.hand).toBe(1);
-    // The third always folds; the other two shove and call until one of them is out.
     const third = players[2].userId;
     for (let i = 0; i < 40; i++) {
       const m = await getMatch(id);
@@ -312,8 +302,6 @@ test.describe("Poker", () => {
       .getByRole("group", { name: new RegExp(`^${name}, `) });
     await expect(seat).toHaveAttribute("data-out", "true");
     await expect(pageOf(third).getByText(`Hand ${m.state.hand}`, { exact: true })).toBeVisible();
-    // Through the whole deal of the next hand, not only once it's settled: every frame for six seconds,
-    // about how long the deal takes to play out (this one is about time passing).
     const most = await seat.evaluate(
       (el) =>
         new Promise<number>((done) => {
@@ -339,13 +327,12 @@ test.describe("Poker", () => {
       expect(box!.x + box!.width).toBeLessThanOrEqual(393);
     }
     if (process.env.SCREENS) await first.page.screenshot({ path: "e2e/.state/screens/dark-poker-omaha.png" });
-    // The menu shows what the table's playing with, Omaha's pot limit included.
     await first.page.getByRole("button", { name: "Menu" }).click();
     const settings = first.page.getByRole("dialog").getByRole("region", { name: "Game settings" });
     await expect(settings).toContainText("Chips");
     await expect(settings).toContainText("Pot limit");
     if (process.env.SCREENS) {
-      await first.page.waitForTimeout(800); // let the menu finish sliding in
+      await readyForShot(first.page);
       await first.page.screenshot({ path: "e2e/.state/screens/dark-poker-menu.png" });
     }
   });
@@ -355,7 +342,6 @@ test.describe("Poker", () => {
     await expect(first.page.getByRole("group", { name: "Your cards" }).locator("[data-card]")).toHaveCount(5);
     await first.page.getByRole("button", { name: "Call 10" }).click();
     await second.page.getByRole("button", { name: "Check", exact: true }).click();
-    // The draw: the big blind (first to the button's left) swaps first.
     await expect(second.page.getByText("Pick cards to swap")).toBeVisible();
     const before = await second.page
       .getByRole("group", { name: "Your cards" })
@@ -376,5 +362,60 @@ test.describe("Poker", () => {
     expect(after.slice(0, 2)).not.toEqual(before.slice(0, 2));
     const m = await getMatch(id);
     expect(m.state.drew.filter((d: number | null) => d !== null).sort()).toEqual([0, 2]);
+  });
+
+  test("landscape: the table fills the height, my cards beside it, the dock on the side", async ({ phones }) => {
+    const sideways = async (page: Page) => {
+      await simulateSafeAreas(page, SAFE_LANDSCAPE);
+      await rotate(page, "landscape");
+      await ready(page);
+      await expectFitsScreen(page);
+      const felt = (await page.locator("[data-table] .poker-felt").boundingBox())!;
+      const table = (await page.getByRole("group", { name: "Poker table" }).boundingBox())!;
+      const cards = (await page.getByRole("group", { name: "Your cards" }).boundingBox())!;
+      const menu = (await page.getByRole("button", { name: "Menu" }).boundingBox())!;
+      expect(table.y + table.height, "the table fits the height").toBeLessThanOrEqual(LANDSCAPE.height - SAFE_LANDSCAPE.bottom);
+      expect(cards.x, "my cards sit beside the felt").toBeGreaterThanOrEqual(felt.x + felt.width);
+      expect(menu.x, "the menu sits beside the table").toBeGreaterThan(table.x + table.width);
+      return { table, menu };
+    };
+    const { first, second } = await twoPlayerGame(phones, "holdem", { reducedMotion: true });
+    const { table } = await sideways(first.page);
+    if (process.env.SCREENS) await first.page.screenshot({ path: "e2e/.state/screens/dark-poker-landscape.png" });
+    const actions = first.page.getByRole("group", { name: "Actions" });
+    for (const name of ["Fold", "Call 10", "Raise"]) {
+      const box = (await actions.getByRole("button", { name, exact: true }).boundingBox())!;
+      expect(box.x, `${name} sits beside the table`).toBeGreaterThan(table.x + table.width);
+    }
+    await expect(first.page.getByText("Hand 1", { exact: true })).toBeVisible();
+    await first.page.getByRole("button", { name: "Raise", exact: true }).click();
+    await expect(first.page.getByRole("heading", { name: "Raise to" })).toBeVisible();
+    await holdsStill(first.page);
+    await expectFitsScreen(first.page);
+    await first.page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+    await expect(first.page.getByRole("heading", { name: "Raise to" })).toBeHidden();
+
+    await sideways(second.page);
+    await expect(second.page.getByRole("button", { name: "Check/Fold" })).toBeVisible();
+    await second.page.getByRole("button", { name: "Check/Fold" }).click();
+    await expect(second.page.getByRole("button", { name: "Check/Fold" })).toHaveAttribute("aria-pressed", "true");
+    await expectFitsScreen(second.page);
+    if (process.env.SCREENS) await second.page.screenshot({ path: "e2e/.state/screens/dark-poker-landscape-waiting.png" });
+  });
+
+  test("landscape: five-card draw fits all five cards and the swap", async ({ phones }) => {
+    const { first, second } = await twoPlayerGame(phones, "draw", { reducedMotion: true });
+    await first.page.getByRole("button", { name: "Call 10" }).click();
+    await second.page.getByRole("button", { name: "Check", exact: true }).click();
+    await expect(second.page.getByText("Pick cards to swap")).toBeVisible();
+    await simulateSafeAreas(second.page, SAFE_LANDSCAPE);
+    await rotate(second.page, "landscape");
+    await ready(second.page);
+    await expect(second.page.getByRole("group", { name: "Your cards" }).locator("[data-card]")).toHaveCount(5);
+    await second.page.getByRole("button", { name: "Swap card 1" }).click();
+    await expect(second.page.getByRole("button", { name: "Swap 1" })).toBeVisible();
+    await holdsStill(second.page);
+    await expectFitsScreen(second.page);
+    if (process.env.SCREENS) await second.page.screenshot({ path: "e2e/.state/screens/dark-poker-landscape-draw.png" });
   });
 });

@@ -32,24 +32,14 @@ import {
 } from "./poker/engine";
 import { actionText, handInSentence, resultText } from "./poker/text";
 
-// Poker on the shared match framework, async: every move pushes whoever's next. Stacks, bets, the board and
-// the last hand's showdown are in matches.state; the deck and everyone's cards are in `secrets`, so nobody can
-// read another player's hand from the network. A move you've lined up for when it's your turn ("check or
-// fold", "call 40") is a draft, and the game plays it for you the moment the action reaches you.
-
 export type { PokerState } from "./poker/engine";
 
 const VARIANT: Record<string, Variant> = { "poker:holdem": "holdem", "poker:omaha": "omaha", "poker:short": "short", "poker:draw": "draw" };
-// At most this many automatic moves and hands in one go, so nothing can spin forever.
-const MAX_STEPS = 200;
-// Run out of time on this many moves in a row and you're taken off the table, so one absent player can't
-// hold up everyone else's game for days.
+const MAX_AUTOMATIC_STEPS = 200;
 export const IDLE_OUT = 3;
 
 type Shoe = { deck: Card[]; muck: Card[] };
 type Hand = { cards: Card[]; hand: number };
-// A move lined up for later. It belongs to one street of one hand, and is used up or dropped when the
-// action reaches you.
 export type Pre = { kind: "checkfold" | "check" | "call"; amount: number; hand: number; street: number };
 
 async function load(ctx: QueryCtx, match: Doc<"matches">): Promise<Table> {
@@ -70,8 +60,7 @@ async function save(ctx: MutationCtx, match: Doc<"matches">, before: Table, afte
   }
 }
 
-// The move a lined-up plan makes now, or null if it doesn't fit any more (someone bet into your check).
-function planned(s: PokerState, seat: number, pre: Pre): Action | null {
+function plannedMove(s: PokerState, seat: number, pre: Pre): Action | null {
   if (pre.hand !== s.hand || pre.street !== s.street || streetOf(s).kind !== "bet") return null;
   const owe = toCall(s, seat);
   if (pre.kind === "checkfold") return owe === 0 ? { kind: "check" } : { kind: "fold" };
@@ -80,7 +69,12 @@ function planned(s: PokerState, seat: number, pre: Pre): Action | null {
   return owe <= pre.amount ? { kind: "call" } : null;
 }
 
-// --- Start, resign, timeout ---
+const resignedHeadsUp = (s: PokerState, players: number) => players === 2 && s.out.some((o) => o.reason === "resign" && o.hand === s.hand);
+
+function nextBlinds(s: PokerState, every: number, by: number) {
+  const next = blindsFor(s.hand + 1, every, by);
+  return next.sb < s.sb ? { sb: s.sb, bb: s.bb } : next;
+}
 
 export const pokerHooks: GameHooks = {
   seats: (_mode, n) => SEAT_COLORS.slice(0, n),
@@ -117,42 +111,32 @@ export const pokerHooks: GameHooks = {
   timeoutWarning: "or we check or fold for you",
 };
 
-// `why` names how the game ends if this move leaves one player: a resignation or a timeout.
 async function apply(ctx: MutationCtx, match: Doc<"matches">, step: (t: Table) => Table, by: Id<"users"> | null, why?: string) {
   const before = await load(ctx, match);
   await proceed(ctx, match, before, step(before), by, why);
 }
 
-// After a move: plays any moves lined up by whoever's next, deals the next hand when one ends, ends the game
-// when it's over, then saves and tells whoever has to act. `by` made the move and doesn't need a push.
 async function proceed(ctx: MutationCtx, match: Doc<"matches">, before: Table, after: Table, by: Id<"users"> | null, why?: string) {
   const s = settingsOf(match.mode, match.settings);
   const variant = VARIANT[match.mode];
   let t = after;
   const results: HandResult[] = [];
   let ended: string | null = null;
-  for (let i = 0; i < MAX_STEPS; i++) {
+  for (let i = 0; i < MAX_AUTOMATIC_STEPS; i++) {
     if (t.state.turn === -1) {
       if (t.state.last && t.state.last.hand === t.state.hand && !results.includes(t.state.last)) results.push(t.state.last);
       const left = alive(t.state);
-      // Someone leaving can end it: a resignation reads better than "last one standing" heads-up.
-      if (left.length < 2)
-        ended =
-          why && t.state.out.some((o) => o.reason === "resign" && o.hand === t.state.hand) && match.players.length === 2
-            ? why
-            : "last_player";
+      if (left.length < 2) ended = why && resignedHeadsUp(t.state, match.players.length) ? why : "last_player";
       else if (s.hands > 0 && t.state.hand >= s.hands) ended = "hands";
       if (ended) break;
-      // Blinds never come down: a game from when they scaled with the stacks stays where it's got to.
-      const next = blindsFor(t.state.hand + 1, s.blinds, s.blindsBy);
-      t = deal(t.state, next.sb < t.state.sb ? { sb: t.state.sb, bb: t.state.bb } : next, shuffle(deckOf(VARIANTS[variant].short)));
+      t = deal(t.state, nextBlinds(t.state, s.blinds, s.blindsBy), shuffle(deckOf(VARIANTS[variant].short)));
       continue;
     }
     const seat = t.state.turn;
     const pre = await readDraft<Pre>(ctx, match._id, match.players[seat].userId);
     if (!pre) break;
     await clearDraft(ctx, match._id, match.players[seat].userId);
-    const move = planned(t.state, seat, pre);
+    const move = plannedMove(t.state, seat, pre);
     if (!move) break;
     t = act(t, seat, move);
   }
@@ -163,17 +147,12 @@ async function proceed(ctx: MutationCtx, match: Doc<"matches">, before: Table, a
     await finishBySeats(ctx, { ...match, state: t.state, moveCount }, standings(t.state), ended ?? "last_player");
     return;
   }
-  // Pushes are poker's own (tell), so passTurn sends none. The same seat to act is still a new decision if
-  // the hand or street moved on.
   const b = before.state;
   const newDecision = b.hand !== t.state.hand || b.street !== t.state.street || b.turn !== t.state.turn;
   const { fresh } = await passTurn(ctx, match, { state: t.state, turn: match.players[t.state.turn].userId, by, newDecision });
   await tell(ctx, match, t.state, results, by, before.state.hand === 0, fresh);
 }
 
-// Pushes: whoever has to act now hears what just happened (notify skips anyone already looking at the game),
-// winners of a showdown hear they won, and anyone knocked out hears it. One push each, the most useful.
-// Unless `fresh`, the player to act is the one they were before and has heard already.
 async function tell(
   ctx: MutationCtx,
   match: Doc<"matches">,
@@ -229,18 +208,15 @@ async function tell(
     pushes.set(up, push);
   }
   for (const [userId, push] of pushes) {
-    // Whoever moved saw what happened, unless the action has come back round to them.
-    if (userId === by && userId !== up) continue;
+    const sawItThemselves = userId === by && userId !== up;
+    if (sawItThemselves) continue;
     await notifyMatch(ctx, userId, match, push);
   }
 }
 
-// --- Moves ---
-
 export const move = mutation({
   args: {
     id: v.id("matches"),
-    // Hand and street the player saw, so a stale tap (the hand moved on under their thumb) is refused.
     hand: v.number(),
     street: v.number(),
     kind: v.union(v.literal("fold"), v.literal("check"), v.literal("call"), v.literal("raise"), v.literal("draw")),
@@ -256,13 +232,9 @@ export const move = mutation({
   },
 });
 
-// Lines up a move for when the action reaches you, or clears it (`kind` left out). If it's already your turn,
-// it plays now.
 export const plan = mutation({
   args: {
     id: v.id("matches"),
-    // The hand and street the player saw. A tap that lands after the hand moved on is dropped, so it can never
-    // fold a hand you haven't looked at.
     hand: v.number(),
     street: v.number(),
     kind: v.optional(v.union(v.literal("checkfold"), v.literal("check"), v.literal("call"))),
@@ -276,7 +248,7 @@ export const plan = mutation({
     if (state.hand !== hand || state.street !== street) return;
     const pre: Pre = { kind, amount: amount ?? 0, hand: state.hand, street: state.street };
     if (state.turn === seat) {
-      const now = planned(state, seat, pre);
+      const now = plannedMove(state, seat, pre);
       if (now) await apply(ctx, match, (t) => act(t, seat, now), userId);
       return;
     }
@@ -284,10 +256,6 @@ export const plan = mutation({
   },
 });
 
-// --- What each player sees ---
-
-// My cards in the current hand. `hand` says which hand they're from, so a phone never shows last hand's
-// cards against this hand's board.
 export const cards = query({
   args: { id: v.id("matches") },
   handler: async (ctx, { id }) => await mySecret<Hand>(ctx, id),

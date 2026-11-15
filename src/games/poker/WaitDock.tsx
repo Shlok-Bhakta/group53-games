@@ -4,11 +4,10 @@ import { api } from "../../../convex/_generated/api";
 import type { MatchView } from "../../../convex/matches";
 import { streetOf, toCall, type PokerState } from "../../../convex/poker/engine";
 import { AsyncButton } from "@/components/AsyncButton";
-import { DockNote } from "@/components/game/GameFrame";
+import { ActionRail, DockNote } from "@/components/game/GameFrame";
 import { ResignButton } from "@/components/match";
 import { chips } from "./format";
 
-// Not my turn: line up a move for when the action reaches me, so the game doesn't wait on me.
 export function WaitDock({ match, state, seat }: { match: MatchView; state: PokerState; seat: number }) {
   const plan = useQuery(api.poker.myPlan, { id: match._id });
   const setPlan = useMutation(api.poker.plan).withOptimisticUpdate((store, { id, hand, street, kind, amount }) => {
@@ -31,10 +30,10 @@ export function WaitDock({ match, state, seat }: { match: MatchView; state: Poke
   if (!canPlan) {
     const note = !inIt ? "Folded" : state.stacks[seat] === 0 ? "All in" : "Swapping";
     return (
-      <div className="grid grid-cols-[2fr_1fr] gap-2.5">
+      <ActionRail className="grid-cols-[2fr_1fr] gap-2.5">
         <DockNote>{note}</DockNote>
         {resign}
-      </div>
+      </ActionRail>
     );
   }
   const owe = toCall(state, seat);
@@ -56,7 +55,7 @@ export function WaitDock({ match, state, seat }: { match: MatchView; state: Poke
     plan.kind === o.kind &&
     (o.kind !== "call" || plan.amount === o.amount);
   return (
-    <div className="grid grid-cols-3 gap-2.5">
+    <ActionRail className="gap-2.5">
       {options.map((o) => {
         const on = armed(o);
         return (
@@ -75,6 +74,6 @@ export function WaitDock({ match, state, seat }: { match: MatchView; state: Poke
         );
       })}
       {resign}
-    </div>
+    </ActionRail>
   );
 }

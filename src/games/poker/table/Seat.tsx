@@ -12,8 +12,6 @@ import { chips } from "../format";
 import { PACE, cardsHeld, type Show } from "../show";
 import { DECK_W, FLIGHT, Flying, Roll, SPRING, toward } from "./motion";
 
-// Someone along the rail: their avatar sits on the table's edge, with their cards behind it, on a tile with
-// their name and chips.
 export function Seat({
   player,
   seat,
@@ -41,7 +39,6 @@ export function Seat({
   const shown = show.shown[seat];
   const won = show.paying?.find((p) => p.seat === seat);
   const held = dealt ? cardsHeld(s, seat, show.dealtCards) : 0;
-  // Shown cards keep to the width of the seat, as far as their corners stay readable.
   const shownW = tight ? 24 : 28;
   const shownStep = Math.max(9, Math.min(shownW - 7, (room - shownW) / Math.max(1, (shown?.length ?? 2) - 1)));
   return (
@@ -91,7 +88,6 @@ export function Seat({
         >
           <PlayerAvatar player={player} glow={player.glow} size={avatar} />
         </span>
-        {/* Outside the dimmed part: someone who's folded can still be right here. */}
         <span className="absolute -right-0.5 -top-0.5 z-[3] [--dot-ring:var(--background)]">
           <OnlineDot online={online} />
         </span>
@@ -123,7 +119,6 @@ export function Seat({
   );
 }
 
-// Where a seat stands in the hand, and the word on its label: Out, All in, Fold, or its last move this street.
 export function statusOf(show: Show, seat: number) {
   const s = show.state;
   const dealt = s.dealt[seat];
@@ -136,12 +131,10 @@ export function statusOf(show: Show, seat: number) {
   return { dealt, out, folded, allIn, label };
 }
 
-// The cards an opponent holds, fanned behind their avatar, going back to the deck if they fold.
 function Backs({ count, folded, color, width, flying }: { count: number; folded: boolean; color: string; width: number; flying: boolean }) {
   const hole = useRef<(HTMLSpanElement | null)[]>([]);
   const gone = useRef(folded);
   const still = useReducedMotion();
-  // Folded before these ever came on screen: there's nothing to send back.
   const never = useRef(folded).current;
   useEffect(() => {
     if (!folded || gone.current) return;
@@ -151,7 +144,6 @@ function Backs({ count, folded, color, width, flying }: { count: number; folded:
       if (still) return void (el.style.opacity = "0");
       const to = toward(el, "[data-deck]");
       if (!to) return;
-      // It stays where it lands, invisible, until the hand's over: going back to its place for even a frame shows as a blip.
       animate(
         el,
         { x: to.x, y: to.y, rotate: k % 2 ? 150 : -150, scale: DECK_W / width, opacity: [1, 1, 0] },
@@ -191,8 +183,6 @@ function Backs({ count, folded, color, width, flying }: { count: number; folded:
   );
 }
 
-// Chips in front of someone this street. The outer span is what flies to the pile: it holds where it lands
-// and goes when the amounts are cleared, so nothing comes back for a frame.
 export function Bet({
   amount,
   color,
@@ -269,7 +259,6 @@ function Label({ text, hot }: { text: string | null; hot: boolean }) {
   );
 }
 
-// What a seat just won, floating up off it.
 export function Float({ net, color, hand, high }: { net: number; color: string; hand: number; high?: boolean }) {
   return (
     <motion.span
@@ -285,15 +274,13 @@ export function Float({ net, color, hand, high }: { net: number; color: string; 
   );
 }
 
-// The dealer button. It's a physical chip 17px across with its D printed on, so its letter is 10px, under the
-// smallest text size, like the letters on a card.
 export function Dealer({ className }: { className?: string }) {
   return (
     <motion.span
       initial={{ scale: 0 }}
       animate={{ scale: 1 }}
       transition={{ duration: 0.25 * PACE, ease: SPRING }}
-      className={cn("poker-dealer absolute z-[2] grid size-[17px] place-items-center rounded-full font-display text-[10px]", className)}
+      className={cn("poker-dealer absolute z-[2] grid size-[17px] place-items-center rounded-full font-display text-caption", className)}
       role="img"
       aria-label="Dealer"
     >
@@ -311,7 +298,6 @@ export function NameLine({ player, name }: { player: Player; name: string }) {
   );
 }
 
-// Winnings on their way from the pile to a seat.
 export function PayChip({ seat, i, color }: { seat: number; i: number; color: string }) {
   const ref = useRef<HTMLSpanElement>(null);
   const still = useReducedMotion();

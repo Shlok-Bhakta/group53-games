@@ -1,11 +1,3 @@
-// Poker's rules as plain functions on plain data, shared by the server and phones. No Convex or browser
-// imports. The server keeps the deck, the muck and everyone's cards in `secrets` and the rest (stacks, bets,
-// the board, the last hand's showdown) in matches.state, which everyone can read.
-//
-// A game is a run of hands. Everyone starts with the same stack; the blinds rise on a schedule; a player
-// who runs out of chips is out. It ends when one player has everything, or after the last hand, placing by
-// chips (and the knocked-out by how long they lasted).
-
 import { bestHand, shuffle, type Card, type Variant } from "./cards";
 
 export type { Card, Variant } from "./cards";
@@ -31,13 +23,9 @@ export const VARIANTS: Record<Variant, { hole: number; short: boolean; streets: 
 };
 
 export type LogKind = "blind" | "fold" | "check" | "call" | "bet" | "raise" | "draw";
-// `amount`: chips put in for a blind or call, the total bet for a bet or raise, cards swapped for a draw.
-// `auto`: the move timer ran out and the game moved for them.
 export type LogEntry = { seat: number; kind: LogKind; amount?: number; allIn?: boolean; street: number; auto?: boolean };
 
 export type Pot = { amount: number; eligible: number[]; winners: number[] };
-// How a hand ended. `shown` and `names` are per seat, set for everyone who got to the showdown. `won` is
-// what each seat took from the pot, `net` that minus what they put in.
 export type HandResult = {
   hand: number;
   board: Card[];
@@ -48,8 +36,6 @@ export type HandResult = {
   net: number[];
   showdown: boolean;
 };
-// Someone leaving the game, in order. `stack` is what they had when the hand began (a bust) or when they left
-// (a resignation), to place players knocked out in the same hand.
 export type Exit = { seat: number; hand: number; reason: "bust" | "resign"; stack: number };
 
 export type PokerState = {
@@ -60,26 +46,19 @@ export type PokerState = {
   button: number;
   sb: number;
   bb: number;
-  // Stacks when this hand was dealt.
   start: number[];
   stacks: number[];
-  // Chips in front of each seat on this street, and in the pot from each seat this hand (bets included).
   bets: number[];
   paid: number[];
   dealt: boolean[];
   folded: boolean[];
-  // The bet each seat last acted at on this street; null until they act. A raise reopens the action to a
-  // seat only if it's a full raise over that.
   acted: (number | null)[];
   current: number;
   minRaise: number;
   street: number;
   board: Card[];
-  // The seat to act, or -1 once the hand is over.
   turn: number;
-  // Draw poker: how many cards each seat swapped.
   drew: (number | null)[];
-  // Moves in a row the game made for each seat because their timer ran out (see convex/poker.ts).
   idle: number[];
   log: LogEntry[];
   last: HandResult | null;
@@ -96,22 +75,16 @@ const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 const seatsOf = (s: PokerState) => s.stacks.map((_, i) => i);
 
 export const isOut = (s: PokerState, seat: number) => s.out.some((o) => o.seat === seat);
-// Still in the game with chips, between hands.
 export const alive = (s: PokerState) => seatsOf(s).filter((i) => !isOut(s, i) && s.stacks[i] > 0);
 export const inHand = (s: PokerState, seat: number) => s.dealt[seat] && !s.folded[seat];
 export const toCall = (s: PokerState, seat: number) => Math.max(0, s.current - s.bets[seat]);
-// Clamped: a game that ended at a showdown before this was fixed has its street one past the last.
 export const streetOf = (s: PokerState) => {
   const streets = VARIANTS[s.variant].streets;
   return streets[Math.min(Math.max(0, s.street), streets.length - 1)];
 };
-// The pot already gathered in the middle, not counting this street's bets.
 export const potOf = (s: PokerState) => sum(s.paid) - sum(s.bets);
 const canAct = (s: PokerState, seat: number) => inHand(s, seat) && s.stacks[seat] > 0;
 
-// Blinds start at 10/20 whatever the stacks, so more chips means a longer, deeper game, and multiply by `by`
-// every `every` hands (0: never). Rounded to chips worth using, and every level goes up by at least one step,
-// however small the multiplier.
 const FIRST_SB = 10;
 const BLIND_STEP = 5;
 export function blindsFor(hand: number, every: number, by = 2) {
@@ -168,7 +141,6 @@ function pay(s: PokerState, seat: number, amount: number) {
   return x;
 }
 
-// Cards off the top of the deck. Draw poker can run it dry; then the muck is shuffled back in.
 function take(t: Table, k: number, random: () => number) {
   if (t.hidden.deck.length < k) {
     t.hidden.deck.push(...shuffle(t.hidden.muck, random));
@@ -177,7 +149,6 @@ function take(t: Table, k: number, random: () => number) {
   return t.hidden.deck.splice(0, k);
 }
 
-// Deals the next hand from a shuffled deck: moves the button, posts the blinds, deals everyone in.
 export function deal(state: PokerState, blinds: { sb: number; bb: number }, deck: Card[], random: () => number = Math.random): Table {
   const s = clone(state);
   const live = alive(s);
@@ -201,7 +172,6 @@ export function deal(state: PokerState, blinds: { sb: number; bb: number }, deck
   s.minRaise = blinds.bb;
   s.turn = -1;
   const t: Table = { state: s, hidden: { deck: [...deck], muck: [], holes: seatsOf(s).map(() => []) } };
-  // Heads-up the button is the small blind and acts first before the flop.
   const sbSeat = live.length === 2 ? s.button : nextOf(s, s.button, (i) => live.includes(i));
   const bbSeat = nextOf(s, sbSeat, (i) => live.includes(i));
   for (const [seat, amount] of [
@@ -219,21 +189,16 @@ export function deal(state: PokerState, blinds: { sb: number; bb: number }, deck
   return settle(t, bbSeat, random);
 }
 
-// Whether a seat still has to act on this street.
 function needs(s: PokerState, seat: number) {
   if (!inHand(s, seat)) return false;
   if (streetOf(s).kind === "draw") return s.acted[seat] === null;
   if (s.stacks[seat] === 0) return false;
-  // Everyone else still in is all-in: only a bet bigger than yours needs an answer (a big blind all-in for
-  // less than the small blind doesn't).
   const others = seatsOf(s).filter((i) => i !== seat && inHand(s, i));
   if (!others.some((i) => s.stacks[i] > 0)) return s.bets[seat] < Math.max(0, ...others.map((i) => s.bets[i]));
   if (s.bets[seat] < s.current) return true;
-  // Nobody left to bet against: everyone else is all-in.
   return s.acted[seat] === null && seatsOf(s).filter((i) => canAct(s, i)).length > 1;
 }
 
-// After anything changes: the hand is won, the next seat acts, or the street is done.
 function settle(t: Table, from: number, random: () => number): Table {
   const s = t.state;
   if (seatsOf(s).filter((i) => inHand(s, i)).length === 1) return award(t);
@@ -245,8 +210,6 @@ function settle(t: Table, from: number, random: () => number): Table {
   return nextStreet(t, random);
 }
 
-// Gathers the bets and deals the next street. If nobody can bet any more (everyone all-in), it runs the
-// board out to the showdown.
 function nextStreet(t: Table, random: () => number): Table {
   const s = t.state;
   const streets = VARIANTS[s.variant].streets;
@@ -257,7 +220,6 @@ function nextStreet(t: Table, random: () => number): Table {
     s.minRaise = s.bb;
     s.street += 1;
     if (s.street >= streets.length) {
-      // The showdown happens on the last street; the hand never moves past it.
       s.street = streets.length - 1;
       return showdown(t);
     }
@@ -271,8 +233,6 @@ function nextStreet(t: Table, random: () => number): Table {
   }
 }
 
-// The smallest and largest a seat may raise to, or null if it can only call or fold. A raise must be at
-// least the last raise again, except all-in; pot limit caps it at the pot after calling.
 export function raiseBounds(s: PokerState, seat: number): { min: number; max: number } | null {
   if (s.turn !== seat || streetOf(s).kind !== "bet") return null;
   const owe = toCall(s, seat);
@@ -298,7 +258,6 @@ export function act(table: Table, seat: number, action: Action, random: () => nu
     if (action.kind !== "draw") throw new Error("Pick the cards to swap first.");
     const hole = t.hidden.holes[seat];
     const picks = [...new Set(action.discard)].filter((i) => Number.isInteger(i) && i >= 0 && i < hole.length);
-    // New cards come off the deck before the old ones hit the muck, so you never draw your own back.
     const fresh = take(t, picks.length, random);
     const thrown = picks.map((i) => hole[i]);
     picks.forEach((i, k) => (hole[i] = fresh[k]));
@@ -340,14 +299,11 @@ export function act(table: Table, seat: number, action: Action, random: () => nu
   return settle(t, seat, random);
 }
 
-// What the game does for someone whose move timer ran out: check if it's free, otherwise fold; keep every
-// card in a draw.
 export function autoAction(s: PokerState, seat: number): Action {
   if (streetOf(s).kind === "draw") return { kind: "draw", discard: [] };
   return toCall(s, seat) === 0 ? { kind: "check" } : { kind: "fold" };
 }
 
-// A player resigns: they fold if they're in the hand, and their chips leave the table with them.
 export function leave(table: Table, seat: number, random: () => number = Math.random): Table {
   const t = clone(table);
   const s = t.state;
@@ -360,11 +316,9 @@ export function leave(table: Table, seat: number, random: () => number = Math.ra
   s.out.push({ seat, hand: s.hand, reason: "resign", stack: s.stacks[seat] });
   s.stacks[seat] = 0;
   if (s.turn === -1) return t;
-  // Carry on from whoever's turn it is (them, if it was theirs: they've folded, so it passes on).
   return settle(t, (s.turn + s.stacks.length - 1) % s.stacks.length, random);
 }
 
-// Splits the chips put in into a main pot and side pots, each with the seats still in that can win it.
 export function sidePots(s: PokerState): { amount: number; eligible: number[] }[] {
   const left = [...s.paid];
   const pots: { amount: number; eligible: number[] }[] = [];
@@ -380,25 +334,21 @@ export function sidePots(s: PokerState): { amount: number; eligible: number[] }[
     }
     pots.push({ amount, eligible: live });
   }
-  // Chips from folded seats above the last level still belong in the pot.
   const dead = sum(left);
   if (dead && pots.length) pots[pots.length - 1].amount += dead;
   return pots;
 }
 
-// A bet nobody matched goes back to whoever made it before the pot is shared out.
 function refundUncalled(s: PokerState) {
   const order = seatsOf(s).sort((a, b) => s.paid[b] - s.paid[a]);
   const [top, next] = order;
   const extra = s.paid[top] - (next === undefined ? 0 : s.paid[next]);
-  // Chips from someone who's folded (a player who resigned mid-bet) stay in the pot.
   if (extra <= 0 || !inHand(s, top)) return;
   s.paid[top] -= extra;
   s.bets[top] = Math.max(0, s.bets[top] - extra);
   s.stacks[top] += extra;
 }
 
-// Everyone else folded: the last one in takes it all without showing.
 function award(t: Table): Table {
   const s = t.state;
   refundUncalled(s);
@@ -427,7 +377,6 @@ function showdown(t: Table): Table {
   const pots: Pot[] = sidePots(s).map(({ amount, eligible }) => {
     const top = Math.max(...eligible.map((i) => ranks[i]?.score ?? -1));
     const winners = eligible.filter((i) => (ranks[i]?.score ?? -1) === top);
-    // Split evenly; odd chips go to the winners closest to the button's left.
     const share = Math.floor(amount / winners.length);
     let odd = amount - share * winners.length;
     for (let k = 1; k <= n; k++) {
@@ -457,7 +406,6 @@ function endHand(t: Table, result: HandResult): Table {
   s.turn = -1;
   s.bets = s.bets.map(() => 0);
   s.current = 0;
-  // Knocked out this hand, the smaller stacks first so they place lower.
   const busted = seatsOf(s)
     .filter((i) => s.dealt[i] && s.stacks[i] === 0 && !isOut(s, i))
     .sort((a, b) => s.start[a] - s.start[b]);
@@ -465,8 +413,6 @@ function endHand(t: Table, result: HandResult): Table {
   return t;
 }
 
-// Places, best first, ties sharing a place: everyone still in by chips, then everyone out, the last to go
-// first. Two knocked out in the same hand with the same stack tie.
 export function standings(s: PokerState): number[][] {
   const groups: number[][] = [];
   const left = seatsOf(s)

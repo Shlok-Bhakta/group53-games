@@ -7,7 +7,6 @@ import { Sheet } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { chips } from "./format";
 
-// The last hand in full: the board, everyone who showed and what they had, and who won what.
 export function LastHand({ match, result, open, onClose }: { match: MatchView; result: HandResult; open: boolean; onClose: () => void }) {
   const rows = match.players
     .map((p, seat) => ({ p, seat, net: result.net[seat], shown: result.shown[seat], name: result.names[seat] }))

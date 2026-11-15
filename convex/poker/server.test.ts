@@ -39,7 +39,6 @@ async function game(t: T, n = 2, mode: Mode = "poker:holdem", settings?: Record<
   return { id, players, seats };
 }
 
-// The player whose turn it is, and a move for them on the hand and street they see.
 async function up(t: T, id: Id<"matches">, seats: Player[]) {
   const s = await stateOf(t, id);
   const p = seats[s.turn];
@@ -72,9 +71,7 @@ describe("starting", () => {
       board: [],
     });
     expect(m.turn).toBe(seats[0].userId);
-    // Nothing hidden in the public state.
     expect(JSON.stringify(s)).not.toMatch(/"[2-9TJQKA][shdc]"/);
-    // Each player gets exactly their own cards: the ones the server dealt to them, and nobody else's.
     const rows = await t.run((ctx) =>
       ctx.db
         .query("secrets")
@@ -90,7 +87,6 @@ describe("starting", () => {
       hands.push(...got!.cards);
     }
     expect(new Set(hands).size).toBe(6);
-    // Someone watching, or signed out, gets none.
     const outsider = await signedIn(t, "Lurker");
     expect(await outsider.as.query(api.poker.cards, { id })).toBeNull();
     expect(await t.query(api.poker.cards, { id })).toBeNull();
@@ -114,7 +110,6 @@ describe("starting", () => {
     expect(m.status).toBe("active");
     const s = m.state as PokerState;
     expect(s.hand).toBe(13);
-    // Hand 13 is the seventh level: 10, 15, 25, 35, 50, 75, 115.
     expect(s).toMatchObject({ sb: 115, bb: 230 });
   });
 
@@ -167,7 +162,6 @@ describe("playing", () => {
     const s = await stateOf(t, id);
     expect(s.street).toBe(1);
     expect(s.board).toHaveLength(3);
-    // A tap from the street before is refused.
     u = await up(t, id, seats);
     await expect(u.p.as.mutation(api.poker.move, { id, hand: 1, street: 0, kind: "check" })).rejects.toThrow("moved on");
   });
@@ -191,11 +185,9 @@ describe("playing", () => {
   test("a lined-up move plays itself when the action arrives", async () => {
     const t = setup();
     const { id, seats } = await game(t, 3);
-    // Seat 1 (small blind) lines up check/fold, seat 2 (big blind) lines up a call of 20 or less.
     await seats[1].as.mutation(api.poker.plan, { id, hand: 1, street: 0, kind: "checkfold" });
     await seats[2].as.mutation(api.poker.plan, { id, hand: 1, street: 0, kind: "call", amount: 20 });
     expect(await seats[1].as.query(api.poker.myPlan, { id })).toMatchObject({ kind: "checkfold", hand: 1, street: 0 });
-    // Seat 0 calls: seat 1 has 10 to call, so its check/fold folds; seat 2 owes nothing, so it checks.
     await seats[0].as.mutation(api.poker.move, { id, hand: 1, street: 0, kind: "call" });
     const s = await stateOf(t, id);
     expect(s.folded).toEqual([false, true, false]);
@@ -223,7 +215,6 @@ describe("playing", () => {
   test("a lined-up move from a hand that's already over is dropped", async () => {
     const t = setup();
     const { id, seats } = await game(t, 2);
-    // The big blind taps Check/Fold for hand 1, but the button folds first and hand 2 is dealt.
     await (await up(t, id, seats)).move("fold");
     const s = await stateOf(t, id);
     expect(s.hand).toBe(2);
@@ -242,7 +233,6 @@ describe("playing", () => {
     await seats[2].as.mutation(api.poker.plan, { id, hand: 1, street: 0, kind: "call", amount: 50 });
     await clearPushes(t);
     await seats[0].as.mutation(api.poker.move, { id, hand: 1, street: 0, kind: "raise", to: 50 });
-    // Both called for them, so it's the flop and seat 1 to act; nobody was left waiting on seat 0.
     const s = await stateOf(t, id);
     expect(s.street).toBe(1);
     expect((await pushes(t)).map((p) => p.userId)).toContain(seats[s.turn].userId);
@@ -311,7 +301,6 @@ describe("ending", () => {
     const t = setup();
     const { id, seats } = await game(t, 3, "poker:holdem", { moveTime: 24 });
     const absent = seats[0];
-    // Seat 0 never moves; everyone else folds or checks to it whenever it's their turn.
     for (let i = 0; i < 40; i++) {
       const m = (await get(t, id))!;
       const s = m.state as PokerState;
@@ -334,7 +323,6 @@ describe("ending", () => {
     const m = (await get(t, id))!;
     for (let strikes = 0; strikes < 3; strikes++) await t.mutation(internal.matches.remind, { id, moveCount: m.moveCount, strikes });
     const s = await stateOf(t, id);
-    // The button had 10 to call, so it folded and the next hand is on.
     expect(s.hand).toBe(2);
     expect(s.last).toMatchObject({ hand: 1, showdown: false });
   });
@@ -344,7 +332,6 @@ describe("hidden information and stale taps", () => {
   test("a folded hand never shows, even when the others go to a showdown", async () => {
     const t = setup();
     const { id, seats } = await game(t, 3);
-    // Button (seat 0) folds; the blinds check it down to a showdown.
     const folded = (await seats[0].as.query(api.poker.cards, { id }))!;
     expect(folded.hand).toBe(1);
     const shown = [(await seats[1].as.query(api.poker.cards, { id }))!.cards, (await seats[2].as.query(api.poker.cards, { id }))!.cards];
@@ -358,7 +345,6 @@ describe("hidden information and stale taps", () => {
     expect(s.last).toMatchObject({ hand: 1, showdown: true });
     expect(s.last!.shown).toEqual([null, shown[0], shown[1]]);
     expect(s.last!.names[0]).toBeNull();
-    // Not one of the folded cards is anywhere in what everyone can read.
     const everything = JSON.stringify((await get(t, id))!);
     for (const card of folded.cards) expect(everything).not.toContain(`"${card}"`);
   });
@@ -370,7 +356,6 @@ describe("hidden information and stale taps", () => {
     const before = await stateOf(t, id);
     expect(before).toMatchObject({ hand: 2, street: 0 });
     const p = seats[before.turn];
-    // It's their turn and the street index matches; only the hand number is stale.
     await expect(p.as.mutation(api.poker.move, { id, hand: 1, street: 0, kind: "fold" })).rejects.toThrow("The hand moved on.");
     await expect(p.as.mutation(api.poker.move, { id, hand: 1, street: 0, kind: "call" })).rejects.toThrow("The hand moved on.");
     expect(await stateOf(t, id)).toEqual(before);

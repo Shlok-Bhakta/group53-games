@@ -1,9 +1,14 @@
-// Visual review of Poker: SCREENS=1 npm run test:e2e -- poker-screens. Writes PNGs to e2e/.state/screens.
 import type { Page } from "@playwright/test";
 import { anyApi } from "convex/server";
-import { admin, createPlayer, expect, phone, test } from "./fixtures";
+import { FRAME_COLOR } from "../convex/palette";
+import { admin, createPlayer, expect, phone, readyForShot, test } from "./fixtures";
 
 test.skip(!process.env.SCREENS, "Set SCREENS=1 to capture review screenshots");
+
+async function showCaughtUp(page: Page) {
+  const table = page.locator("[data-table]");
+  if (await table.count()) await expect(table).toHaveAttribute("data-busy", "false", { timeout: 30_000 });
+}
 
 for (const scheme of ["dark", "light"] as const) {
   test(`poker screens ${scheme}`, async ({ browser }) => {
@@ -11,9 +16,9 @@ for (const scheme of ["dark", "light"] as const) {
     const names = ["WashableBowl700", "chrisis14", "Boiler", "Wes", "Kai", "Sam", "Lee", "Dev"].slice(0, Number(process.env.PLAYERS ?? 6));
     const looks = [
       { frame: "gold", badge: "🦀" },
-      { frame: "comet", frameColor: "#f38ba8", glow: true },
+      { frame: "comet", frameColor: FRAME_COLOR.pink, glow: true },
       { frame: "fire", badge: "🃏" },
-      { frame: "neon", frameColor: "#f9e2af", glow: true },
+      { frame: "neon", frameColor: FRAME_COLOR.gold, glow: true },
       {},
       { frame: "holo" },
       { frame: "rgb" },
@@ -38,7 +43,8 @@ for (const scheme of ["dark", "light"] as const) {
     }
     const [a] = pages;
     const shot = async (name: string, page: Page = a, full = false) => {
-      await page.waitForTimeout(1300);
+      await showCaughtUp(page);
+      await readyForShot(page);
       await page.screenshot({ path: `e2e/.state/screens/${scheme}-poker-${name}.png`, fullPage: full, animations: "allow" });
     };
     await a.goto("/games");
@@ -52,7 +58,6 @@ for (const scheme of ["dark", "light"] as const) {
     await expect(a.getByRole("heading", { name: "Waiting for players" })).toBeVisible();
     const id = a.url().split("/poker/")[1];
     for (const p of pages.slice(1)) await p.goto(`/poker/${id}?accept=1`);
-    // A full table starts by itself.
     if (names.length < 8) {
       await expect(a.getByRole("heading", { name: `${names.length} in` })).toBeVisible();
       await a.getByRole("button", { name: `Start with ${names.length}` }).click();
@@ -63,7 +68,6 @@ for (const scheme of ["dark", "light"] as const) {
     const snap = () => admin().query(anyApi.testing.getMatch, { id });
     const pageOf = (m: { players: { userId: string }[] }, seat: number) =>
       pages[players.findIndex((p) => p.userId === m.players[seat].userId)];
-    // Taps a button on the phone whose turn it is, and waits for the move to land.
     const play = async (name: string | RegExp, before?: (p: Page) => Promise<void>) => {
       const m = await snap();
       const p = pageOf(m, m.state.turn);
@@ -77,7 +81,6 @@ for (const scheme of ["dark", "light"] as const) {
       await expect.poll(async () => (await snap()).moveCount, { timeout: 15_000 }).not.toBe(m.moveCount);
       return p;
     };
-    // A round: a raise, a call, a fold, someone lining up a call, then everyone calls to the flop.
     await play(/^Raise to/, async (p) => {
       await p.getByRole("button", { name: "Raise", exact: true }).click();
       await shot("raise", p);
@@ -98,7 +101,6 @@ for (const scheme of ["dark", "light"] as const) {
     const m = await snap();
     await shot("game", pageOf(m, m.state.turn));
     await shot("watching-turn", pageOf(m, (m.state.turn + 1) % names.length));
-    // Everyone checks it down to see a showdown.
     for (let i = 0; i < 40 && (await snap()).state.hand === 1; i++) await play("Check");
     await expect(a.getByText(/(took|won|split) the pot/).first()).toBeVisible({ timeout: 15_000 });
     await a.screenshot({ path: `e2e/.state/screens/${scheme}-poker-showdown.png`, animations: "allow" });
@@ -107,14 +109,13 @@ for (const scheme of ["dark", "light"] as const) {
   });
 }
 
-// A whole hand on film, from the deal to the next deal: e2e/.state/screens/poker-hand.webm. Also fails on a long stall.
 test("poker hand on video", async ({ browser }) => {
   test.setTimeout(240_000);
   const looks = [
     { frame: "gold", badge: "🦀" },
-    { frame: "comet", frameColor: "#f38ba8", glow: true },
+    { frame: "comet", frameColor: FRAME_COLOR.pink, glow: true },
     { frame: "fire", badge: "🃏" },
-    { frame: "neon", frameColor: "#f9e2af", glow: true },
+    { frame: "neon", frameColor: FRAME_COLOR.gold, glow: true },
     { frame: "holo" },
   ];
   const names = ["WashableBowl700", "chrisis14", "Boiler", "Wes", "Kai"];
@@ -164,7 +165,6 @@ test("poker hand on video", async ({ browser }) => {
     const m = await snap();
     if (m.state.hand > 1) break;
     const p = pageOf(m, m.state.turn);
-    // A raise, a fold, then everyone calls and checks it down.
     const name = acts === 0 ? /^Raise$/ : acts === 1 ? /^Fold$/ : /^(Call|Check)/;
     await p.getByRole("button", { name }).first().click({ timeout: 30_000 });
     if (acts === 0) {
@@ -172,10 +172,10 @@ test("poker hand on video", async ({ browser }) => {
       await p.getByRole("button", { name: /^Raise to/ }).click();
     }
     await expect.poll(async () => (await snap()).moveCount, { timeout: 15_000 }).not.toBe(m.moveCount);
-    await p.waitForTimeout(500);
+    await showCaughtUp(a);
   }
   await expect(a.getByRole("button", { name: "Last hand" })).toBeVisible({ timeout: 30_000 });
-  await a.waitForTimeout(3000);
+  await showCaughtUp(a);
   const gap = await a.evaluate(() => (window as unknown as { __gap: number }).__gap);
   console.log(`longest frame ${Math.round(gap)}ms`);
   expect(gap).toBeLessThan(2000);

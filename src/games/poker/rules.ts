@@ -3,7 +3,6 @@ import { blindsFor } from "../../../convex/poker/engine";
 
 const days = (hours: number) => (hours === 24 ? "a day" : `${hours / 24} days`);
 
-// How to play, with the game's settings filled in.
 export function pokerRules(mode: ModeKey, s: Settings): string[] {
   const stack = s.stack ?? 1000;
   const { sb } = blindsFor(1, 0);
