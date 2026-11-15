@@ -3,7 +3,6 @@ import type { ModeKey, Settings } from "../../../convex/modes";
 const time = (s: number) => (s === 60 ? "1-minute" : s % 60 ? `${s}-second` : `${s / 60}-minute`);
 const days = (hours: number) => (hours === 24 ? "a day" : `${hours / 24} days`);
 
-// How to play, with the game's settings filled in.
 export function scrabbleRules(mode: ModeKey, s: Settings): string[] {
   const live = mode === "scrabble:live";
   return [

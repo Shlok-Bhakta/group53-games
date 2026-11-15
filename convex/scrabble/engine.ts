@@ -1,12 +1,3 @@
-// Scrabble for 2 to 8 players on one board, a rack each, with official rules or Letter League's. The official
-// rules (which plays are legal, which words they form, how they score, the standard board, letter values and
-// bag) come from @bglowacki/bingo-engine, set up for English Scrabble. On top of it we add a bigger board
-// (handed to the engine as its layout), Letter League's rule changes (LEAGUE below), and turns, seats and
-// standings.
-//
-// Pure and shared by the server (which validates every play) and the phones (which preview the score as you
-// place tiles). Checking words against the dictionary is the server's job (convex/scrabble/dictionary.ts),
-// so the engine here runs with a dictionary that accepts anything and only judges the shape of a play.
 import {
   BLANK_FLAG,
   ENGLISH_ALPHABET,
@@ -19,16 +10,13 @@ import {
 } from "@bglowacki/bingo-engine";
 
 const A = ENGLISH_ALPHABET;
-// Points per letter ("?" is the blank).
 export const VALUES: Record<string, number> = Object.fromEntries(A.labels.map((l, id) => [id === 0 ? "?" : l.toUpperCase(), A.scores[id]]));
 export const BINGO = SCRABBLE_CLASSIC_RULES.bingoBonus;
 
-// "T" triple word, "D" double word, "t" triple letter, "d" double letter, "*" the centre (double word).
 export type Premium = "T" | "D" | "t" | "d" | "*" | ".";
 const KIND: Record<string, Premium> = { TWS: "T", DWS: "D", TLS: "t", DLS: "d" };
 const ENGINE_KIND = { T: "TWS", D: "DWS", "*": "DWS", t: "TLS", d: "DLS" } as const;
 
-// The standard board, straight from the engine.
 const LAYOUT_15: string[] = (() => {
   const n = SCRABBLE_LAYOUT_15X15.size;
   const grid = Array.from({ length: n }, () => Array<Premium>(n).fill("."));
@@ -38,8 +26,6 @@ const LAYOUT_15: string[] = (() => {
   return grid.map((r) => r.join(""));
 })();
 
-// Our big board for bigger games, built from one eighth of it (distances from the centre, a >= b) mirrored
-// eight ways.
 const OCTANT_21: Record<Exclude<Premium, ".">, [number, number][]> = {
   "*": [[0, 0]],
   T: [
@@ -89,7 +75,6 @@ export const layout = (size: number) => LAYOUTS[size] ?? LAYOUT_15;
 export const premiumAt = (size: number, x: number, y: number) => (layout(size)[y]?.[x] ?? ".") as Premium;
 export const centre = (size: number) => (layout(size).length - 1) / 2;
 
-// Our layouts in the engine's terms.
 function engineLayout(size: number) {
   const rows = layout(size);
   const premiums = rows.flatMap((row, y) =>
@@ -99,15 +84,10 @@ function engineLayout(size: number) {
   return { size: rows.length, premiums, centerStart: { row: c, col: c } };
 }
 
-// A tile in a rack. `letter` is "?" for a blank.
 export type Tile = { id: number; letter: string };
-// A tile on the board. Blanks show the letter they stand for and score nothing.
 export type Placed = { x: number; y: number; letter: string; blank?: boolean; seat: number; turn: number };
-// A tile someone is putting down this turn. `letter` names what a blank plays as.
 export type Placement = { id: number; x: number; y: number; letter?: string };
 
-// Settings that change the rules. A bingo is always using the whole rack. `league` plays by Letter League's
-// rules instead of Scrabble's.
 export type Rules = { size: number; rack: number; league: boolean };
 export const rulesOf = (settings: Record<string, number>): Rules => ({
   size: settings.board ?? 15,
@@ -115,10 +95,6 @@ export const rulesOf = (settings: Record<string, number>): Rules => ({
   league: settings.rules === 1,
 });
 
-// What Letter League does differently from official Scrabble. Everything else is the same engine, board and
-// word list.
-//  - stickyBonuses ("Wild" scoring, Letter League's default): a bonus square stays with the tile on it, so
-//    every later word through that tile scores it again. Add an S to a doubled word and it doubles again.
 export const LEAGUE = { stickyBonuses: true } as const;
 
 const engines = new Map<string, BingoEngine>();
@@ -138,8 +114,6 @@ function engineFor(rules: Rules) {
   return e;
 }
 
-// Sticky-bonus scoring, from the engine's breakdown of a word: the same sum, but every tile's square counts,
-// old or new. (Official scoring is the engine's own.)
 function stickyScore(size: number, cells: readonly { row: number; col: number; letter: string; isBlank: boolean }[]) {
   let sum = 0;
   let mult = 1;
@@ -155,8 +129,6 @@ function stickyScore(size: number, cells: readonly { row: number; col: number; l
   return sum * mult;
 }
 
-// The bag for a game, as letters, unshuffled: the standard English bag scaled by `percent` (at least one of
-// each letter).
 export function bagLetters(percent = 100): string[] {
   const out: string[] = [];
   A.labels.forEach((label, id) => {
@@ -200,8 +172,6 @@ const REASONS: Record<string, string> = {
   "rack-mismatch": "That tile isn't in your rack.",
 };
 
-// Checks a play and scores it. Placements are tiles on any squares; this finds the line they make, fills in
-// the tiles already on the board between them, and hands that to the engine.
 export function evaluate(board: Placed[], placement: Placement[], rack: Tile[], rules: Rules): Evaluation {
   if (placement.length === 0) return { ok: false, error: REASONS["empty-placement"] };
   const { size } = rules;
@@ -224,10 +194,10 @@ export function evaluate(board: Placed[], placement: Placement[], rack: Tile[], 
   const ys = new Set(placement.map((p) => p.y));
   if (xs.size > 1 && ys.size > 1) return { ok: false, error: "Keep your tiles in one line." };
 
-  // One tile reads along whichever line it joins.
   const at = (x: number, y: number) => fresh.get(key(x, y)) ?? map.get(key(x, y));
   const p0 = placement[0];
-  const horizontal = placement.length > 1 ? ys.size === 1 : !!(at(p0.x - 1, p0.y) || at(p0.x + 1, p0.y));
+  const loneTileJoinsAcross = !!(at(p0.x - 1, p0.y) || at(p0.x + 1, p0.y));
+  const horizontal = placement.length > 1 ? ys.size === 1 : loneTileJoinsAcross;
   const along = placement.map((p) => (horizontal ? p.x : p.y));
   const [from, to] = [Math.min(...along), Math.max(...along)];
   const tiles: EnginePlacement["tiles"][number][] = [];
@@ -256,21 +226,18 @@ export function evaluate(board: Placed[], placement: Placement[], rack: Tile[], 
       cells: w.cells.map((c) => [c.col, c.row] as [number, number]),
     }));
   if (words.length === 0) return { ok: false, error: "Words need at least two letters." };
-  // The main word (the one through every new tile) first.
-  const main = words.findIndex((w) => placement.every((p) => w.cells.some(([x, y]) => x === p.x && y === p.y)));
-  if (main > 0) words.unshift(...words.splice(main, 1));
+  const mainWord = words.findIndex((w) => placement.every((p) => w.cells.some(([x, y]) => x === p.x && y === p.y)));
+  if (mainWord > 0) words.unshift(...words.splice(mainWord, 1));
   const total = rules.league && LEAGUE.stickyBonuses ? words.reduce((s, w) => s + w.score, 0) + (scored.bingo ? BINGO : 0) : scored.total;
   return { ok: true, words, score: total, bingo: scored.bingo };
 }
 
-// The state everyone can see, stored in matches.state. Racks and the bag are secret (see convex/scrabble.ts).
 export type Move = {
   seat: number;
   kind: "play" | "swap" | "pass" | "timeout" | "resign";
   score: number;
   words?: { word: string; score: number }[];
   bingo?: boolean;
-  // How many tiles went down or were swapped.
   count?: number;
   at: number;
 };
@@ -280,24 +247,17 @@ export type ScrabbleState = {
   size: number;
   tiles: Placed[];
   scores: number[];
-  // Tiles each seat holds, and tiles left in the bag.
   racks: number[];
   bag: number;
-  // The seat to move; -1 once it's over.
   turn: number;
   round: number;
-  // Turns in a row nobody scored (passes, swaps, timeouts). Everyone doing it twice ends the game.
   scoreless: number;
-  // Seats that resigned. They score nothing more and are skipped.
   out: number[];
   moves: Move[];
-  // Live games: when the current turn runs out.
   deadline: number | null;
-  // End of game: what each seat's leftover tiles cost them (or earned, for whoever went out).
   adjust?: number[];
 };
 
-// The next seat still in, after `seat`.
 export function nextSeat(state: Pick<ScrabbleState, "out" | "scores">, seat: number) {
   const n = state.scores.length;
   for (let i = 1; i <= n; i++) {
@@ -307,8 +267,6 @@ export function nextSeat(state: Pick<ScrabbleState, "out" | "scores">, seat: num
   return seat;
 }
 
-// Places best first, ties sharing a place, by final score. Resigned seats come last, in the order they left
-// (the last to leave placing higher).
 export function standings(state: ScrabbleState): number[][] {
   const inSeats = state.scores.map((_, i) => i).filter((s) => !state.out.includes(s));
   const groups: number[][] = [];

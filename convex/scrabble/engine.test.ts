@@ -16,7 +16,6 @@ import { isWord } from "./dictionary";
 
 const rules = { size: 15, rack: 7, league: false };
 const rackOf = (letters: string): Tile[] => [...letters].map((letter, i) => ({ id: i, letter }));
-// Lays `word` out from (x, y), across or down, using rack tiles in order.
 const lay = (word: string, x: number, y: number, down = false, from = 0) =>
   [...word].map((_, i) => ({ id: from + i, x: down ? x : x + i, y: down ? y + i : y }));
 const onBoard = (word: string, x: number, y: number, down = false): Placed[] =>
@@ -47,9 +46,8 @@ describe("board", () => {
   test("the bag is the standard 100 tiles, and scales with at least one of each", () => {
     expect(bagLetters()).toHaveLength(100);
     expect(bagLetters().filter((l) => l === "?")).toHaveLength(2);
-    // Half of each letter, rounded, but never none: 54 tiles, one blank, one of each rare letter.
     const half = bagLetters(50);
-    expect(half).toHaveLength(54);
+    expect(half, "half of each letter, rounded, but never none").toHaveLength(54);
     const count = (bag: string[], l: string) => bag.filter((x) => x === l).length;
     expect([count(half, "?"), count(half, "E"), count(half, "A"), count(half, "Q"), count(half, "Z"), count(half, "S")]).toEqual([
       1, 6, 5, 1, 1, 2,
@@ -102,11 +100,9 @@ describe("evaluate", () => {
   });
 
   test("existing tiles fill the gaps and every cross word counts", () => {
-    // CAT across the middle, then S on the end makes CATS.
     const board = onBoard("CAT", 6, 7);
     const r = evaluate(board, [{ id: 0, x: 9, y: 7 }], rackOf("S"), rules);
-    expect(r).toMatchObject({ ok: true, score: 6 });
-    // Playing H-A-T down through the A of CAT: the A is reused.
+    expect(r, "an S on the end of CAT makes CATS").toMatchObject({ ok: true, score: 6 });
     const down = evaluate(
       board,
       [
@@ -116,22 +112,29 @@ describe("evaluate", () => {
       rackOf("HT"),
       rules,
     );
-    expect(down.ok && down.words.map((w) => w.word)).toEqual(["HAT"]);
+    expect(down.ok && down.words.map((w) => w.word), "H and T down through CAT's A reuse it").toEqual(["HAT"]);
   });
 
   test("bonus squares count once in Scrabble, and stay with their tile in Letter League", () => {
-    // CAT across the centre star (double word), then COW down from its C.
     const board = onBoard("CAT", 7, 7);
-    expect(evaluate(board, lay("OW", 7, 8, true), rackOf("OW"), rules)).toMatchObject({ ok: true, score: 8 });
-    expect(evaluate(board, lay("OW", 7, 8, true), rackOf("OW"), { ...rules, league: true })).toMatchObject({ ok: true, score: 16 });
+    expect(evaluate(board, lay("OW", 7, 8, true), rackOf("OW"), rules), "COW down from CAT's C, the star already used").toMatchObject({
+      ok: true,
+      score: 8,
+    });
+    expect(evaluate(board, lay("OW", 7, 8, true), rackOf("OW"), { ...rules, league: true }), "the star stays with the C").toMatchObject({
+      ok: true,
+      score: 16,
+    });
   });
 
   test("in Letter League, an S on a doubled word doubles it again", () => {
-    // CAT on the centre star scored (3+1+1)x2 = 10. CATS: official 6, Letter League (3+1+1+1)x2 = 12.
     const board = onBoard("CAT", 6, 7);
     const s = [{ id: 0, x: 9, y: 7 }];
     expect(evaluate(board, s, rackOf("S"), rules)).toMatchObject({ ok: true, score: 6 });
-    expect(evaluate(board, s, rackOf("S"), { ...rules, league: true })).toMatchObject({ ok: true, score: 12 });
+    expect(evaluate(board, s, rackOf("S"), { ...rules, league: true }), "(3+1+1+1) x 2 for the star under the C").toMatchObject({
+      ok: true,
+      score: 12,
+    });
   });
 
   test("the big board plays by the same rules, centred on its own star", () => {
@@ -205,15 +208,16 @@ describe("evaluate", () => {
   });
 
   test("one tile can't go down on two squares", () => {
-    // TOO with the same O twice: a real word, so only the duplicate check stands in the way.
     const twice = [
       { id: 1, x: 6, y: 7 },
       { id: 0, x: 7, y: 7 },
       { id: 0, x: 8, y: 7 },
     ];
     expect(evaluate([], twice, rackOf("OT"), rules)).toEqual({ ok: false, error: "That tile is down twice." });
-    expect(evaluate([], twice, rackOf("OTO"), rules)).toEqual({ ok: false, error: "That tile is down twice." });
-    // With two different O tiles it's fine.
+    expect(evaluate([], twice, rackOf("OTO"), rules), "TOO is a word, so only the duplicate check refuses it").toEqual({
+      ok: false,
+      error: "That tile is down twice.",
+    });
     expect(
       evaluate(
         [],

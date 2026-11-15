@@ -4,7 +4,6 @@ import { api } from "../../../convex/_generated/api";
 import { evaluate, type Placed, type Placement, type Rules, type Tile } from "../../../convex/scrabble/engine";
 import { sfx } from "@/sound";
 
-// The live preview of what I've laid out: its words, its score, and whether the dictionary knows them.
 export function usePreview({
   placed,
   rack,
@@ -22,7 +21,6 @@ export function usePreview({
   const checking = words.length > 0 && unknown === undefined;
   const bad = unknown?.filter((w) => words.includes(w)) ?? [];
   const tone: "idle" | "ok" | "bad" = !evaluation ? "idle" : !evaluation.ok || bad.length ? "bad" : checking ? "idle" : "ok";
-  // Shake (and a soft "nope") the moment a layout stops making real words.
   const [shake, setShake] = useState(0);
   const lastTone = useRef(tone);
   useEffect(() => {

@@ -13,10 +13,8 @@ import type { evaluate, Placement } from "../../../convex/scrabble/engine";
 import { AsyncButton } from "@/components/AsyncButton";
 import { Button } from "@/components/ui/button";
 
-// A square tool in the dock with its name under the icon.
 const tool = "flex-col gap-0.5 text-caption [&_svg:not([class*='size-'])]:size-[22px]";
 
-// The bag, with how many tiles are left in it. Tap it for the letters you haven't seen.
 export function BagButton({ count, onClick }: { count: number; onClick: () => void }) {
   return (
     <Button variant="secondary" size="dock-square" className={tool} onClick={onClick} aria-label={`Bag, ${count} left`}>
@@ -26,8 +24,6 @@ export function BagButton({ count, onClick }: { count: number; onClick: () => vo
   );
 }
 
-// The buttons under your rack: the bag on the left, Swap, Play, and Shuffle (or Recall) on the right.
-// Swapping with nothing picked passes the turn instead.
 export function DockActions({
   match,
   myTurn,

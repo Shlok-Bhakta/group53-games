@@ -10,8 +10,9 @@ import { Result } from "@/components/match";
 import { FullscreenStage } from "@/components/game/floating";
 import { seatColor } from "@/games/seats";
 import { Tiles } from "@/Tiles";
+import { cn } from "@/lib/utils";
 import { sfx } from "@/sound";
-import { ScrabbleBoard, type DraftTile } from "./Board";
+import { ScrabbleBoard, type BoardView, type DraftTile } from "./Board";
 import { BagSheet } from "./BagSheet";
 import { BlankPicker } from "./BlankPicker";
 import { BagButton, DockActions } from "./DockActions";
@@ -23,8 +24,6 @@ import { usePreview } from "./usePreview";
 import { key, useScrabbleDraft } from "./useScrabbleDraft";
 import { useTileDrag } from "./useTileDrag";
 
-// A Scrabble game: scores on top, the board in the middle, your rack and actions at the bottom. Lay tiles
-// out any time; it's a plan until it's your turn and you play it.
 export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"users"> | undefined }) {
   const state = match.state as ScrabbleState;
   const settings = settingsOf(match.mode, match.settings);
@@ -37,7 +36,7 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
   const rack = useQuery(api.scrabble.rack, mySeat >= 0 ? { id: match._id } : "skip");
   const play = useMutation(api.scrabble.play);
 
-  const { draft, setDraft, hydrated, occupied, rackById, placed, inRack, setPlaced, setOrder } = useScrabbleDraft({
+  const { draft, setDraft, occupied, rackById, placed, inRack, setPlaced, setOrder } = useScrabbleDraft({
     match,
     state,
     mySeat,
@@ -45,7 +44,6 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
     rack,
   });
 
-  // --- Picking and placing ---
   const [selected, setSelected] = useState<number | null>(null);
   const [blankFor, setBlankFor] = useState<{ id: number; x: number; y: number } | null>(null);
   const [swapping, setSwapping] = useState<number[] | null>(null);
@@ -87,7 +85,6 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
 
   const { evaluation, bad, checking, tone, bubble, shake, setShake } = usePreview({ placed, rack, tiles: state.tiles, rules });
 
-  // --- The latest move, which every phone animates in ---
   const last = state.moves.at(-1);
   const fresh = useMemo(
     () => new Set(state.tiles.filter((t) => t.turn === state.moves.length - 1 && last?.kind === "play").map((t) => key(t.x, t.y))),
@@ -102,7 +99,6 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
       ? { key: state.moves.length, x: lastCell[0], y: lastCell[1], text: `+${last.score}`, color: colorOf(last.seat) }
       : null;
 
-  // Whoever's turn it is, trying tiles out: face down on everyone else's board.
   const planning = useQuery(api.scrabble.planning, match.status === "active" ? { id: match._id } : "skip");
   const upUser = match.status === "active" ? match.players[state.turn]?.userId : undefined;
   const upPlan = upUser && upUser !== meId ? planning?.find((p) => p.userId === upUser) : undefined;
@@ -115,7 +111,6 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
     heardGhosts.current = ghostSig;
   }, [ghostSig, ghostCount]);
 
-  // Sounds for things that happen on other phones: a word landing, your turn coming round, the end.
   const seenMoves = useRef(state.moves.length);
   useEffect(() => {
     if (state.moves.length <= seenMoves.current) return;
@@ -130,45 +125,32 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
     wasActive.current = match.status === "active";
   }, [match.status, match.result, mySeat, meId]);
 
-  // The celebration when anyone plays all their tiles.
   const bingoKey = last?.bingo ? state.moves.length : null;
 
   const focus = useMemo<[number, number]>(() => {
     if (!state.tiles.length && !draft.placed.length) return [centre(state.size), centre(state.size)];
     const pts = [...state.tiles, ...draft.placed];
     return [Math.round(pts.reduce((s, p) => s + p.x, 0) / pts.length), Math.round(pts.reduce((s, p) => s + p.y, 0) / pts.length)];
-    // Only where to look when the board first opens.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated.current]);
+  }, [state.tiles, state.size, draft.placed]);
 
   const finished = match.status === "finished";
 
-  // --- Board size. In a game in progress the board fills the screen between the floating top bar and the
-  // dock, and you pan around it; once it's over it's a square above the result. ---
   const area = useRef<HTMLDivElement>(null);
   const topBar = useRef<HTMLDivElement>(null);
   const dock = useRef<HTMLDivElement>(null);
-  const [box, setBox] = useState({ w: 0, h: 0, top: 0, bottom: 0 });
+  const [view, setView] = useState<Required<BoardView>>({ width: 0, height: 0, padTop: 0, padRight: 0, padBottom: 0, padLeft: 0 });
   useLayoutEffect(() => {
     const el = area.current;
     if (!el) return;
-    const measure = () => {
-      const bar = topBar.current;
-      const d = dock.current;
-      setBox({
-        w: el.clientWidth,
-        h: el.clientHeight || el.clientWidth,
-        top: bar ? bar.offsetTop + bar.offsetHeight + 6 : 0,
-        bottom: d ? d.offsetHeight + 6 : 0,
-      });
-    };
+    const measure = () => setView(boardView(el, topBar.current, dock.current));
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     if (dock.current) ro.observe(dock.current);
+    if (topBar.current) ro.observe(topBar.current);
     return () => ro.disconnect();
   }, [finished]);
-  const px = Math.floor(Math.min(box.w, box.h));
+  const px = Math.floor(Math.min(view.width, view.height));
 
   const [menu, setMenu] = useState(false);
   const [bagOpen, setBagOpen] = useState(false);
@@ -189,7 +171,7 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
       ref={board}
       size={state.size}
       px={px}
-      view={finished ? undefined : { width: box.w, height: box.h, padTop: box.top, padBottom: box.bottom }}
+      view={finished ? undefined : view}
       tiles={state.tiles}
       draft={draftTiles}
       seatColor={colorOf}
@@ -213,7 +195,10 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
   if (finished) {
     return (
       <div className="flex flex-1 flex-col gap-2 pb-1">
-        <div ref={area} className="relative aspect-square w-full">
+        <div
+          ref={area}
+          className="relative aspect-square w-full phone-landscape:mx-auto phone-landscape:max-w-[calc(100svh-var(--safe-bottom)-16px)]"
+        >
           {boardEl && <div className="absolute inset-0 flex items-start justify-center">{boardEl}</div>}
         </div>
         <div className="pt-4">
@@ -223,11 +208,8 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
     );
   }
 
-  // A game in progress takes the whole screen, Letter League style: the board is the background, with
-  // buttons floating over its top and your rack in a see-through dock over its bottom. The stage runs up under
-  // the status bar while it's up (see useFullbleed).
   return (
-    <FullscreenStage className="[background-image:radial-gradient(color-mix(in_oklch,var(--foreground)_8%,transparent)_1px,transparent_1px)] [background-size:16px_16px]">
+    <FullscreenStage className="[--rail-width:12rem] [background-image:radial-gradient(color-mix(in_oklch,var(--foreground)_8%,transparent)_1px,transparent_1px)] [background-size:16px_16px]">
       <div ref={area} className="absolute inset-0">
         {boardEl && <div className="absolute inset-0">{boardEl}</div>}
         <TopBar ref={topBar} match={match} state={state} meId={meId} myTurn={myTurn} onMenu={() => setMenu(true)} />
@@ -236,7 +218,11 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
 
       <div
         ref={dock}
-        className="absolute inset-x-0 bottom-0 z-10 flex flex-col gap-2.5 rounded-t-3xl bg-card/80 px-3 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-3 shadow-[0_-8px_24px_rgb(0_0_0/0.18)] backdrop-blur-xl"
+        data-dock
+        className={cn(
+          "absolute inset-x-0 bottom-0 z-10 flex flex-col gap-2.5 rounded-t-3xl bg-card/80 px-3 pb-[calc(var(--safe-bottom)+10px)] pt-3 shadow-[0_-8px_24px_color-mix(in_oklch,var(--shade)_18%,transparent)] backdrop-blur-xl",
+          "phone-landscape:right-[max(12px,var(--safe-right))] phone-landscape:left-[calc(max(12px,var(--safe-left))+var(--rail-width)+8px)] phone-landscape:pb-[max(10px,var(--safe-bottom))]",
+        )}
       >
         {playing ? (
           <>
@@ -319,7 +305,6 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
   );
 }
 
-// BINGO, spelled in tiles over the board for a moment.
 function Bingo() {
   return (
     <motion.div
@@ -340,4 +325,18 @@ function shuffled<T>(xs: T[]) {
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
+}
+
+const OPEN_GAP = 6;
+
+function boardView(area: HTMLElement, bar: HTMLElement | null, dock: HTMLElement | null): Required<BoardView> {
+  const barIsSideRail = !!bar && bar.offsetHeight > bar.offsetWidth;
+  return {
+    width: area.clientWidth,
+    height: area.clientHeight || area.clientWidth,
+    padTop: bar && !barIsSideRail ? bar.offsetTop + bar.offsetHeight + OPEN_GAP : 0,
+    padLeft: bar && barIsSideRail ? bar.offsetLeft + bar.offsetWidth + OPEN_GAP : 0,
+    padBottom: dock ? dock.offsetHeight + OPEN_GAP : 0,
+    padRight: dock ? area.clientWidth - dock.offsetLeft - dock.offsetWidth : 0,
+  };
 }

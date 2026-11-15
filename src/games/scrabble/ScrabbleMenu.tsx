@@ -7,6 +7,7 @@ import { settingsOf, type ModeKey } from "../../../convex/modes";
 import type { ScrabbleState } from "../../../convex/scrabble/engine";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { GameMenu } from "@/components/GameMenu";
+import { Button } from "@/components/ui/button";
 import { ResignButton } from "@/components/match";
 import { SeatDot } from "@/components/game/SeatDot";
 import { useHere } from "@/presence";
@@ -15,8 +16,6 @@ import type { Player } from "@/games/types";
 import { cn } from "@/lib/utils";
 import { scrabbleRules } from "./rules";
 
-// The menu: everyone's score and who's up, the words played (tap one for its meaning), then what every
-// game's menu has (settings, how to play, sharing), and resigning, well away from the buttons you tap all game.
 export function ScrabbleMenu({
   open,
   onOpenChange,
@@ -145,7 +144,6 @@ function PlayerRow({
   );
 }
 
-// One turn's words. Tap a word for what it means (from the free dictionary at dictionaryapi.dev).
 function PlayedWords({
   words,
   by,
@@ -167,13 +165,13 @@ function PlayedWords({
       </div>
       <div className="mt-1 flex flex-wrap gap-1.5">
         {words.map((w) => (
-          // 44px to tap, drawn 36px: the extra reaches into the gaps around it without moving anything.
-          <button
+          <Button
             key={w.word}
-            type="button"
+            variant="bare"
+            size="pill"
             onClick={() => setOpen((o) => (o === w.word ? null : w.word))}
             aria-expanded={open === w.word}
-            className="-my-1 touch-manipulation py-1"
+            className="-my-1 py-1"
           >
             <span
               className={cn(
@@ -183,7 +181,7 @@ function PlayedWords({
             >
               {w.word}
             </span>
-          </button>
+          </Button>
         ))}
       </div>
       <AnimatePresence initial={false}>{open && <Definition key={open} word={open} />}</AnimatePresence>

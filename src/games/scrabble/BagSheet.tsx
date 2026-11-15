@@ -5,7 +5,6 @@ import { Sheet } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { LetterTile } from "./Tile";
 
-// The bag: how many tiles are left, and which letters are still out there (in the bag or in other racks).
 export function BagSheet({
   open,
   onClose,

@@ -1,10 +1,12 @@
 import type { PointerEvent as ReactPointerEvent, Ref } from "react";
 import { motion } from "motion/react";
 import type { Tile } from "../../../convex/scrabble/engine";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { LetterTile } from "./Tile";
 
-// My tiles, in my order. Tap one to pick it up, drag it onto the board or to another place in the rack.
+const MotionButton = motion.create(Button);
+
 export function Rack({
   ref,
   tiles,
@@ -26,7 +28,6 @@ export function Rack({
   hop: number;
   onDown: (id: number, e: ReactPointerEvent) => void;
 }) {
-  // While a tile is dragged over the rack, the others part to show where it'll go.
   const shown = tiles.filter((t) => t.id !== dragging);
   const items: (Tile | null)[] = [...shown];
   if (slot !== null) items.splice(Math.min(slot, items.length), 0, null);
@@ -41,20 +42,23 @@ export function Rack({
         t === null ? (
           <span key="slot" className="aspect-square rounded-sm border-2 border-dashed border-primary/50" />
         ) : (
-          <motion.button
+          <MotionButton
             key={t.id}
             layout
-            type="button"
             initial={{ scale: 0.4, y: 14, opacity: 0 }}
             animate={{ scale: 1, y: 0, opacity: 1 }}
             transition={{ type: "spring", bounce: 0.35, duration: 0.4, delay: i * 0.03 }}
+            variant="bare"
+            size="pill"
             aria-label={t.letter === "?" ? "Blank tile" : `Tile ${t.letter}`}
             aria-pressed={swapping ? swapping.includes(t.id) : selected === t.id}
-            className={cn("grid touch-none place-items-center", (selected === t.id || swapping?.includes(t.id)) && "-translate-y-1.5")}
+            className={cn(
+              "grid touch-none place-items-center rounded-sm",
+              (selected === t.id || swapping?.includes(t.id)) && "-translate-y-1.5",
+            )}
             style={{ transition: "translate 120ms ease-out" }}
             onPointerDown={(e) => onDown(t.id, e)}
           >
-            {/* Shuffling makes every tile hop; a picked-up tile jiggles until you put it somewhere. */}
             <motion.span
               key={hop}
               className="grid w-full place-items-center"
@@ -73,18 +77,17 @@ export function Rack({
                   style={{
                     height: "auto",
                     aspectRatio: "1",
-                    // Keeps the tile's own edge and shadow, and adds the ring.
                     boxShadow:
                       selected === t.id
-                        ? "inset 0 -3px 0 #cdb07c, 0 0 0 3px var(--primary), 0 8px 14px rgb(0 0 0 / 0.28)"
+                        ? "inset 0 -3px 0 var(--color-tile-rim), 0 0 0 3px var(--primary), 0 8px 14px color-mix(in oklch, var(--shade) 28%, transparent)"
                         : swapping?.includes(t.id)
-                          ? "inset 0 -3px 0 #cdb07c, 0 0 0 3px var(--tile-hit)"
+                          ? "inset 0 -3px 0 var(--color-tile-rim), 0 0 0 3px var(--tile-hit)"
                           : undefined,
                   }}
                 />
               </motion.span>
             </motion.span>
-          </motion.button>
+          </MotionButton>
         ),
       )}
       {pad(size - items.length)}
@@ -92,5 +95,4 @@ export function Rack({
   );
 }
 
-// Empty places in the rack keep the tiles from stretching.
 const pad = (n: number) => Array.from({ length: Math.max(0, n) }, (_, i) => <span key={`pad${i}`} />);

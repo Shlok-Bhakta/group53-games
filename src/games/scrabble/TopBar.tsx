@@ -13,8 +13,6 @@ import { ThinkingDots } from "@/presence";
 import { seatColor } from "@/games/seats";
 import { cn } from "@/lib/utils";
 
-// Floats over the top of the board, Letter League style: back, whose turn it is with the last play and the
-// clock, and the menu.
 export function TopBar({
   ref,
   match,
@@ -49,8 +47,7 @@ export function TopBar({
       <FloatPill
         onClick={onMenu}
         aria-label="Players and scores"
-        // The whole pill is edged in the color of whoever's turn it is.
-        className="flex-1 border-2 py-1 pl-1 pr-3 transition-colors duration-300"
+        className="flex-1 border-2 py-1 pl-1 pr-3 transition-colors duration-300 phone-landscape:w-(--rail-width)"
         style={{ borderColor: up ? seatColor(up) : "transparent" }}
       >
         {up && <PlayerAvatar player={up} size={34} className="shrink-0" />}

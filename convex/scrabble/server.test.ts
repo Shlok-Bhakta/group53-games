@@ -34,7 +34,6 @@ async function crew(t: T, n: number) {
   return out;
 }
 
-// Gives a player exactly these tiles (ids 0, 1, 2... in order).
 async function setRack(t: T, id: Id<"matches">, userId: Id<"users">, letters: string) {
   await t.run(async (ctx) => {
     const row = await ctx.db
@@ -47,7 +46,6 @@ async function setRack(t: T, id: Id<"matches">, userId: Id<"users">, letters: st
 const lay = (word: string, x: number, y: number, down = false) =>
   [...word].map((_, i) => ({ id: i, x: down ? x : x + i, y: down ? y + i : y }));
 
-// A started game, seats in turn order.
 async function game(t: T, n = 2, mode: "scrabble:classic" | "scrabble:live" = "scrabble:classic", settings?: Record<string, number>) {
   const players = await crew(t, n);
   const id = await players[0].as.mutation(api.matches.queue, { mode, settings });
@@ -104,12 +102,10 @@ describe("lobby with a flexible seat count", () => {
       "Scrabble with Sam. Tap to accept.",
     ]);
     await clearPushes(t);
-    // Someone not invited can still take a seat.
     await d.as.mutation(api.matches.join, { id });
     await c.as.mutation(api.matches.decline, { id });
     expect((await pushes(t)).map((p) => p.title)).toContain("Sam declined");
     expect((await get(t, id))!.status).toBe("waiting");
-    // Start without waiting on Chris: he misses this one.
     await a.as.mutation(api.matches.startGame, { id });
     expect((await get(t, id))!.players.map((p) => p.userId).sort()).toEqual([a.userId, d.userId].sort());
   });
@@ -132,8 +128,7 @@ describe("settings", () => {
   test("a smaller bag deals from fewer tiles", async () => {
     const t = setup();
     const { id } = await game(t, 2, "scrabble:classic", { bag: 50 });
-    // Half a bag is 54 tiles; two racks of 7 leave 40.
-    expect(await stateOf(t, id)).toMatchObject({ bag: 40, racks: [7, 7] });
+    expect(await stateOf(t, id), "half a bag is 54 tiles; two racks of 7 leave 40").toMatchObject({ bag: 40, racks: [7, 7] });
   });
 });
 
@@ -148,22 +143,19 @@ describe("racks are secret", () => {
         .collect(),
     );
     const secret = (userId?: Id<"users">) => rows.find((r) => r.userId === userId)!.data as { rack: { id: number; letter: string }[] };
-    // Each player's rack query returns exactly their own tiles, never the other player's.
     for (const p of seats) {
       const got = await p.as.query(api.scrabble.rack, { id });
-      expect(got).toEqual(secret(p.userId).rack);
+      expect(got, "a rack query returns only your own tiles").toEqual(secret(p.userId).rack);
       expect(got).toHaveLength(7);
     }
     expect(secret(seats[0].userId).rack.map((x) => x.id)).not.toEqual(
       expect.arrayContaining(secret(seats[1].userId).rack.map((x) => x.id)),
     );
-    // Someone not in the game, or signed out, gets nothing.
     const outsider = await signedIn(t, "Lurker");
-    expect(await outsider.as.query(api.scrabble.rack, { id })).toBeNull();
-    expect(await t.query(api.scrabble.rack, { id })).toBeNull();
-    // The public state only counts tiles: no letters, no bag.
+    expect(await outsider.as.query(api.scrabble.rack, { id }), "someone not in the game").toBeNull();
+    expect(await t.query(api.scrabble.rack, { id }), "signed out").toBeNull();
     const view = await seats[1].as.query(api.matches.get, { id });
-    expect(view!.state).toMatchObject({ racks: [7, 7], bag: 86, tiles: [] });
+    expect(view!.state, "the public state only counts tiles").toMatchObject({ racks: [7, 7], bag: 86, tiles: [] });
     expect(JSON.stringify(view)).not.toMatch(/"letter"|"rack"|"bag":\[/);
   });
 });
@@ -310,13 +302,14 @@ describe("plans", () => {
         ],
       ],
     ]);
-    // Where, but never which letters.
-    expect(JSON.stringify(await seats[0].as.query(api.scrabble.planning, { id }))).not.toMatch(/"id"|letter/);
+    expect(JSON.stringify(await seats[0].as.query(api.scrabble.planning, { id })), "where, never which letters").not.toMatch(/"id"|letter/);
     await seats[0].as.mutation(api.scrabble.saveDraft, { id, placed: lay("CAT", 6, 7), order: [] });
     await seats[0].as.mutation(api.scrabble.play, { id, tiles: lay("CAT", 6, 7) });
     expect(await seats[0].as.query(api.scrabble.draft, { id })).toEqual({ placed: [], order: [] });
-    // The other player's plan stays put; it's their screen that sorts out any clash.
-    expect((await seats[1].as.query(api.scrabble.draft, { id }))!.placed).toHaveLength(2);
+    expect(
+      (await seats[1].as.query(api.scrabble.draft, { id }))!.placed,
+      "the server keeps their plan; their phone sorts out the clash",
+    ).toHaveLength(2);
   });
 
   test("the dictionary check reports the words it doesn't know", async () => {
@@ -337,21 +330,17 @@ describe("timers", () => {
     await t.mutation(internal.scrabble.turnTimeout, { id, moveCount: 0 });
     expect(await stateOf(t, id)).toMatchObject({ turn: 1, scoreless: 1 });
     expect((await stateOf(t, id)).moves.at(-1)).toMatchObject({ kind: "timeout", seat: 0 });
-    // A stale timer does nothing.
     await t.mutation(internal.scrabble.turnTimeout, { id, moveCount: 0 });
-    expect(await stateOf(t, id)).toMatchObject({ turn: 1 });
+    expect(await stateOf(t, id), "a stale timer does nothing").toMatchObject({ turn: 1 });
   });
 
   test("async games with a move timer skip you once it runs out", async () => {
     const t = setup();
     const { id } = await game(t, 3, "scrabble:classic", { moveTime: 24 });
-    // A one-day limit is three reminders: the second one warns, the third skips.
     await t.mutation(internal.matches.remind, { id, moveCount: 0, strikes: 1 });
     expect((await pushes(t)).find((p) => p.title === "Still your move")!.body).toContain("Move in the next 8 hours or we skip your turn.");
     await t.mutation(internal.matches.remind, { id, moveCount: 0, strikes: 2 });
     expect(await stateOf(t, id)).toMatchObject({ turn: 1 });
-    // Each strike is a reminder armed 8 hours (in minutes here) out, so three are the day: the
-    // start's, the one the first strike re-armed, and the next player's first after the skip.
     const reminders = (await scheduled(t))
       .filter((f) => f.name === "matches:remind")
       .map((f) => [f.args[0], Math.round((f.scheduledTime - Date.now()) / 60_000)]);
@@ -402,7 +391,6 @@ describe("notifications", () => {
     const t = setup();
     const { id, seats } = await game(t, 3);
     const url = `/scrabble/${id}`;
-    // The game starting tells everyone, and the first player it's on them.
     const start = (await pushes(t)).filter((p) => !p.title.includes("wants") && !p.title.includes("joined"));
     expect(start.find((p) => p.userId === seats[0].userId)).toMatchObject({ title: "You go first", url });
     expect(start.filter((p) => p.userId !== seats[0].userId).map((p) => p.title)).toEqual([
@@ -419,14 +407,12 @@ describe("notifications", () => {
     ]);
     await clearPushes(t);
 
-    // The reminder for this move is armed 8 hours out and nags the right person.
     const reminder = (await scheduledFns(t, "matches:remind")).find((f) => (f.args[0] as { moveCount: number }).moveCount === 1)!;
     expect(reminder.scheduledTime - Date.now()).toBeGreaterThan(REMINDER_MS - 1000);
     await t.mutation(internal.matches.remind, reminder.args[0] as { id: Id<"matches">; moveCount: number });
     expect(await pushes(t)).toEqual([expect.objectContaining({ userId: seats[1].userId, title: "Still your move", url })]);
     await clearPushes(t);
 
-    // Once they've moved, that reminder fizzles.
     await seats[1].as.mutation(api.scrabble.pass, { id });
     await clearPushes(t);
     await t.mutation(internal.matches.remind, { id, moveCount: 1 });
@@ -497,7 +483,6 @@ describe("plays the server refuses or records specially", () => {
     await setRack(t, id, seats[0].userId, "OTZZZZZ");
     const rack = await seats[0].as.query(api.scrabble.rack, { id });
     const before = await get(t, id);
-    // TOO, with tile 0 (the only O) used for both Os.
     await expect(
       seats[0].as.mutation(api.scrabble.play, {
         id,
@@ -526,7 +511,6 @@ describe("plays the server refuses or records specially", () => {
     await setBag(t, id, []);
     await expect(seats[0].as.mutation(api.scrabble.swap, { id, tileIds: [0] })).rejects.toThrow("The bag is empty.");
     expect(await seats[0].as.query(api.scrabble.rack, { id })).toEqual(rack);
-    // As many as the bag holds is fine.
     await setBag(t, id, ["E", "S"]);
     await seats[0].as.mutation(api.scrabble.swap, { id, tileIds: [0, 1] });
     expect((await seats[0].as.query(api.scrabble.rack, { id }))!.map((x) => x.letter).sort()).toEqual(["A", "E", "E", "I", "O", "Q", "S"]);
@@ -536,9 +520,8 @@ describe("plays the server refuses or records specially", () => {
     const t = setup();
     const { id, seats } = await game(t, 2);
     await setRack(t, id, seats[0].userId, "?ETAINS");
-    // RETAINS through the star, the blank as R: (0 + 1 + 1 + 1 + 1 + 1 + 1) x 2 + 50.
     const tiles = lay("RETAINS", 4, 7).map((p) => (p.id === 0 ? { ...p, letter: "r" } : p));
-    expect(await seats[0].as.mutation(api.scrabble.play, { id, tiles })).toBe(62);
+    expect(await seats[0].as.mutation(api.scrabble.play, { id, tiles }), "RETAINS through the star, blank as R: 6 x 2 + 50").toBe(62);
     const s = await stateOf(t, id);
     expect(s.tiles.map((x) => [x.letter, x.blank ?? false])).toEqual([
       ["R", true],
@@ -558,9 +541,8 @@ describe("plays the server refuses or records specially", () => {
       bingo: true,
       count: 7,
       words: [{ word: "RETAINS", score: 12 }],
-    }); // the word itself, the 50 on top
+    });
     expect(s.racks).toEqual([7, 7]);
-    // A blank with no letter picked is refused.
     await setRack(t, id, seats[1].userId, "?TZZZZZ");
     await expect(seats[1].as.mutation(api.scrabble.play, { id, tiles: [{ id: 0, x: 4, y: 8 }] })).rejects.toThrow(
       "Pick a letter for your blank.",

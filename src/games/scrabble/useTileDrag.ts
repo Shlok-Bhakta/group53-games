@@ -4,9 +4,6 @@ import { sfx } from "@/sound";
 import type { BoardHandle } from "./Board";
 import { key } from "./useScrabbleDraft";
 
-// Dragging a tile, from the rack or the board: onto a square, or back into the rack at a place of your choosing.
-// A tap instead picks a rack tile up, or sends a board tile home. The held tile (`ghost`) follows the finger
-// straight in the DOM.
 export function useTileDrag({
   playing,
   swapping,
@@ -58,7 +55,6 @@ export function useTileDrag({
     let moved = false;
     let cell: [number, number] | null = null;
     let at: number | null = null;
-    // The tile leans into the direction you drag it, and settles when you stop.
     let lastX = x0;
     let tilt = 0;
     const place = (cx: number, cy: number) => {
@@ -89,7 +85,6 @@ export function useTileDrag({
       setTarget(null);
       setSlot(null);
       if (!moved) {
-        // A tap: rack tiles get picked up, board tiles go home.
         if (from === "board") recall(id);
         else {
           setSelected((s) => (s === id ? null : id));
