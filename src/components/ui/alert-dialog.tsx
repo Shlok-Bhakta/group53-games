@@ -104,19 +104,6 @@ function AlertDialogDescription({ className, ...props }: React.ComponentProps<ty
   );
 }
 
-function AlertDialogAction({
-  className,
-  variant = "default",
-  size = "lg",
-  ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Action> & Pick<React.ComponentProps<typeof Button>, "variant" | "size">) {
-  return (
-    <Button variant={variant} size={size} asChild>
-      <AlertDialogPrimitive.Action data-slot="alert-dialog-action" className={cn(className)} {...props} />
-    </Button>
-  );
-}
-
 function AlertDialogCancel({
   className,
   variant = "secondary",
@@ -132,7 +119,6 @@ function AlertDialogCancel({
 
 export {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,

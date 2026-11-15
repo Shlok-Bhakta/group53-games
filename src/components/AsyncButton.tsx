@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
 import { toast } from "sonner";
-import { Button, IconButton } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { errorText } from "@/lib/errors";
 
 export function usePending() {
@@ -32,12 +32,4 @@ type Action = () => Promise<unknown> | unknown;
 export function AsyncButton({ onClick, ...rest }: Omit<ComponentProps<typeof Button>, "onClick" | "pending"> & { onClick: Action }) {
   const [pending, run] = usePending();
   return <Button {...rest} pending={pending} onClick={() => void run(onClick)} />;
-}
-
-export function AsyncIconButton({
-  onClick,
-  ...rest
-}: Omit<ComponentProps<typeof IconButton>, "onClick" | "pending"> & { onClick: Action }) {
-  const [pending, run] = usePending();
-  return <IconButton {...rest} pending={pending} onClick={() => void run(onClick)} />;
 }
