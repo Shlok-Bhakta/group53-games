@@ -2,9 +2,6 @@ import { useRef } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { cn } from "@/lib/utils";
 
-// A number whose digits roll when it changes: up when it rose, down when it fell. Each digit has its own
-// slot, counted from the right so a digit keeps its place as the number grows, and only the digits that
-// changed move: a price going from 344.61 to 344.68 rolls one digit. Readers get the plain text.
 export function Ticker({ value, text, instant, className }: { value: number; text: string; instant?: boolean; className?: string }) {
   const still = useReducedMotion();
   const last = useRef({ value, dir: 1 });

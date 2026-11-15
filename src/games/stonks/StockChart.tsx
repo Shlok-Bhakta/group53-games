@@ -17,34 +17,27 @@ import { savedRange } from "./warm";
 
 export const HOUR = 3600_000;
 export const dayDomain = (open: number, close: number): [number, number] => [open - 5.5 * HOUR, close + 4 * HOUR];
-// The 1D axis runs 4am to 8pm for anything that trades then; the index (and anything with no extended
-// hours yet) gets just the session, so its line fills the chart.
 export function axisFor(open: number, close: number, points: Point[], q?: { time: number } | null): [number, number] {
   const [from, to] = dayDomain(open, close);
-  // The closing auction prints a few minutes after the bell; that's still the session.
   const late = close + 5 * 60_000;
   const outside = (t: number) => t >= from && t <= to && (t < open - 60_000 || t >= late);
   const extended = points.some((p) => outside(p[0])) || (!!q && outside(q.time));
   return extended ? [from, to] : [open, close];
 }
 
-/** An earnings report this week (or earlier today): what's about to move the price. */
 export const earningsSoon = (t: number | undefined, now: number) => !!t && t > now - 12 * HOUR && t - now < 6 * 86_400_000;
 
-// The range sticks, on this phone, across stocks and visits.
 function useRange(): [Range, (r: Range) => void] {
   const [range, setRange] = useState<Range>(savedRange);
   return [range, (r) => (localStorage.setItem("stonks-range", r), setRange(r))];
 }
 
-// While a new range loads, the old chart stays up, faded, instead of flashing empty.
 function useHeld<T>(value: T | undefined) {
   const ref = useRef(value);
   if (value !== undefined) ref.current = value;
   return { value: ref.current, stale: value === undefined };
 }
 
-/** History plus the live price on the end, kept to the day on the 1D chart. */
 export function withLive(points: Point[], q: { time: number; price: number } | null | undefined, domain?: [number, number]) {
   const pts = domain ? points.filter((p) => p[0] >= domain[0] && p[0] <= domain[1]) : points;
   if (!q || (domain && (q.time < domain[0] || q.time > domain[1]))) return pts;
@@ -55,7 +48,6 @@ export function withLive(points: Point[], q: { time: number; price: number } | n
 
 export const dirOf = (p?: number, base?: number): Dir => (p !== undefined && base !== undefined && p < base ? "down" : "up");
 
-// One stock's chart, with its price above it.
 export function StockChart({
   symbol,
   quote,
@@ -74,7 +66,6 @@ export function StockChart({
   const now = useNow(5_000);
   const unit = unitOf(quote ?? (symbol === INDEX ? { type: "INDEX" } : null));
   const market = marketOf(quote, now);
-  // The day's axis: 4am to 8pm in New York, the session elsewhere, and just the points for what never shuts.
   const open = range === "1D" ? market.day?.open : undefined;
   const close = range === "1D" ? market.day?.close : undefined;
   const newYork = market.kind === "newYork";
@@ -100,13 +91,11 @@ export function StockChart({
   const base = range === "1D" ? quote?.prevClose : points[0]?.[1];
   const last = scrub?.[1] ?? quote?.price ?? points.at(-1)?.[1];
   const dir = dirOf(points.at(-1)?.[1], base);
-  // After hours (or before the open), the move since the bell is its own line.
   const ext =
     !scrub && newYork && range === "1D" && quote?.regularPrice !== undefined && quote.session && quote.session !== "regular"
       ? quote.price - quote.regularPrice
       : null;
   const isLive = !!quote && now - quote.recv < 2 * 60_000;
-  // Pro: the 50- and 200-day moving averages on the year (on five years, 10 and 40 weeks are the same).
   const overlays = useMemo(() => {
     if (!pro || (range !== "1Y" && range !== "5Y")) return undefined;
     const closes = points.map((p) => p[1]);
@@ -189,7 +178,6 @@ function MarketState({ market, earnings, now }: { market: Market; earnings?: num
         : market.open
           ? "Market open"
           : "Market closed";
-  // An earnings report this week beats the market's hours: it's what's about to move the price.
   if (!market.late && earningsSoon(earnings, now))
     return (
       <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-footnote font-semibold text-muted-foreground">

@@ -1,7 +1,6 @@
 import { motion } from "motion/react";
 import { Tiles } from "@/Tiles";
 
-// Stonks' card art on the Games tab: a line that dips, then goes to the moon, drawn in once.
 const LINE = "M4,58 L30,50 L52,62 L74,46 L96,54 L118,64 L140,42 L160,48 L182,26 L204,32 L236,6";
 
 export function StonksBanner() {

@@ -1,9 +1,8 @@
-// Visual review of the crew chart and profiles, with no real market data: SCREENS=1 npm run test:e2e -- stonks-crew-screens.
-// A crew of five trades a made-up week of prices. Writes PNGs to e2e/.state/screens.
 import { ConvexHttpClient } from "convex/browser";
 import { anyApi } from "convex/server";
 import { readFileSync } from "node:fs";
-import { admin, createPlayer, expect, phone, test } from "./fixtures";
+import { FRAME_COLOR } from "../convex/palette";
+import { admin, createPlayer, expect, phone, readyForShot, test } from "./fixtures";
 
 test.skip(!process.env.SCREENS, "Set SCREENS=1 to capture review screenshots");
 
@@ -75,7 +74,6 @@ test("stonks crew screens", async ({ browser }) => {
     await me.mutation(anyApi.stonks.order, { symbol, side, dollars });
   await new Promise((r) => setTimeout(r, 1200));
   await tick();
-  // A week of swings, a net worth row after each.
   const drift: Record<string, number> = { NVDA: 0.012, AAPL: -0.004, MSFT: 0.003, TSLA: -0.008, AMZN: 0.002, META: -0.001, GOOGL: 0.007 };
   for (let i = 0; i < 26; i++) {
     for (const s of Object.keys(STOCKS)) prices[s] *= 1 + drift[s] + 0.012 * Math.sin(i / 2 + s.charCodeAt(0));
@@ -83,17 +81,15 @@ test("stonks crew screens", async ({ browser }) => {
     await a.mutation(anyApi.stonks.recordWorth, {});
     await new Promise((r) => setTimeout(r, 120));
   }
-  // Cards with something on them, since a profile wears its owner's card.
   await me.mutation(anyApi.profiles.update, {
     frame: "neon",
-    frameColor: "#a855f7",
+    frameColor: FRAME_COLOR.purple,
     glow: true,
     effect: "foil",
     badge: "🦀",
     tagline: "buy high, sell never",
   });
   await clients[1].mutation(anyApi.profiles.update, { frame: "gold", effect: "crt", tagline: "rm -rf portfolio" });
-  // Something waiting, for the profile to show.
   await me.mutation(anyApi.stonks.order, { symbol: "AMZN", side: "buy", dollars: 250 });
   await clients[0].mutation(anyApi.stonks.order, { symbol: "NVDA", side: "buy", dollars: 500 });
 
@@ -105,7 +101,7 @@ test("stonks crew screens", async ({ browser }) => {
   for (const scheme of ["dark", "light"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     const shot = async (name: string) => {
-      await page.waitForTimeout(1000);
+      await readyForShot(page);
       await page.screenshot({ path: `e2e/.state/screens/${scheme}-stonks-${name}.png`, animations: "allow" });
     };
     await page.goto("/stonks");

@@ -39,7 +39,6 @@ describe("paper trading rules", () => {
     expect(buyingPower(long, at({ A: 200 }))).toBe(6000);
     const short: Book = { cash: 14000, positions: [{ symbol: "B", shares: -20, avg: 200 }] };
     expect(buyingPower(short, at({ B: 200 }))).toBe(6000);
-    // Short proceeds can't be spent twice, and a squeeze takes it below zero.
     expect(buyingPower(short, at({ B: 400 }))).toBe(-2000);
   });
 
@@ -78,14 +77,13 @@ describe("currencies", () => {
     expect(fxPair("ILA")).toBe("ILSUSD=X");
     expect(fxPair("ZAc")).toBe("ZARUSD=X");
     expect(fxPair("ZAC")).toBe("ZARUSD=X");
-    // Anything else is taken at its word: its pair just won't have a price until Yahoo has one.
     expect(fxPair("XYZ")).toBe("XYZUSD=X");
   });
 
   test("dollars per unit: 1 for dollars, the pair's price for whole currencies, a hundredth of it for cents", () => {
     expect(toUsd(undefined, undefined)).toBe(1);
     expect(toUsd("USD", undefined)).toBe(1);
-    expect(toUsd("USD", 7)).toBe(1); // a dollar is a dollar whatever a stray pair says
+    expect(toUsd("USD", 7)).toBe(1);
     expect(toUsd("JPY", 0.0065)).toBe(0.0065);
     expect(toUsd("GBP", 1.25)).toBe(1.25);
     expect(toUsd("GBp", 1.25)).toBe(1.25 / 100);

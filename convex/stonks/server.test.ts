@@ -4,7 +4,7 @@ import { contribution, downsample, liveWeight, withMinute, type Point } from "./
 import { marketClock, nextOpen, sessionDay } from "./market";
 import { setup, signedIn } from "../test.setup";
 
-const ET = (s: string) => new Date(`${s}-04:00`).getTime(); // EDT (Oct 2026 is still daylight time until Nov 1)
+const ET = (s: string) => new Date(`${s}-04:00`).getTime();
 const EST = (s: string) => new Date(`${s}-05:00`).getTime();
 
 describe("market clock", () => {
@@ -12,7 +12,7 @@ describe("market clock", () => {
     expect(marketClock(ET("2026-10-30T10:00:00")).state).toBe("open");
     expect(marketClock(ET("2026-10-30T08:00:00")).state).toBe("pre");
     expect(marketClock(ET("2026-10-30T17:00:00")).state).toBe("post");
-    expect(marketClock(ET("2026-10-31T12:00:00")).state).toBe("closed"); // Saturday
+    expect(marketClock(ET("2026-10-31T12:00:00")).state).toBe("closed");
   });
   test("a weekend belongs to Friday's session, and opens on Monday across the clock change", () => {
     const sat = ET("2026-10-31T12:00:00");
@@ -20,7 +20,7 @@ describe("market clock", () => {
     expect(nextOpen(sat)).toBe(EST("2026-11-02T09:30:00"));
   });
   test("holidays and early closes", () => {
-    expect(sessionDay(EST("2026-11-26T12:00:00")).key).toBe("2026-11-25"); // Thanksgiving
+    expect(sessionDay(EST("2026-11-26T12:00:00")).key).toBe("2026-11-25");
     expect(sessionDay(EST("2026-11-27T12:00:00")).close).toBe(EST("2026-11-27T13:00:00"));
   });
 });
@@ -32,7 +32,6 @@ describe("board math", () => {
     expect(liveWeight(7.5, undefined, 100, 6000, 6000)).toBe(7.5);
   });
   test("a stock's share times its move is the index points it's moved", () => {
-    // 7.5% of a 6000 index, up 10%: 45 points.
     expect(contribution(7.5, 110, 100, 100, 6000, 6000)).toBeCloseTo(45);
     expect(contribution(7.5, 90, 100, 100, 6000, 6000)).toBeCloseTo(-45);
     expect(contribution(7.5, 90, undefined, 100, 6000, 6000)).toBe(0);
@@ -87,7 +86,7 @@ describe("stonks", () => {
       feeds: [{ source: "yahoo", state: "live" }],
     });
     const b = await t.query(api.stonks.board, {});
-    expect(b.rows.map((r) => r.symbol)).toEqual(["AAPL", "NVDA"]); // NVDA fell, AAPL rose: they swap
+    expect(b.rows.map((r) => r.symbol)).toEqual(["AAPL", "NVDA"]);
     expect(b.rows[0]).toMatchObject({ rank: 1, price: 310, name: "APPLE INC" });
     expect(b.index?.price).toBe(6000);
     expect(b.feeds).toEqual([expect.objectContaining({ source: "yahoo", state: "live" })]);
@@ -125,7 +124,6 @@ describe("stonks", () => {
     expect(await t.query(api.stonks.quote, { symbol: "NVDA" })).toMatchObject({ rank: 2, baseRank: 1, price: 190 });
   });
 
-  // Convex keeps the old version of every row it rewrites, which is what filled the disk: these tests count rewrites.
   const hoursOf = (t: ReturnType<typeof setup>) => t.run((ctx) => ctx.db.query("stockDayHours").collect());
 
   test("a day's chart is a row per hour, so a new minute rewrites one hour and an unchanged refresh rewrites none", async () => {
@@ -139,19 +137,16 @@ describe("stonks", () => {
     expect((await t.query(api.stonks.chart, { symbol: "AAPL", range: "1D" })).points).toEqual(points);
     const before = await hoursOf(t);
 
-    // The same day again: nothing's new, so nothing's written.
     vi.setSystemTime(nine + 3 * 3600_000 + 60_000);
     await t.mutation(internal.stonks.series, { symbol: "AAPL", range: "1D", points });
     expect(await hoursOf(t)).toEqual(before);
 
-    // One point changes in the last hour: only that row is rewritten.
     const changed = [...points.slice(0, -1), [points[179][0], 999]];
     await t.mutation(internal.stonks.series, { symbol: "AAPL", range: "1D", points: changed });
     const after = await hoursOf(t);
     expect(after.filter((h, i) => h.at !== before[i].at)).toHaveLength(1);
     expect(after.at(-1)!.points.at(-1)![1]).toBe(999);
 
-    // A minute finishing rewrites its own hour, and starts a new one when the clock turns over.
     const noon = ET("2026-10-30T12:00:00");
     const trade = (time: number, price: number) =>
       t.mutation(internal.stonks.ingest, { ticks: [{ symbol: "AAPL", price, time, recv: time, source: "yahoo", session: "regular" }] });
@@ -163,7 +158,6 @@ describe("stonks", () => {
     expect(rows[0].at).toBe(after[0].at);
     expect((await t.query(api.stonks.sparks, {}))["^GSPC"]).toEqual([]);
 
-    // The next morning starts the chart over, and what's replaced by this goes too.
     const tomorrow = ET("2026-10-31T09:30:00");
     vi.setSystemTime(tomorrow);
     await trade(tomorrow, 510);
@@ -277,13 +271,11 @@ describe("stonks", () => {
       regularPrice: 303,
       name: "Apple Inc.",
     });
-    // After the bell the chart keeps going, and the regular-session price stays put.
     const post = ET("2026-10-30T16:30:00");
     await t.mutation(internal.stonks.ingest, { ticks: [tick("AAPL", 305, post, { session: "post" })] });
     await t.mutation(internal.stonks.ingest, { ticks: [tick("AAPL", 306, post + 120_000, { session: "post" })] });
     expect((await t.query(api.stonks.chart, { symbol: "AAPL", range: "1D" })).points.at(-1)).toEqual([post, 305]);
     expect(await t.query(api.stonks.quote, { symbol: "AAPL" })).toMatchObject({ price: 306, regularPrice: 303, session: "post" });
-    // Monday's pre-market: a fresh chart, and Friday's close is the previous close.
     const pre = EST("2026-11-02T04:00:00");
     await t.mutation(internal.stonks.ingest, { ticks: [tick("AAPL", 307, pre, { session: "pre" })] });
     await t.mutation(internal.stonks.ingest, { ticks: [tick("AAPL", 308, pre + 60_000, { session: "pre" })] });
@@ -352,10 +344,8 @@ describe("paper trading", () => {
     const { as } = await signedIn(t);
     vi.setSystemTime(open + 10_000);
     await as.mutation(api.stonks.order, { symbol: "NVDA", side: "buy", dollars: 1000 });
-    // A trade from before the tap, arriving late: knowing that price mustn't help.
     await tickAt(t, "NVDA", 150, open + 9_000);
     expect((await as.query(api.stonks.portfolio, {}))?.waiting).toHaveLength(1);
-    // Another stock's trade doesn't touch it, and nor does after hours.
     await tickAt(t, "TSLA", 410, open + 11_000);
     await tickAt(t, "NVDA", 160, open + 11_000, { session: "post" });
     expect((await as.query(api.stonks.portfolio, {}))?.positions).toEqual([]);
@@ -368,7 +358,6 @@ describe("paper trading", () => {
       positions: [expect.objectContaining({ symbol: "NVDA", shares: 4, avg: 250 })],
     });
     expect(p?.lastFill).toMatchObject({ side: "buy", symbol: "NVDA", amount: 1000, price: 250 });
-    // The price moves, and so does everything derived from it.
     await tickAt(t, "NVDA", 300, open + 13_000);
     const later = await as.query(api.stonks.portfolio, {});
     expect(later).toMatchObject({ worth: 10200, gain: 200 });
@@ -430,7 +419,7 @@ describe("paper trading", () => {
       (await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect()))
         .filter((f) => f.name.includes("sendToUser"))
         .map((f) => f.args[0] as { userId: string; title: string; body: string });
-    expect(await pushes()).toEqual([]); // filled within the second: Chris saw it
+    expect(await pushes()).toEqual([]);
     await shlok.as.mutation(api.stonks.order, { symbol: "NVDA", side: "short", dollars: 500 });
     vi.setSystemTime(open + 60_000);
     await tickAt(t, "NVDA", 205, open + 60_000);
@@ -460,7 +449,6 @@ describe("paper trading", () => {
   test("anything in any currency: dollars go in, the local price fills it, and the currency counts", async () => {
     const t = await market();
     const { as } = await signedIn(t);
-    // Toyota in yen, with the rate from a batch quote: the stream doesn't carry this pair.
     await t.mutation(internal.stonks.snapshot, {
       rows: [
         {
@@ -479,8 +467,6 @@ describe("paper trading", () => {
     vi.setSystemTime(open + 1000);
     const id = await as.mutation(api.stonks.order, { symbol: "7203.T", side: "buy", dollars: 1000 });
     expect(await t.query(api.stonks.watchlist, {})).toEqual(expect.arrayContaining(["7203.T", "JPYUSD=X"]));
-    // Yahoo's feed from Tokyo runs 15 minutes late. A trade stamped before the tap can't fill it, however
-    // late it arrives, and without a rate it waits too.
     await tickAt(t, "7203.T", 3010, open + 500);
     await tickAt(t, "7203.T", 3020, open + 2000);
     expect((await as.query(api.stonks.portfolio, {}))?.waiting.map((w) => w.id)).toEqual([id]);
@@ -489,9 +475,8 @@ describe("paper trading", () => {
     });
     await tickAt(t, "7203.T", 3200, open + 3000);
     const p = await as.query(api.stonks.portfolio, {});
-    expect(p?.positions[0]).toMatchObject({ symbol: "7203.T", avg: 16, shares: 62.5, value: 1000 }); // 3200 yen is $16
+    expect(p?.positions[0]).toMatchObject({ symbol: "7203.T", avg: 16, shares: 62.5, value: 1000 });
     expect(p?.lastFill).toMatchObject({ price: 3200, currency: "JPY", amount: 1000 });
-    // The yen strengthens: the same shares are worth more dollars.
     await t.mutation(internal.stonks.snapshot, { rows: [{ symbol: "JPYUSD=X", price: 0.006, time: open + 4000 }] });
     expect(await as.query(api.stonks.portfolio, {})).toMatchObject({ worth: 10200 });
   });
@@ -519,7 +504,6 @@ describe("paper trading", () => {
     await as.mutation(api.stonks.order, { symbol: "NVDA", side: "buy", dollars: 100 });
     await as.mutation(api.stonks.order, { symbol: "ES=F", side: "short", dollars: 760 });
     await tickAt(t, "NVDA", 180, open + 2000, { session: "overnight" });
-    // The batch's latest trade is from before the tap: nothing yet.
     await t.mutation(internal.stonks.snapshot, { rows: [{ symbol: "ES=F", price: 7500, time: open + 500 }] });
     expect((await as.query(api.stonks.portfolio, {}))?.waiting).toHaveLength(2);
     await t.mutation(internal.stonks.snapshot, { rows: [{ symbol: "ES=F", price: 7600, time: open + 3000 }] });
@@ -553,7 +537,7 @@ describe("paper trading", () => {
     });
     expect(await t.query(api.stonks.pendingLookups, {})).toEqual([]);
     await as.mutation(api.stonks.lookup, { q: "toyota" });
-    expect(await t.query(api.stonks.pendingLookups, {})).toEqual([]); // asked once
+    expect(await t.query(api.stonks.pendingLookups, {})).toEqual([]);
     expect((await as.query(api.stonks.search, { q: "toyota" })).map((r) => r.symbol)).toEqual(["TM", "7203.T"]);
   });
 
@@ -590,7 +574,6 @@ describe("paper trading", () => {
     const t = await market();
     const shlok = await signedIn(t, "Shlok");
     await signedIn(t, "Chris");
-    // Nobody's traded: nothing to record, everyone's on $10,000.
     await t.mutation(internal.stonks.recordWorth, {});
     expect(await t.query(api.stonks.worthHistory, {})).toEqual([]);
     vi.setSystemTime(open + 1000);
@@ -598,12 +581,11 @@ describe("paper trading", () => {
     await tickAt(t, "NVDA", 200, open + 2000);
     const first = await t.query(api.stonks.worthHistory, {});
     expect(first.map((r) => r.worths.map((x) => x.w))).toEqual([[10000]]);
-    await t.mutation(internal.stonks.recordWorth, {}); // nothing's moved
+    await t.mutation(internal.stonks.recordWorth, {});
     expect(await t.query(api.stonks.worthHistory, {})).toHaveLength(1);
     await tickAt(t, "NVDA", 220, open + 3000);
     await t.mutation(internal.stonks.recordWorth, {});
     expect((await t.query(api.stonks.worthHistory, {})).at(-1)?.worths[0].w).toBe(10100);
-    // Four rows an hour for a month, then thinned: hourly after 3 days, daily after 14.
     const uid = shlok.userId;
     const day = 86_400_000;
     await t.run(async (ctx) => {
@@ -615,9 +597,9 @@ describe("paper trading", () => {
     await t.mutation(internal.stonks.thinWorth, {});
     const rows = await t.query(api.stonks.worthHistory, {});
     const span = (from: number, to: number) => rows.filter((r) => r.t >= open + from * day && r.t < open + to * day).length;
-    expect(span(0, 16)).toBeLessThanOrEqual(17); // daily
-    expect(span(17, 27)).toBeLessThanOrEqual(10 * 24 + 1); // hourly
-    expect(span(27.5, 30)).toBeGreaterThan(2 * 96); // untouched
+    expect(span(0, 16)).toBeLessThanOrEqual(17);
+    expect(span(17, 27)).toBeLessThanOrEqual(10 * 24 + 1);
+    expect(span(27.5, 30)).toBeGreaterThan(2 * 96);
     expect(rows.length).toBeLessThan(600);
   });
 
@@ -652,7 +634,6 @@ describe("paper trading", () => {
       worst: { symbol: "TSLA", realized: -100 },
     });
     expect(p?.history[0]).toMatchObject({ side: "cover", symbol: "TSLA", realized: -100 });
-    // The positions and what's idle add up to the net worth.
     const held = p!.positions.reduce((n, x) => n + Math.abs(x.value), 0);
     expect(held + p!.idle).toBeCloseTo(p!.worth);
     expect((await shlok.as.query(api.stonks.player, { userId: shlok.userId }))?.me).toBe(true);
@@ -680,11 +661,9 @@ describe("filling against the book as it is at the fill", () => {
     await as.mutation(api.stonks.order, { symbol: "TSLA", side: "short", dollars: 5000 });
     await tickAt(t, "TSLA", 400, open + 2000);
     expect(await as.query(api.stonks.portfolio, {})).toMatchObject({ cash: 15000, free: 5000 });
-    // Everything that's free goes on NVDA, which waits for its next trade.
     vi.setSystemTime(open + 3000);
     await as.mutation(api.stonks.order, { symbol: "NVDA", side: "buy", dollars: 5000 });
     expect((await as.query(api.stonks.portfolio, {}))?.free).toBe(0);
-    // TSLA squeezes to 480 first: worth 15000 - 12.5 x 480 = 9000, the short backs 6000, so 3000 is free.
     await tickAt(t, "TSLA", 480, open + 4000);
     await tickAt(t, "NVDA", 200, open + 5000);
     const nvda = (await orders(t)).find((o) => o.symbol === "NVDA")!;
@@ -702,7 +681,6 @@ describe("filling against the book as it is at the fill", () => {
     await tickAt(t, "NVDA", 200, open + 2000);
     vi.setSystemTime(open + 3000);
     const first = await as.mutation(api.stonks.order, { symbol: "NVDA", side: "sell" });
-    // Far enough apart not to be taken for a double tap.
     vi.setSystemTime(open + 7000);
     const second = await as.mutation(api.stonks.order, { symbol: "NVDA", side: "sell" });
     expect(second).not.toBe(first);
@@ -712,7 +690,6 @@ describe("filling against the book as it is at the fill", () => {
     expect(byId.get(first)).toMatchObject({ status: "filled", filledShares: 5, amount: 1250, realized: 250 });
     expect(byId.get(second)).toMatchObject({ status: "refused", reason: "You don't own any.", filledAt: open + 60_000 });
     expect(byId.get(second)!.amount).toBeUndefined();
-    // Sold once, not twice.
     expect(await as.query(api.stonks.portfolio, {})).toMatchObject({ cash: 10250, worth: 10250, positions: [], waiting: [] });
     const pushes = (await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect()))
       .filter((f) => f.name === "push:sendToUser")
@@ -731,16 +708,12 @@ describe("filling against the book as it is at the fill", () => {
     const before = await as.mutation(api.stonks.order, { symbol: "AAPL", side: "buy", dollars: 101 });
     vi.setSystemTime(close + 3600_000);
     const after = await as.mutation(api.stonks.order, { symbol: "AAPL", side: "buy", dollars: 202 });
-    // Yahoo's batch quote in the evening: the market's in post, and the trade it carries is the 4pm close
-    // (the sidecar sends regularMarketPrice and regularMarketTime, never the after-hours price).
     vi.setSystemTime(close + 3900_000);
     await t.mutation(internal.stonks.snapshot, { rows: [{ symbol: "AAPL", price: 101, time: close, state: "POST" }] });
-    // And an after-hours trade on the stream doesn't fill anything either.
     await t.mutation(internal.stonks.ingest, { ticks: [tick("AAPL", 105, close + 3950_000, { session: "post" })] });
     let byId = new Map((await orders(t)).map((o) => [o._id, o]));
     expect(byId.get(before)).toMatchObject({ status: "filled", price: 101, amount: 101, filledShares: 1, filledAt: close });
     expect(byId.get(after)).toMatchObject({ status: "waiting" });
-    // The next morning's first regular trade fills the evening's order.
     const next = ET("2026-10-30T09:30:00");
     vi.setSystemTime(next + 1000);
     await t.mutation(internal.stonks.snapshot, { rows: [{ symbol: "AAPL", price: 101, time: next + 500, state: "REGULAR" }] });

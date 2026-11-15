@@ -7,9 +7,9 @@ import { AmountSheet } from "@/components/AmountSheet";
 import { Button } from "@/components/ui/button";
 import { sfx } from "@/sound";
 import { price, shareCount } from "./format";
+import { PINNED_DOCK } from "./skeletons";
 import { VERB, whenFills, type Portfolio } from "./Trade";
 
-// The two actions you can take, where thumbs are: pinned to the bottom of the screen as it scrolls.
 export function TradeDock({
   symbol,
   last,
@@ -46,13 +46,7 @@ export function TradeDock({
   const closes = (s: Side) => s === "sell" || s === "cover";
   return (
     <>
-      <div
-        className="sticky bottom-0 z-10 -mx-4 flex gap-2.5 bg-linear-to-t from-background from-70% to-transparent px-4 pt-5"
-        style={{
-          paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)",
-          marginBottom: "calc(-1 * (env(safe-area-inset-bottom) + 16px))",
-        }}
-      >
+      <div className={`${PINNED_DOCK} z-10 bg-linear-to-t from-background from-70% to-transparent`}>
         <Button
           size="xl"
           className="flex-1"
@@ -111,7 +105,6 @@ function TradeSheet({
 }) {
   const order = useMutation(api.stonks.order);
   const closing = side === "sell" || side === "cover";
-  // Opening picks dollars, up to what's free; closing picks a share of the position, all of it by default.
   const max = closing ? 100 : Math.floor(free);
   const [amount, setAmount] = useState(() => (closing ? 100 : Math.min(max, Math.max(MIN_ORDER, Math.round(free / 40) * 10))));
   const exactMax = amount >= max;

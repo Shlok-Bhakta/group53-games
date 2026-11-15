@@ -3,7 +3,6 @@ import type { NewsItem } from "../../../convex/stonks/profile";
 import { Section } from "@/components/parts";
 import { ago } from "@/lib/time";
 
-// Stories, each opening outside the app: the market's on the board, a company's on its page.
 export function News({ title, items, now }: { title: string; items: NewsItem[]; now: number }) {
   return (
     <Section title={title}>

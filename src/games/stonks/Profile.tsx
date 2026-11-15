@@ -21,9 +21,6 @@ import { Ticker } from "./Ticker";
 import type { Portfolio } from "./Trade";
 import { stockPath, warmBoard, warmStock } from "./warm";
 
-// A player's stock profile: their card, with all its frames and effects, then how they're doing, what they hold, what
-// they're waiting on and everything they've done. Tap anything they hold and you're on its page, with Buy at your thumb.
-
 type Profile = NonNullable<FunctionReturnType<typeof api.stonks.player>>;
 const DID: Record<string, string> = { buy: "Bought", sell: "Sold", short: "Shorted", cover: "Covered" };
 const whenFull = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -52,20 +49,13 @@ export function PlayerPage() {
     [line],
   );
   if (p === undefined || history === undefined) return <PlayerSkeleton />;
-  if (p === null)
-    return (
-      <div className="flex flex-col gap-6">
-        <NavBar title="Stonks" back="/stonks" />
-        <p className="px-1 text-callout text-muted-foreground">Nobody here</p>
-      </div>
-    );
+  if (p === null) return <NavBar title="Stonks" back="/stonks" />;
   const shown = scrub?.[1] ?? p.worth;
   const tint = cardColor(p.card.frame, p.card.frameColor);
   return (
     <div className="flex flex-col gap-6">
       <NavBar title={p.me ? "You" : p.card.name} subtitle={`#${p.place} of ${p.of}`} back="/stonks" />
       <section aria-label={`${p.card.name}'s money`} className="relative flex gap-4">
-        {/* Their card's color spills out behind it. */}
         {tint && (
           <div
             aria-hidden
@@ -97,7 +87,6 @@ export function PlayerPage() {
             reveal={id}
             height={S.chart}
           />
-          {/* Foil or a CRT on their card goes on their chart too. */}
           {p.card.effect !== "none" && <div className="pcard-fx chart-fx" data-effect={p.card.effect} />}
         </div>
       )}
@@ -165,14 +154,12 @@ export function PlayerPage() {
   );
 }
 
-// Where their money is: a slice per position by size, and what isn't invested. Green's up and red's down, and the
-// darker the shade the bigger the move. The list underneath is the rest of the key: each row carries its slice's color.
 function GainPie({ p }: { p: Profile }) {
   const [active, setActive] = useState<string | null>(null);
   const SIZE = 220,
     R = 100,
     HOLE = 66,
-    GAP = 2 / R; // a 2px gap between slices, in radians at the rim
+    SLICE_GAP = 2 / R;
   const parts = useMemo(() => {
     const rows = p.positions.map((x) => ({
       key: x.symbol,
@@ -183,13 +170,14 @@ function GainPie({ p }: { p: Profile }) {
     }));
     if (p.idle > 0.005) rows.push({ key: "idle", label: "Idle", value: p.idle, color: "var(--muted)", pct: null });
     const total = rows.reduce((n, r) => n + r.value, 0) || 1;
-    let at = -Math.PI / 2;
-    return rows.map((r) => {
-      const sweep = (r.value / total) * Math.PI * 2;
-      const start = at;
-      at += sweep;
-      return { ...r, share: r.value / total, start, end: at };
-    });
+    const slices = [];
+    let start = -Math.PI / 2;
+    for (const r of rows) {
+      const end = start + (r.value / total) * Math.PI * 2;
+      slices.push({ ...r, share: r.value / total, start, end });
+      start = end;
+    }
+    return slices;
   }, [p.positions, p.idle]);
   if (p.positions.length === 0) return null;
   const up = p.positions.filter((x) => x.gain > 0);
@@ -198,10 +186,9 @@ function GainPie({ p }: { p: Profile }) {
   const upShare = up.reduce((n, x) => n + Math.abs(x.value), 0) / invested;
   const chosen = parts.find((x) => x.key === active);
   const arc = (a0: number, a1: number) => {
-    // A single slice is the whole ring: two halves, since an arc can't close on itself.
     const whole = a1 - a0 >= Math.PI * 2 - 0.001;
-    const s = whole ? a0 : a0 + GAP / 2;
-    const e = whole ? a0 + Math.PI * 2 - 0.001 : Math.max(a0 + GAP / 2, a1 - GAP / 2);
+    const s = whole ? a0 : a0 + SLICE_GAP / 2;
+    const e = whole ? a0 + Math.PI * 2 - 0.001 : Math.max(a0 + SLICE_GAP / 2, a1 - SLICE_GAP / 2);
     const large = e - s > Math.PI ? 1 : 0;
     const c = SIZE / 2;
     const pt = (r: number, a: number) => `${(c + r * Math.cos(a)).toFixed(2)},${(c + r * Math.sin(a)).toFixed(2)}`;

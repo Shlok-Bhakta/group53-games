@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router";
 import { useConvex, useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowSquareOutIcon, CaretDownIcon, CaretUpIcon } from "@phosphor-icons/react";
 import { api } from "../../../convex/_generated/api";
@@ -8,6 +9,7 @@ import { display, marketOf } from "../../../convex/stonks/market";
 import type { ProfileStats } from "../../../convex/stonks/profile";
 import { NavBar } from "@/components/AppHeader";
 import { Section } from "@/components/parts";
+import { Button } from "@/components/ui/button";
 import { useNow } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { ink, Pairs, RangeRow, Stat } from "./bits";
@@ -16,13 +18,12 @@ import { big, count, dayOf, frac, price, pts, RATING, ratio, sourceName, tradeTi
 import { News } from "./News";
 import { Waiting, WhoHolds, YourPosition } from "./Positions";
 import { ProToggle, usePro } from "./pro";
-import { StockSkeleton } from "./skeletons";
+import { STOCK_COLUMNS, StockSkeleton, WIDE_NAV_BAR } from "./skeletons";
 import { StockChart } from "./StockChart";
 import { useFillNotice } from "./Trade";
 import { TradeDock } from "./TradeDock";
 import { report, warmBoard, warmRanges } from "./warm";
 
-// One stock: its chart, your position, its stats (and Pro's), the crew in it, its news, and Buy at your thumb.
 export function StockPage() {
   const { symbol = "" } = useParams();
   const convex = useConvex();
@@ -37,13 +38,11 @@ export function StockPage() {
   const now = useNow(5_000);
   useEffect(() => {
     warmRanges(convex, symbol);
-    warmBoard(convex); // back to the board is instant too
-    // Open on a phone: keep it streaming, with its charts, stats and news fresh.
+    warmBoard(convex);
     report(convex, symbol, "open");
     const i = setInterval(() => report(convex, symbol, "open"), 45_000);
     return () => clearInterval(i);
   }, [convex, symbol]);
-  // Something nobody's looked at yet: its first quote is a moment away. Yahoo not knowing it takes longer.
   const [opened] = useState(() => Date.now());
   const givenUp = quote === null && now - opened > 8_000;
   if (quote === undefined || !me || (quote === null && !givenUp)) return <StockSkeleton />;
@@ -58,64 +57,97 @@ export function StockPage() {
   const stats = profile?.stats ?? null;
   const market = marketOf(quote, now);
   const unit = unitOf(quote);
-  const open = market.day && dayChart?.points.find((p) => p[0] >= market.day!.open && p[0] < market.day!.close)?.[1];
-  const moved = quote.rank && quote.baseRank ? quote.baseRank - quote.rank : 0;
+  const session = market.day;
+  const open = session ? dayChart?.points.find((p) => p[0] >= session.open && p[0] < session.close)?.[1] : undefined;
   const held = me.positions.find((p) => p.symbol === symbol);
 
   return (
-    <div className="flex flex-col gap-6">
-      <NavBar title={display(symbol)} subtitle={quote.name ?? display(symbol)} back="/stonks" action={<ProToggle />} />
-      <StockChart symbol={symbol} quote={quote} title={quote.name ?? display(symbol)} stats={stats} />
-      {held && <YourPosition p={held} />}
-      <Waiting orders={me.waiting.filter((o) => o.symbol === symbol)} now={now} />
-      <Section title="Stats">
-        <RangeRow label="Today" low={quote.dayLow} high={quote.dayHigh} value={quote.price} unit={unit} />
-        <RangeRow label="52 weeks" low={quote.yearLow} high={quote.yearHigh} value={quote.price} unit={unit} />
-        {quote.weight !== undefined && (
-          <Stat label="Share of the S&P 500">
-            {weight(quote.weight)}
-            {quote.rank ? ` · #${quote.rank}` : ""}
-            {moved !== 0 && (
-              <span className="ml-1 inline-flex items-center text-footnote">
-                {moved > 0 ? (
-                  <CaretUpIcon weight="fill" style={{ color: ink("up") }} />
-                ) : (
-                  <CaretDownIcon weight="fill" style={{ color: ink("down") }} />
-                )}
-                {Math.abs(moved)}
-              </span>
+    <div data-wide className="flex flex-col gap-6">
+      <NavBar
+        title={display(symbol)}
+        subtitle={quote.name ?? display(symbol)}
+        back="/stonks"
+        action={<ProToggle />}
+        className={WIDE_NAV_BAR}
+      />
+      <div className={STOCK_COLUMNS}>
+        <div className="flex flex-col gap-6">
+          <StockChart symbol={symbol} quote={quote} title={quote.name ?? display(symbol)} stats={stats} />
+          {held && <YourPosition p={held} />}
+          <Waiting orders={me.waiting.filter((o) => o.symbol === symbol)} now={now} />
+        </div>
+        <div className="flex flex-col gap-6">
+          <StockStats quote={quote} stats={stats} unit={unit} open={open} now={now} />
+          <AnimatePresence initial={false}>
+            {pro && stats && (
+              <motion.div
+                key="pro"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ type: "spring", bounce: 0, duration: 0.35 }}
+                className="flex flex-col gap-6"
+              >
+                <ProStats stats={stats} price={quote.price} unit={unit} />
+              </motion.div>
             )}
-          </Stat>
-        )}
-        {quote.points !== undefined && <Stat label="Moved the S&P today">{`${pts(quote.points)} points`}</Stat>}
-        <Stat label="Open">{open !== undefined && open !== null ? price(open, unit) : "—"}</Stat>
-        <Stat label="Previous close">{quote.prevClose !== undefined ? price(quote.prevClose, unit) : "—"}</Stat>
-        <Stat label="Volume">
-          {quote.volume !== undefined
-            ? `${count(quote.volume)}${stats?.avgVolume ? ` · ${(quote.volume / stats.avgVolume).toFixed(1)}× normal` : ""}`
-            : "—"}
-        </Stat>
-        <Stat label="Last trade">{`${tradeTime(quote.time, now)} · ${sourceName(quote.source)}`}</Stat>
-      </Section>
-      <AnimatePresence initial={false}>
-        {pro && stats && (
-          <motion.div
-            key="pro"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ type: "spring", bounce: 0, duration: 0.35 }}
-            className="flex flex-col gap-6"
-          >
-            <ProStats stats={stats} price={quote.price} unit={unit} />
-          </motion.div>
-        )}
-      </AnimatePresence>
-      <WhoHolds holders={holders ?? []} />
-      <CrewTrades trades={trades ?? []} now={now} title="Trades in this stock" />
-      {profile && profile.news.length > 0 && <News title="News" items={profile.news} now={now} />}
+          </AnimatePresence>
+          <WhoHolds holders={holders ?? []} />
+          <CrewTrades trades={trades ?? []} now={now} title="Trades in this stock" />
+          {profile && profile.news.length > 0 && <News title="News" items={profile.news} now={now} />}
+        </div>
+      </div>
       <TradeDock symbol={symbol} last={quote.price} unit={unit} rate={quote.rate} me={me} market={market} />
     </div>
+  );
+}
+
+type Quote = NonNullable<FunctionReturnType<typeof api.stonks.quote>>;
+
+function StockStats({
+  quote,
+  stats,
+  unit,
+  open,
+  now,
+}: {
+  quote: Quote;
+  stats: ProfileStats | null;
+  unit: string;
+  open: number | undefined;
+  now: number;
+}) {
+  const moved = quote.rank && quote.baseRank ? quote.baseRank - quote.rank : 0;
+  return (
+    <Section title="Stats">
+      <RangeRow label="Today" low={quote.dayLow} high={quote.dayHigh} value={quote.price} unit={unit} />
+      <RangeRow label="52 weeks" low={quote.yearLow} high={quote.yearHigh} value={quote.price} unit={unit} />
+      {quote.weight !== undefined && (
+        <Stat label="Share of the S&P 500">
+          {weight(quote.weight)}
+          {quote.rank ? ` · #${quote.rank}` : ""}
+          {moved !== 0 && (
+            <span className="ml-1 inline-flex items-center text-footnote">
+              {moved > 0 ? (
+                <CaretUpIcon weight="fill" style={{ color: ink("up") }} />
+              ) : (
+                <CaretDownIcon weight="fill" style={{ color: ink("down") }} />
+              )}
+              {Math.abs(moved)}
+            </span>
+          )}
+        </Stat>
+      )}
+      {quote.points !== undefined && <Stat label="Moved the S&P today">{`${pts(quote.points)} points`}</Stat>}
+      <Stat label="Open">{open !== undefined ? price(open, unit) : "—"}</Stat>
+      <Stat label="Previous close">{quote.prevClose !== undefined ? price(quote.prevClose, unit) : "—"}</Stat>
+      <Stat label="Volume">
+        {quote.volume !== undefined
+          ? `${count(quote.volume)}${stats?.avgVolume ? ` · ${(quote.volume / stats.avgVolume).toFixed(1)}× normal` : ""}`
+          : "—"}
+      </Stat>
+      <Stat label="Last trade">{`${tradeTime(quote.time, now)} · ${sourceName(quote.source)}`}</Stat>
+    </Section>
   );
 }
 
@@ -174,14 +206,15 @@ function ProStats({ stats: s, price: p, unit }: { stats: ProfileStats; price: nu
               </span>
             )}
             {s.summary && (
-              <button
-                type="button"
+              <Button
+                variant="bare"
+                size="overlay"
                 onClick={() => setMore((m) => !m)}
                 className={cn("text-left text-callout", !more && "line-clamp-4")}
                 aria-expanded={more}
               >
                 {s.summary}
-              </button>
+              </Button>
             )}
             {s.website && (
               <a

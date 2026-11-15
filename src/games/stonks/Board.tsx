@@ -25,9 +25,6 @@ import { Ticker } from "./Ticker";
 import { Money, useFillNotice } from "./Trade";
 import { stockPath, warmBoard, warmRanges, warmStock } from "./warm";
 
-// The board: your money and the crew, then the S&P with its twenty biggest companies, ranked by their share of
-// the index, live.
-
 type Board = FunctionReturnType<typeof api.stonks.board>;
 type BoardRow = Board["rows"][number];
 
@@ -59,7 +56,7 @@ export function StonksBoard() {
       {searching ? null : (
         <>
           <Money me={me} crew={crew} />
-          <CrewBoard crew={crew} history={history} />
+          <CrewBoard crew={crew} history={history} now={now} />
           <Positions me={me} />
           <Waiting orders={me.waiting} now={now} />
           <CrewTrades trades={trades ?? []} now={now} />
@@ -104,7 +101,6 @@ function Breadth({ up, down }: { up: number; down: number }) {
   );
 }
 
-// A row only re-renders when one of its own numbers changes, so a trade in one stock doesn't redraw 20.
 const Row = memo(
   function Row({
     r,
@@ -125,7 +121,7 @@ const Row = memo(
     const ref = useWarmWhileSeen<HTMLDivElement>(r.symbol);
     const points = useMemo(() => withLive(spark ?? [], r, dayDomain(open, close)), [spark, r, open, close]);
     const domain = useMemo(() => axisFor(open, close, points, r), [open, close, points, r]);
-    const moved = r.baseRank - r.rank; // places climbed since the previous close
+    const moved = r.baseRank - r.rank;
     const earnings = earningsSoon(r.earnings, now) ? r.earnings! : null;
     return (
       <motion.div ref={ref} layout="position" transition={{ type: "spring", bounce: 0, duration: 0.5 }}>
@@ -201,8 +197,6 @@ const Row = memo(
     Math.floor(a.now / HOUR) === Math.floor(b.now / HOUR),
 );
 
-// Who moved the S&P today, in index points: each bar is a stock's share at the close times its move.
-// One diverging bar chart, up to the right and down to the left of a zero line.
 function Movers({ movers }: { movers: Board["movers"] }) {
   const convex = useConvex();
   const max = Math.max(...movers.map((m) => Math.abs(m.points)), 0.01);
@@ -215,15 +209,14 @@ function Movers({ movers }: { movers: Board["movers"] }) {
             <Link
               to={stockPath(m.symbol)}
               onPointerDown={() => warmStock(convex, m.symbol, "open")}
-              className={`grid ${S.mover} grid-cols-[52px_minmax(0,1fr)_56px] items-center gap-2 px-4 transition-transform duration-100 active:scale-[0.97]`}
+              className={`relative grid ${S.mover} grid-cols-[52px_minmax(0,1fr)_56px] items-center gap-2 px-4 transition-transform duration-100 after:absolute after:inset-x-0 after:-inset-y-1 active:scale-[0.97]`}
               aria-label={`${display(m.symbol)} moved the S&P ${pts(m.points)} points`}
             >
               <span className="font-display text-callout">{display(m.symbol)}</span>
               <span className="relative h-2.5" aria-hidden>
                 <span className="absolute -top-1 left-1/2 h-[18px] w-px bg-border" />
-                {/* A chart mark, not a surface: a bar's free end is rounded 3px, its end on the zero line square. */}
                 <motion.span
-                  className={cn("absolute top-0 h-full", d === "up" ? "left-1/2 rounded-r-[3px]" : "right-1/2 rounded-l-[3px]")}
+                  className={cn("absolute top-0 h-full", d === "up" ? "left-1/2 rounded-r-xs" : "right-1/2 rounded-l-xs")}
                   style={{ background: ink(d) }}
                   initial={{ width: 0 }}
                   animate={{ width: `${(Math.abs(m.points) / max) * 50}%` }}

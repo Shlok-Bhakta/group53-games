@@ -6,18 +6,6 @@ import { cn } from "@/lib/utils";
 export type Dir = "up" | "down";
 const ink = (dir: Dir) => `var(--${dir})`;
 
-// One price line, drawn to the app's chart marks: a 2px line in the up or down color, a faint wash
-// under it, a dotted line at the previous close, and a ringed dot at the latest price. Put a finger on
-// it and a hairline follows to the nearest point; the owner shows that point's price where the live one
-// was (`onScrub`), the way stock apps do.
-//
-// It moves when something happens and never while idle: a new range draws in from the left (`reveal`
-// changes), the live end of the line glides to each new trade, and each trade sends one ping out from
-// the dot.
-//
-// On the 1D chart the x axis is the clock, so the line grows through the day, and anything outside the
-// regular session (`regular`) is drawn lighter. Longer ranges space their points evenly, so nights and
-// weekends don't leave gaps.
 export function PriceChart({
   points,
   baseline,
@@ -49,11 +37,8 @@ export function PriceChart({
   stale?: boolean;
   reveal?: string;
   surface?: string;
-  /** Overrides the up or down color: a player's own, on their net worth. */
   color?: string;
-  /** A soft glow on the line, for a player who's turned theirs on. */
   glow?: boolean;
-  /** Extra lines on the same scale (moving averages), one value per point, null where there's none. */
   overlays?: { values: (number | null)[]; color: string; name: string }[];
 }) {
   const box = useRef<HTMLDivElement>(null);
@@ -74,7 +59,7 @@ export function PriceChart({
   const TOP = 24,
     BOTTOM = 10,
     LEFT = 2,
-    RIGHT = 8; // room for the time label and the end dot
+    RIGHT = 8;
   const geo = useMemo(() => {
     if (!width || points.length === 0) return null;
     const w = width - LEFT - RIGHT,
@@ -103,8 +88,6 @@ export function PriceChart({
     const y = (v: number) => TOP + h * (1 - (v - lo) / (hi - lo));
     const ys = points.map((p) => y(p[1]));
     const dim = (i: number) => !!regular && (points[i][0] < regular[0] || points[i][0] >= regular[1]);
-    // Runs of points inside or outside the regular session, each starting where the last one ended. The
-    // last point isn't in them: its segment is drawn on its own, so it can glide to each new trade.
     const runs: { from: number; to: number; dim: boolean }[] = [];
     for (let i = 0; i < n - 1; i++) {
       const last = runs.at(-1);
@@ -167,12 +150,17 @@ export function PriceChart({
   const scrub = geo && at !== null && at < n ? { x: geo.xs[at], y: geo.ys[at], t: points[at][0] } : null;
   const glide = still ? { duration: 0 } : { type: "spring" as const, bounce: 0, duration: 0.45 };
   const trade = n ? `${points[n - 1][0]}:${points[n - 1][1]}` : "";
+  const shownAt = at !== null && at < n ? at : n - 1;
 
   return (
     <div
       ref={box}
-      role="img"
+      role="slider"
       aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={Math.max(0, n - 1)}
+      aria-valuenow={Math.max(0, shownAt)}
+      aria-valuetext={n ? timeLabel(points[shownAt][0]) : undefined}
       tabIndex={0}
       className={cn(
         "relative w-full touch-pan-y select-none outline-none transition-opacity duration-200 focus-visible:ring-3 focus-visible:ring-ring/50",
@@ -204,7 +192,6 @@ export function PriceChart({
               <stop offset="0%" stopColor={lineColor} stopOpacity={0.16} />
               <stop offset="100%" stopColor={lineColor} stopOpacity={0} />
             </linearGradient>
-            {/* A new range or stock draws in from the left. */}
             <clipPath id={`${id}c`}>
               <motion.rect
                 key={reveal}
@@ -262,7 +249,6 @@ export function PriceChart({
           {scrub && (
             <line x1={scrub.x} x2={scrub.x} y1={TOP - 4} y2={height} stroke="var(--muted-foreground)" strokeOpacity={0.6} strokeWidth={1} />
           )}
-          {/* One ping per trade while the price is live: an event, not a loop. */}
           <AnimatePresence>
             {live && !scrub && !still && (
               <motion.circle
@@ -292,7 +278,6 @@ export function PriceChart({
           )}
         </svg>
       )}
-      {/* Two or more lines get a key: drawn as short strokes, names in text color. */}
       {!scrub && overlays && overlays.length > 0 && (
         <div className="pointer-events-none absolute top-0 left-1 flex gap-3 text-caption font-medium text-muted-foreground">
           <Key color={lineColor} name="Price" />
@@ -322,7 +307,6 @@ function Key({ color, name }: { color: string; name: string }) {
   );
 }
 
-/** A simple moving average over the last `n` values, null until there are `n`. */
 export function movingAverage(values: number[], n: number): (number | null)[] {
   let sum = 0;
   return values.map((v, i) => {
@@ -332,7 +316,6 @@ export function movingAverage(values: number[], n: number): (number | null)[] {
   });
 }
 
-// The board's little chart: the day so far against the previous close, nothing to touch.
 export const Sparkline = memo(function Sparkline({
   points,
   baseline,
@@ -383,7 +366,6 @@ const axisDay = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric
 
 export type Series = { id: string; color: string; dash?: string; points: Point[]; me?: boolean };
 
-/** What a line was worth at a moment: its last point at or before it. */
 export function valueAt(points: Point[], t: number) {
   let last = points[0]?.[1];
   for (const p of points) {
@@ -393,8 +375,6 @@ export function valueAt(points: Point[], t: number) {
   return last;
 }
 
-// Everyone's net worth over the game on one axis: a line per player in their own color, the $10,000 they started
-// with dotted, and the rows underneath as the key. A finger on it finds a moment, and the rows show that moment.
 export function CrewChart({
   series,
   base,
@@ -451,7 +431,6 @@ export function CrewChart({
     const x = (t: number) => LEFT + w * (t1 === t0 ? 1 : (t - t0) / (t1 - t0));
     const y = (v: number) => TOP + h * (1 - (v - bottom) / (top - bottom));
     const times = [...new Set(all.map((p) => p[0]))].sort((a, b) => a - b);
-    // Who's "me" draws last, so your own line is never buried.
     const lines = [...series]
       .sort((a, b) => Number(!!a.me) - Number(!!b.me))
       .map((s) => ({ ...s, d: s.points.map((p, i) => `${i ? "L" : "M"}${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join("") }));

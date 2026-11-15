@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { useConvex } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { motion } from "motion/react";
-import { api } from "../../../convex/_generated/api";
+import type { api } from "../../../convex/_generated/api";
 import type { Point } from "../../../convex/stonks/board";
 import { display } from "../../../convex/stonks/market";
 import { Group, Section } from "@/components/parts";
@@ -21,20 +21,16 @@ import { playerPath, stockPath, warmPlayer } from "./warm";
 export type History = FunctionReturnType<typeof api.stonks.worthHistory>;
 const scrubTime = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
-/** One player's net worth over the game, with where they are right now on the end. */
 export function worthLine(history: History, userId: string, now: { t: number; worth: number } | null, start = 10_000): Point[] {
   const points: Point[] = history.map((r) => [r.t, r.worths.find((x) => x.u === userId)?.w ?? start]);
   if (now && (!points.length || now.t > points[points.length - 1][0])) points.push([now.t, now.worth]);
   return points;
 }
 
-// The crew's standings, under everyone's net worth over the game. The rows are the chart's key, and while a finger's
-// on the chart they show that moment. Tap someone for their profile.
-export function CrewBoard({ crew, history }: { crew: Crew; history: History }) {
+export function CrewBoard({ crew, history, now }: { crew: Crew; history: History; now: number }) {
   const convex = useConvex();
   const [at, setAt] = useState<number | null>(null);
   const colors = useMemo(() => playerColors(crew), [crew]);
-  const worths = crew.map((c) => c.worth.toFixed(2)).join();
   const series = useMemo<Series[]>(
     () =>
       history.length === 0
@@ -44,10 +40,9 @@ export function CrewBoard({ crew, history }: { crew: Crew; history: History }) {
             me: c.me,
             color: colors.get(c.userId)!.color,
             dash: colors.get(c.userId)!.dash,
-            points: worthLine(history, c.userId, { t: Math.max(Date.now(), history[history.length - 1].t + 1), worth: c.worth }),
+            points: worthLine(history, c.userId, { t: Math.max(now, history[history.length - 1].t + 1), worth: c.worth }),
           })),
-    // Rebuilt when someone's worth or the history changes, not on every render.
-    [history, worths, colors], // eslint-disable-line
+    [history, crew, colors, now],
   );
   useEffect(() => {
     for (const c of crew) warmPlayer(convex, c.userId);

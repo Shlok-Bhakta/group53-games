@@ -13,14 +13,10 @@ import { kindOf, price, unitOf } from "./format";
 import { S } from "./skeletons";
 import { stockPath, warmStock } from "./warm";
 
-// Search anything on Yahoo Finance: stocks anywhere, crypto, forex, futures, funds. What's already known
-// answers on every keystroke from Convex; a moment after you stop, the sidecar asks Yahoo (once a week per
-// search) and what it finds joins the list live. Rows on screen stream their price, and a row you touch
-// starts fetching its page.
+const LET_A_RESULT_TAP_LAND_MS = 150;
 
 type Result = FunctionReturnType<typeof api.stonks.search>[number];
 
-// Somewhere to start, to show it's not just US stocks.
 const PICKS: { symbol: string; name: string; type?: string }[] = [
   { symbol: "BTC-USD", name: "Bitcoin", type: "CRYPTOCURRENCY" },
   { symbol: "ETH-USD", name: "Ethereum", type: "CRYPTOCURRENCY" },
@@ -39,7 +35,6 @@ export function StockSearch({ onActive }: { onActive: (active: boolean) => void 
   const lookup = useMutation(api.stonks.lookup);
   const text = q.trim();
   const found = useQuery(api.stonks.search, text ? { q: text } : "skip");
-  // Results stay up while the next keystroke's load, so the list never blinks empty.
   const held = useRef<Result[]>([]);
   if (found) held.current = found;
   const active = focused || !!text;
@@ -74,8 +69,7 @@ export function StockSearch({ onActive }: { onActive: (active: boolean) => void 
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onFocus={() => setFocused(true)}
-          // A tap on a result lands before this matters; a tap elsewhere with nothing typed closes it.
-          onBlur={() => setTimeout(() => setFocused(false), 150)}
+          onBlur={() => setTimeout(() => setFocused(false), LET_A_RESULT_TAP_LAND_MS)}
           className={`${S.search} rounded-md border-0 bg-muted pr-11 pl-10 text-body [&::-webkit-search-cancel-button]:hidden`}
         />
         {active && (
@@ -112,7 +106,6 @@ type RowData = { symbol: string; name: string; type?: string; exchange?: string;
 const Row = memo(function Row({ r }: { r: RowData }) {
   const convex = useConvex();
   const ref = useWarmWhileSeen<HTMLDivElement>(r.symbol);
-  // Once it's on screen it streams, so a row with no price yet gets one in a moment.
   const live = useQuery(api.stonks.quote, { symbol: r.symbol });
   const last = live?.price ?? r.price;
   const prev = live?.prevClose ?? r.prevClose;

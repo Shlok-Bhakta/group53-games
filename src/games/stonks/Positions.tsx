@@ -15,9 +15,6 @@ import { Ticker } from "./Ticker";
 import { VERB, whenFills, type Holders, type Portfolio } from "./Trade";
 import { playerPath, stockPath, warmStock } from "./warm";
 
-// What's held and what's waiting to fill: yours on the board, anyone's on their profile, and on a stock's page,
-// your position and who else is in it.
-
 export function PositionRow({ p, owner, swatch }: { p: Portfolio["positions"][number]; owner?: string; swatch?: string }) {
   const convex = useConvex();
   const ref = useWarmWhileSeen<HTMLDivElement>(p.symbol);

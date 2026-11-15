@@ -1,9 +1,5 @@
 import { v, type Infer } from "convex/values";
 
-// What Stonks keeps about a company beyond its price, as the sidecar sends it (from Yahoo's quote
-// summary and search): every field optional, since Yahoo leaves out what doesn't apply (no dividend,
-// no analysts). Dates are ms since the epoch.
-
 const n = v.optional(v.number());
 const str = v.optional(v.string());
 
@@ -12,23 +8,23 @@ export const profileStats = {
   trailingPE: n,
   forwardPE: n,
   eps: n,
-  dividendYield: n, // a fraction: 0.0031 is 0.31%
+  dividendYield: n,
   exDividend: n,
   beta: n,
   avgVolume: n,
   fiftyDay: n,
   twoHundredDay: n,
   shares: n,
-  shortOfFloat: n, // a fraction
-  profitMargin: n, // a fraction
-  revenueGrowth: n, // a fraction, year on year
-  earnings: n, // the next report
+  shortOfFloat: n,
+  profitMargin: n,
+  revenueGrowth: n,
+  earnings: n,
   epsEstimate: n,
   targetLow: n,
   targetMean: n,
   targetHigh: n,
   analysts: n,
-  rating: str, // "buy", "strong_buy", "hold"...
+  rating: str,
   sector: str,
   industry: str,
   employees: n,
