@@ -124,8 +124,5 @@ for (const c of HOLES) {
     `${c.id.padEnd(10)} ${c.name.padEnd(16)} par ${c.par}  solved in ${line ? line.length : "NEVER"}  sloppy ${human.join(",") || "-"} (avg ${avg})  ${((performance.now() - t0) / 1000).toFixed(0)}s`,
   );
   if (line) out[c.id] = line;
-  fs.writeFileSync(
-    path,
-    `// A way round every hole, found by scripts/golf-solve.ts and replayed by convex/golf/holes.test.ts, so a\n// hole that can't be sunk any more fails the tests. [angle, power] per shot.\nexport const SOLUTIONS: Record<string, [number, number][]> = ${JSON.stringify(out)};\n`,
-  );
+  fs.writeFileSync(path, `export const SOLUTIONS: Record<string, [number, number][]> = ${JSON.stringify(out)};\n`);
 }

@@ -4,9 +4,6 @@ import { Button } from "@/components/ui/button";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { cn } from "@/lib/utils";
 
-// A sunk hole: what that was called, how the crew's done on it, and on to the next. The ball's already
-// back on the tee behind it, for another go. Not a Sheet: it sits inside the stage, inset from the edges and
-// rounded all round, where a Sheet is portalled to the bottom edge of the screen.
 export function HoleResult({
   strokes,
   par,
@@ -28,14 +25,14 @@ export function HoleResult({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="absolute inset-0 z-30 flex items-end bg-black/40 p-3 pb-[calc(env(safe-area-inset-bottom)+12px)]"
+      className="absolute inset-0 z-30 flex items-end bg-scrim p-3 pb-[calc(var(--safe-bottom)+12px)] phone-landscape:items-center phone-landscape:justify-center phone-landscape:pr-[max(12px,var(--safe-right))] phone-landscape:pb-[max(12px,var(--safe-bottom))] phone-landscape:pl-[max(12px,var(--safe-left))]"
     >
       <motion.div
         initial={{ y: 40 }}
         animate={{ y: 0 }}
         exit={{ y: 40 }}
         transition={{ type: "spring", bounce: 0, duration: 0.35 }}
-        className="flex w-full flex-col gap-4 rounded-3xl bg-card p-5"
+        className="flex w-full flex-col gap-4 rounded-3xl bg-card p-5 phone-landscape:max-h-full phone-landscape:max-w-md phone-landscape:overflow-y-auto"
         role="dialog"
         aria-label="Hole finished"
       >

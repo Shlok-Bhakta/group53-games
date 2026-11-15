@@ -8,9 +8,6 @@ import type { GolfState } from "./round";
 import { advance, applyCmd, newWorld, pack, TPS, unpack, type Packed } from "./world";
 import { setup, signedIn } from "../test.setup";
 
-// A round of golf as a game: the lobby, the holes being built, turns going to whoever's farthest away,
-// scores on the card, and the end.
-
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-11-10T12:00:00Z"));
@@ -54,7 +51,6 @@ async function game(t: T, n: number, mode: "golf:turns" | "golf:live", settings:
   return { id, players, seats };
 }
 
-// The server's ticks, for `seconds` of play (twice a second, like a game's world).
 async function settle(t: T, id: Id<"matches">, seconds: number) {
   for (let i = 0; i < seconds * 2; i++) {
     vi.advanceTimersByTime(500);
@@ -63,7 +59,6 @@ async function settle(t: T, id: Id<"matches">, seconds: number) {
   }
 }
 
-// The world as it stands, worked out the way a phone would.
 async function worldNow(t: T, id: Id<"matches">) {
   const w = await worldOfMatch(t, id);
   const c = await courseOfHole(t, id, w.hole!);
@@ -93,7 +88,6 @@ async function worldNow(t: T, id: Id<"matches">) {
   return { w, c, s };
 }
 
-// Whoever's turn it is takes the bot's best shot, and the server ticks until the turn's passed on.
 async function playTurn(t: T, id: Id<"matches">, players: Player[]) {
   const m = await get(t, id);
   const p = players.find((x) => x.userId === m.turn)!;
@@ -139,7 +133,6 @@ describe("a turn-based round", () => {
     expect(st.total).toBe(3);
     expect(st.holes.map((h) => h?.name)).toEqual(["Hello", "Elbow", "Tilt"]);
     expect(st.hole).toBe(0);
-    // The first hole goes in seat order.
     expect(m.turn).toBe(seats[0].userId);
     const { s } = await worldNow(t, id);
     expect(s.balls.map((b) => b.id).sort()).toEqual(seats.map((p) => p.userId).sort());
@@ -157,7 +150,6 @@ describe("a turn-based round", () => {
     await expect(seats[0].as.mutation(api.golf.act, { worldId: w._id, kind: "reset", clientTick: 0, seq: 1 })).rejects.toThrow(
       "starting again",
     );
-    // Two shots in one turn: the world takes the first, ignores the second.
     await seats[0].as.mutation(api.golf.act, { worldId: w._id, kind: "shot", clientTick: 0, seq: 1, a: -Math.PI / 2, p: 0.15 });
     vi.advanceTimersByTime(3000);
     await seats[0].as.mutation(api.golf.act, { worldId: w._id, kind: "shot", clientTick: 0, seq: 2, a: -Math.PI / 2, p: 0.15 });
@@ -188,7 +180,6 @@ describe("a turn-based round", () => {
   test("whoever's farthest from the cup goes next", async () => {
     const t = setup();
     const { id, players, seats } = await game(t, 2, "golf:turns", { course: 1, holes: 3 });
-    // Seat 0 tees off; seat 1 hasn't, so it's theirs next whatever happened.
     await playTurn(t, id, players);
     const m = await get(t, id);
     if ((m.state as GolfState).hole === 0) expect(m.turn).toBe(seats[1].userId);
@@ -205,7 +196,6 @@ describe("a turn-based round", () => {
   });
 
   test("the caddie never goes for a hole in one", () => {
-    // The first hole of Bumper Plains can be aced from the tee, and a perfect bot finds it.
     const c = courseOf("plains-1")!;
     const w = worldOf(c);
     const s = newWorld(c, { collide: true });
@@ -221,7 +211,6 @@ describe("a turn-based round", () => {
     const m = await get(t, id);
     vi.advanceTimersByTime(60 * 60_000);
     await t.mutation(internal.golf.shotTimeout, { id, moveCount: m.moveCount });
-    // The timeout calls the caddie, an action (working out the shot takes too long for a mutation).
     await t.action(internal.golf.caddie, { id, moveCount: m.moveCount, why: "timeout" });
     const { s } = await worldNow(t, id);
     expect(s.balls.find((b) => b.id === seats[0].userId)?.strokes ?? 1).toBe(1);
@@ -232,28 +221,22 @@ describe("a turn-based round", () => {
   test("someone the caddie's playing for gets their shot taken at once, and the game keeps going", async () => {
     const t = setup();
     const { id, players, seats } = await game(t, 2, "golf:turns", { course: 1, holes: 3 });
-    // The second seat's been away three turns running.
     await t.run(async (ctx) => {
       const m = (await ctx.db.get(id))!;
       await ctx.db.patch(id, { state: { ...(m.state as GolfState), idle: [0, 3] } });
     });
     const w = await worldOfMatch(t, id);
     await seats[0].as.mutation(api.golf.act, { worldId: w._id, kind: "shot", clientTick: 0, seq: 1, a: -Math.PI / 2, p: 0.1 });
-    // A slow scheduler: the next tick only comes round well after the ball's stopped.
     vi.advanceTimersByTime(15_000);
     await t.mutation(internal.golf.tick, { worldId: w._id });
     expect((await get(t, id)).turn).toBe(seats[1].userId);
-    // No "Your shot" for a turn the caddie takes before they could tap it.
     expect((await pushes(t)).some((p) => p.userId === seats[1].userId && p.title === "Your shot")).toBe(false);
-    // The caddie's called straight away (an action, as the scheduler would run it).
     await t.action(internal.golf.caddie, { id, moveCount: (await get(t, id)).moveCount, why: "away" });
-    // The caddie's shot is in, and the world stayed awake to play it out.
     expect((await worldOfMatch(t, id)).awake).toBe(true);
     await settle(t, id, 20);
     const { s } = await worldNow(t, id);
     const caddied = s.balls.find((b) => b.id === seats[1].userId);
     expect(caddied ? caddied.strokes : 1).toBeGreaterThanOrEqual(1);
-    // And it came back round to the first player (or the hole moved on).
     const m = await get(t, id);
     expect(m.turn === seats[0].userId || (m.state as GolfState).hole > 0).toBe(true);
     void players;
@@ -333,9 +316,7 @@ describe("a live round", () => {
     await settle(t, id, 6);
     const st = await stateOf(t, id);
     expect(st.scores[0]).toHaveLength(2);
-    // Picked up by the clock: par plus four, however few they'd taken, so sitting it out never pays.
     expect(st.scores[0]).toEqual([st.holes[0]!.par + 4, st.holes[0]!.par + 4]);
-    // The next hole after a moment to see the scores.
     vi.advanceTimersByTime(6000);
     await t.mutation(internal.golf.nextHole, { id, hole: 1 });
     expect((await stateOf(t, id)).hole).toBe(1);
@@ -378,7 +359,6 @@ describe("previews", () => {
     const settings = { holes: 3, seed: 777 };
     expect((await me.as.query(api.golf.preview, { mode: "golf:turns", settings }))!.holes).toEqual([null, null, null]);
     await me.as.mutation(api.golf.requestPreview, { mode: "golf:turns", settings });
-    // Asking twice makes it once.
     await me.as.mutation(api.golf.requestPreview, { mode: "golf:turns", settings });
     const jobs = await t.run((ctx) => ctx.db.query("golfPreviewJobs").collect());
     expect(jobs).toHaveLength(1);

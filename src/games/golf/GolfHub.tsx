@@ -14,9 +14,6 @@ import { usePlayingIn } from "@/presence";
 import GolfWorld from "./GolfWorld";
 import { refreshTheme, still } from "./toy";
 
-// Golf's page: the courses, hole by hole, with your best and the crew's, and the open world. Each hole
-// is its own live world, with whoever else is on it.
-
 const holePath = (course: string, n: number) => `/golf/${course}/${n}`;
 
 function Thumb({ c }: { c: Course }) {
@@ -63,7 +60,6 @@ export function GolfHub() {
         const par = co.holes.reduce((a, h) => a + h.par, 0);
         const played = co.holes.filter((h) => mine(h.id));
         const total = played.reduce((a, h) => a + mine(h.id)!.best, 0);
-        // Pick up at the first hole you haven't finished.
         const nextUp = co.holes.findIndex((h) => !mine(h.id));
         const resume = nextUp < 0 ? 0 : nextUp;
         return (
@@ -109,7 +105,6 @@ export function GolfHub() {
 }
 
 export function GolfOpenWorld() {
-  // (Back from the open world goes to golf's page, where it's listed.)
   return <GolfWorld course={SANDBOX} />;
 }
 

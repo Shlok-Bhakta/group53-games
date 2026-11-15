@@ -11,7 +11,6 @@
     "preview": "vite preview --host 0.0.0.0",
     "test:e2e": "node e2e/run.mjs",
     "game:publish": "node scripts/publish-hosted.mjs",
-    "golf:build": "vite build --config prototypes/golf/vite.config.ts",
     "test:e2e:install": "PLAYWRIGHT_BROWSERS_PATH=0 playwright install chromium chromium-headless-shell",
     "verify": "node scripts/verify.mjs",
     "prepare": "git config core.hooksPath .githooks || true",

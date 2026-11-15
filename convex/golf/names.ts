@@ -1,7 +1,5 @@
 import type { Power } from "./engine";
 
-// Every item's name, for the screens (src/games/golf/items.ts adds the icons) and the settings that pick
-// which ones a game's boxes give.
 export const POWER_NAMES: Record<Power, string> = {
   rocket: "Rocket Driver",
   ghost: "Ghost",

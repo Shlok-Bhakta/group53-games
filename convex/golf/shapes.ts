@@ -1,8 +1,5 @@
 import { closest, edges, inPoly, rng, v, type Vec } from "./engine";
 import { dcos, dsin, hyp } from "./dmath";
-// Course geometry is part of the physics, so it uses the portable math too (see dmath.ts).
-
-// Shape helpers for writing courses by hand.
 
 export const P = (...n: number[]): Vec[] => {
   const out: Vec[] = [];
@@ -29,7 +26,6 @@ export function rrect(x: number, y: number, w: number, h: number, r: number, n =
   return out;
 }
 
-// Rounded across the top, square at the bottom: a pinball table.
 export function archRect(x: number, y: number, w: number, h: number, r: number, n = 8): Vec[] {
   const out: Vec[] = [];
   for (let i = 0; i <= n; i++) {
@@ -51,7 +47,6 @@ export function circle(cx: number, cy: number, r: number, n = 24): Vec[] {
   });
 }
 
-// An organic shape: an ellipse with a wobbly edge, the same every time for the same seed.
 export function blob(cx: number, cy: number, rx: number, ry: number, seed = 1, wob = 0.13, n = 32): Vec[] {
   const s = seed * 1.7;
   return Array.from({ length: n }, (_, i) => {
@@ -61,7 +56,6 @@ export function blob(cx: number, cy: number, rx: number, ry: number, seed = 1, w
   });
 }
 
-// A winding strip (a fairway, a river): a smooth curve through [x, y, half width] points.
 export function ribbon(spec: [number, number, number][], samples = 8): Vec[] {
   const pts: [number, number, number][] = [];
   const at = (i: number) => spec[Math.max(0, Math.min(spec.length - 1, i))];
@@ -130,7 +124,6 @@ export function bbox(poly: Vec[]) {
   return { x0, y0, x1, y1 };
 }
 
-// Shrink (k < 1) or grow a shape toward its middle. Good enough for the rounded shapes courses use.
 export function scalePoly(poly: Vec[], k: number, by = 0): Vec[] {
   const c = centroid(poly);
   return poly.map((p) => {
@@ -141,7 +134,6 @@ export function scalePoly(poly: Vec[], k: number, by = 0): Vec[] {
   });
 }
 
-// Random points that keep clear of everything `blocked` says no to, and of each other.
 export function scatter(
   seed: number,
   count: number,

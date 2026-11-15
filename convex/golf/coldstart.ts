@@ -3,15 +3,10 @@ import { dcos, dsin } from "./dmath";
 import { baffle, boost, build, ramp, type Hole } from "./plains";
 import { blob, P, rect, rrect } from "./shapes";
 
-// Cold Start: nine holes on packed snow, where everything slides further than you meant it to. Polished
-// ice is slicker still, snow drifts are the only brakes, and the water's as cold as it looks. The
-// first few teach the slide; the last few are about where you stop.
-
 const ice = (poly: Vec[]): Zone => ({ kind: "ice", poly });
 const snow = (poly: Vec[]): Zone => ({ kind: "snow", poly });
 const water = (poly: Vec[]): Zone => ({ kind: "water", poly });
 const wind = (poly: Vec[], dx: number, dy: number, strength: number): Zone => ({ kind: "wind", poly, dir: v(dx, dy), strength });
-// A curved rail: part of an ellipse, in radians with y down.
 function arc(cx: number, cy: number, rx: number, ry: number, a0: number, a1: number, n = 14): Wall {
   const pts: Vec[] = [];
   for (let k = 0; k <= n; k++) {
@@ -25,7 +20,6 @@ const COLD: Partial<Hole> = { theme: "ice", surface: "packed" };
 
 const HOLES: Hole[] = [
   {
-    // Straight up, across a sheet of ice. Hit it like you would on grass and it's gone.
     id: "cold-1",
     name: "Thin Ice",
     par: 2,
@@ -37,7 +31,6 @@ const HOLES: Hole[] = [
     boxes: [v(9, 27)],
   },
   {
-    // A corner on ice, with the cup down a side street behind two bumpers.
     id: "cold-2",
     name: "Zamboni",
     par: 3,
@@ -53,7 +46,6 @@ const HOLES: Hole[] = [
     boxes: [v(17.3, 26)],
   },
   {
-    // Two snow drifts across the way, each with a gap on the other side from the last.
     id: "cold-3",
     name: "Snowplow",
     par: 3,
@@ -69,7 +61,6 @@ const HOLES: Hole[] = [
     boxes: [v(5.5, 30), v(16.8, 8.5)],
   },
   {
-    // Freezing water right across the hole. A thin ice bridge in the middle, or the ramp on the right.
     id: "cold-4",
     name: "Crevasse",
     par: 4,
@@ -84,7 +75,6 @@ const HOLES: Hole[] = [
     boxes: [v(6, 7)],
   },
   {
-    // The cup's inside an igloo, and the door faces away from you.
     id: "cold-5",
     name: "Igloo",
     par: 4,
@@ -103,7 +93,6 @@ const HOLES: Hole[] = [
     boxes: [v(4.5, 31), v(17.5, 31)],
   },
   {
-    // Through a gap on the right, back across against the wind, through a gap on the left.
     id: "cold-6",
     name: "Slipstream",
     par: 4,
@@ -119,7 +108,6 @@ const HOLES: Hole[] = [
     boxes: [v(17.5, 23), v(4, 17)],
   },
   {
-    // Downhill all the way: three blocks of ice sliding across the chute, in no hurry to let you past.
     id: "cold-7",
     name: "Avalanche",
     par: 3,
@@ -139,7 +127,6 @@ const HOLES: Hole[] = [
     boxes: [v(5, 8.5), v(17, 24)],
   },
   {
-    // Ice floes in open water, a ramp on each pointing at the next. Land soft or keep going.
     id: "cold-8",
     name: "Whiteout",
     par: 6,
@@ -172,8 +159,6 @@ const HOLES: Hole[] = [
     boxes: [v(6.5, 59), v(34.5, 42.5), v(8, 31)],
   },
   {
-    // The finale, three chambers long: a spinning bar in the first door, a block sliding through
-    // the rink, mines round the cup, and a portal that skips the lot if you can stop on it.
     id: "cold-9",
     name: "Absolute Zero",
     par: 6,

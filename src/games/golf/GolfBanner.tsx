@@ -1,10 +1,10 @@
 import { useEffect, useRef } from "react";
 import { useReducedMotion } from "motion/react";
 import { drawBall, drawBoard, drawBox, drawBumper, drawCup, drawFlag, popIn } from "./toy";
+import { PALETTE } from "./palette";
 
-// Golf's card art on the Games tab: a little green, and a putt that rolls in once.
 const W = 26,
-  H = 9; // in course units
+  H = 9;
 const CUP = { x: 21, y: 4.5 };
 const START = { x: 4.5, y: 4.5 };
 const BOARD = [
@@ -13,7 +13,7 @@ const BOARD = [
   { x: W - 1, y: H - 1 },
   { x: 1, y: H - 1 },
 ];
-const LENGTH = 2.4; // seconds
+const LENGTH = 2.4;
 
 export function GolfBanner() {
   const cv = useRef<HTMLCanvasElement>(null);
@@ -41,7 +41,7 @@ export function GolfBanner() {
       ctx.restore();
       ctx.beginPath();
       ctx.roundRect(1, 1, W - 2, H - 2, 1.2);
-      ctx.strokeStyle = "#ece4d0";
+      ctx.strokeStyle = PALETTE.rail;
       ctx.lineWidth = 0.5;
       ctx.stroke();
       drawBumper(ctx, { x: 12, y: 2.9 }, 0.8 * popIn((t - 0.1) / 0.35));
@@ -52,7 +52,6 @@ export function GolfBanner() {
       drawBox(ctx, { x: 0, y: 0 }, t, 0);
       ctx.restore();
       drawCup(ctx, CUP, 0.72);
-      // The putt: out fast, slowing, a curl round the rim, and in.
       const roll = Math.max(0, Math.min(1, (t - 0.45) / 1.1));
       const k = 1 - (1 - roll) ** 2.2;
       const x = START.x + (CUP.x - START.x) * k;
@@ -71,13 +70,17 @@ export function GolfBanner() {
         ctx.restore();
       }
     };
-    if (still) draw(LENGTH);
+    const finish = () => {
+      draw(LENGTH);
+      el.dataset.played = "";
+    };
+    if (still) finish();
     else {
       const frame = (now: number) => {
         const t = (now - t0) / 1000;
-        draw(Math.min(t, LENGTH));
-        // Plays once, then holds still (the flag keeps fluttering only while it's playing).
-        if (t < LENGTH) raf = requestAnimationFrame(frame);
+        if (t >= LENGTH) return finish();
+        draw(t);
+        raf = requestAnimationFrame(frame);
       };
       raf = requestAnimationFrame(frame);
     }

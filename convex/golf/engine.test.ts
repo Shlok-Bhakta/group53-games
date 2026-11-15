@@ -1,12 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { GREEN_HILLS } from "./courses";
 import {
-  BALL_R,
   CUP_R,
+  DECEL,
   DT,
-  HAZARDS,
+  MAX_SPEED,
   activate,
-  closest,
   compile,
   groundAt,
   newSim,
@@ -19,15 +17,30 @@ import {
   type Sim,
   type World,
 } from "./engine";
-import { MAX_ROLL, generate, powerFor } from "./gen";
+import { BUMPER_PLAINS } from "./plains";
 
 const settle = (sim: Sim, world: World, seconds = 40) => {
   for (let i = 0; i < seconds / DT && (sim.mode === "roll" || sim.mode === "out"); i++) step(sim, world);
   return sim;
 };
+const ROLL_DRAG = 0.12;
+const rollDistance = (power: number) => {
+  const v0 = MAX_SPEED * power;
+  return v0 / ROLL_DRAG - (DECEL.green / (ROLL_DRAG * ROLL_DRAG)) * Math.log(1 + (ROLL_DRAG * v0) / DECEL.green);
+};
+const powerFor = (distance: number) => {
+  let lo = 0,
+    hi = 1;
+  for (let i = 0; i < 30; i++) {
+    const m = (lo + hi) / 2;
+    if (rollDistance(m) < distance) lo = m;
+    else hi = m;
+  }
+  return hi;
+};
+const MAX_ROLL = rollDistance(1);
 const box = (x0: number, y0: number, x1: number, y1: number) => [v(x0, y0), v(x1, y0), v(x1, y1), v(x0, y1)];
 
-// A plain walled green, 20 by 60, with whatever's added on top.
 function plain(extra: Partial<Course> = {}): Course {
   return {
     id: "test",
@@ -55,46 +68,8 @@ function plain(extra: Partial<Course> = {}): Course {
   };
 }
 
-describe("golf generator", () => {
-  test("the same seed always makes the same hole", () => {
-    const a = generate(GREEN_HILLS[0])!,
-      b = generate(GREEN_HILLS[0])!;
-    expect(a).not.toBeNull();
-    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
-  });
-
-  test.each(GREEN_HILLS.map((s) => [s]))("Green Hills seed %i: a long hole that plays", (seed) => {
-    const c = generate(seed)!;
-    expect(c).not.toBeNull();
-    const world = compile(c);
-    expect(c.stats.length).toBeGreaterThan(80);
-    expect(c.par).toBeGreaterThanOrEqual(3);
-    // The bot got round, and not in one or two.
-    expect(c.stats.bot).toBeGreaterThan(2);
-    expect(c.stats.bot).toBeLessThanOrEqual(c.par + 2);
-    for (const p of [c.tee, c.cup, ...c.boxes]) expect(HAZARDS).not.toContain(groundAt(world, p));
-    for (const p of [c.tee, c.cup])
-      for (const s of world.segs) {
-        const q = closest(p, s.a, s.b);
-        expect(Math.hypot(p.x - q.x, p.y - q.y)).toBeGreaterThan(s.r + BALL_R);
-      }
-    // Straight at the cup from the tee is never a hole in one.
-    const sim = newSim(c);
-    shoot(sim, Math.atan2(c.cup.y - c.tee.y, c.cup.x - c.tee.x), powerFor(Math.hypot(c.cup.x - c.tee.x, c.cup.y - c.tee.y)));
-    settle(sim, world);
-    expect(sim.mode).not.toBe("sunk");
-  });
-
-  test("most seeds are thrown out, but plenty make it", () => {
-    let made = 0;
-    for (let s = 500; s < 520; s++) if (generate(s)) made++;
-    expect(made).toBeGreaterThan(1);
-    expect(made).toBeLessThan(20);
-  }, 60_000);
-});
-
 describe("golf physics", () => {
-  test("a full-power putt rolls about as far as the generator thinks", () => {
+  test("a full-power putt rolls about as far as the drag model says", () => {
     const c = plain({ greens: [{ poly: box(5, 5, 25, 200) }], h: 210, tee: v(15, 190) });
     const sim = newSim(c);
     shoot(sim, -Math.PI / 2, 1);
@@ -158,7 +133,7 @@ describe("golf physics", () => {
   });
 
   test("the same shot at the same moment plays out exactly the same", () => {
-    const c = generate(GREEN_HILLS[1])!;
+    const c = BUMPER_PLAINS[1];
     const world = compile(c);
     const run = () => {
       const sim = newSim(c);

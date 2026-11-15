@@ -6,8 +6,6 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { seatColor } from "@/games/seats";
 import { cn } from "@/lib/utils";
 
-// The card: a row per hole with everyone's strokes, totals at the foot. Holes still to come show their par
-// once they're built. Scrolls sideways with a big table.
 export function Scorecard({ match, st, meId }: { match: MatchView; st: GolfState; meId: Id<"users"> | undefined }) {
   const seats = match.players.map((p, i) => ({ p, i }));
   const t = totals(st, match.players.length);

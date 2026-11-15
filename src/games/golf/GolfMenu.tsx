@@ -11,8 +11,6 @@ import { Button } from "@/components/ui/button";
 import { Scorecard } from "./Scorecard";
 import { golfRules } from "./rules";
 
-// A golf game's menu: the scorecard, the seed (to copy, or to play the same holes again), then what every
-// game's menu has, and resigning at the bottom.
 export function GolfMenu({
   open,
   onOpenChange,
@@ -55,7 +53,6 @@ export function GolfMenu({
   );
 }
 
-// A generated course's seed: copy it, or start a new game on the same holes with the same settings.
 export function SeedRow({ match }: { match: MatchView }) {
   const navigate = useNavigate();
   const s = settingsOf(match.mode, match.settings);

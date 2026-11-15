@@ -3,7 +3,6 @@ import type { ModeKey, Settings } from "../../../convex/modes";
 const hours = (m: number) => (m === 60 ? "an hour" : m === 1440 ? "a day" : `${m / 60} hours`);
 const COURSE = ["holes generated from the seed", "Bumper Plains, made by hand", "Cold Start, made by hand on ice"];
 
-// How to play golf, with the game's settings filled in.
 export function golfRules(mode: ModeKey, s: Settings): string[] {
   const live = mode === "golf:live";
   const hits = s.collide !== 0;

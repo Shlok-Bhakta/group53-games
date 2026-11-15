@@ -1,11 +1,9 @@
 import { v, type Bumper, type Course, type Ground, type Mover, type Portal, type Theme, type Vec, type Wall, type Zone } from "./engine";
+import { DPI, dacos, dcos, dsin } from "./dmath";
 import { P, rect, rrect } from "./shapes";
 
-// Bumper Plains: six short holes made by hand, each built round bumpers sitting exactly where you'd
-// rather they didn't. Plain green boards floating in the void; no scenery.
-
 export type Hole = Pick<Course, "id" | "name" | "par" | "tee" | "cup"> & {
-  board: Vec[] | Vec[][]; // one board, or several separate islands
+  board: Vec[] | Vec[][];
   bumpers: [number, number, number?][];
   walls?: Wall[];
   boxes?: Vec[];
@@ -14,9 +12,9 @@ export type Hole = Pick<Course, "id" | "name" | "par" | "tee" | "cup"> & {
   movers?: Mover[];
   portals?: Portal[];
   theme?: Theme;
-  surface?: Ground; // what the board's made of, if it isn't grass
-  off?: Ground; // what's round it, if it isn't the void
-  rim?: false; // no rail round the board: roll off the edge and you're in
+  surface?: Ground;
+  off?: Ground;
+  rim?: false;
 };
 
 const bump = (b: [number, number, number?]): Bumper => ({ at: v(b[0], b[1]), r: b[2] ?? 0.85, kick: 5 });
@@ -26,7 +24,6 @@ export const baffle = (x0: number, y0: number, x1: number, y1: number): Wall => 
   h: 0.6,
   style: "wood",
 });
-// A speed pad or a jump ramp: a square plate centred on (x, y), facing (dx, dy).
 const plate = (x: number, y: number, size: number) => rect(x - size / 2, y - size / 2, size, size);
 export const boost = (x: number, y: number, dx: number, dy: number): Zone => ({
   kind: "boost",
@@ -41,22 +38,20 @@ export const ramp = (x: number, y: number, dx: number, dy: number): Zone => ({
   lift: 0.6,
 });
 
-// A round green on a stem that joins the bottom of the circle.
 function lollipop(cx: number, cy: number, r: number, stemHalf: number, stemTo: number): Vec[] {
-  const a0 = Math.acos(stemHalf / r); // where the stem's right edge meets the circle
-  const sweep = Math.PI * 2 - (Math.PI - 2 * a0);
+  const a0 = dacos(stemHalf / r);
+  const sweep = DPI * 2 - (DPI - 2 * a0);
   const pts: Vec[] = [];
   for (let k = 0; k <= 48; k++) {
     const a = a0 - (sweep * k) / 48;
-    pts.push(v(cx + Math.cos(a) * r, cy + Math.sin(a) * r));
+    pts.push(v(cx + dcos(a) * r, cy + dsin(a) * r));
   }
-  const join = cy + Math.sin(a0) * r;
+  const join = cy + dsin(a0) * r;
   return [...pts, v(cx - stemHalf, stemTo), v(cx + stemHalf, stemTo), v(cx + stemHalf, join)];
 }
 
 const HOLES: Hole[] = [
   {
-    // One bumper, dead in the middle of the only line.
     id: "plains-1",
     name: "Hello",
     par: 2,
@@ -68,7 +63,6 @@ const HOLES: Hole[] = [
     boxes: [v(8.8, 12)],
   },
   {
-    // A corner, a bumper on the inside of it, and two guarding the cup.
     id: "plains-2",
     name: "Elbow",
     par: 4,
@@ -84,7 +78,6 @@ const HOLES: Hole[] = [
     boxes: [v(18, 11.5)],
   },
   {
-    // A pinball table: a triangle of bumpers right across the way up.
     id: "plains-3",
     name: "Tilt",
     par: 3,
@@ -104,7 +97,6 @@ const HOLES: Hole[] = [
     boxes: [v(4.5, 9), v(17.5, 30)],
   },
   {
-    // Three baffles from alternate sides, and a bumper splitting every gap.
     id: "plains-4",
     name: "Chicane",
     par: 4,
@@ -120,7 +112,6 @@ const HOLES: Hole[] = [
     boxes: [v(16, 23)],
   },
   {
-    // The cup inside a ring of bumpers whose gap faces away from you.
     id: "plains-5",
     name: "Crown",
     par: 4,
@@ -128,13 +119,12 @@ const HOLES: Hole[] = [
     cup: v(11, 13),
     board: lollipop(11, 13, 9.5, 3, 36),
     bumpers: [0, 45, 90, 135, 180, 225, 315].map((d) => {
-      const a = ((d + 90) * Math.PI) / 180;
-      return [11 + Math.cos(a) * 4.4, 13 + Math.sin(a) * 4.4, 0.8] as [number, number, number];
+      const a = ((d + 90) * DPI) / 180;
+      return [11 + dcos(a) * 4.4, 13 + dsin(a) * 4.4, 0.8] as [number, number, number];
     }),
     boxes: [v(4, 9), v(18, 9)],
   },
   {
-    // Up, over the top through a field of bumpers, and back down to the cup.
     id: "plains-6",
     name: "Hairpin",
     par: 5,
@@ -174,7 +164,6 @@ export function build(h: Hole, course: string): Course {
     theme: h.theme ?? "hills",
     surface: h.surface,
     par: h.par,
-    // Wide enough that the boards sit in the middle, with a margin all round.
     w: x0 + x1,
     h: y0 + y1,
     tee: h.tee,

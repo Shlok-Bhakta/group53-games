@@ -2,8 +2,6 @@ import { FlagPennantIcon, GlobeHemisphereWestIcon } from "@phosphor-icons/react"
 import { ListRow } from "@/components/ListRow";
 import { Section } from "@/components/parts";
 
-// Golf's page, under the modes: the handmade holes to play on your own (or with whoever's on them), and the
-// open world.
 export function GolfPractice() {
   return (
     <Section title="Practice">

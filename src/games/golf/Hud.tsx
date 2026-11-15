@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { CaretLeftIcon, CornersInIcon, CornersOutIcon, FlagPennantIcon, GolfIcon, ListIcon, XIcon } from "@phosphor-icons/react";
 import { BAG_SIZE, type Course, type Power } from "../../../convex/golf/engine";
 import type { Ball } from "../../../convex/golf/world";
-import { Button } from "@/components/ui/button";
+import { Button, IconButton } from "@/components/ui/button";
 import { AvatarStack, type Face } from "@/components/PlayerAvatar";
 import { FloatButton, FloatingTopBar, FloatPill } from "@/components/game/floating";
 import { cn } from "@/lib/utils";
@@ -11,8 +11,9 @@ import { ITEMS } from "./items";
 import type { Target } from "./useGolfLoop";
 import type { Round } from "./GolfWorld";
 
-// What floats over a golf world: the bar on top, the hint while placing a targeted item, and the dock with
-// the bag.
+export const BESIDE_RAIL =
+  "phone-landscape:top-[max(12px,var(--safe-top))] phone-landscape:left-[calc(max(12px,var(--safe-left))+var(--rail-width)+8px)] phone-landscape:right-[max(12px,var(--safe-right))]";
+const RAIL_PILL = "phone-landscape:w-(--rail-width)";
 
 export type Hud = {
   ready: boolean;
@@ -27,7 +28,6 @@ export type Hud = {
   slow: boolean;
 };
 
-// Back, the course and who's on it, and my count: strokes on a hole, holes sunk in the open world.
 export function TopBar({
   ref,
   course,
@@ -44,11 +44,11 @@ export function TopBar({
   onBack: () => void;
 }) {
   return (
-    <FloatingTopBar ref={ref}>
+    <FloatingTopBar ref={ref} className="phone-landscape:*:last:mt-0">
       <FloatButton aria-label="Back" onClick={onBack}>
         <CaretLeftIcon size={22} weight="bold" />
       </FloatButton>
-      <FloatPill className="flex-1 py-1 pl-4 pr-1.5">
+      <FloatPill className={cn("flex-1 py-1 pl-4 pr-1.5", RAIL_PILL)}>
         <span className="min-w-0 flex-1">
           <span className="block truncate font-display text-callout leading-tight">{course.name}</span>
           <span className="block truncate text-caption text-muted-foreground">
@@ -61,7 +61,6 @@ export function TopBar({
                   : `${others.length + 1} here`}
           </span>
         </span>
-        {/* Faces only: frames don't fit in the pill. */}
         <AvatarStack people={others.map((p) => ({ name: p.name, image: p.image }))} />
         {hole ? (
           <span
@@ -84,8 +83,6 @@ export function TopBar({
   );
 }
 
-// A game's top bar: back, the hole with whose turn it is (the game says what, `round.bar`), my strokes, and the
-// menu with the card and the rules.
 export function RoundBar({
   ref,
   course,
@@ -104,7 +101,7 @@ export function RoundBar({
       <FloatButton aria-label="Back" onClick={onBack}>
         <CaretLeftIcon size={22} weight="bold" />
       </FloatButton>
-      <FloatPill onClick={round.onMenu} aria-label="Scorecard" className="flex-1 py-1 pl-1.5 pr-1.5">
+      <FloatPill onClick={round.onMenu} aria-label="Scorecard" className={cn("flex-1 py-1 pl-1.5 pr-1.5", RAIL_PILL)}>
         {round.bar}
         <span
           className="grid size-9 shrink-0 place-items-center rounded-full bg-primary font-display text-callout tabular-nums leading-none text-primary-foreground"
@@ -120,7 +117,6 @@ export function RoundBar({
   );
 }
 
-// Under the top bar while a targeted item waits for a tap on the map.
 export function TargetHint({ target, onCancel }: { target: Target | null; onCancel: () => void }) {
   return (
     <AnimatePresence>
@@ -130,21 +126,15 @@ export function TargetHint({ target, onCancel }: { target: Target | null; onCanc
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
           transition={{ type: "spring", bounce: 0, duration: 0.3 }}
-          className="absolute inset-x-0 top-[calc(env(safe-area-inset-top)+92px)] z-20 flex justify-center"
+          className={cn("absolute inset-x-0 top-[calc(var(--safe-top)+92px)] z-20 flex justify-center", BESIDE_RAIL)}
         >
           <FloatPill className="py-1 pl-4 pr-1 font-display text-callout">
             {ITEMS[target.kind].hint}
-            {/* 44px to tap, drawn 36px so it sits inside the pill. */}
-            <button
-              type="button"
-              aria-label="Cancel"
-              onClick={onCancel}
-              className="-m-1 grid size-11 place-items-center active:scale-[0.94]"
-            >
+            <IconButton label="Cancel" variant="bare" size="float" onClick={onCancel} className="-m-1">
               <span className="grid size-9 place-items-center rounded-full bg-muted">
                 <XIcon weight="bold" />
               </span>
-            </button>
+            </IconButton>
           </FloatPill>
         </motion.div>
       )}
@@ -152,8 +142,6 @@ export function TargetHint({ target, onCancel }: { target: Target | null; onCanc
   );
 }
 
-// The bag, what's happening to my ball, and the buttons: Jump or Brake while one's in play, otherwise the
-// whole map and back to a tee.
 export function Dock({
   ref,
   hud,
@@ -172,7 +160,7 @@ export function Dock({
   hud: Hud;
   target: Target | null;
   hole: boolean;
-  game: boolean; // in a game: no starting again
+  game: boolean;
   myTurn: boolean;
   big: boolean;
   overview: boolean;
@@ -184,7 +172,10 @@ export function Dock({
   return (
     <div
       ref={ref}
-      className="absolute inset-x-0 bottom-0 z-10 flex items-center gap-2 px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3"
+      className={cn(
+        "absolute inset-x-0 bottom-0 z-10 flex items-center gap-2 px-3 pb-[calc(var(--safe-bottom)+12px)] pt-3",
+        "phone-landscape:right-[max(12px,var(--safe-right))] phone-landscape:left-[calc(max(12px,var(--safe-left))+var(--rail-width)+8px)] phone-landscape:px-0 phone-landscape:pb-[max(12px,var(--safe-bottom))]",
+      )}
     >
       <div className="flex gap-2">
         {Array.from({ length: BAG_SIZE }, (_, i) => {
@@ -226,7 +217,6 @@ export function Dock({
         {hud.armed && <span className="block truncate">{ITEMS[hud.armed].name} next shot</span>}
       </span>
       {hud.mode === "roll" && (hud.shot === "brake" || hud.shot === "jump") ? (
-        // On the finger going down, not up: a rolling ball won't wait for a tap to finish.
         <Button size="xl" onPointerDown={onRolling} className="border-0 px-5 font-display text-callout shadow-md">
           {hud.shot === "jump" ? "Jump" : "Brake"}
         </Button>

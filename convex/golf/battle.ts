@@ -1,15 +1,10 @@
 import { v, type Course, type Vec } from "./engine";
 import { P, rect, rrect } from "./shapes";
+import { hyp } from "./dmath";
 import { baffle, boost, build, ramp, type Hole } from "./plains";
-
-// Battle Grounds: three big holes in the spirit of Super Battle Golf. They take you somewhere:
-// across minefields, over gaps in the void on jump ramps, along speed-pad highways. More boxes, more
-// items, and bumpers and mines wherever they'll hurt most.
 
 const HOLES: Hole[] = [
   {
-    // A tee box, a field of mines and bumpers, a chokepoint, then speed pads into a ramp that has to
-    // clear the void to reach the island green.
     id: "battle-1",
     name: "The Gauntlet",
     par: 6,
@@ -36,7 +31,6 @@ const HOLES: Hole[] = [
     boxes: [v(8, 76), v(32, 76), v(10, 37), v(30, 37), v(26, 5)],
   },
   {
-    // Four islands in the void, each with a ramp pointing at the next, and bumpers where you land.
     id: "battle-2",
     name: "Island Hop",
     par: 7,
@@ -65,7 +59,6 @@ const HOLES: Hole[] = [
     boxes: [v(12, 63.5), v(42, 62), v(44, 36), v(4.5, 30)],
   },
   {
-    // A wide-open minefield straight at the cup, or the long way round up a speed-pad highway.
     id: "battle-3",
     name: "Minefield",
     par: 5,
@@ -87,14 +80,13 @@ const HOLES: Hole[] = [
   },
 ];
 
-// A grid of mines with a few missing, so there's always a way through for someone brave.
 function mines(): Vec[] {
   const out: Vec[] = [];
   for (let j = 0; j < 8; j++)
     for (let i = 0; i < 5; i++) {
       if ((i + j * 2) % 3 === 0) continue;
       const p = v(15 + i * 5.5 + (j % 2) * 2.5, 18 + j * 6.5);
-      if (Math.hypot(p.x - 36, p.y - 72) < 5 || Math.hypot(p.x - 36, p.y - 8) < 5) continue;
+      if (hyp(p.x - 36, p.y - 72) < 5 || hyp(p.x - 36, p.y - 8) < 5) continue;
       out.push(p);
     }
   return out;

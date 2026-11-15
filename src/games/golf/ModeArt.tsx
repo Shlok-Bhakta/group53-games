@@ -2,9 +2,8 @@ import { useEffect, useRef } from "react";
 import type { ModeKey } from "../../../convex/modes";
 import { SEAT_COLORS } from "@/games/seats";
 import { drawBall, drawBoard, drawBumper, drawCup, drawFlag } from "./toy";
+import { ART, PALETTE } from "./palette";
 
-// Each golf mode's card: a little green with the balls on it. Turn-based has one ball rolling and the rest
-// waiting their turn, with a dotted line for the next shot; Live has everyone on the move at once. Still.
 const W = 26,
   H = 14;
 const CUP = { x: 21, y: 5 };
@@ -47,7 +46,7 @@ export function GolfModeArt({ mode }: { mode: ModeKey }) {
     ctx.restore();
     ctx.beginPath();
     ctx.roundRect(1, 1, W - 2, H - 2, 1.4);
-    ctx.strokeStyle = "#ece4d0";
+    ctx.strokeStyle = PALETTE.rail;
     ctx.lineWidth = 0.5;
     ctx.stroke();
     drawBumper(ctx, { x: 15, y: 4 }, 0.85);
@@ -55,9 +54,8 @@ export function GolfModeArt({ mode }: { mode: ModeKey }) {
     drawFlag(ctx, CUP, 0.4, 1, 0);
     const balls = BALLS[mode as keyof typeof BALLS] ?? BALLS["golf:turns"];
     if (mode === "golf:turns") {
-      // The next shot, dotted toward the cup.
       ctx.setLineDash([0.35, 0.45]);
-      ctx.strokeStyle = "rgba(251,249,243,0.85)";
+      ctx.strokeStyle = ART.nextShot;
       ctx.lineWidth = 0.22;
       ctx.beginPath();
       ctx.moveTo(6, 10);
@@ -68,9 +66,8 @@ export function GolfModeArt({ mode }: { mode: ModeKey }) {
     for (const b of balls) {
       const moving = "go" in b;
       if (moving) {
-        // A streak behind whatever's rolling.
         const dir = ("dir" in b ? b.dir : 0) + Math.PI;
-        ctx.strokeStyle = "rgba(251,249,243,0.35)";
+        ctx.strokeStyle = ART.streak;
         ctx.lineWidth = 0.5;
         ctx.beginPath();
         ctx.moveTo(b.x, b.y);

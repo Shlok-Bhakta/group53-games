@@ -21,7 +21,6 @@ const world = (t: T) => t.run(async (ctx) => (await ctx.db.query("golfWorlds").c
 const commands = (t: T) => t.run((ctx) => ctx.db.query("golfCommands").collect());
 const snapshot = (t: T) => t.run(async (ctx) => (await ctx.db.query("golfSnapshots").collect())[0] ?? null);
 const tickNow = async (t: T) => Math.floor(((Date.now() - (await world(t))!.startAt) * TPS) / 1000);
-// Lets the server tick run, the way the scheduler would, for `seconds`.
 async function settle(t: T, seconds: number) {
   for (let i = 0; i < seconds; i++) {
     vi.advanceTimersByTime(1000);
@@ -55,7 +54,7 @@ describe("golf's open world", () => {
     const worldId = await ann.as.mutation(api.golf.join, {});
     vi.advanceTimersByTime(10_000);
     const now = await tickNow(t);
-    // (convex-test's clock inside a mutation can run a millisecond ahead, so a tick either way.)
+    // platform: convex-test's clock inside a mutation can run a millisecond ahead, so a tick either way.
     expect(await ann.as.mutation(api.golf.act, { worldId, kind: "shot", clientTick: now - 20, seq: 1, a: -1.5, p: 0.5 })).toBe(now - 20);
     const pulled = await ann.as.mutation(api.golf.act, { worldId, kind: "shot", clientTick: now - 5000, seq: 2, a: -1.5, p: 0.5 });
     expect(pulled - (now - MAX_LAG)).toBeGreaterThanOrEqual(0);
@@ -63,7 +62,6 @@ describe("golf's open world", () => {
     expect(
       await ann.as.mutation(api.golf.act, { worldId, kind: "shot", clientTick: now + 5000, seq: 3, a: -1.5, p: 2 }),
     ).toBeLessThanOrEqual(now + 1 + SLACK);
-    // Power is capped, and junk is refused.
     expect((await commands(t)).find((c) => c.seq === 3)?.p).toBe(1);
     await expect(ann.as.mutation(api.golf.act, { worldId, kind: "shot", clientTick: now, seq: 4, a: NaN, p: 0.5 })).rejects.toThrow(
       "number",
@@ -76,7 +74,6 @@ describe("golf's open world", () => {
     const bo = await signedIn(t, "Bo");
     const worldId = await ann.as.mutation(api.golf.join, {});
     await bo.as.mutation(api.golf.join, {});
-    // Awake (someone's just joined). Waking a sleeping world is the one write a command makes.
     expect((await world(t))!.awake).toBe(true);
     const before = await world(t);
     const now = await tickNow(t);
@@ -95,11 +92,9 @@ describe("golf's open world", () => {
     const worldId = await ann.as.mutation(api.golf.join, {});
     await bo.as.mutation(api.golf.join, {});
     vi.advanceTimersByTime(500);
-    // East along the plaza, short of the speed pad, so it stays on the grass.
     await ann.as.mutation(api.golf.act, { worldId, kind: "shot", clientTick: await tickNow(t), seq: 1, a: 0, p: 0.3 });
     expect((await world(t))!.awake).toBe(true);
     await settle(t, 1);
-    // Mid-shot: still awake.
     expect((await world(t))!.awake).toBe(true);
     await settle(t, 15);
     const w = (await world(t))!;
@@ -109,7 +104,6 @@ describe("golf's open world", () => {
     const ball = s.balls.find((b) => b.id === ann.userId)!;
     expect(ball.mode).toBe("aim");
     expect(ball.x).toBeGreaterThan(SANDBOX.tee.x + 4);
-    // A phone starting from nothing, with every command, comes to exactly the same world.
     const phone = newWorld(SANDBOX);
     const cmds = (await commands(t))
       .map(({ tick, by, seq, kind, a, p, i, x, y }) => ({ tick, by, seq, kind, a, p, i, x, y }))
@@ -140,12 +134,10 @@ describe("golf's open world", () => {
     const ann = await signedIn(t, "Ann");
     const worldId = await ann.as.mutation(api.golf.join, { key: "plains-1" });
     expect((await ann.as.query(api.golf.world, { key: "plains-1" }))?.worldId).toBe(worldId);
-    // Not the open world, and no such hole.
     expect(await ann.as.query(api.golf.world, {})).toBeNull();
     await expect(ann.as.mutation(api.golf.join, { key: "plains-99" })).rejects.toThrow("no such hole");
     const w0 = (await t.run((ctx) => ctx.db.get(worldId)))!;
     const hole = courseOf("plains-1")!;
-    // The line the solver found, played through the real mutations.
     vi.advanceTimersByTime(500);
     const [a, p] = SOLUTIONS["plains-1"][0];
     await ann.as.mutation(api.golf.act, {
@@ -164,9 +156,7 @@ describe("golf's open world", () => {
     const scores = await ann.as.query(api.golf.scores, {});
     expect(scores.map((r) => [r.hole, r.name, r.plays])).toEqual([["plains-1", "Ann", 1]]);
     expect(scores[0].best).toBeLessThanOrEqual(hole.par);
-    // Each sink counts once, however many times the server ticks after it.
     expect(scores[0].last).toBe(scores[0].best);
-    // Off the hole: the ball goes, and coming back joins again.
     await ann.as.mutation(api.golf.leave, { worldId });
     vi.advanceTimersByTime(3000);
     await t.mutation(internal.golf.tick, { worldId });
@@ -180,7 +170,6 @@ describe("golf's open world", () => {
     const ann = await signedIn(t, "Ann");
     const joins = async () => (await commands(t)).filter((c) => c.kind === "join").map((c) => c.bag ?? []);
     await t.run((ctx) => ctx.db.insert("golfBags", { course: "plains", userId: ann.userId, bag: ["coffee"], at: 0 }));
-    // Hole 2: comes with what was carried, and plays the solver's line to sink it.
     const worldId = await ann.as.mutation(api.golf.join, { key: "plains-2" });
     expect(await joins()).toEqual([["coffee"]]);
     const w0 = (await t.run((ctx) => ctx.db.get(worldId)))!;
@@ -195,19 +184,15 @@ describe("golf's open world", () => {
       p,
     });
     vi.advanceTimersByTime(9000);
-    // Straight off it, sink not settled yet on the server: it still counts.
     await ann.as.mutation(api.golf.leave, { worldId });
     const bag = () => t.run(async (ctx) => (await ctx.db.query("golfBags").collect())[0]?.bag);
     expect(await bag()).toEqual(expect.arrayContaining(["coffee"]));
-    // On to hole 3, carrying it.
     await ann.as.mutation(api.golf.join, { key: "plains-3" });
     expect((await joins()).at(-1)).toEqual(expect.arrayContaining(["coffee"]));
-    // Walking off without finishing leaves the bag as it was.
     const before = await bag();
     const w3 = await ann.as.mutation(api.golf.join, { key: "plains-3" });
     await ann.as.mutation(api.golf.leave, { worldId: w3 });
     expect(await bag()).toEqual(before);
-    // Back to hole 1: a new run, empty-handed.
     await ann.as.mutation(api.golf.join, { key: "plains-1" });
     expect((await joins()).at(-1)).toEqual([]);
     expect(await bag()).toBeFalsy();
@@ -221,7 +206,6 @@ describe("golf's open world", () => {
     const worldId = await gone.as.mutation(api.golf.join, { key: "plains-2" });
     await here.as.mutation(api.golf.join, { key: "plains-2" });
     await settle(t, 3);
-    // Long enough that their last commands are old news.
     vi.advanceTimersByTime(60_000);
     await t.run((ctx) => ctx.db.insert("presence", { userId: here.userId, online: true, lastSeen: Date.now(), path: "/golf/plains/2" }));
     await next.as.mutation(api.golf.join, { key: "plains-2" });

@@ -26,11 +26,9 @@ import {
   TargetIcon,
   type Icon,
 } from "@phosphor-icons/react";
-import { LASER_R, type Power } from "./engine";
+import { LASER_R, type Power } from "../../../convex/golf/engine";
 import { ELEPHANT, FREEZE_R, PISTOL, STORM } from "../../../convex/golf/world";
 
-// How every item looks and reads, for the golf screens (the world and the explorer). `aim` is what a
-// targeted item shows while you pick its spot: a line out from your ball, or the patch it covers.
 export type ItemUI = {
   name: string;
   short: string;

@@ -23,7 +23,6 @@ const ALL = [...BUMPER_PLAINS, ...BATTLE_GROUNDS];
 const roll = (sim: Sim, world: World, seconds = 30) => {
   for (let i = 0; i < seconds / DT && (sim.mode === "roll" || sim.mode === "out"); i++) step(sim, world);
 };
-// A long plain lane with one bumper in it, for trying items.
 const lane = (extra: Partial<Course> = {}): Course => ({
   id: "lane",
   name: "Lane",

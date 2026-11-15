@@ -34,7 +34,6 @@ describe("the eighteen holes", () => {
         for (const m of h.mines ?? []) expect(onBoard(m), `mine at ${m.x},${m.y}`).toBe(true);
         for (const b of h.bumpers) expect(onBoard(b.at), `bumper at ${b.at.x},${b.at.y}`).toBe(true);
         for (const p of h.portals.flatMap((q) => [q.a, q.b])) expect(onBoard(p)).toBe(true);
-        // Room for a few players to start without touching.
         expect(h.tees?.length ?? 0).toBeGreaterThanOrEqual(3);
       });
 

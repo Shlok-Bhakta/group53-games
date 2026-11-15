@@ -2,19 +2,6 @@ import { v, type Bumper, type Course, type Vec, type Wall, type Zone } from "./e
 import { dcos, dsin } from "./dmath";
 import { blob, circle, rect, rrect } from "./shapes";
 
-// Driftwood Bay: the open world everyone shares while golf is being built. One big island in the sea,
-// with something to do in every corner:
-//  - the plaza in the south, where everyone starts (eight tees);
-//  - a lagoon in the middle, a wooden bridge across it, and a ramp that jumps the whole thing;
-//  - a pinball park of bumpers round a flag in the north-west;
-//  - a minefield in the north-east, with the best boxes in it;
-//  - a speed-pad highway up the east side and a ramp out to a little island with its own flag;
-//  - sand on the west beach, and a pair of portals corner to corner;
-//  - an ice rink with bumpers on it in the west, wind gusting across the lagoon jump and the gap to
-//    the islet, a spinning bar east of the lagoon, and a crate sliding up and down the bridge.
-// The sea is everywhere off the grass: roll in and you're back where you hit from.
-
-// Corner-cutting (Chaikin), so a coastline drawn as a few points comes out smooth.
 function smooth(pts: Vec[], rounds = 3): Vec[] {
   let p = pts;
   for (let r = 0; r < rounds; r++) {
@@ -89,7 +76,6 @@ const ISLET = circle(99, 46, 4.6, 28);
 const LAGOON = blob(48, 40, 11.5, 7.5, 7, 0.07, 36);
 const BRIDGE = rect(34.5, 38.2, 27, 3.6);
 
-// The islet's far side has a rail, so a ball landing hot stays on it.
 const isletRail = (): Wall => {
   const p: Vec[] = [];
   for (let k = 0; k <= 10; k++) {
@@ -118,7 +104,6 @@ export const SANDBOX: Course = {
     { poly: ISLET, rim: false },
   ],
   zones: [
-    // The ice rink: slides forever, bumpers on it.
     { kind: "ice", poly: rrect(19, 33, 13, 10.5, 3) },
     { kind: "water", poly: LAGOON },
     { kind: "bridge", poly: BRIDGE },
@@ -126,35 +111,23 @@ export const SANDBOX: Course = {
     { kind: "sand", poly: blob(23.5, 61.5, 3, 2.2, 5, 0.1, 20) },
     { kind: "sand", poly: blob(76, 9.8, 2.6, 1.6, 9, 0.1, 18) },
     { kind: "sand", poly: blob(25, 12.5, 2.4, 1.6, 11, 0.1, 18) },
-    // The lagoon jump: speed, then the ramp, over the bridge to the south shore.
     boost(44, 23.5, 0, 1),
     ramp(44, 28.5, 0, 1),
-    // The highway up the east side, and the ramp out to the islet.
     boost(83, 66, 0, -1),
     boost(83, 58, 0, -1),
     boost(83, 50, 0, -1),
     boost(83.5, 40, 0, -1),
     boost(84, 46, 1, 0),
     ramp(88.5, 46, 1, 0, 0.55),
-    // Gusts across the lagoon jump (east) and across the gap to the islet (south).
     { kind: "wind", poly: rect(37, 30, 22, 19), dir: v(1, 0), strength: 9 },
     { kind: "wind", poly: rect(87.5, 38, 7, 16), dir: v(0, 1), strength: 10 },
-    // A shove out of the plaza either way.
     boost(36, 66, -1, 0),
     boost(60, 66, 1, 0),
   ],
-  walls: [
-    // The bridge's rails, open at both ends.
-    rail(37.5, 38.1, 58.5, 38.1),
-    rail(37.5, 41.9, 58.5, 41.9),
-    // A rail along the plaza's beach so nobody falls in on their first shot.
-    rail(37, 73, 59, 73),
-    isletRail(),
-  ],
+  walls: [rail(37.5, 38.1, 58.5, 38.1), rail(37.5, 41.9, 58.5, 41.9), rail(37, 73, 59, 73), isletRail()],
   blocks: [],
   props: [],
   bumpers: [
-    // The pinball park round the north-west flag.
     bump(15.5, 20.5),
     bump(24.5, 21),
     bump(20, 24.5),
@@ -163,22 +136,16 @@ export const SANDBOX: Course = {
     bump(20.5, 31),
     bump(30, 16, 0.7),
     bump(16.5, 14.5, 0.7),
-    // Goalposts at the plaza.
     bump(41.5, 58.5, 0.7),
     bump(54.5, 58.5, 0.7),
-    // A couple guarding the beach flag.
     bump(21.5, 54.5, 0.7),
     bump(14.5, 60.5, 0.7),
-    // Two on the ice rink.
     bump(23.5, 38.5, 0.7),
     bump(28.5, 40.5, 0.7),
-    // And the island's cup.
     bump(96.5, 43, 0.6),
   ],
   movers: [
-    // A bar spinning in the open ground east of the lagoon.
     { kind: "spinner", at: v(71, 50), L: 3.2, arms: 2, omega: 1.5, w: 0.55 },
-    // A crate sliding up and down the bridge: time your crossing.
     { kind: "slider", a: v(40.5, 40), b: v(55.5, 40), size: v(1.6, 2.9), period: 7 },
   ],
   portals: [{ a: v(14.5, 66), b: v(84, 30.5) }],
@@ -203,5 +170,4 @@ export const SANDBOX: Course = {
   mines: [v(66, 16.5), v(70, 19), v(74, 15.5), v(78, 21), v(68, 26.5), v(75, 28), v(82, 19), v(63.5, 22), v(72, 31), v(76, 24.5)],
 };
 
-// Where a player can be put without starting in the sea.
 export const SANDBOX_SPAWNS = [SANDBOX.tee, ...(SANDBOX.tees ?? [])];
