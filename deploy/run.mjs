@@ -291,7 +291,7 @@ const deploy = async () => {
   step("Publishing the app in place");
   sh("mkdir", ["-p", BUILDS, ASSETS, NGINX_DIR]);
   sh("cp", ["-a", out, path.join(BUILDS, id)]);
-  sh("cp", ["-a", "-n", ...(DRY ? [`${out}/assets/.`] : [path.join(out, "assets", ".")]), ASSETS]);
+  sh("cp", ["-a", "-n", `${path.join(out, "assets")}/.`, `${ASSETS}/`]);
   sh("chmod", ["-R", "a+rX", path.join(BUILDS, id), ASSETS]);
   const nginxFile = path.join(NGINX_DIR, "default.conf");
   const nginxChanged = DRY || !fs.existsSync(nginxFile) || fs.readFileSync(nginxFile, "utf8") !== nginxConfig();
