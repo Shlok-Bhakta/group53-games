@@ -1,32 +1,16 @@
-import type { Ground } from "./engine";
-
-// Golf's own sounds, synthesized like the rest of the app's (soft envelopes, filtered noise for
-// anything percussive, a few sine partials for anything tonal, a small room reverb rather than
-// loudness): the putt, wood knocks off the rails, rubber bumpers, the ball rolling (a filtered hiss
-// that follows its speed and what it's rolling on), the cup, boxes, blasts.
-//
-// iOS only starts audio from a whole tap (touchend or click, not the finger going down), and wants a
-// sound started in that tap, so every tap anywhere wakes the context with a silent buffer until it's
-// running. Nothing plays on its own: every sound is something happening in the game.
-//
-// Every sound is also logged to `window.__golfSounds` when that's an array, with the time it played,
-// so a recording can render the same sounds offline (`renderOffline`) and lay them under the video.
+import type { Ground } from "../../../convex/golf/engine";
 
 type Graph = { out: GainNode; wet: GainNode; roll: { gain: GainNode; filter: BiquadFilterNode }; noise: AudioBuffer };
-let ctx: BaseAudioContext | null = null;
+let ctx: AudioContext | null = null;
 let g: Graph | null = null;
-let muted = false;
-let at: number | null = null; // rendering offline: when the sound being scheduled happens
-let offline = false;
 
 function graph(c: BaseAudioContext, dest: AudioNode): Graph {
   const out = c.createGain();
-  out.gain.value = muted && !offline ? 0 : 0.9;
+  out.gain.value = 0.9;
   const comp = c.createDynamicsCompressor();
   comp.threshold.value = -14;
   comp.knee.value = 12;
   out.connect(comp).connect(dest);
-  // A small room: a second of decaying noise, a little darker each moment.
   const len = Math.floor(c.sampleRate * 1.1);
   const ir = c.createBuffer(2, len, c.sampleRate);
   for (let ch = 0; ch < 2; ch++) {
@@ -34,7 +18,7 @@ function graph(c: BaseAudioContext, dest: AudioNode): Graph {
     let lp = 0;
     for (let i = 0; i < len; i++) {
       const k = i / len;
-      lp += ((Math.random() * 2 - 1) - lp) * (0.6 - k * 0.45);
+      lp += (Math.random() * 2 - 1 - lp) * (0.6 - k * 0.45);
       d[i] = lp * (1 - k) ** 3;
     }
   }
@@ -46,7 +30,6 @@ function graph(c: BaseAudioContext, dest: AudioNode): Graph {
   const noise = c.createBuffer(1, c.sampleRate * 2, c.sampleRate);
   const nd = noise.getChannelData(0);
   for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
-  // The rolling bed runs all the time; its volume follows the ball.
   const src = c.createBufferSource();
   src.buffer = noise;
   src.loop = true;
@@ -62,21 +45,19 @@ function graph(c: BaseAudioContext, dest: AudioNode): Graph {
 }
 
 function audio(): AudioContext | null {
-  if (ctx && !offline) return ctx as AudioContext;
+  if (ctx) return ctx;
   const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AC) return null;
   const c = new AC();
   ctx = c;
   g = graph(c, c.destination);
-  // Plays with the ringer off, like the rest of the app's default ("Play on silent").
   const nav = navigator as Navigator & { audioSession?: { type: string } };
   if (nav.audioSession) nav.audioSession.type = "playback";
   return c;
 }
 
-// Every tap: make sure the context exists and is running.
+// platform: iOS only starts audio from a whole tap and wants a sound started in it, so every tap plays a silent buffer and resumes the context until it runs.
 export function unlock() {
-  if (offline) return;
   const c = audio();
   if (!c || c.state === "running") return;
   const silent = c.createBufferSource();
@@ -89,31 +70,30 @@ let listening = false;
 export function listen() {
   if (listening || typeof window === "undefined") return;
   listening = true;
-  for (const type of ["touchend", "click", "keydown", "pointerdown"]) window.addEventListener(type, unlock, { capture: true, passive: true });
+  for (const type of ["touchend", "click", "keydown", "pointerdown"])
+    window.addEventListener(type, unlock, { capture: true, passive: true });
 }
 
-export function setMuted(m: boolean) {
-  muted = m;
-  if (ctx && g && !offline) g.out.gain.setTargetAtTime(m ? 0 : 0.9, ctx.currentTime, 0.05);
-}
-// Leaving the game: the ball's not rolling any more.
 export function stop() {
   rolling(0, null);
 }
 
-type Name = "putt" | "knock" | "bump" | "plunk" | "drop" | "blast" | "whoosh" | "land" | "pickup" | "brake" | "lip" | "rolling" | "horn" | "camera" | "thunder" | "freeze" | "gun" | "shieldUp" | "coffee" | "honey" | "fizzle" | "rocket";
-function rec(name: Name, args: unknown[]) {
-  if (offline) return;
-  const log = (window as unknown as { __golfSounds?: unknown[] }).__golfSounds;
-  if (Array.isArray(log)) log.push({ name, args, t: performance.now() });
-}
 function live(): BaseAudioContext | null {
-  if (offline) return ctx;
-  return ctx && (ctx as AudioContext).state === "running" && !muted ? ctx : null;
+  return ctx && ctx.state === "running" ? ctx : null;
 }
-const now = (c: BaseAudioContext) => at ?? c.currentTime;
+const now = (c: BaseAudioContext) => c.currentTime;
 
-function burst(c: BaseAudioContext, t: number, dur: number, type: BiquadFilterType, freq: number, q: number, level: number, sweepTo?: number, send = 0.5) {
+function burst(
+  c: BaseAudioContext,
+  t: number,
+  dur: number,
+  type: BiquadFilterType,
+  freq: number,
+  q: number,
+  level: number,
+  sweepTo?: number,
+  send = 0.5,
+) {
   const src = c.createBufferSource();
   src.buffer = g!.noise;
   const f = c.createBiquadFilter();
@@ -152,9 +132,7 @@ function sendTo(c: BaseAudioContext, level: number) {
   return s;
 }
 
-// The putter meeting the ball: a woody tock, firmer the harder it's hit.
 export function putt(power: number) {
-  rec("putt", [power]);
   const c = live();
   if (!c) return;
   const t = now(c);
@@ -164,10 +142,8 @@ export function putt(power: number) {
   tone(c, t, 260, 0.12, 0.28 * p, 200, 0.4);
 }
 
-// Off a rail: a soft wooden knock.
 export function knock(power: number) {
   if (power < 0.04) return;
-  rec("knock", [power]);
   const c = live();
   if (!c) return;
   const t = now(c);
@@ -177,9 +153,7 @@ export function knock(power: number) {
   burst(c, t, 0.03, "bandpass", 1300, 1.6, 0.18 * p, undefined, 0.3);
 }
 
-// A rubber bumper: a round, low boing.
 export function bump() {
-  rec("bump", []);
   const c = live();
   if (!c) return;
   const t = now(c);
@@ -188,9 +162,7 @@ export function bump() {
   burst(c, t, 0.05, "lowpass", 700, 0.7, 0.2, undefined, 0.3);
 }
 
-// Into the cup: a rattle round the rim, a soft thud at the bottom, and a little rising chime.
 export function plunk() {
-  rec("plunk", []);
   const c = live();
   if (!c) return;
   const t = now(c);
@@ -200,9 +172,7 @@ export function plunk() {
   [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(c, t + 0.32 + i * 0.075, f, 0.6, 0.09, undefined, 0.9, 0.01));
 }
 
-// Off the edge: it falls away into the void.
 export function drop() {
-  rec("drop", []);
   const c = live();
   if (!c) return;
   const t = now(c);
@@ -210,9 +180,7 @@ export function drop() {
   burst(c, t, 0.4, "bandpass", 900, 1, 0.08, 250, 0.6);
 }
 
-// An Orbital Laser or a mine going off: a low thump under a dark rush.
 export function blast(power = 1) {
-  rec("blast", [power]);
   const c = live();
   if (!c) return;
   const t = now(c);
@@ -221,15 +189,12 @@ export function blast(power = 1) {
 }
 
 export function whoosh() {
-  rec("whoosh", []);
   const c = live();
   if (!c) return;
   burst(c, now(c), 0.4, "bandpass", 450, 0.9, 0.16, 1500, 0.6);
 }
 
-// A Rocket Driver going off: a thump under a rising roar.
 export function rocket() {
-  rec("rocket", []);
   const c = live();
   if (!c) return;
   const t = now(c);
@@ -238,10 +203,8 @@ export function rocket() {
   burst(c, t, 0.12, "lowpass", 1400, 0.7, 0.3, 300, 0.4);
 }
 
-// Coming down from a jump.
 export function land(power: number) {
   if (power <= 0.1) return;
-  rec("land", [power]);
   const c = live();
   if (!c) return;
   const t = now(c);
@@ -249,48 +212,41 @@ export function land(power: number) {
   burst(c, t, 0.06, "lowpass", 800, 0.7, 0.2 * power, undefined, 0.3);
 }
 
-// A box opening, or an item used: three soft notes going up.
 export function pickup() {
-  rec("pickup", []);
   const c = live();
   if (!c) return;
   const t = now(c);
   [587.33, 739.99, 880].forEach((f, i) => tone(c, t + i * 0.06, f, 0.35, 0.11, undefined, 0.9, 0.008));
 }
 
-// The Brake: a short scuff.
 export function brake() {
-  rec("brake", []);
   const c = live();
   if (!c) return;
   burst(c, now(c), 0.18, "bandpass", 1400, 1.2, 0.18, 500, 0.3);
 }
 
-// Round the rim and out.
 export function lip() {
-  rec("lip", []);
   const c = live();
   if (!c) return;
   const t = now(c);
   [0, 0.05].forEach((d) => burst(c, t + d, 0.03, "bandpass", 2600, 2.5, 0.16, undefined, 0.3));
 }
 
-// An Air Horn: a short, soft two-note honk (filtered, not a real blare).
 export function horn() {
-  rec("horn", []);
   const c = live();
   if (!c) return;
   const t = now(c);
-  for (const [f, d] of [[233, 0], [233, 0.16]] as const) {
+  for (const [f, d] of [
+    [233, 0],
+    [233, 0.16],
+  ] as const) {
     tone(c, t + d, f, 0.14, 0.14, f * 0.97, 0.5, 0.01);
     tone(c, t + d, f * 2, 0.12, 0.07, undefined, 0.5, 0.01);
     tone(c, t + d, f * 3, 0.1, 0.04, undefined, 0.5, 0.01);
   }
 }
 
-// A Flash Camera: the shutter, and a high whine as the flash charges down.
 export function camera() {
-  rec("camera", []);
   const c = live();
   if (!c) return;
   const t = now(c);
@@ -299,9 +255,7 @@ export function camera() {
   tone(c, t, 3400, 0.4, 0.035, 1800, 0.6, 0.01);
 }
 
-// Lightning: a crack, then the rumble rolling away.
 export function thunder() {
-  rec("thunder", []);
   const c = live();
   if (!c) return;
   const t = now(c);
@@ -310,9 +264,7 @@ export function thunder() {
   tone(c, t + 0.03, 70, 0.8, 0.3, 40, 0.6, 0.02);
 }
 
-// A Freeze Bomb: glassy notes falling, and a crackle.
 export function freeze() {
-  rec("freeze", []);
   const c = live();
   if (!c) return;
   const t = now(c);
@@ -320,9 +272,7 @@ export function freeze() {
   burst(c, t, 0.35, "highpass", 4000, 0.7, 0.1, undefined, 0.5);
 }
 
-// A gunshot: the Dueling Pistol's pop, or (big) the Elephant Gun's both barrels.
 export function gun(big = false) {
-  rec("gun", [big]);
   const c = live();
   if (!c) return;
   const t = now(c);
@@ -330,9 +280,7 @@ export function gun(big = false) {
   tone(c, t, big ? 90 : 180, big ? 0.35 : 0.12, big ? 0.4 : 0.2, 50, 0.4, 0.002);
 }
 
-// An Electromagnet coming on: a hum rising into a soft chord.
 export function shieldUp() {
-  rec("shieldUp", []);
   const c = live();
   if (!c) return;
   const t = now(c);
@@ -340,18 +288,14 @@ export function shieldUp() {
   [440, 554.37, 659.25].forEach((f) => tone(c, t + 0.18, f, 0.6, 0.05, undefined, 0.9, 0.02));
 }
 
-// Coffee: a quick bubbly slurp.
 export function coffee() {
-  rec("coffee", []);
   const c = live();
   if (!c) return;
   const t = now(c);
   for (let i = 0; i < 4; i++) tone(c, t + i * 0.05, 500 + i * 140, 0.06, 0.08, 900 + i * 140, 0.4, 0.004);
 }
 
-// Honey landing: a low wet squelch.
 export function honey() {
-  rec("honey", []);
   const c = live();
   if (!c) return;
   const t = now(c);
@@ -359,9 +303,7 @@ export function honey() {
   burst(c, t, 0.18, "lowpass", 700, 2, 0.12, 250, 0.3);
 }
 
-// Something blocked or burnt out: a shield taking a hit, a missile running dry.
 export function fizzle() {
-  rec("fizzle", []);
   const c = live();
   if (!c) return;
   const t = now(c);
@@ -369,45 +311,15 @@ export function fizzle() {
   tone(c, t, 660, 0.15, 0.05, 330, 0.5, 0.005);
 }
 
-// Called every frame with the ball's speed and what it's on.
 let lastRoll = -1;
 export function rolling(speed: number, ground: Ground | null) {
   const s = ground ? Math.min(1, speed / 22) : 0;
-  // Sand and wood are rough, ice a thin scrape, honey a muffled drag.
   const rough = ground === "sand" ? 2.4 : ground === "bridge" ? 1.6 : ground === "ice" ? 2.2 : ground === "honey" ? 0.35 : 1;
   const level = s ** 1.2 * 0.2 * (ground === "sand" ? 1.6 : ground === "ice" ? 0.55 : ground === "honey" ? 1.3 : 1);
-  if (level === 0 && lastRoll === 0 && !offline) return;
+  if (level === 0 && lastRoll === 0) return;
   lastRoll = level;
-  rec("rolling", [speed, ground]);
   if (!ctx || !g) return;
   const t = now(ctx);
   g.roll.gain.gain.setTargetAtTime(level, t, 0.04);
   g.roll.filter.frequency.setTargetAtTime(180 + s * 900 * rough, t, 0.05);
-}
-
-const PLAY: Record<Name, (...a: never[]) => void> = { putt, knock, bump, plunk, drop, blast, whoosh, land, pickup, brake, lip, rolling, horn, camera, thunder, freeze, gun, shieldUp, coffee, honey, fizzle, rocket };
-
-// Renders a log of sounds (from `window.__golfSounds`) into a buffer, `t0` being the log time (ms)
-// at which the buffer starts.
-export async function renderOffline(log: { name: Name; args: unknown[]; t: number }[], t0: number, seconds: number): Promise<AudioBuffer> {
-  const rate = 44100;
-  const oc = new OfflineAudioContext(2, Math.ceil(seconds * rate), rate);
-  const saved = { ctx, g };
-  offline = true;
-  ctx = oc;
-  g = graph(oc, oc.destination);
-  try {
-    for (const e of log) {
-      const s = (e.t - t0) / 1000;
-      if (s < 0 || s > seconds) continue;
-      at = s;
-      (PLAY[e.name] as (...a: unknown[]) => void)(...e.args);
-    }
-  } finally {
-    at = null;
-    offline = false;
-    ctx = saved.ctx;
-    g = saved.g;
-  }
-  return oc.startRendering();
 }

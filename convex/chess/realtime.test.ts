@@ -14,7 +14,6 @@ import {
   type State,
 } from "./realtime";
 
-// Square names to coordinates: "e2" -> [4, 1].
 const sq = (s: string): [number, number] => [s.charCodeAt(0) - 97, Number(s[1]) - 1];
 const at = (state: State, s: string) => {
   const [x, y] = sq(s);
@@ -27,9 +26,10 @@ const move = (tick: number, from: string, to: string, state = initialState()): C
   return { tick, color: p.color, pieceId: p.id, toX, toY };
 };
 const targets = (state: State, from: string) =>
-  legalTargets(state.pieces, at(state, from)!).map(([x, y]) => String.fromCharCode(97 + x) + (y + 1)).sort();
+  legalTargets(state.pieces, at(state, from)!)
+    .map(([x, y]) => String.fromCharCode(97 + x) + (y + 1))
+    .sort();
 
-// A custom position: pieces given as "wKe1" style strings, all ready.
 function position(...specs: string[]): State {
   const pieces: Piece[] = specs.map((s, id) => {
     const [x, y] = sq(s.slice(2));
@@ -151,7 +151,6 @@ describe("captures", () => {
   });
 
   test("a piece that wanders into a moving piece's path gets taken", () => {
-    // The rook starts toward a8; the black knight lands on a6 after the rook set off.
     const s = position("wRa1", "bNb8", "wKh1", "bKh8");
     const cmds: Command[] = [
       { tick: 0, color: "w", pieceId: 0, toX: 0, toY: 7 },
@@ -214,7 +213,6 @@ describe("promotion and endings", () => {
   });
 
   test("both kings falling on the same tick is a draw", () => {
-    // Each rook runs the full length of its own file into the enemy king, in lockstep.
     const s = position("wKa1", "bKh8", "wRh1", "bRa8");
     const cmds: Command[] = [
       { tick: 0, color: "w", pieceId: 2, toX: 7, toY: 7 },
@@ -246,8 +244,9 @@ describe("promotion and endings", () => {
 
   test("predictEnd finds when a game will finish if nobody moves again", () => {
     expect(predictEnd([], 0)).toEqual({ tick: NO_PROGRESS_TICKS, result: { winner: null, reason: "no_progress", ranking: [["w", "b"]] } });
-    // A pawn move at tick 1000 pushes the no-progress draw back by that much.
-    expect(predictEnd([move(1000, "e2", "e3")], 0).tick).toBe(1000 + NO_PROGRESS_TICKS);
+    expect(predictEnd([move(1000, "e2", "e3")], 0).tick, "a pawn move at tick 1000 pushes the no-progress draw back by that much").toBe(
+      1000 + NO_PROGRESS_TICKS,
+    );
     expect(predictEnd([move(1000, "e2", "e3")], 2000).tick).toBe(1000 + NO_PROGRESS_TICKS);
   });
 });
@@ -256,9 +255,11 @@ describe("premoves", () => {
   test("a premove queued during cooldown fires the tick the piece is ready", () => {
     const first = move(0, "e2", "e3");
     const pre: Command = { ...first, tick: 40, toY: 3 };
-    // Lands at tick 30, ready at 30 + 150 = 180, then moves to e4 (lands 30 ticks later).
     const before = simulate([first, pre], 180);
-    expect(before.pieces.find((p) => p.id === first.pieceId)).toMatchObject({ status: "cooldown", pending: { toX: 4, toY: 3 } });
+    expect(
+      before.pieces.find((p) => p.id === first.pieceId),
+      "lands at tick 30 and is ready at 30 + 150 = 180",
+    ).toMatchObject({ status: "cooldown", pending: { toX: 4, toY: 3 } });
     const fired = simulate([first, pre], 181);
     expect(fired.pieces.find((p) => p.id === first.pieceId)).toMatchObject({ status: "moving", startTick: 180, toY: 3 });
     expect(fired.pieces.find((p) => p.id === first.pieceId)?.pending).toBeUndefined();
@@ -285,7 +286,6 @@ describe("premoves", () => {
   });
 
   test("a premove that's no longer legal when it fires is dropped", () => {
-    // The rook premoves to a5, but a white knight parks there first.
     const s = position("wRa1", "wNb3", "wKh1", "bKh8");
     const cmds: Command[] = [
       { tick: 0, color: "w", pieceId: 0, toX: 0, toY: 1 },

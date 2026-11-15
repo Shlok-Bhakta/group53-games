@@ -1,20 +1,30 @@
 import { describe, expect, test } from "vitest";
 import { elo, multiElo } from "./ratings";
 
-// Expected numbers worked out by hand from the formula (K = 32, expected = 1 / (1 + 10^((b - a) / 400))), so a
-// sign flipped in the exponent or a swapped pair shows up even where equal ratings would hide it.
-// 1400 vs 1200: the favourite is expected to score 0.759747, the underdog 0.240253.
-describe("Elo with unequal ratings", () => {
+const K = 32;
+const FAVOURITE_1400_VS_1200_EXPECTS = 0.759747;
+const PAIR_WEIGHT_OF_FOUR = K / 3;
+const EXPECTED_SCORE = {
+  "1300 v 1200": 0.640065,
+  "1300 v 1250": 0.571463,
+  "1300 v 1100": 0.759747,
+  "1200 v 1250": 0.428537,
+  "1250 v 1100": 0.703313,
+  "1200 v 1100": 0.640065,
+};
+const by = (sum: number) => Math.round(PAIR_WEIGHT_OF_FOUR * sum);
+
+describe("Elo with unequal ratings, against numbers worked out by hand", () => {
   test("two players: the favourite gains little for winning and loses a lot for the upset", () => {
-    // 32 * (1 - 0.759747) = 7.688
-    expect(multiElo([1400, 1200], [0, 1])).toEqual([8, -8]);
-    // 32 * (0 - 0.759747) = -24.312
-    expect(multiElo([1400, 1200], [1, 0])).toEqual([-24, 24]);
-    // The same game with the seats the other way round.
-    expect(multiElo([1200, 1400], [1, 0])).toEqual([-8, 8]);
-    expect(multiElo([1200, 1400], [0, 1])).toEqual([24, -24]);
-    // A draw takes from the favourite: 32 * (0.5 - 0.759747) = -8.312.
-    expect(multiElo([1400, 1200], [0, 0])).toEqual([-8, 8]);
+    const favouriteWins = Math.round(K * (1 - FAVOURITE_1400_VS_1200_EXPECTS));
+    const upset = Math.round(K * (0 - FAVOURITE_1400_VS_1200_EXPECTS));
+    const draw = Math.round(K * (0.5 - FAVOURITE_1400_VS_1200_EXPECTS));
+    expect([favouriteWins, upset, draw]).toEqual([8, -24, -8]);
+    expect(multiElo([1400, 1200], [0, 1])).toEqual([favouriteWins, -favouriteWins]);
+    expect(multiElo([1400, 1200], [1, 0])).toEqual([upset, -upset]);
+    expect(multiElo([1200, 1400], [1, 0]), "the same game, seats the other way round").toEqual([-favouriteWins, favouriteWins]);
+    expect(multiElo([1200, 1400], [0, 1]), "the same upset, seats the other way round").toEqual([-upset, upset]);
+    expect(multiElo([1400, 1200], [0, 0]), "a draw takes from the favourite").toEqual([draw, -draw]);
   });
 
   test("two-player elo() agrees with multiElo", () => {
@@ -26,15 +36,16 @@ describe("Elo with unequal ratings", () => {
   });
 
   test("four players with a tie in the middle", () => {
-    // Equal ratings: the two sharing second draw each other and beat one player, lose to another: zero.
-    expect(multiElo([1200, 1200, 1200, 1200], [0, 1, 1, 3])).toEqual([16, 0, 0, -16]);
-    // Unequal ratings, seats 1 and 2 tied for second. Each pair weighted 32/3:
-    //   1300: (1 - 0.640065) + (1 - 0.571463) + (1 - 0.759747) = 1.028725 -> 10.973
-    //   1200: (0 - 0.359935) + (0.5 - 0.428537) + (1 - 0.640065) = 0.071463 -> 0.762
-    //   1250: (0 - 0.428537) + (0.5 - 0.571463) + (1 - 0.703313) = -0.203385 -> -2.169
-    //   1100: (0 - 0.240253) + (0 - 0.359935) + (0 - 0.296687) = -0.896803 -> -9.566
+    expect(multiElo([1200, 1200, 1200, 1200], [0, 1, 1, 3]), "equal ratings: the two sharing second come out even").toEqual([
+      16, 0, 0, -16,
+    ]);
+    const e = EXPECTED_SCORE;
+    const firstAt1300 = by(1 - e["1300 v 1200"] + (1 - e["1300 v 1250"]) + (1 - e["1300 v 1100"]));
+    const secondAt1200 = by(0 - (1 - e["1300 v 1200"]) + (0.5 - e["1200 v 1250"]) + (1 - e["1200 v 1100"]));
+    const secondAt1250 = by(0 - (1 - e["1300 v 1250"]) + (0.5 - (1 - e["1200 v 1250"])) + (1 - e["1250 v 1100"]));
+    const lastAt1100 = by(0 - (1 - e["1300 v 1100"]) + (0 - (1 - e["1200 v 1100"])) + (0 - (1 - e["1250 v 1100"])));
+    expect([firstAt1300, secondAt1200, secondAt1250, lastAt1100]).toEqual([11, 1, -2, -10]);
     expect(multiElo([1300, 1200, 1250, 1100], [0, 1, 1, 2])).toEqual([11, 1, -2, -10]);
-    // Places only matter in order, so a gap in the numbering changes nothing.
-    expect(multiElo([1300, 1200, 1250, 1100], [0, 1, 1, 3])).toEqual([11, 1, -2, -10]);
+    expect(multiElo([1300, 1200, 1250, 1100], [0, 1, 1, 3]), "only the order of places matters").toEqual([11, 1, -2, -10]);
   });
 });

@@ -15,9 +15,6 @@ function keyToBase64(key: ArrayBuffer | null) {
   return key ? btoa(String.fromCharCode(...new Uint8Array(key))) : "";
 }
 
-// This device's subscription, shared by every screen that asks: turning push on in the New game sheet
-// unlocks the Play tab underneath it at the same moment.
-// `endpoint` is undefined while we ask the service worker, null when this device has no subscription.
 type Device = { endpoint: string | null | undefined; permission: NotificationPermission };
 let device: Device = { endpoint: pushSupported ? undefined : null, permission: pushSupported ? Notification.permission : "denied" };
 const listeners = new Set<() => void>();
@@ -62,7 +59,7 @@ export function useNotifications() {
     if (!pushSupported) return;
     setBusy(true);
     try {
-      // iOS only shows the prompt when this is the first await in the tap handler.
+      // platform: iOS only shows the prompt when this is the first await in the tap handler.
       const result = await Notification.requestPermission();
       setDevice({ permission: result });
       if (result !== "granted") return;

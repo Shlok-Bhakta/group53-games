@@ -1,5 +1,3 @@
-// The steps behind dekit.yaml: a local Convex backend in Docker, our functions on it, and the stonks sidecar.
-// Everything it makes is in .dev/ and a Docker volume; `npm run dev:reset` wipes both.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -9,8 +7,7 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 process.chdir(ROOT);
 
 const CONVEX_URL = "http://127.0.0.1:3210";
-// The backend checks session tokens by fetching this from inside its container, where the site is always on 3211.
-// Nothing outside needs it without Discord, so it isn't published and `npm run test:e2e` can have host port 3211.
+// platform: the backend checks session tokens by fetching its site from inside its container, where it's always on 3211.
 const SITE_URL = "http://127.0.0.1:3211";
 const CONVEX = "group53-dev-convex";
 const STONKS = "group53-dev-stonks";
@@ -26,16 +23,14 @@ const run = (cmd, args, options = {}) => {
   const { status } = spawnSync(cmd, args, { stdio: "inherit", ...options });
   if (status !== 0) process.exit(status ?? 1);
 };
-// Runs until stopped, as the dekit task itself.
-const serve = (cmd, args, options = {}) => {
+const runAsTheTask = (cmd, args, options = {}) => {
   const child = spawn(cmd, args, { stdio: "inherit", ...options });
   child.on("exit", (code) => process.exit(code ?? 1));
 };
 const quietly = (cmd, args) => spawnSync(cmd, args, { stdio: "ignore" });
 const state = () => JSON.parse(readFileSync(STATE, "utf8"));
 
-// Always named outright: a checkout with kiwi's keys in .env.local must never push there from here.
-function cliEnv() {
+function localBackendOnlyEnv() {
   return {
     ...process.env,
     CONVEX_SELF_HOSTED_URL: CONVEX_URL,
@@ -52,12 +47,22 @@ function installIfStale(dir) {
   run("npm", ["ci"], { cwd: dir });
 }
 
-// The sidecar builds in a container, so nobody needs Rust, and its build is kept in a volume, so changing it is quick.
 function cargo(command) {
   return [
-    "-v", `${ROOT}/stonks:/src:ro`, "-v", "group53-dev-cargo:/usr/local/cargo/registry", "-v", "group53-dev-target:/target",
-    "-e", "CARGO_TARGET_DIR=/target", "-w", "/src", "docker.io/library/rust:1-alpine",
-    "sh", "-c", `apk add --no-cache musl-dev && cargo ${command} --locked`,
+    "-v",
+    `${ROOT}/stonks:/src:ro`,
+    "-v",
+    "group53-dev-cargo:/usr/local/cargo/registry",
+    "-v",
+    "group53-dev-target:/target",
+    "-e",
+    "CARGO_TARGET_DIR=/target",
+    "-w",
+    "/src",
+    "docker.io/library/rust:1-alpine",
+    "sh",
+    "-c",
+    `apk add --no-cache musl-dev && cargo ${command} --locked`,
   ];
 }
 
@@ -69,13 +74,15 @@ const steps = {
     installIfStale(".");
     installIfStale("og");
     if (existsSync(STATE)) return;
-    // No keys means the data in any old volume can't be read.
     quietly("docker", ["volume", "rm", "-f", VOLUME]);
     const { generateVars } = await import("../e2e/backend.mjs");
     mkdirSync(".dev", { recursive: true });
     writeFileSync(
       STATE,
-      JSON.stringify({ instanceSecret: randomBytes(32).toString("hex"), vars: { ...generateVars(), SITE_URL: "http://127.0.0.1:5173", DEV_AUTH: "1" } }),
+      JSON.stringify({
+        instanceSecret: randomBytes(32).toString("hex"),
+        vars: { ...generateVars(), SITE_URL: "http://127.0.0.1:5173", DEV_AUTH: "1" },
+      }),
       { mode: 0o600 },
     );
   },
@@ -83,12 +90,29 @@ const steps = {
   async convex() {
     const { resolveImage } = await import("../e2e/backend.mjs");
     quietly("docker", ["rm", "-f", CONVEX]);
-    serve("docker", [
-      "run", "--rm", "--name", CONVEX, "--stop-signal", "SIGINT",
-      "-p", "127.0.0.1:3210:3210", "-v", `${VOLUME}:/convex/data`,
-      "-e", "INSTANCE_NAME=group53-dev", "-e", `INSTANCE_SECRET=${state().instanceSecret}`,
-      "-e", `CONVEX_CLOUD_ORIGIN=${CONVEX_URL}`, "-e", `CONVEX_SITE_ORIGIN=${SITE_URL}`,
-      "-e", "DO_NOT_REQUIRE_SSL=true", "-e", "DISABLE_BEACON=true",
+    runAsTheTask("docker", [
+      "run",
+      "--rm",
+      "--name",
+      CONVEX,
+      "--stop-signal",
+      "SIGINT",
+      "-p",
+      "127.0.0.1:3210:3210",
+      "-v",
+      `${VOLUME}:/convex/data`,
+      "-e",
+      "INSTANCE_NAME=group53-dev",
+      "-e",
+      `INSTANCE_SECRET=${state().instanceSecret}`,
+      "-e",
+      `CONVEX_CLOUD_ORIGIN=${CONVEX_URL}`,
+      "-e",
+      `CONVEX_SITE_ORIGIN=${SITE_URL}`,
+      "-e",
+      "DO_NOT_REQUIRE_SSL=true",
+      "-e",
+      "DISABLE_BEACON=true",
       resolveImage(),
     ]);
   },
@@ -96,7 +120,7 @@ const steps = {
   functions() {
     const adminKey = execFileSync("docker", ["exec", CONVEX, "./generate_admin_key.sh"]).toString().trim().split("\n").pop();
     writeFileSync(ADMIN_KEY, adminKey, { mode: 0o600 });
-    const env = cliEnv();
+    const env = localBackendOnlyEnv();
     const convex = (...args) => run("npx", ["convex", ...args], { env });
     const set = execFileSync("npx", ["convex", "env", "list"], { env }).toString();
     if (!set.includes("DEV_AUTH=")) {
@@ -104,15 +128,31 @@ const steps = {
       for (const [name, value] of Object.entries(state().vars)) convex("env", "set", "--", name, value);
       convex("run", "devAuth:seed");
     }
-    serve("npx", ["convex", "dev"], { env });
+    runAsTheTask("npx", ["convex", "dev"], { env });
   },
 
-  // In the backend's own network, so 127.0.0.1:3210 is the backend on Docker and Podman alike, on any OS.
+  // platform: only inside the backend's own network is 127.0.0.1:3210 the backend on Docker and Podman alike, on any OS.
   stonks() {
     quietly("docker", ["rm", "-f", STONKS]);
-    serve("docker", ["run", "--rm", "--name", STONKS, "--network", `container:${CONVEX}`, "-e", `CONVEX_URL=${CONVEX_URL}`, "-e", "ADMIN_KEY", ...cargo("run")], {
-      env: { ...process.env, ADMIN_KEY: readFileSync(ADMIN_KEY, "utf8").trim() },
-    });
+    runAsTheTask(
+      "docker",
+      [
+        "run",
+        "--rm",
+        "--name",
+        STONKS,
+        "--network",
+        `container:${CONVEX}`,
+        "-e",
+        `CONVEX_URL=${CONVEX_URL}`,
+        "-e",
+        "ADMIN_KEY",
+        ...cargo("run"),
+      ],
+      {
+        env: { ...process.env, ADMIN_KEY: readFileSync(ADMIN_KEY, "utf8").trim() },
+      },
+    );
   },
 
   "test-sidecar"() {

@@ -10,7 +10,6 @@ import { ago, useNow } from "@/lib/time";
 
 const TAP_THROTTLE_MS = 200;
 
-// Reports that this player has the app open, which screen they're on, and where they tap.
 export function usePresenceReporter({ shareTaps }: { shareTaps: boolean }) {
   const { pathname } = useLocation();
   const heartbeat = useMutation(api.presence.heartbeat);
@@ -49,8 +48,7 @@ export function usePresenceReporter({ shareTaps }: { shareTaps: boolean }) {
   }, [shareTaps, tap]);
 }
 
-// Live presence for everyone. Re-evaluates the online window on a timer, because queries only
-// re-run when data changes, not when time passes.
+// platform: Convex queries only re-run when data changes, not when time passes, so the online window is re-checked on a timer.
 export function usePresence() {
   const rows = useQuery(api.presence.list);
   const now = useNow(5_000);
@@ -64,7 +62,6 @@ export function usePresence() {
   }, [rows, now]);
 }
 
-// A steady green dot for someone with the app open. Offline shows nothing: red would read as an error.
 export function OnlineDot({ online }: { online: boolean }) {
   if (!online) return null;
   return <span className="online-dot block" role="img" aria-label="Online" />;
@@ -76,7 +73,6 @@ export function lastSeenText(online: boolean, lastSeen: number | undefined) {
   return `Last on ${ago(Date.now() - lastSeen)}`;
 }
 
-// Someone with this game open right now: `here` when they're on the same screen as me.
 export function useHere(userId: Id<"users"> | undefined) {
   const { pathname } = useLocation();
   const { isOnline, byUser } = usePresence();
@@ -84,12 +80,16 @@ export function useHere(userId: Id<"users"> | undefined) {
   return { online: isOnline(userId), here: isOnline(userId) && byUser.get(userId)?.path === pathname };
 }
 
-// Three dots breathing: someone's working on their move right now. One of the few things allowed to loop.
 export function ThinkingDots() {
   return (
     <span className="flex gap-1" aria-hidden="true">
       {[0, 1, 2].map((i) => (
-        <motion.span key={i} className="size-1.5 rounded-full bg-muted-foreground" animate={{ opacity: [0.25, 1, 0.25] }} transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }} />
+        <motion.span
+          key={i}
+          className="size-1.5 rounded-full bg-muted-foreground"
+          animate={{ opacity: [0.25, 1, 0.25] }}
+          transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
+        />
       ))}
     </span>
   );
@@ -97,34 +97,46 @@ export function ThinkingDots() {
 
 type Ripple = { key: string; x: number; y: number; userId: Id<"users"> };
 
-// Shows other players' taps on the screen you're both looking at, as a ripple with their avatar.
+const RIPPLES_SHOWN = 12;
+const RIPPLE_MS = 1600;
+
 export function TapLayer({ meId }: { meId: Id<"users"> | undefined }) {
   const { pathname } = useLocation();
   const { rows } = usePresence();
   const crew = useQuery(api.profiles.crew);
-  const seen = useRef<Map<string, number> | null>(null);
+  const [seen, setSeen] = useState<ReadonlyMap<string, number> | null>(null);
+  const [seenRows, setSeenRows] = useState<typeof rows | null>(null);
   const [ripples, setRipples] = useState<Ripple[]>([]);
+  if (rows !== seenRows) {
+    setSeenRows(rows);
+    if (seen === null) {
+      if (rows.length > 0) setSeen(new Map(rows.map((r) => [r.userId, r.tap?.seq ?? 0])));
+    } else {
+      const next = new Map(seen);
+      const fresh: Ripple[] = [];
+      for (const r of rows) {
+        if (!r.tap || r.userId === meId) continue;
+        if ((next.get(r.userId) ?? 0) >= r.tap.seq) continue;
+        next.set(r.userId, r.tap.seq);
+        if (r.tap.path !== pathname) continue;
+        fresh.push({ key: `${r.userId}:${r.tap.seq}`, x: r.tap.x, y: r.tap.y, userId: r.userId });
+      }
+      setSeen(next);
+      if (fresh.length > 0) setRipples((rs) => [...rs, ...fresh].slice(-RIPPLES_SHOWN));
+    }
+  }
 
+  const fading = useRef(new Set<string>());
   useEffect(() => {
-    // On first load, remember everyone's current tap so old taps don't replay.
-    if (seen.current === null) {
-      if (rows.length === 0) return;
-      seen.current = new Map(rows.map((r) => [r.userId, r.tap?.seq ?? 0]));
-      return;
+    for (const r of ripples) {
+      if (fading.current.has(r.key)) continue;
+      fading.current.add(r.key);
+      setTimeout(() => {
+        fading.current.delete(r.key);
+        setRipples((rs) => rs.filter((x) => x.key !== r.key));
+      }, RIPPLE_MS);
     }
-    const fresh: Ripple[] = [];
-    for (const r of rows) {
-      if (!r.tap || r.userId === meId) continue;
-      if ((seen.current.get(r.userId) ?? 0) >= r.tap.seq) continue;
-      seen.current.set(r.userId, r.tap.seq);
-      if (r.tap.path !== pathname) continue;
-      fresh.push({ key: `${r.userId}:${r.tap.seq}`, x: r.tap.x, y: r.tap.y, userId: r.userId });
-    }
-    if (fresh.length === 0) return;
-    setRipples((rs) => [...rs, ...fresh].slice(-12));
-    const keys = new Set(fresh.map((f) => f.key));
-    setTimeout(() => setRipples((rs) => rs.filter((r) => !keys.has(r.key))), 1600);
-  }, [rows, meId, pathname]);
+  }, [ripples]);
 
   const people = useMemo(() => new Map((crew ?? []).map((p) => [p._id, p])), [crew]);
 
@@ -137,24 +149,37 @@ export function TapLayer({ meId }: { meId: Id<"users"> | undefined }) {
           const left = r.x * window.innerWidth;
           const top = r.y - window.scrollY;
           return (
-            <motion.div key={r.key} data-tap={p.name} className="absolute" style={{ left, top }} initial={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.35 } }}>
+            <motion.div
+              key={r.key}
+              data-tap={p.name}
+              className="absolute -ml-[18px] -mt-[18px] size-9"
+              style={{ left, top }}
+              initial={{ opacity: 1 }}
+              exit={{ opacity: 0, transition: { duration: 0.35 } }}
+            >
               <motion.span
-                className="absolute -left-7 -top-7 size-14 rounded-full border-2"
+                className="absolute -left-2.5 -top-2.5 size-14 rounded-full border-2"
                 style={{ borderColor: p.frameColor }}
                 initial={{ scale: 0.2, opacity: 0.9 }}
                 animate={{ scale: 1.6, opacity: 0 }}
                 transition={{ duration: 0.9, ease: "easeOut" }}
               />
               <motion.span
-                className="absolute -left-[18px] -top-[18px] block"
+                className="absolute left-0 top-0 block"
                 initial={{ scale: 0, rotate: -20 }}
                 animate={{ scale: 1, rotate: 0 }}
                 transition={{ type: "spring", stiffness: 520, damping: 22 }}
               >
-                <PlayerAvatar name={p.name} image={p.image} frame={p.frame === "none" ? "solid" : p.frame} frameColor={p.frameColor} size={36} />
+                <PlayerAvatar
+                  name={p.name}
+                  image={p.image}
+                  frame={p.frame === "none" ? "solid" : p.frame}
+                  frameColor={p.frameColor}
+                  size={36}
+                />
               </motion.span>
               <motion.span
-                className="absolute left-5 top-3 whitespace-nowrap rounded-full bg-foreground px-2 py-0.5 text-caption font-semibold text-background shadow-md"
+                className="absolute left-[38px] top-[30px] whitespace-nowrap rounded-full bg-foreground px-2 py-0.5 text-caption font-semibold text-background shadow-md"
                 initial={{ opacity: 0, x: -4 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.08 }}
@@ -169,7 +194,6 @@ export function TapLayer({ meId }: { meId: Id<"users"> | undefined }) {
   );
 }
 
-// Everyone else who has the app open right now.
 export function useOnlineOthers() {
   const me = useQuery(api.users.me);
   const crew = useQuery(api.profiles.crew);
@@ -177,7 +201,6 @@ export function useOnlineOthers() {
   return useMemo(() => (crew ?? []).filter((p) => p._id !== me?._id && isOnline(p._id)), [crew, me?._id, isOnline]);
 }
 
-// Players who are online and currently on a game's screens (their path starts with the game's path).
 export function usePlayingIn(gamePath: string) {
   const crew = useQuery(api.profiles.crew);
   const { isOnline, byUser } = usePresence();
@@ -193,7 +216,6 @@ export function usePlayingIn(gamePath: string) {
 
 type Arrival = { key: string; name: string; image?: string; frame: string; frameColor: string };
 
-// A Dynamic Island style pill that drops in when someone opens the app.
 export function ArrivalPills() {
   const others = useOnlineOthers();
   const { loaded } = usePresence();
@@ -203,7 +225,6 @@ export function ArrivalPills() {
   useEffect(() => {
     if (!loaded) return;
     const now = new Set(others.map((p) => p._id as string));
-    // The first pass only records who's already here, so opening the app doesn't announce everyone.
     if (seen.current === null) {
       seen.current = now;
       return;
@@ -211,14 +232,23 @@ export function ArrivalPills() {
     const fresh = others.filter((p) => !seen.current!.has(p._id));
     seen.current = now;
     if (fresh.length === 0) return;
-    const items = fresh.map((p) => ({ key: `${p._id}:${Date.now()}`, name: p.name, image: p.image, frame: p.frame, frameColor: p.frameColor }));
+    const items = fresh.map((p) => ({
+      key: `${p._id}:${Date.now()}`,
+      name: p.name,
+      image: p.image,
+      frame: p.frame,
+      frameColor: p.frameColor,
+    }));
     setArrivals((a) => [...a, ...items].slice(-3));
     const keys = new Set(items.map((i) => i.key));
     setTimeout(() => setArrivals((a) => a.filter((x) => !keys.has(x.key))), 3200);
   }, [others, loaded]);
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+36px)] z-50 flex flex-col items-center gap-2" aria-live="polite">
+    <div
+      className="pointer-events-none fixed inset-x-0 top-[calc(var(--safe-top)+36px)] z-50 flex flex-col items-center gap-2"
+      aria-live="polite"
+    >
       <AnimatePresence>
         {arrivals.map((a) => (
           <motion.div
@@ -228,7 +258,7 @@ export function ArrivalPills() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -16, scale: 0.92, transition: { duration: 0.22 } }}
             transition={{ type: "spring", stiffness: 420, damping: 30 }}
-            className="flex items-center gap-2.5 rounded-full bg-foreground py-1.5 pl-1.5 pr-4 text-background shadow-xl shadow-black/25"
+            className="flex items-center gap-2.5 rounded-full bg-foreground py-1.5 pl-1.5 pr-4 text-background shadow-xl shadow-shade/25"
           >
             <PlayerAvatar name={a.name} image={a.image} frame={a.frame} frameColor={a.frameColor} size={28} />
             <span className="text-callout font-semibold">

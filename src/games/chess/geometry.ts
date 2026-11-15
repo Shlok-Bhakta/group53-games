@@ -2,8 +2,6 @@ import { FILES14, SIZE as SIZE4, onBoard as onBoard4, rotate, unrotate, type Col
 
 export type Sq = [number, number];
 
-// How a board sits on screen for one player: their army at the bottom. Works on fractional squares too,
-// so pieces in flight map smoothly.
 export type View = {
   n: number;
   toScreen: (x: number, y: number) => [number, number];
@@ -12,7 +10,8 @@ export type View = {
   name: (sq: Sq) => string;
 };
 
-const FILES = "abcdefgh";
+export const FILES = "abcdefgh";
+export const TAP_REACH = 0.85;
 const COLORS4 = ["red", "blue", "yellow", "green"];
 
 export function viewFor(variant: "two" | "four", color: string | undefined): View {
@@ -42,7 +41,6 @@ export function viewFor(variant: "two" | "four", color: string | undefined): Vie
 
 export const same = (a: Sq | null | undefined, b: Sq | null | undefined) => !!a && !!b && a[0] === b[0] && a[1] === b[1];
 
-// Fractional screen square under a point, or null off the board's box.
 export function pointToScreen(el: HTMLElement, n: number, clientX: number, clientY: number): [number, number] | null {
   const r = el.getBoundingClientRect();
   const fc = ((clientX - r.left) / r.width) * n;
@@ -51,7 +49,6 @@ export function pointToScreen(el: HTMLElement, n: number, clientX: number, clien
   return [fc, fr];
 }
 
-// On the 14x14 board squares are small, so a tap goes to the nearest candidate within reach of the finger.
 export function nearest(view: View, candidates: Sq[], fc: number, fr: number, reach: number): Sq | null {
   let best: Sq | null = null;
   let bestD = reach;

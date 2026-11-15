@@ -1,0 +1,16 @@
+node_modules
+dist
+convex/_generated
+convex/scrabble/words.ts
+convex/golf/solutions.ts
+stonks/target
+public
+assets
+e2e/.state
+test-results
+playwright-report
+package-lock.json
+og/package-lock.json
+.claude/worktrees
+*.md
+src/style.css

@@ -5,6 +5,7 @@ import { VARIANTS, isOut } from "../../../../convex/poker/engine";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { SeatDot } from "@/components/game/SeatDot";
 import { useTurnText } from "@/components/game/TurnText";
+import { Button } from "@/components/ui/button";
 import { PlayingCard } from "@/components/ui/playing-card";
 import { OnlineDot, ThinkingDots, useHere } from "@/presence";
 import { seatColor } from "@/games/seats";
@@ -12,15 +13,12 @@ import type { Player } from "@/games/types";
 import { cn } from "@/lib/utils";
 import { chips } from "../format";
 import { PACE, cardsHeld, type Show } from "../show";
+import { usePhoneLandscape } from "@/components/game/landscape";
 import { Flying, Roll, SPRING } from "./motion";
 import { Bet, Dealer, Float, NameLine, statusOf } from "./Seat";
 
-// My side of the table: my tile, then my cards, big. A spectator gets whose move it is instead.
-
-// What's going on, for whoever's looking at my side of the table.
 export function TurnStatus({ match, show }: { match: MatchView; show: Show }) {
   const up = match.status === "active" && show.turn >= 0 ? match.players[show.turn] : undefined;
-  // Never "Your move": that's on my tile.
   const { text, thinking } = useTurnText(up, undefined);
   if (!up) return null;
   return (
@@ -32,8 +30,19 @@ export function TurnStatus({ match, show }: { match: MatchView; show: Show }) {
   );
 }
 
-// My tile: my avatar, my chips, what I've got in, and whose move it is.
-export function MyTile({ match, player, seat, show, picking }: { match: MatchView; player: Player; seat: number; show: Show; picking: boolean }) {
+export function MyTile({
+  match,
+  player,
+  seat,
+  show,
+  picking,
+}: {
+  match: MatchView;
+  player: Player;
+  seat: number;
+  show: Show;
+  picking: boolean;
+}) {
   const s = show.state;
   const { online } = useHere(player.userId);
   const { out, folded, allIn, label } = statusOf(show, seat);
@@ -41,10 +50,24 @@ export function MyTile({ match, player, seat, show, picking }: { match: MatchVie
   const up = match.status === "active" && show.turn === seat && !show.busy;
   const won = show.paying?.find((p) => p.seat === seat);
   return (
-    <div data-seat={player.color} data-up={up} data-out={out || folded} role="group" aria-label={`You, ${chips(show.stacks[seat])} chips${label ? `, ${label}` : ""}`} className="relative mt-2.5" style={{ "--seat": color } as CSSProperties}>
-      <div className="poker-tile flex h-14 items-center gap-2.5 rounded-lg bg-card px-2.5">
+    <div
+      data-seat={player.color}
+      data-up={up}
+      data-out={out || folded}
+      role="group"
+      aria-label={`You, ${chips(show.stacks[seat])} chips${label ? `, ${label}` : ""}`}
+      className="relative mt-2.5 phone-landscape:mt-0"
+      style={{ "--seat": color } as CSSProperties}
+    >
+      <div className="poker-tile flex h-14 items-center gap-2.5 rounded-lg bg-card px-2.5 phone-landscape:h-auto phone-landscape:flex-wrap phone-landscape:gap-y-2 phone-landscape:py-2">
         <span className="relative shrink-0" data-spot={seat}>
-          <span className={cn("block rounded-full transition-[box-shadow,opacity,filter] duration-300", up && "poker-up", (folded || out) && "opacity-55 grayscale")}>
+          <span
+            className={cn(
+              "block rounded-full transition-[box-shadow,opacity,filter] duration-300",
+              up && "poker-up",
+              (folded || out) && "opacity-55 grayscale",
+            )}
+          >
             <PlayerAvatar player={player} glow={player.glow} size={38} />
           </span>
           <span className="absolute -right-0.5 -top-0.5 z-[3] [--dot-ring:var(--card)]">
@@ -59,8 +82,17 @@ export function MyTile({ match, player, seat, show, picking }: { match: MatchVie
             <Roll value={show.stacks[seat]} />
           </span>
         </span>
-        {show.bets[seat] > 0 && <Bet amount={show.bets[seat]} color={color} sweeping={show.sweeping} order={seat} label={`You have ${chips(show.bets[seat])} in`} className="z-10" />}
-        <span className="ml-auto flex min-w-0 items-center">
+        {show.bets[seat] > 0 && (
+          <Bet
+            amount={show.bets[seat]}
+            color={color}
+            sweeping={show.sweeping}
+            order={seat}
+            label={`You have ${chips(show.bets[seat])} in`}
+            className="z-10"
+          />
+        )}
+        <span className="ml-auto flex min-w-0 items-center phone-landscape:ml-0 phone-landscape:basis-full phone-landscape:empty:hidden">
           {up ? (
             <motion.span
               key="turn"
@@ -82,21 +114,56 @@ export function MyTile({ match, player, seat, show, picking }: { match: MatchVie
   );
 }
 
-// My cards, big, and what they make. In a draw, tap the ones to swap. A place for each card is held from the
-// start, so nothing moves as they land.
-export function MyHand({ show, seat, color, cards, picking, swap, onPick, rung, madeName }: { show: Show; seat: number; color: string; cards: string[] | null; picking: boolean; swap: number[]; onPick: (i: number) => void; rung: string[]; madeName: string | null }) {
+const ROOMY_HEIGHT = 780;
+
+function handLayout(count: number, landscape: boolean) {
+  if (landscape) {
+    const perRow = count <= 2 ? count : count === 4 ? 2 : 3;
+    return { width: count <= 2 ? 66 : count === 4 ? 56 : 50, tilt: count <= 2 ? 8 : 0, perRow };
+  }
+  const roomy = window.innerHeight >= ROOMY_HEIGHT;
+  const width = count <= 2 ? (roomy ? 88 : 66) : count === 4 ? (roomy ? 74 : 62) : roomy ? 66 : 58;
+  return { width, tilt: count <= 2 ? 8 : 3, perRow: count };
+}
+
+export function MyHand({
+  show,
+  seat,
+  color,
+  cards,
+  picking,
+  swap,
+  onPick,
+  rung,
+  madeName,
+}: {
+  show: Show;
+  seat: number;
+  color: string;
+  cards: string[] | null;
+  picking: boolean;
+  swap: number[];
+  onPick: (i: number) => void;
+  rung: string[];
+  madeName: string | null;
+}) {
   const s = show.state;
   const count = VARIANTS[s.variant].hole;
-  // Bigger on a phone with the height to spare.
-  const roomy = window.innerHeight >= 780;
-  const width = count <= 2 ? (roomy ? 88 : 66) : count === 4 ? (roomy ? 74 : 62) : roomy ? 66 : 58;
-  const tilt = count <= 2 ? 8 : 3;
+  const landscape = usePhoneLandscape();
+  const { width, tilt, perRow } = handLayout(count, landscape);
   const sitting = !s.dealt[seat] || isOut(s, seat);
   const held = cardsHeld(s, seat, show.dealtCards);
   const dim = s.dealt[seat] && show.folded[seat];
   return (
     <div role="group" aria-label="Your cards" className="mt-4 flex flex-col items-center gap-1">
-      <div className={cn("flex items-end justify-center transition-opacity duration-300", dim && "opacity-40")} style={{ minHeight: width * 1.4 + 2 }}>
+      <div
+        className={cn("flex items-end justify-center transition-opacity duration-300", landscape && "flex-wrap", dim && "opacity-40")}
+        style={
+          landscape
+            ? { minHeight: Math.ceil(count / perRow) * (width * 1.4 + 2), maxWidth: perRow * (width + 2) }
+            : { minHeight: width * 1.4 + 2 }
+        }
+      >
         {!sitting &&
           Array.from({ length: count }, (_, i) => {
             const angle = (i - (count - 1) / 2) * tilt;
@@ -114,18 +181,21 @@ export function MyHand({ show, seat, color, cards, picking, swap, onPick, rung, 
                   exit={{ rotateY: 90, transition: { duration: 0.12 * PACE, ease: "easeIn" } }}
                   transition={{ type: "spring", bounce: 0.2, duration: 0.3 * PACE }}
                 >
-                  {c ? <PlayingCard card={c} width={width} best={picking ? lifted : rung.includes(c)} /> : <PlayingCard width={width} seat={color} />}
+                  {c ? (
+                    <PlayingCard card={c} width={width} best={picking ? lifted : rung.includes(c)} />
+                  ) : (
+                    <PlayingCard width={width} seat={color} />
+                  )}
                 </motion.span>
               </AnimatePresence>
             );
             return (
               <Flying key={`${s.hand}:${i}`} width={width} fly={show.dealtCards !== Infinity} className="-mx-[3px]">
                 <span className="block" style={style}>
-                  {/* The card itself is the button, so it's no Button. */}
                   {picking && c ? (
-                    <button type="button" className="block touch-manipulation rounded-sm active:scale-[0.97]" aria-pressed={lifted} aria-label={`Swap card ${i + 1}`} onClick={() => onPick(i)}>
+                    <Button variant="bare" size="piece" aria-pressed={lifted} aria-label={`Swap card ${i + 1}`} onClick={() => onPick(i)}>
                       {face}
-                    </button>
+                    </Button>
                   ) : (
                     face
                   )}
@@ -135,7 +205,14 @@ export function MyHand({ show, seat, color, cards, picking, swap, onPick, rung, 
           })}
       </div>
       <AnimatePresence mode="wait" initial={false}>
-        <motion.p key={madeName ?? "none"} className="h-[22px] text-callout font-semibold text-muted-foreground" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 * PACE }}>
+        <motion.p
+          key={madeName ?? "none"}
+          className="h-[22px] text-callout font-semibold text-muted-foreground"
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 * PACE }}
+        >
           {madeName ?? ""}
         </motion.p>
       </AnimatePresence>

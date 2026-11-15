@@ -4,14 +4,10 @@ import { Group } from "@/components/parts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { display, INDEX } from "../../../convex/stonks/market";
 
-// Stand-ins the exact size of what they stand in for, so nothing moves when the data lands. Every height
-// here is the real one's (S below): change one, change both. They're in the main bundle, since they're
-// what shows while Stonks' code is still on its way.
-
 export const S = {
-  heroTop: "h-6", // the name and the market's state
-  heroPrice: "h-10", // text-title-lg
-  heroLine: "h-6", // a change line
+  heroTop: "h-6",
+  heroPrice: "h-10",
+  heroLine: "h-6",
   chart: 200,
   segmented: "h-[52px]",
   row: "h-16",
@@ -22,6 +18,13 @@ export const S = {
   search: "h-11",
   crewChart: 190,
 } as const;
+
+export const PINNED_DOCK =
+  "sticky pin-bottom bleed-x flex gap-2.5 px-page pt-5 pb-[calc(var(--safe-bottom)+12px)] mb-[calc(-1*(var(--safe-bottom)+16px))]";
+
+export const WIDE_NAV_BAR = "phone-landscape:mx-0";
+
+export const STOCK_COLUMNS = "flex flex-col gap-6 phone-landscape:grid phone-landscape:grid-cols-2 phone-landscape:items-start";
 
 const MOVERS = 6;
 const STATS = 6;
@@ -160,15 +163,17 @@ function StatsSkeleton() {
 export function StockSkeleton() {
   const { symbol = "" } = useParams();
   return (
-    <div className="flex flex-col gap-6" aria-busy="true">
-      <NavBar title={display(symbol)} subtitle={<span className="inline-block h-[17px]" />} back="/stonks" />
-      <section className="flex flex-col gap-3">
-        <HeroSkeleton extended={symbol !== INDEX} />
-        <ChartSkeleton />
-        <Skeleton className={`${S.segmented} w-full rounded-md`} />
-      </section>
-      <StatsSkeleton />
-      <div className="sticky bottom-0 -mx-4 flex gap-2.5 bg-background px-4 pt-5" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)", marginBottom: "calc(-1 * (env(safe-area-inset-bottom) + 16px))" }}>
+    <div data-wide className="flex flex-col gap-6" aria-busy="true">
+      <NavBar title={display(symbol)} subtitle={<span className="inline-block h-[17px]" />} back="/stonks" className={WIDE_NAV_BAR} />
+      <div className={STOCK_COLUMNS}>
+        <section className="flex flex-col gap-3">
+          <HeroSkeleton extended={symbol !== INDEX} />
+          <ChartSkeleton />
+          <Skeleton className={`${S.segmented} w-full rounded-md`} />
+        </section>
+        <StatsSkeleton />
+      </div>
+      <div className={`${PINNED_DOCK} bg-background`}>
         <Skeleton className="h-14 flex-1 rounded-lg" />
         <Skeleton className="h-14 flex-1 rounded-lg" />
       </div>

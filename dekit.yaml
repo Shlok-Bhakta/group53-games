@@ -8,23 +8,23 @@ tasks:
       VITE_CONVEX_URL: http://127.0.0.1:3210
       # Pick a player instead of signing in with Discord, each tab its own player, and skip the install and push gates.
       VITE_DEV_AUTH: "1"
-    ready: {http: http://127.0.0.1:5173}
+    ready: { http: http://127.0.0.1:5173 }
     autostart: true
   functions:
     cmd: node scripts/dev.mjs functions
     deps: [convex]
-    ready: {log: Convex functions ready}
+    ready: { log: Convex functions ready }
     autostart: true
   convex:
     cmd: node scripts/dev.mjs convex
     deps: [setup]
-    ready: {http: http://127.0.0.1:3210/version}
-    stop: {cmd: docker stop -t 10 group53-dev-convex}
+    ready: { http: http://127.0.0.1:3210/version }
+    stop: { cmd: docker stop -t 10 group53-dev-convex }
   stonks:
     cmd: node scripts/dev.mjs stonks
     deps: [functions]
-    ready: {log: "stonks: connected"}
-    stop: {cmd: docker rm -f group53-dev-stonks}
+    ready: { log: "stonks: connected" }
+    stop: { cmd: docker rm -f group53-dev-stonks }
     autostart: true
   og:
     cmd: node server.mjs
@@ -36,7 +36,7 @@ tasks:
       ADMIN_KEY_FILE: ../.dev/admin_key
       SITE_URL: http://127.0.0.1:5173
       PIECES_URL: http://127.0.0.1:5173/pieces
-    ready: {http: http://127.0.0.1:8788/og/health}
+    ready: { http: http://127.0.0.1:8788/og/health }
     autostart: true
   setup:
     type: job
@@ -48,7 +48,7 @@ tasks:
     type: job
     cmd: node scripts/dev-smoke.mjs
     deps: [web, og, test/browser]
-    env: {PLAYWRIGHT_BROWSERS_PATH: "0"}
+    env: { PLAYWRIGHT_BROWSERS_PATH: "0" }
   test/unit:
     type: job
     cmd: npm test
@@ -58,7 +58,7 @@ tasks:
     cmd: node e2e/run.mjs
     deps: [test/browser]
     # Playwright only shuts its preview server down on SIGINT.
-    stop: {signal: SIGINT, timeout: 30s}
+    stop: { signal: SIGINT, timeout: 30s }
   test/sidecar:
     type: job
     cmd: node scripts/dev.mjs test-sidecar

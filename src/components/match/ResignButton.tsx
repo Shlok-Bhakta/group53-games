@@ -9,8 +9,6 @@ import { cn } from "@/lib/utils";
 
 type ButtonProps = ComponentProps<typeof Button>;
 
-// Resign, behind a confirmation. `detail` says what happens next in this game; `variant` and `size` let a dock
-// make it one of its own buttons.
 export function ResignButton({
   match,
   detail,

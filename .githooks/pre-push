@@ -1,0 +1,16 @@
+#!/bin/sh
+set -e
+stamps="$(git rev-parse --git-common-dir)/group53-verified"
+zero=0000000000000000000000000000000000000000
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue
+  tree=$(git rev-parse "$local_sha^{tree}")
+  [ -f "$stamps/$tree" ] && continue
+  if [ "$(git rev-parse HEAD^{tree})" = "$tree" ] && [ -z "$(git status --porcelain)" ]; then
+    echo "$local_ref hasn't been verified yet. Running npm run verify..."
+    npm run verify </dev/null
+    [ -f "$stamps/$tree" ] && continue
+  fi
+  echo "Refusing to push $local_ref: $local_sha hasn't passed npm run verify. Check it out with a clean tree and run npm run verify." >&2
+  exit 1
+done

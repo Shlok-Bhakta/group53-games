@@ -1,16 +1,12 @@
 import type { ReactNode } from "react";
 import { MinusIcon, PlusIcon } from "@phosphor-icons/react";
 import { AsyncButton } from "@/components/AsyncButton";
-import { Button } from "@/components/ui/button";
+import { Button, IconButton } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
 import { Slider } from "@/components/ui/slider";
 
 export type Preset = { label: string; value: number };
 
-// Picking how much: the amount big in the middle, a slider, a row of usual sizes, and one button to commit.
-// Poker's bets and Stonks' orders are both this. `snap` keeps the slider on round amounts; `step` adds − and +
-// around the amount for fine steps. Whatever the game wants to say about the amount goes in `detail` (under
-// it) and `children` (above the button).
 export function AmountSheet({
   open,
   onClose,
@@ -44,7 +40,6 @@ export function AmountSheet({
   confirm: ReactNode;
   onConfirm: () => Promise<unknown>;
 }) {
-  // Two sizes can come to the same amount; the last of them lights up.
   const lit = [...presets].reverse().find((p) => p.value === value);
   const amount = (
     <div className="text-center">
@@ -58,13 +53,13 @@ export function AmountSheet({
     <Sheet open={open} onClose={onClose} title={title} closable>
       {step ? (
         <div className="flex items-center justify-between gap-3">
-          <Button variant="secondary" size="icon-lg" aria-label="Less" disabled={value <= min} onClick={() => onChange(snap(value - step))}>
+          <IconButton label="Less" variant="secondary" size="icon-lg" disabled={value <= min} onClick={() => onChange(snap(value - step))}>
             <MinusIcon weight="bold" />
-          </Button>
+          </IconButton>
           {amount}
-          <Button variant="secondary" size="icon-lg" aria-label="More" disabled={value >= max} onClick={() => onChange(snap(value + step))}>
+          <IconButton label="More" variant="secondary" size="icon-lg" disabled={value >= max} onClick={() => onChange(snap(value + step))}>
             <PlusIcon weight="bold" />
-          </Button>
+          </IconButton>
         </div>
       ) : (
         amount

@@ -1,8 +1,5 @@
 import type { HandResult, LogEntry } from "./engine";
 
-// How poker moves read, in pushes and on the table. Shared by the server and phones.
-
-// "Chris raised to 200", "Chris went all in", "Chris swapped 2".
 export function actionText(e: LogEntry, name: string): string {
   if (e.auto) return `${name} ran out of time`;
   if (e.allIn && e.kind !== "blind") return `${name} went all in`;
@@ -24,7 +21,6 @@ export function actionText(e: LogEntry, name: string): string {
   }
 }
 
-// The word on a seat for its last move this street: "Raise 200", "Check", "All in".
 export function actionLabel(e: LogEntry): string {
   if (e.allIn) return "All in";
   switch (e.kind) {
@@ -45,18 +41,17 @@ export function actionLabel(e: LogEntry): string {
   }
 }
 
-// A hand's name as it reads mid-sentence: "with a pair of Kings", "with two pair", "with Ace high".
 export function handInSentence(name: string) {
   if (name.endsWith(" high") && !name.includes(",")) return name;
   const lower = name[0].toLowerCase() + name.slice(1);
   return /^(pair|flush|straight|full|royal)/.test(lower) ? `a ${lower}` : lower;
 }
 
-// Who took the biggest share of the last hand: "Chris won the pot of 340 with two pair, Kings and 7s", or
-// "Chris took the pot of 60" when everyone else folded. The pot counts the winner's own chips in it; Last
-// hand and the table's +chips show what each player came out ahead. `you` names the reader's own seat "You".
 export function resultText(r: HandResult, nameOf: (seat: number) => string): string {
-  const winners = r.won.map((w, seat) => ({ w, seat })).filter((x) => x.w > 0).sort((a, b) => b.w - a.w);
+  const winners = r.won
+    .map((w, seat) => ({ w, seat }))
+    .filter((x) => x.w > 0)
+    .sort((a, b) => b.w - a.w);
   if (!winners.length) return `Hand ${r.hand} is over`;
   const top = winners[0];
   if (!r.showdown) return `${nameOf(top.seat)} took the pot of ${top.w}`;

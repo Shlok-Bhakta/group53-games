@@ -1,14 +1,18 @@
-// Turn-based four-player chess, chess.com Free-for-all rules. Pure and deterministic; no Convex imports.
-//
-// Players move clockwise: red, blue, yellow, green. The usual chess rules apply, with check against every
-// live opponent. When it's your turn and you have no legal move you're out: checkmate gives the player who
-// delivered it +20, and stalemating yourself gives you +20. Resigning or timing out also puts you out.
-// Eliminated armies turn grey and stay on the board; capturing them scores nothing. Captures score
-// P 1, N 3, B 5, R 5, Q 9 (promoted queens 1). Checking two kings at once scores +5 (+1 with a queen),
-// three +20 (+5 with a queen). The game ends when one player is left, or after 50 rounds with no capture
-// or pawn move (+10 to everyone still in). Most points wins; ties go to whoever lasted longer.
-
-import { CASTLES, COLORS4, POINTS, SIZE, forward, onBoard, onPawnStart, promotes, rotate, setup, squareName, type Color4, type Kind } from "./board";
+import {
+  CASTLES,
+  COLORS4,
+  POINTS,
+  SIZE,
+  forward,
+  onBoard,
+  onPawnStart,
+  promotes,
+  rotate,
+  setup,
+  squareName,
+  type Color4,
+  type Kind,
+} from "./board";
 
 export type Piece4 = { id: number; color: Color4; kind: Kind; x: number; y: number; moved: boolean; promoted?: boolean; dead?: boolean };
 
@@ -33,14 +37,32 @@ export type FourState = {
   out: Out[];
   points: Record<Color4, number>;
   moves: Move4[];
-  // Plies since the last capture or pawn move.
   quiet: number;
   result: { standings: Color4[][]; reason: "last_player" | "fifty" } | null;
 };
 
-const DIAG: [number, number][] = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
-const ORTH: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-const KNIGHT: [number, number][] = [[2, 1], [2, -1], [-2, 1], [-2, -1], [1, 2], [1, -2], [-1, 2], [-1, -2]];
+const DIAG: [number, number][] = [
+  [1, 1],
+  [1, -1],
+  [-1, 1],
+  [-1, -1],
+];
+const ORTH: [number, number][] = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+const KNIGHT: [number, number][] = [
+  [2, 1],
+  [2, -1],
+  [-2, 1],
+  [-2, -1],
+  [1, 2],
+  [1, -2],
+  [-1, 2],
+  [-1, -2],
+];
 
 export function initialFour(): FourState {
   return {
@@ -64,7 +86,6 @@ function occupancy(pieces: Piece4[]) {
   return (x: number, y: number) => map.get(y * SIZE + x);
 }
 
-// Squares this piece attacks (for check), ignoring whose turn it is. Dead pieces attack nothing.
 function attacks(p: Piece4, at: ReturnType<typeof occupancy>): [number, number][] {
   if (p.dead) return [];
   const out: [number, number][] = [];
@@ -80,14 +101,23 @@ function attacks(p: Piece4, at: ReturnType<typeof occupancy>): [number, number][
     }
   };
   switch (p.kind) {
-    case "Q": ray([...DIAG, ...ORTH]); break;
-    case "R": ray(ORTH); break;
-    case "B": ray(DIAG); break;
-    case "K": ray([...DIAG, ...ORTH], 1); break;
-    case "N": for (const [dx, dy] of KNIGHT) if (onBoard(p.x + dx, p.y + dy)) out.push([p.x + dx, p.y + dy]); break;
+    case "Q":
+      ray([...DIAG, ...ORTH]);
+      break;
+    case "R":
+      ray(ORTH);
+      break;
+    case "B":
+      ray(DIAG);
+      break;
+    case "K":
+      ray([...DIAG, ...ORTH], 1);
+      break;
+    case "N":
+      for (const [dx, dy] of KNIGHT) if (onBoard(p.x + dx, p.y + dy)) out.push([p.x + dx, p.y + dy]);
+      break;
     case "P": {
       const [fx, fy] = forward(p.color);
-      // Diagonal-forward squares: forward plus either sideways direction.
       for (const s of [-1, 1]) {
         const x = p.x + fx + (fy !== 0 ? s : 0);
         const y = p.y + fy + (fx !== 0 ? s : 0);
@@ -109,7 +139,12 @@ const king = (pieces: Piece4[], c: Color4) => pieces.find((p) => p.kind === "K" 
 export function inCheck(s: FourState, c: Color4, pieces = s.pieces) {
   const k = king(pieces, c);
   if (!k) return false;
-  return squareAttackedBy(pieces, k.x, k.y, liveColors(s).filter((o) => o !== c));
+  return squareAttackedBy(
+    pieces,
+    k.x,
+    k.y,
+    liveColors(s).filter((o) => o !== c),
+  );
 }
 
 type Candidate = { pieceId: number; to: [number, number]; castle?: (typeof CASTLES)[number] };
@@ -154,7 +189,11 @@ function play(s: FourState, m: Candidate): { pieces: Piece4[]; captured?: Piece4
   const mover = s.pieces.find((p) => p.id === m.pieceId)!;
   const captured = s.pieces.find((p) => p.x === m.to[0] && p.y === m.to[1] && p.id !== mover.id);
   const promoted = mover.kind === "P" && promotes(mover.color, m.to[0], m.to[1]);
-  let pieces = s.pieces.filter((p) => p !== captured).map((p) => (p.id === mover.id ? { ...p, x: m.to[0], y: m.to[1], moved: true, ...(promoted ? { kind: "Q" as Kind, promoted: true } : {}) } : p));
+  let pieces = s.pieces
+    .filter((p) => p !== captured)
+    .map((p) =>
+      p.id === mover.id ? { ...p, x: m.to[0], y: m.to[1], moved: true, ...(promoted ? { kind: "Q" as Kind, promoted: true } : {}) } : p,
+    );
   if (m.castle) {
     const [rx, ry] = rotate(mover.color, m.castle.rook[0], m.castle.rook[1]);
     const [tx, ty] = rotate(mover.color, m.castle.rookTo[0], m.castle.rookTo[1]);
@@ -163,8 +202,6 @@ function play(s: FourState, m: Candidate): { pieces: Piece4[]; captured?: Piece4
   return { pieces, captured, promoted };
 }
 
-// Every legal move for this color: pseudo-legal moves that don't leave its own king attacked, and castling
-// that doesn't start in, pass through, or land in check.
 export function legalMoves(s: FourState, color: Color4): Candidate[] {
   if (isOut(s, color)) return [];
   const enemies = liveColors(s).filter((c) => c !== color);
@@ -187,7 +224,9 @@ export function legalMoves(s: FourState, color: Color4): Candidate[] {
 export function legalTargetsFrom(s: FourState, x: number, y: number): [number, number][] {
   const p = s.pieces.find((q) => q.x === x && q.y === y);
   if (!p || p.dead || p.color !== s.turn) return [];
-  return legalMoves(s, p.color).filter((m) => m.pieceId === p.id).map((m) => m.to);
+  return legalMoves(s, p.color)
+    .filter((m) => m.pieceId === p.id)
+    .map((m) => m.to);
 }
 
 function eliminate(s: FourState, color: Color4, reason: Out["reason"]) {
@@ -204,14 +243,11 @@ const nextLive = (s: FourState, after: Color4): Color4 | null => {
   return null;
 };
 
-// Settles whose turn it is: skips past players with no legal move (checkmate or stalemate puts them out),
-// and ends the game when one player is left or the fifty-round rule triggers.
 function advance(s: FourState, lastMover: Color4) {
   let c = nextLive(s, lastMover);
   while (c && liveColors(s).length > 1) {
     if (legalMoves(s, c).length > 0) break;
     if (inCheck(s, c)) {
-      // Credit the mate to the most recent mover whose pieces are attacking the king, else the last mover.
       const k = king(s.pieces, c)!;
       const order = [...s.moves].reverse().map((m) => m.color);
       const by = order.find((o) => o !== c && !isOut(s, o) && squareAttackedBy(s.pieces, k.x, k.y, [o])) ?? lastMover;
@@ -236,9 +272,7 @@ function advance(s: FourState, lastMover: Color4) {
   }
 }
 
-// Final placings, best first. More points places higher; on a tie, whoever lasted longer.
 export function standings(s: FourState): Color4[][] {
-  // Position in the order players went out; still in counts as lasting longest.
   const lasted = (c: Color4) => {
     const i = s.out.findIndex((x) => x.color === c);
     return i < 0 ? Infinity : i;
@@ -253,7 +287,6 @@ export function standings(s: FourState): Color4[][] {
   return groups;
 }
 
-// Plays a move for whoever's turn it is. Returns the new state, or null if the move isn't legal.
 export function move4(s: FourState, from: [number, number], to: [number, number]): FourState | null {
   if (s.result || !s.turn) return null;
   const color = s.turn;
@@ -267,22 +300,34 @@ export function move4(s: FourState, from: [number, number], to: [number, number]
   if (captured && !captured.dead) next.points[color] += captured.promoted ? 1 : POINTS[captured.kind];
   next.quiet = captured || piece.kind === "P" ? 0 : next.quiet + 1;
 
-  // Check bonuses: kings of other live players now attacked by this player's pieces.
-  const checks = liveColors(next).filter((c) => c !== color && (() => {
-    const k = king(next.pieces, c);
-    return !!k && squareAttackedBy(next.pieces, k.x, k.y, [color]);
-  })());
+  const checks = liveColors(next).filter(
+    (c) =>
+      c !== color &&
+      (() => {
+        const k = king(next.pieces, c);
+        return !!k && squareAttackedBy(next.pieces, k.x, k.y, [color]);
+      })(),
+  );
   const withQueen = piece.kind === "Q" || promoted;
   if (checks.length === 2) next.points[color] += withQueen ? 1 : 5;
   if (checks.length >= 3) next.points[color] += withQueen ? 5 : 20;
 
   const text = `${piece.kind === "P" ? "" : piece.kind}${captured ? "x" : ""}${squareName(...to)}${promoted ? "=Q" : ""}${checks.length ? "+" : ""}`;
-  next.moves.push({ color, from, to, kind: piece.kind, captured: captured?.kind, promoted: promoted || undefined, castle: !!m.castle || undefined, checks, text: m.castle ? (m.castle.kingTo[0] === 9 ? "O-O" : "O-O-O") : text });
+  next.moves.push({
+    color,
+    from,
+    to,
+    kind: piece.kind,
+    captured: captured?.kind,
+    promoted: promoted || undefined,
+    castle: !!m.castle || undefined,
+    checks,
+    text: m.castle ? (m.castle.kingTo[0] === 9 ? "O-O" : "O-O-O") : text,
+  });
   advance(next, color);
   return next;
 }
 
-// Takes a player out without a move (resignation or timing out). Their army goes grey.
 export function retire4(s: FourState, color: Color4, reason: "resign" | "timeout"): FourState {
   if (s.result || isOut(s, color)) return s;
   const next: FourState = structuredClone(s);
@@ -296,15 +341,12 @@ export function retire4(s: FourState, color: Color4, reason: "resign" | "timeout
   return next;
 }
 
-// The board after each move, for stepping back through a game: `[i]` is how it stood after `i` moves, with
-// everyone who'd gone out by then greyed. It trusts the recorded moves instead of checking them (a full
-// replay through `move4` took over a second for 200 moves), so only the board, who's out and whose turn it
-// was are the position's; points and the result are the game's.
 export type FourBoard = Pick<FourState, "pieces" | "out" | "turn">;
 export function fourBoards(s: FourState): FourBoard[] {
   let pieces = initialFour().pieces;
   const outBy = (ply: number) => s.out.filter((o) => o.ply <= ply);
-  const grey = (ps: Piece4[], out: Out[]) => (out.length ? ps.map((p) => (out.some((o) => o.color === p.color) ? { ...p, dead: true } : p)) : ps);
+  const grey = (ps: Piece4[], out: Out[]) =>
+    out.length ? ps.map((p) => (out.some((o) => o.color === p.color) ? { ...p, dead: true } : p)) : ps;
   const boards: FourBoard[] = [{ pieces, out: outBy(0), turn: s.moves[0]?.color ?? s.turn }];
   for (let i = 0; i < s.moves.length; i++) {
     const m = s.moves[i];

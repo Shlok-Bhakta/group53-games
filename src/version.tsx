@@ -7,15 +7,7 @@ import { Tiles } from "@/Tiles";
 
 declare const __BUILD_ID__: string;
 
-// Keeps every phone on the newest build, so clients and server functions always match. When a new build
-// is out (checked on launch, every minute, and whenever the app comes back to the foreground) the app
-// covers itself with "Updating", reloads, and says "You're up to date" once it's back. Nothing is lost:
-// games live on the server and Scrabble plans save within a fraction of a second. The one thing worth
-// waiting for is a game on screen: while one is open the update waits, and it lands as soon as the player
-// leaves the game or the app goes to the background, so nobody is pulled out of a game mid-move.
-
 const CHECK_EVERY_MS = 60_000;
-// How long the overlay shows before the reload, long enough to read and for pending saves to land.
 const SHOW_MS = 1100;
 const TARGET_KEY = "updating-to";
 
@@ -42,7 +34,6 @@ async function latestBuild(): Promise<string | null> {
 function update(latest: string) {
   pending = latest;
   if ((holds > 0 && document.visibilityState === "visible") || phase === "updating") return;
-  // Already reloaded for this build and still not on it (a stale cache somewhere): don't loop, offer it.
   if (sessionStorage.getItem(TARGET_KEY) === latest) {
     toast("A new version is ready", { id: "update", duration: Infinity, action: { label: "Update", onClick: () => location.reload() } });
     return;
@@ -65,7 +56,6 @@ async function check() {
   if (latest && latest !== __BUILD_ID__) update(latest);
 }
 
-// Hold updates while a game is on screen.
 export function useHoldUpdates(hold: boolean) {
   useEffect(() => {
     if (!hold) return;
@@ -85,7 +75,6 @@ export function HoldUpdates() {
 export function useVersionCheck() {
   const { pathname } = useLocation();
   useEffect(() => {
-    // Back from an update: say so.
     const target = sessionStorage.getItem(TARGET_KEY);
     if (target && target === __BUILD_ID__) {
       sessionStorage.removeItem(TARGET_KEY);
@@ -105,11 +94,14 @@ export function useVersionCheck() {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
-  // Moving between screens is a natural moment too.
   useEffect(() => void check(), [pathname]);
 }
 
-const usePhase = () => useSyncExternalStore((l) => (listeners.add(l), () => listeners.delete(l)), () => phase);
+const usePhase = () =>
+  useSyncExternalStore(
+    (l) => (listeners.add(l), () => listeners.delete(l)),
+    () => phase,
+  );
 
 export function UpdateOverlay() {
   const p = usePhase();
@@ -120,18 +112,28 @@ export function UpdateOverlay() {
           key="updating"
           role="status"
           aria-label="Updating"
-          className="fixed inset-0 z-[100] grid place-items-center bg-background/85 backdrop-blur-md"
+          className="fixed inset-x-0 top-0 pin-bottom z-[100] grid place-items-center bg-background/85 backdrop-blur-md"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.25 }}
         >
-          <motion.div className="flex flex-col items-center gap-5" initial={{ scale: 0.9, y: 12 }} animate={{ scale: 1, y: 0 }} transition={{ type: "spring", bounce: 0.35, duration: 0.5 }}>
+          <motion.div
+            className="flex flex-col items-center gap-5"
+            initial={{ scale: 0.9, y: 12 }}
+            animate={{ scale: 1, y: 0 }}
+            transition={{ type: "spring", bounce: 0.35, duration: 0.5 }}
+          >
             <Tiles word="UPDATE" states={["green", "yellow", "green", "yellow", "green", "yellow"]} size="md" flip label="Updating" />
             <p className="font-display text-heading">Getting the new version</p>
             <span className="flex gap-1.5" aria-hidden="true">
               {[0, 1, 2].map((i) => (
-                <motion.span key={i} className="size-2 rounded-full bg-primary" animate={{ opacity: [0.25, 1, 0.25], y: [0, -4, 0] }} transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15 }} />
+                <motion.span
+                  key={i}
+                  className="size-2 rounded-full bg-primary"
+                  animate={{ opacity: [0.25, 1, 0.25], y: [0, -4, 0] }}
+                  transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15 }}
+                />
               ))}
             </span>
           </motion.div>
@@ -141,14 +143,18 @@ export function UpdateOverlay() {
         <motion.div
           key="updated"
           role="status"
-          className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+104px)] z-[100] flex justify-center"
+          className="fixed inset-x-0 bottom-[calc(var(--safe-bottom)+104px)] z-[100] flex justify-center"
           initial={{ opacity: 0, y: 30, scale: 0.9 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 20, scale: 0.95 }}
           transition={{ type: "spring", bounce: 0.4, duration: 0.5 }}
         >
           <span className="flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 font-semibold text-primary-foreground shadow-lg">
-            <motion.span initial={{ scale: 0, rotate: -45 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", bounce: 0.6, duration: 0.5, delay: 0.15 }}>
+            <motion.span
+              initial={{ scale: 0, rotate: -45 }}
+              animate={{ scale: 1, rotate: 0 }}
+              transition={{ type: "spring", bounce: 0.6, duration: 0.5, delay: 0.15 }}
+            >
               <CheckCircleIcon size={20} weight="fill" />
             </motion.span>
             You're up to date

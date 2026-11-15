@@ -32,7 +32,7 @@ export function SignIn() {
       ) : (
         <Button
           size="xl"
-          className="w-full bg-[var(--discord)] text-white hover:bg-[var(--discord)]/85"
+          className="w-full bg-discord text-discord-ink hover:bg-discord/85"
           onClick={() => void signIn("discord", { redirectTo: window.location.href })}
         >
           <DiscordLogo size={22} /> Sign in with Discord

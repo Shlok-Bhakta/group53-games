@@ -2,10 +2,12 @@ import { motion } from "motion/react";
 import { LightningIcon } from "@phosphor-icons/react";
 import { MODES, type ModeKey } from "../../../convex/modes";
 import { SEAT_COLORS } from "@/games/seats";
+import { MODE_ART_PIECES } from "./palette";
 
-export const ChessModeArt = ({ mode }: { mode: ModeKey }) => <ModeArt four={MODES[mode].players > 2} realtime={MODES[mode].kind === "realtime"} />;
+export const ChessModeArt = ({ mode }: { mode: ModeKey }) => (
+  <ModeArt four={MODES[mode].players > 2} realtime={MODES[mode].kind === "realtime"} />
+);
 
-// A tiny board: a 4x4 square for two players, a cross for four, with a spark for real-time that jolts once.
 function ModeArt({ four, realtime }: { four: boolean; realtime: boolean }) {
   const n = four ? 6 : 4;
   const cells = Array.from({ length: n * n }, (_, i) => [i % n, Math.floor(i / n)] as const);
@@ -22,7 +24,16 @@ function ModeArt({ four, realtime }: { four: boolean; realtime: boolean }) {
     <span className="relative block size-20" aria-hidden="true">
       <svg viewBox={`0 0 ${n} ${n}`} className="size-full overflow-visible">
         {cells.map(([x, y]) =>
-          cut(x, y) ? null : <rect key={`${x}${y}`} x={x} y={y} width={1} height={1} className={(x + y) % 2 ? "fill-[var(--board-dark)]" : "fill-[var(--board-light)]"} />,
+          cut(x, y) ? null : (
+            <rect
+              key={`${x}${y}`}
+              x={x}
+              y={y}
+              width={1}
+              height={1}
+              className={(x + y) % 2 ? "fill-[var(--board-dark)]" : "fill-[var(--board-light)]"}
+            />
+          ),
         )}
         {dots.map((d, i) => (
           <motion.circle
@@ -31,7 +42,7 @@ function ModeArt({ four, realtime }: { four: boolean; realtime: boolean }) {
             cy={d.y + 0.5}
             r={0.36}
             fill={d.c}
-            stroke="white"
+            stroke={MODE_ART_PIECES.white}
             strokeWidth={0.08}
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
@@ -41,8 +52,8 @@ function ModeArt({ four, realtime }: { four: boolean; realtime: boolean }) {
         ))}
         {!four && (
           <>
-            <circle cx={1.5} cy={3.5} r={0.36} fill="white" stroke="black" strokeWidth={0.08} />
-            <circle cx={2.5} cy={0.5} r={0.36} fill="black" stroke="white" strokeWidth={0.08} />
+            <circle cx={1.5} cy={3.5} r={0.36} fill={MODE_ART_PIECES.white} stroke={MODE_ART_PIECES.black} strokeWidth={0.08} />
+            <circle cx={2.5} cy={0.5} r={0.36} fill={MODE_ART_PIECES.black} stroke={MODE_ART_PIECES.white} strokeWidth={0.08} />
           </>
         )}
       </svg>

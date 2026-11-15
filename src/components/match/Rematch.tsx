@@ -10,17 +10,17 @@ import { Button } from "@/components/ui/button";
 import { AsyncButton } from "@/components/AsyncButton";
 import { usePresence } from "@/presence";
 import { listNames } from "@/lib/text";
+import { useNow } from "@/lib/time";
 
 const REMATCH_TTL_MS = 2 * 60 * 1000;
 
-// Rematches happen right here: asking turns everyone else's button into Accept, the new game starts once
-// everyone's in and moves all the phones to it, and leaving the page declines.
 export function Rematch({ match, meId }: { match: MatchView; meId: Id<"users"> }) {
   const rematch = useMutation(api.matches.rematch);
   const answer = useMutation(api.matches.answerRematch);
   const navigate = useNavigate();
   const offer = match.rematch;
-  const pending = offer?.status === "pending" && Date.now() - offer.at < REMATCH_TTL_MS;
+  const now = useNow(5_000);
+  const pending = offer?.status === "pending" && now - offer.at < REMATCH_TTL_MS;
   const yes = pending ? (offer!.yes ?? [offer!.by]) : [];
   const iSaidYes = yes.includes(meId);
   const others = match.players.filter((p) => p.userId !== meId);
@@ -29,12 +29,10 @@ export function Rematch({ match, meId }: { match: MatchView; meId: Id<"users"> }
   const { isOnline } = usePresence();
   const stillHere = others.filter((p) => isOnline(p.userId));
 
-  // Accepted: every phone moves to the new game.
   useEffect(() => {
     if (offer?.status === "accepted" && offer.matchId) navigate(matchPath({ _id: offer.matchId, mode: match.mode }), { replace: true });
-  }, [offer?.status, offer?.matchId, navigate]);
+  }, [offer?.status, offer?.matchId, match.mode, navigate]);
 
-  // Leaving the page (or the app) while an offer is open declines it.
   const open = useRef(false);
   open.current = !!pending;
   useEffect(() => {
@@ -88,7 +86,13 @@ export function Rematch({ match, meId }: { match: MatchView; meId: Id<"users"> }
     const declinedByThem = offer.by === meId;
     return (
       <div className={wrap}>
-        <p className="text-callout text-muted-foreground">{declinedByThem ? (others.length > 1 ? "Someone passed on a rematch." : `${others[0]?.name} passed on a rematch.`) : "Rematch declined."}</p>
+        <p className="text-callout text-muted-foreground">
+          {declinedByThem
+            ? others.length > 1
+              ? "Someone passed on a rematch."
+              : `${others[0]?.name} passed on a rematch.`
+            : "Rematch declined."}
+        </p>
         <Button size="xl" className="w-full" onClick={() => navigate(modePath(match.mode as ModeKey))}>
           New game
         </Button>
@@ -100,7 +104,11 @@ export function Rematch({ match, meId }: { match: MatchView; meId: Id<"users"> }
       {stillHere.length > 0 && (
         <p className="flex items-center justify-center gap-2 text-footnote text-muted-foreground">
           <span className="size-2 rounded-full bg-online" />
-          {stillHere.length === others.length ? (others.length === 1 ? `${others[0].name} is still here` : "Everyone's still here") : `${listNames(stillHere.map((p) => p.name))} still here`}
+          {stillHere.length === others.length
+            ? others.length === 1
+              ? `${others[0].name} is still here`
+              : "Everyone's still here"
+            : `${listNames(stillHere.map((p) => p.name))} still here`}
         </p>
       )}
       <AsyncButton size="xl" className="w-full" icon={<ArrowsClockwiseIcon weight="bold" />} onClick={() => rematch({ id: match._id })}>

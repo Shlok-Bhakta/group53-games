@@ -7,7 +7,6 @@ import { Sheet } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { chips } from "./format";
 
-// The last hand in full: the board, everyone who showed and what they had, and who won what.
 export function LastHand({ match, result, open, onClose }: { match: MatchView; result: HandResult; open: boolean; onClose: () => void }) {
   const rows = match.players
     .map((p, seat) => ({ p, seat, net: result.net[seat], shown: result.shown[seat], name: result.names[seat] }))
@@ -38,7 +37,12 @@ export function LastHand({ match, result, open, onClose }: { match: MatchView; r
                 ))}
               </span>
             )}
-            <span className={cn("shrink-0 rounded-full px-2 py-0.5 font-display text-footnote tabular-nums", r.net > 0 ? "bg-[var(--tile-green)] text-[var(--tile-ink)]" : "text-muted-foreground")}>
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-2 py-0.5 font-display text-footnote tabular-nums",
+                r.net > 0 ? "bg-[var(--tile-green)] text-[var(--tile-ink)]" : "text-muted-foreground",
+              )}
+            >
               {r.net > 0 ? "+" : r.net < 0 ? "−" : ""}
               {chips(Math.abs(r.net))}
             </span>

@@ -22,12 +22,15 @@ describe("settings", () => {
   test("real-time chess moves at the game's pace", () => {
     const pace = paceFromSettings({ cooldown: 2, speed: 15 });
     expect(pace).toEqual({ square: 15, cooldown: 60 });
-    // e2-e4 for white: pawn id 12, two squares.
-    const cmd = { tick: 0, color: "w", pieceId: 12, toX: 4, toY: 3 };
-    const landed = simulate([cmd], 31, initialState("two", pace));
+    const whiteE2E4 = { tick: 0, color: "w", pieceId: 12, toX: 4, toY: 3 };
+    const landed = simulate([whiteE2E4], 31, initialState("two", pace));
     expect(landed.pieces.find((p) => p.id === 12)).toMatchObject({ status: "cooldown", y: 3, readyAt: 30 + 60 });
-    // The default pace takes twice as long to get there.
-    expect(simulate([cmd], 31).pieces.find((p) => p.id === 12)).toMatchObject({ status: "moving" });
+    expect(
+      simulate([whiteE2E4], 31).pieces.find((p) => p.id === 12),
+      "the default pace is still on its way",
+    ).toMatchObject({
+      status: "moving",
+    });
   });
 
   test("a real-time game starts its snapshot at the game's pace", async () => {

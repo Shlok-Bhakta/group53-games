@@ -1,5 +1,4 @@
 import { useState, type ReactNode } from "react";
-import { SpinnerGapIcon } from "@phosphor-icons/react";
 import { usePending } from "@/components/AsyncButton";
 import {
   AlertDialog,
@@ -13,8 +12,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 
-// Anything destructive goes behind this: the trigger opens a question, and only the confirm button does it. The
-// action runs once however often it's tapped, and an error becomes a toast.
 export function ConfirmButton({
   trigger,
   title,
@@ -24,14 +21,11 @@ export function ConfirmButton({
   tone = "destructive",
   onConfirm,
 }: {
-  // The button that asks, usually a Button.
   trigger: ReactNode;
   title: string;
   detail: ReactNode;
-  // What the two buttons say: "Keep playing" and "Resign".
   keep: string;
   confirm: string;
-  // Red for what can't be undone; "default" for a choice worth a second look that can be (a mortgage).
   tone?: "destructive" | "default";
   onConfirm: () => Promise<unknown> | unknown;
 }) {
@@ -47,8 +41,7 @@ export function ConfirmButton({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>{keep}</AlertDialogCancel>
-          <Button variant={tone} size="lg" disabled={pending} aria-busy={pending} onClick={() => void run(async () => (await onConfirm(), setOpen(false)))}>
-            {pending && <SpinnerGapIcon className="animate-spin" weight="bold" />}
+          <Button variant={tone} size="lg" pending={pending} onClick={() => void run(async () => (await onConfirm(), setOpen(false)))}>
             {confirm}
           </Button>
         </AlertDialogFooter>

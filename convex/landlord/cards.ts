@@ -1,12 +1,7 @@
-// The two decks, sixteen cards each, with the classic US decks' effects (2008 and later) in our own words.
-// A deck is drawn from the top and each card goes back underneath, never reshuffled; a get-out-of-jail card
-// stays with whoever drew it until it's used, sold or they go bankrupt.
-
 export type Deck = "chance" | "chest";
 
 export type Effect =
   | { k: "advance"; to: number }
-  // To the next railroad or utility ahead, where rent is doubled (a railroad) or ten times a fresh roll (a utility).
   | { k: "nearest"; kind: "rail" | "util" }
   | { k: "back"; n: number }
   | { k: "collect"; amount: number }
@@ -25,9 +20,18 @@ export const DECKS: Record<Deck, readonly Card[]> = {
     { text: "Advance to GO. Collect $200.", effect: { k: "advance", to: 0 } },
     { text: "Head to Illinois Avenue. Collect $200 if you pass GO.", effect: { k: "advance", to: 24 } },
     { text: "Head to St. Charles Place. Collect $200 if you pass GO.", effect: { k: "advance", to: 11 } },
-    { text: "Catch the next train: on to the nearest railroad. If it's owned, pay double rent; if not, you can buy it.", effect: { k: "nearest", kind: "rail" } },
-    { text: "Catch the next train: on to the nearest railroad. If it's owned, pay double rent; if not, you can buy it.", effect: { k: "nearest", kind: "rail" } },
-    { text: "On to the nearest utility. If it's owned, roll and pay ten times the roll; if not, you can buy it.", effect: { k: "nearest", kind: "util" } },
+    {
+      text: "Catch the next train: on to the nearest railroad. If it's owned, pay double rent; if not, you can buy it.",
+      effect: { k: "nearest", kind: "rail" },
+    },
+    {
+      text: "Catch the next train: on to the nearest railroad. If it's owned, pay double rent; if not, you can buy it.",
+      effect: { k: "nearest", kind: "rail" },
+    },
+    {
+      text: "On to the nearest utility. If it's owned, roll and pay ten times the roll; if not, you can buy it.",
+      effect: { k: "nearest", kind: "util" },
+    },
     { text: "Your shares paid out. Collect $50.", effect: { k: "collect", amount: 50 } },
     { text: "Get out of jail free. Keep this until you need it, or sell it.", effect: { k: "free" } },
     { text: "Missed your stop. Go back three squares.", effect: { k: "back", n: 3 } },

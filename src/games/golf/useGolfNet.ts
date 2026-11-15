@@ -7,32 +7,26 @@ import type { Course } from "../../../convex/golf/engine";
 import { TPS, cmdOrder, type Cmd, type Packed, type Pending, type WorldState } from "../../../convex/golf/world";
 import { useServerClock } from "@/lib/serverClock";
 
-// A golf world over the wire: joining and leaving, the settled snapshot and everyone's commands since, and my
-// own commands, which play the moment they're sent and are kept until the server confirms them (see
-// `withPending`), because the commands query is unloaded for a whole round trip every time the snapshot moves.
-
 type Vec = { x: number; y: number };
+const SEQ_SPAN = 1_000_000_000;
 export type CmdKind = "shot" | "use" | "fire" | "hop" | "brake" | "reset";
 export type CmdArgs = { a?: number; p?: number; i?: number; x?: number; y?: number };
 
-// The world as this phone sees it. Rebuilt from the snapshot whenever the commands change; stepped forward
-// with the clock every frame in between.
 export type Net = {
   state: WorldState | null;
   dirty: boolean;
   base: Packed | null;
-  server: Cmd[]; // the server's commands from the snapshot on
-  pending: Pending[]; // mine it hasn't confirmed yet: they play right away regardless
-  cmds: Cmd[]; // both, in order: what the world runs on
+  server: Cmd[];
+  pending: Pending[];
+  cmds: Cmd[];
   startAt: number;
   collide: boolean;
-  prev: Map<string, Vec>; // each ball a tick ago, to draw between ticks
-  off: Map<string, Vec & { tau: number }>; // corrections still easing out
-  seen: Map<string, number>; // events already played, by when
+  prev: Map<string, Vec>;
+  off: Map<string, Vec & { tau: number }>;
+  seen: Map<string, number>;
   seq: number;
 };
 
-// `minTick`, in a game: the earliest tick a command can count from (just after the turn started).
 export function useGolfNet(COURSE: Course, minTick?: { current: number }) {
   const key = COURSE.id;
   const me = useQuery(api.users.me);
@@ -51,14 +45,13 @@ export function useGolfNet(COURSE: Course, minTick?: { current: number }) {
       })
       .catch(() => toast.error("Couldn't get onto the course."));
   };
+  const leavesWithMe = !COURSE.open;
   useEffect(() => {
     joinRef.current();
-    // Off a hole, your ball goes with you. The open world keeps it.
     return () => {
-      if (!COURSE.open && worldIdRef.current) void leave({ worldId: worldIdRef.current }).catch(() => {});
+      if (leavesWithMe && worldIdRef.current) void leave({ worldId: worldIdRef.current }).catch(() => {});
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, leavesWithMe, leave]);
   const from = view?.snapshot?.tick ?? 0;
   const fromRef = useRef(from);
   fromRef.current = from;
@@ -66,7 +59,20 @@ export function useGolfNet(COURSE: Course, minTick?: { current: number }) {
   const clock = useServerClock();
   const act = useMutation(api.golf.act);
 
-  const net = useRef<Net>({ state: null, dirty: false, base: null, server: [], pending: [], cmds: [], startAt: 0, collide: true, prev: new Map(), off: new Map(), seen: new Map(), seq: Date.now() % 1_000_000_000 });
+  const net = useRef<Net>({
+    state: null,
+    dirty: false,
+    base: null,
+    server: [],
+    pending: [],
+    cmds: [],
+    startAt: 0,
+    collide: true,
+    prev: new Map(),
+    off: new Map(),
+    seen: new Map(),
+    seq: 0,
+  });
   useEffect(() => {
     if (!view || !cmds) return;
     const n = net.current;
@@ -86,8 +92,9 @@ export function useGolfNet(COURSE: Course, minTick?: { current: number }) {
   const send = (kind: CmdKind, extra: CmdArgs = {}) => {
     const n = net.current;
     if (!worldId || !meRef.current) return;
-    const tick = Math.max(tickNow(), minTick?.current ?? 0), seq = ++n.seq;
-    // It plays from here, right now. The server's copy replaces it when that turns up.
+    const tick = Math.max(tickNow(), minTick?.current ?? 0);
+    n.seq = (n.seq || Date.now() % SEQ_SPAN) + 1;
+    const seq = n.seq;
     const mine: Pending = { tick, by: meRef.current, seq, kind, at: performance.now(), ...extra };
     n.pending.push(mine);
     n.dirty = true;

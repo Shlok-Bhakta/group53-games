@@ -1,9 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { generateHole, problems } from "./gen";
 
-// The generator: every hole it keeps passes the checks (and the bot sank it to get kept), the same seed
-// makes the same hole, and the settings get what they ask for.
-
 describe("generated holes", () => {
   const cases = [
     { seed: 101, n: 0, terrain: 0, style: 0, hazards: 1 },
@@ -16,13 +13,20 @@ describe("generated holes", () => {
     test(`seed ${o.seed}, hole ${o.n + 1}, terrain ${o.terrain}, style ${o.style}`, () => {
       const log: string[] = [];
       const c = generateHole(o, (m) => log.push(m));
-      expect(log.some((l) => l.startsWith("kept")), log.join("\n")).toBe(true);
-      expect(problems(c, c.zones.some((z) => z.kind === "ramp"))).toBeNull();
+      expect(
+        log.some((l) => l.startsWith("kept")),
+        log.join("\n"),
+      ).toBe(true);
+      expect(
+        problems(
+          c,
+          c.zones.some((z) => z.kind === "ramp"),
+        ),
+      ).toBeNull();
       expect(c.par).toBeGreaterThanOrEqual(2);
       expect(c.par).toBeLessThanOrEqual(7);
       if (o.terrain === 1) expect(c.theme).toBe("ice");
       if (o.terrain === 0) expect(c.theme).toBe("hills");
-      // Fairways have no rail round them; mini golf does.
       if (o.style === 1) expect(c.greens.every((g) => g.rim === false)).toBe(true);
       if (o.style === 0) expect(c.greens.every((g) => g.rim !== false)).toBe(true);
       expect(generateHole(o)).toEqual(c);
@@ -42,7 +46,8 @@ describe("generated holes", () => {
   }, 120_000);
 
   test("a seed's hole doesn't depend on what was generated before it (the caches)", async () => {
-    const a = { seed: 101, n: 0, terrain: 0, style: 0, hazards: 1 }, b = { seed: 101, n: 0, terrain: 1, style: 1, hazards: 2 };
+    const a = { seed: 101, n: 0, terrain: 0, style: 0, hazards: 1 },
+      b = { seed: 101, n: 0, terrain: 1, style: 1, hazards: 2 };
     generateHole(a);
     const after = generateHole(b);
     vi.resetModules();

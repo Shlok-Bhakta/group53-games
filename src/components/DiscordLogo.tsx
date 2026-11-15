@@ -1,4 +1,3 @@
-// Discord's official mark (via Simple Icons). Phosphor's DiscordLogo is a redrawn take, not the real one.
 export function DiscordLogo({ size = 24, className }: { size?: number; className?: string }) {
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden="true" className={className}>

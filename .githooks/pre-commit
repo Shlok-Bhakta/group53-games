@@ -1,0 +1,6 @@
+#!/bin/sh
+set -e
+files=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(ts|tsx|js|mjs)$' || true)
+[ -z "$files" ] && exit 0
+echo "$files" | xargs npx prettier --check --log-level warn
+echo "$files" | xargs npx eslint --max-warnings 0 --no-warn-ignored

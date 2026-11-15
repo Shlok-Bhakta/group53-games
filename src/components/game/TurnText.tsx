@@ -2,8 +2,6 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import type { Player } from "@/games/types";
 import { ThinkingDots, useHere } from "@/presence";
 
-// Whose move it is, live: "Your move", "Chris is on it" (with thinking dots, while they've got the game open)
-// or "Waiting for Chris".
 export function useTurnText(up: Player | undefined, meId: Id<"users"> | undefined, mine = "Your move") {
   const { here } = useHere(up?.userId);
   if (!up) return { text: null, thinking: false };

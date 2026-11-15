@@ -1,23 +1,28 @@
-import { closest, compile, edges, groundAt, HAZARDS, inPoly, rng, v, type Bumper, type Course, type Ground, type Mover, type Portal, type Theme, type Vec, type Wall, type WallStyle, type Zone } from "./engine";
+import {
+  closest,
+  compile,
+  edges,
+  groundAt,
+  HAZARDS,
+  inPoly,
+  rng,
+  v,
+  type Bumper,
+  type Course,
+  type Ground,
+  type Mover,
+  type Portal,
+  type Theme,
+  type Vec,
+  type Wall,
+  type WallStyle,
+  type Zone,
+} from "./engine";
 import { datan2, dcos, dsin, hyp } from "./dmath";
 import { blob, circle, rect } from "./shapes";
 import { withTees } from "./holes";
 import { distanceField, reachable } from "./distance";
 import { playHole } from "./bot";
-
-// Holes from a seed, in the spirit of the ones made by hand (plains.ts, coldstart.ts), not blobs: a board
-// is a few straight pieces with square or gently rounded corners, a curving ribbon, a round green on a stem,
-// islands in the void; or, for a fairway hole, a stretch of land in a lake with the fairway mown down the
-// middle, rough either side, bunkers, rivers and a bridge. Then a handful of things in the way, each placed
-// with room round it: bumpers on the line, baffles from alternate sides, speed pads, water with a way
-// round, sand by the cup, ice and snow, a spinning bar, a crate sliding across.
-//
-// Every hole is checked (nothing in the water that shouldn't be, no sand in a pond, bridges that land on
-// both sides, no gap a ball can get wedged in) and then played by the bot (bot.ts) with shaky hands: if it
-// can't sink it, or sinks it in one every time, the hole's made again from the next seed. How the bot does
-// sets par. Only the server runs this (convex/golf/build.ts), and a game stores what it made, so nothing
-// here has to match between phones; it still sticks to the portable math, to keep a seed's holes the same
-// wherever it's built.
 
 export type GenOpts = { seed: number; n: number; terrain: number; style: number; hazards: number };
 type Rand = { r: () => number; R: (a: number, b: number) => number; pick: <T>(xs: readonly T[]) => T; chance: (p: number) => boolean };
@@ -31,43 +36,59 @@ const mix = (...n: number[]) => {
   return h >>> 0;
 };
 
-// --- Shapes, drawn into a signed field (positive inside) and traced round ---
-
-const G = 0.25; // field resolution
+const G = 0.25;
 type Sdf = (x: number, y: number) => number;
 class Field {
   readonly a: Float32Array;
-  constructor(readonly x0: number, readonly y0: number, readonly nx: number, readonly ny: number) {
+  constructor(
+    readonly x0: number,
+    readonly y0: number,
+    readonly nx: number,
+    readonly ny: number,
+  ) {
     this.a = new Float32Array(nx * ny).fill(-99);
   }
-  // Union (max) or cut (min with the negation) a shape over its bounding box.
   apply(bb: [number, number, number, number], f: Sdf, cut = false) {
-    const i0 = Math.max(0, Math.floor((bb[0] - 1 - this.x0) / G)), i1 = Math.min(this.nx - 1, Math.ceil((bb[2] + 1 - this.x0) / G));
-    const j0 = Math.max(0, Math.floor((bb[1] - 1 - this.y0) / G)), j1 = Math.min(this.ny - 1, Math.ceil((bb[3] + 1 - this.y0) / G));
+    const i0 = Math.max(0, Math.floor((bb[0] - 1 - this.x0) / G)),
+      i1 = Math.min(this.nx - 1, Math.ceil((bb[2] + 1 - this.x0) / G));
+    const j0 = Math.max(0, Math.floor((bb[1] - 1 - this.y0) / G)),
+      j1 = Math.min(this.ny - 1, Math.ceil((bb[3] + 1 - this.y0) / G));
     for (let j = j0; j <= j1; j++)
       for (let i = i0; i <= i1; i++) {
-        const k = j * this.nx + i, d = f(this.x0 + i * G, this.y0 + j * G);
+        const k = j * this.nx + i,
+          d = f(this.x0 + i * G, this.y0 + j * G);
         this.a[k] = cut ? Math.min(this.a[k], -d) : Math.max(this.a[k], d);
       }
   }
 }
 
-// A box along a→b, `hw` either side, running on past each end by `ea` and `eb`, corners rounded by `round`.
 function box(a: Vec, b: Vec, hw: number, ea: number, eb: number, round = 0): { bb: [number, number, number, number]; f: Sdf } {
-  const dx = b.x - a.x, dy = b.y - a.y, L = hyp(dx, dy) || 1e-9;
-  const ux = dx / L, uy = dy / L;
-  const half = (L + ea + eb) / 2, mid = (eb - ea) / 2 + L / 2;
+  const dx = b.x - a.x,
+    dy = b.y - a.y,
+    L = hyp(dx, dy) || 1e-9;
+  const ux = dx / L,
+    uy = dy / L;
+  const half = (L + ea + eb) / 2,
+    mid = (eb - ea) / 2 + L / 2;
   const f: Sdf = (x, y) => {
-    const px = x - a.x, py = y - a.y;
-    const qx = Math.abs(px * ux + py * uy - mid) - (half - round), qy = Math.abs(-px * uy + py * ux) - (hw - round);
+    const px = x - a.x,
+      py = y - a.y;
+    const qx = Math.abs(px * ux + py * uy - mid) - (half - round),
+      qy = Math.abs(-px * uy + py * ux) - (hw - round);
     return -(hyp(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - round);
   };
   const r = Math.max(hw, ea, eb) + 1;
   return { bb: [Math.min(a.x, b.x) - r, Math.min(a.y, b.y) - r, Math.max(a.x, b.x) + r, Math.max(a.y, b.y) + r], f };
 }
-const disk = (c: Vec, rad: number): { bb: [number, number, number, number]; f: Sdf } => ({ bb: [c.x - rad, c.y - rad, c.x + rad, c.y + rad], f: (x, y) => rad - hyp(x - c.x, y - c.y) });
+const disk = (c: Vec, rad: number): { bb: [number, number, number, number]; f: Sdf } => ({
+  bb: [c.x - rad, c.y - rad, c.x + rad, c.y + rad],
+  f: (x, y) => rad - hyp(x - c.x, y - c.y),
+});
 const capsule = (a: Vec, b: Vec, ra: number, rb: number): { bb: [number, number, number, number]; f: Sdf } => {
-  const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy || 1e-9, m = Math.max(ra, rb);
+  const dx = b.x - a.x,
+    dy = b.y - a.y,
+    l2 = dx * dx + dy * dy || 1e-9,
+    m = Math.max(ra, rb);
   return {
     bb: [Math.min(a.x, b.x) - m, Math.min(a.y, b.y) - m, Math.max(a.x, b.x) + m, Math.max(a.y, b.y) + m],
     f: (x, y) => {
@@ -77,25 +98,32 @@ const capsule = (a: Vec, b: Vec, ra: number, rb: number): { bb: [number, number,
   };
 };
 
-// The outline of the field's inside as closed loops (marching squares), tidied.
 function trace(F: Field, minArea = 4): Vec[][] {
   const { nx, ny, a } = F;
   const val = (i: number, j: number) => a[j * nx + i];
-  const H = (i: number, j: number) => j * nx + i, V = (i: number, j: number) => nx * ny + j * nx + i;
+  const H = (i: number, j: number) => j * nx + i,
+    V = (i: number, j: number) => nx * ny + j * nx + i;
   const pts = new Map<number, Vec>();
   const links = new Map<number, number[]>();
   const point = (e: number) => {
     let p = pts.get(e);
     if (p) return p;
-    const vert = e >= nx * ny, k = vert ? e - nx * ny : e, i = k % nx, j = Math.floor(k / nx);
-    const v0 = val(i, j), v1 = vert ? val(i, j + 1) : val(i + 1, j);
+    const vert = e >= nx * ny,
+      k = vert ? e - nx * ny : e,
+      i = k % nx,
+      j = Math.floor(k / nx);
+    const v0 = val(i, j),
+      v1 = vert ? val(i, j + 1) : val(i + 1, j);
     const t = Math.max(0, Math.min(1, -v0 / (v1 - v0 || 1e-9)));
     p = vert ? v(F.x0 + i * G, F.y0 + (j + t) * G) : v(F.x0 + (i + t) * G, F.y0 + j * G);
     pts.set(e, p);
     return p;
   };
   const link = (e1: number, e2: number) => {
-    for (const [x, y] of [[e1, e2], [e2, e1]]) {
+    for (const [x, y] of [
+      [e1, e2],
+      [e2, e1],
+    ]) {
       const l = links.get(x);
       if (l) l.push(y);
       else links.set(x, [y]);
@@ -103,20 +131,60 @@ function trace(F: Field, minArea = 4): Vec[][] {
   };
   for (let j = 0; j < ny - 1; j++)
     for (let i = 0; i < nx - 1; i++) {
-      const tl = val(i, j) > 0, tr = val(i + 1, j) > 0, br = val(i + 1, j + 1) > 0, bl = val(i, j + 1) > 0;
+      const tl = val(i, j) > 0,
+        tr = val(i + 1, j) > 0,
+        br = val(i + 1, j + 1) > 0,
+        bl = val(i, j + 1) > 0;
       const c = (+tl << 3) | (+tr << 2) | (+br << 1) | +bl;
       if (c === 0 || c === 15) continue;
-      const T = H(i, j), B = H(i, j + 1), L = V(i, j), R = V(i + 1, j);
+      const T = H(i, j),
+        B = H(i, j + 1),
+        L = V(i, j),
+        R = V(i + 1, j);
       const mid = (val(i, j) + val(i + 1, j) + val(i + 1, j + 1) + val(i, j + 1)) / 4 > 0;
       switch (c) {
-        case 1: case 14: link(L, B); break;
-        case 2: case 13: link(B, R); break;
-        case 3: case 12: link(L, R); break;
-        case 4: case 11: link(T, R); break;
-        case 6: case 9: link(T, B); break;
-        case 7: case 8: link(T, L); break;
-        case 5: if (mid) (link(T, L), link(B, R)); else (link(T, R), link(L, B)); break;
-        case 10: if (mid) (link(T, R), link(L, B)); else (link(T, L), link(B, R)); break;
+        case 1:
+        case 14:
+          link(L, B);
+          break;
+        case 2:
+        case 13:
+          link(B, R);
+          break;
+        case 3:
+        case 12:
+          link(L, R);
+          break;
+        case 4:
+        case 11:
+          link(T, R);
+          break;
+        case 6:
+        case 9:
+          link(T, B);
+          break;
+        case 7:
+        case 8:
+          link(T, L);
+          break;
+        case 5:
+          if (mid) {
+            link(T, L);
+            link(B, R);
+          } else {
+            link(T, R);
+            link(L, B);
+          }
+          break;
+        case 10:
+          if (mid) {
+            link(T, R);
+            link(L, B);
+          } else {
+            link(T, L);
+            link(B, R);
+          }
+          break;
       }
     }
   const loops: Vec[][] = [];
@@ -124,7 +192,8 @@ function trace(F: Field, minArea = 4): Vec[][] {
   for (const start of links.keys()) {
     if (seen.has(start)) continue;
     const loop: Vec[] = [];
-    let prev = -1, cur = start;
+    let prev = -1,
+      cur = start;
     for (let guard = 0; guard < 200000; guard++) {
       seen.add(cur);
       loop.push(point(cur));
@@ -136,67 +205,87 @@ function trace(F: Field, minArea = 4): Vec[][] {
     }
     if (loop.length >= 6) loops.push(simplify(loop, 0.04));
   }
-  // Specks too small to stand on aren't worth a rail.
   return loops.filter((l) => Math.abs(area(l)) > minArea);
 }
 function area(p: Vec[]) {
   let s = 0;
   for (let i = 0; i < p.length; i++) {
-    const a = p[i], b = p[(i + 1) % p.length];
+    const a = p[i],
+      b = p[(i + 1) % p.length];
     s += a.x * b.y - b.x * a.y;
   }
   return s / 2;
 }
-// Ramer-Douglas-Peucker on a closed loop: straight runs become two points, curves keep their shape.
 function simplify(loop: Vec[], eps: number): Vec[] {
   const rdp = (pts: Vec[]): Vec[] => {
     if (pts.length < 3) return pts;
-    const a = pts[0], b = pts[pts.length - 1];
-    let best = -1, bi = 0;
+    const a = pts[0],
+      b = pts[pts.length - 1];
+    let best = -1,
+      bi = 0;
     for (let i = 1; i < pts.length - 1; i++) {
-      const q = closest(pts[i], a, b), d = hyp(pts[i].x - q.x, pts[i].y - q.y);
-      if (d > best) (best = d), (bi = i);
+      const q = closest(pts[i], a, b),
+        d = hyp(pts[i].x - q.x, pts[i].y - q.y);
+      if (d > best) {
+        best = d;
+        bi = i;
+      }
     }
     if (best <= eps) return [a, b];
     return [...rdp(pts.slice(0, bi + 1)).slice(0, -1), ...rdp(pts.slice(bi))];
   };
-  // Split at the point farthest from the first, so both halves are open runs.
-  let far = 0, fd = -1;
+  let far = 0,
+    fd = -1;
   for (let i = 0; i < loop.length; i++) {
     const d = hyp(loop[i].x - loop[0].x, loop[i].y - loop[0].y);
-    if (d > fd) (fd = d), (far = i);
+    if (d > fd) {
+      fd = d;
+      far = i;
+    }
   }
-  const one = rdp(loop.slice(0, far + 1)), two = rdp([...loop.slice(far), loop[0]]);
+  const one = rdp(loop.slice(0, far + 1)),
+    two = rdp([...loop.slice(far), loop[0]]);
   return [...one.slice(0, -1), ...two.slice(0, -1)];
 }
 
-// --- The way through ---
-
-// The centreline from tee to cup, one point a unit, each with its half width and heading.
 type Sample = Vec & { hw: number; dx: number; dy: number };
 function along(pts: (Vec & { hw: number })[]): Sample[] {
   const out: Sample[] = [];
   for (let i = 0; i < pts.length - 1; i++) {
-    const a = pts[i], b = pts[i + 1], L = hyp(b.x - a.x, b.y - a.y);
+    const a = pts[i],
+      b = pts[i + 1],
+      L = hyp(b.x - a.x, b.y - a.y);
     const n = Math.max(1, Math.round(L));
     for (let k = 0; k < n; k++) {
       const t = k / n;
-      out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, hw: a.hw + (b.hw - a.hw) * t, dx: (b.x - a.x) / (L || 1), dy: (b.y - a.y) / (L || 1) });
+      out.push({
+        x: a.x + (b.x - a.x) * t,
+        y: a.y + (b.y - a.y) * t,
+        hw: a.hw + (b.hw - a.hw) * t,
+        dx: (b.x - a.x) / (L || 1),
+        dy: (b.y - a.y) / (L || 1),
+      });
     }
   }
-  const last = pts[pts.length - 1], prev = out[out.length - 1];
+  const last = pts[pts.length - 1],
+    prev = out[out.length - 1];
   out.push({ ...last, dx: prev?.dx ?? 0, dy: prev?.dy ?? -1 });
   return out;
 }
-// A smooth curve through control points (Catmull-Rom), for ribbons.
 function curve(ctl: (Vec & { hw: number })[], per = 6): (Vec & { hw: number })[] {
   const at = (i: number) => ctl[Math.max(0, Math.min(ctl.length - 1, i))];
   const out: (Vec & { hw: number })[] = [];
   for (let i = 0; i < ctl.length - 1; i++) {
-    const p0 = at(i - 1), p1 = at(i), p2 = at(i + 1), p3 = at(i + 2);
+    const p0 = at(i - 1),
+      p1 = at(i),
+      p2 = at(i + 1),
+      p3 = at(i + 2);
     for (let k = 0; k < per; k++) {
-      const t = k / per, t2 = t * t, t3 = t2 * t;
-      const cr = (a: number, b: number, c: number, d: number) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+      const t = k / per,
+        t2 = t * t,
+        t3 = t2 * t;
+      const cr = (a: number, b: number, c: number, d: number) =>
+        0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
       out.push({ x: cr(p0.x, p1.x, p2.x, p3.x), y: cr(p0.y, p1.y, p2.y, p3.y), hw: p1.hw + (p2.hw - p1.hw) * t });
     }
   }
@@ -204,31 +293,32 @@ function curve(ctl: (Vec & { hw: number })[], per = 6): (Vec & { hw: number })[]
   return out;
 }
 
-// What a shape lays out: the board, the way through it, and where there's room for things.
 type Leg = { a: Vec; b: Vec; hw: number };
 type Layout = {
-  kind: string; // for the name
+  kind: string;
   path: Sample[];
-  legs: Leg[]; // straight runs, for baffles and crates
-  rooms: { c: Vec; r: number }[]; // open spaces, for bumpers, spinners and ponds
+  legs: Leg[];
+  rooms: { c: Vec; r: number }[];
   draw: (F: Field) => void;
   walls?: Wall[];
   bumpers?: Bumper[];
   zones?: Zone[];
-  ramps?: boolean; // islands joined by ramps: the ground doesn't connect
-  noObstacles?: boolean; // the shape's already the obstacle (a crown of bumpers)
+  ramps?: boolean;
+  noObstacles?: boolean;
 };
 
-// The shapes. Up the screen is -y. Sizes are like the hand-made holes': a lane's 6 to 10 wide.
 const L = {
-  // Straight up, maybe wider in the middle.
   straight: ({ R, chance }: Rand, len: number): Layout => {
-    const w = R(3.5, 5), Lh = 18 + len * 16;
+    const w = R(3.5, 5),
+      Lh = 18 + len * 16;
     const bulge = chance(0.5) ? R(1.5, 4) : 0;
     const legs = [{ a: v(0, 0), b: v(0, -Lh), hw: w }];
     return {
       kind: "straight",
-      path: along([{ x: 0, y: 0, hw: w }, { x: 0, y: -Lh, hw: w }]),
+      path: along([
+        { x: 0, y: 0, hw: w },
+        { x: 0, y: -Lh, hw: w },
+      ]),
       legs,
       rooms: bulge ? [{ c: v(0, -Lh / 2), r: w + bulge - 1.5 }] : [],
       draw: (F) => {
@@ -241,47 +331,85 @@ const L = {
       },
     };
   },
-  // Up, then a square turn to one side.
   dogleg: ({ R, pick }: Rand, len: number): Layout => {
-    const w1 = R(3.5, 4.8), w2 = R(3.5, 4.8), side = pick([-1, 1]);
-    const L1 = 14 + len * 12, L2 = 10 + len * 8;
-    const j = v(0, -L1), end = v(side * L2, -L1);
+    const w1 = R(3.5, 4.8),
+      w2 = R(3.5, 4.8),
+      side = pick([-1, 1]);
+    const L1 = 14 + len * 12,
+      L2 = 10 + len * 8;
+    const j = v(0, -L1),
+      end = v(side * L2, -L1);
     const round = R(0.3, 1.2);
     return {
       kind: "dogleg",
-      path: along([{ x: 0, y: 0, hw: w1 }, { ...j, hw: w1 }, { ...end, hw: w2 }]),
-      legs: [{ a: v(0, 0), b: j, hw: w1 }, { a: j, b: end, hw: w2 }],
+      path: along([
+        { x: 0, y: 0, hw: w1 },
+        { ...j, hw: w1 },
+        { ...end, hw: w2 },
+      ]),
+      legs: [
+        { a: v(0, 0), b: j, hw: w1 },
+        { a: j, b: end, hw: w2 },
+      ],
       rooms: [{ c: j, r: Math.min(w1, w2) }],
       draw: (F) => {
         for (const b of [box(v(0, 0), j, w1, 2.8, w2, round), box(j, end, w2, w1, 2.8, round)]) F.apply(b.bb, b.f);
       },
     };
   },
-  // Up, across, up again: a Z.
   zbend: ({ R, pick }: Rand, len: number): Layout => {
-    const w = R(3.4, 4.5), side = pick([-1, 1]);
-    const L1 = 9 + len * 6, L2 = 9 + len * 6, L3 = 9 + len * 6;
-    const a = v(0, 0), b = v(0, -L1), c = v(side * L2, -L1), d = v(side * L2, -L1 - L3);
+    const w = R(3.4, 4.5),
+      side = pick([-1, 1]);
+    const L1 = 9 + len * 6,
+      L2 = 9 + len * 6,
+      L3 = 9 + len * 6;
+    const a = v(0, 0),
+      b = v(0, -L1),
+      c = v(side * L2, -L1),
+      d = v(side * L2, -L1 - L3);
     const round = R(0.3, 1);
     return {
       kind: "zbend",
-      path: along([{ ...a, hw: w }, { ...b, hw: w }, { ...c, hw: w }, { ...d, hw: w }]),
-      legs: [{ a, b, hw: w }, { a: b, b: c, hw: w }, { a: c, b: d, hw: w }],
+      path: along([
+        { ...a, hw: w },
+        { ...b, hw: w },
+        { ...c, hw: w },
+        { ...d, hw: w },
+      ]),
+      legs: [
+        { a, b, hw: w },
+        { a: b, b: c, hw: w },
+        { a: c, b: d, hw: w },
+      ],
       rooms: [],
       draw: (F) => {
         for (const x of [box(a, b, w, 2.8, w, round), box(b, c, w, w, w, round), box(c, d, w, w, 2.8, round)]) F.apply(x.bb, x.f);
       },
     };
   },
-  // Up one lane, over the top and back down the other, past a gap in the void.
   hairpin: ({ R, pick }: Rand, len: number): Layout => {
-    const w = R(3.2, 4.2), gap = R(1.5, 4), side = pick([-1, 1]);
-    const Lh = 16 + len * 12, D = (2 * w + gap) * side, top = -Lh;
-    const a = v(0, 0), b = v(0, top), c = v(D, top), d = v(D, -2);
+    const w = R(3.2, 4.2),
+      gap = R(1.5, 4),
+      side = pick([-1, 1]);
+    const Lh = 16 + len * 12,
+      D = (2 * w + gap) * side,
+      top = -Lh;
+    const a = v(0, 0),
+      b = v(0, top),
+      c = v(D, top),
+      d = v(D, -2);
     return {
       kind: "hairpin",
-      path: along([{ ...a, hw: w }, { ...b, hw: w }, { ...c, hw: w }, { ...d, hw: w }]),
-      legs: [{ a, b, hw: w }, { a: c, b: d, hw: w }],
+      path: along([
+        { ...a, hw: w },
+        { ...b, hw: w },
+        { ...c, hw: w },
+        { ...d, hw: w },
+      ]),
+      legs: [
+        { a, b, hw: w },
+        { a: c, b: d, hw: w },
+      ],
       rooms: [{ c: v(D / 2, top), r: w }],
       draw: (F) => {
         const r = R(0.5, 2.5);
@@ -289,10 +417,17 @@ const L = {
       },
     };
   },
-  // A ribbon that curves one way and back.
   snake: ({ R, pick }: Rand, len: number): Layout => {
-    const w = R(3.2, 4.2), side = pick([-1, 1]), Lh = 22 + len * 14, sway = R(4, 8);
-    const ctl = [{ x: 0, y: 0, hw: w }, { x: side * sway, y: -Lh * 0.33, hw: w }, { x: -side * sway, y: -Lh * 0.66, hw: w }, { x: side * R(0, 3), y: -Lh, hw: w + R(0, 1.5) }];
+    const w = R(3.2, 4.2),
+      side = pick([-1, 1]),
+      Lh = 22 + len * 14,
+      sway = R(4, 8);
+    const ctl = [
+      { x: 0, y: 0, hw: w },
+      { x: side * sway, y: -Lh * 0.33, hw: w },
+      { x: -side * sway, y: -Lh * 0.66, hw: w },
+      { x: side * R(0, 3), y: -Lh, hw: w + R(0, 1.5) },
+    ];
     const pts = curve(ctl);
     return {
       kind: "snake",
@@ -309,17 +444,21 @@ const L = {
       },
     };
   },
-  // A stem up to a round green, with a ring of bumpers round the cup whose gap faces away from you.
   crown: ({ R, r }: Rand, len: number): Layout => {
-    const stem = R(2.8, 3.5), Lh = 12 + len * 10, rad = R(7.5, 9.5), c = v(0, -Lh - rad + 1.5);
-    // A ring of bumpers round the cup, its gap somewhere round the back; how many, how big and how wide the
-    // gap all vary, and sometimes it's only half a ring, or a second pair sits further out.
-    const ring = rad * R(0.38, 0.52), n = [6, 7, 8, 9][Math.floor(r() * 4)], gapAt = Math.PI / 2 + (r() - 0.5) * 1.6, gap = R(0.45, 0.9);
-    const half = r() < 0.25, br = R(0.65, 0.9);
+    const stem = R(2.8, 3.5),
+      Lh = 12 + len * 10,
+      rad = R(7.5, 9.5),
+      c = v(0, -Lh - rad + 1.5);
+    const ring = rad * R(0.38, 0.52),
+      n = [6, 7, 8, 9][Math.floor(r() * 4)],
+      gapAt = Math.PI / 2 + (r() - 0.5) * 1.6,
+      gap = R(0.45, 0.9);
+    const half = r() < 0.25,
+      br = R(0.65, 0.9);
     const bumpers: Bumper[] = [];
     for (let k = 0; k < n; k++) {
       const a = -Math.PI / 2 + (k * Math.PI * 2) / n + (half ? 0 : R(-0.08, 0.08));
-      const da = Math.abs(((a - (-gapAt) + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+      const da = Math.abs(((a - -gapAt + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
       if (da < gap || (half && da > Math.PI * 0.62)) continue;
       bumpers.push({ at: v(c.x + dcos(a) * ring, c.y + dsin(a) * ring), r: br, kick: 5 });
     }
@@ -330,7 +469,11 @@ const L = {
       }
     return {
       kind: "crown",
-      path: along([{ x: 0, y: 0, hw: stem }, { x: 0, y: -Lh, hw: stem }, { ...c, hw: 3 }]),
+      path: along([
+        { x: 0, y: 0, hw: stem },
+        { x: 0, y: -Lh, hw: stem },
+        { ...c, hw: 3 },
+      ]),
       legs: [{ a: v(0, 0), b: v(0, -Lh + 2), hw: stem }],
       rooms: [],
       bumpers,
@@ -342,34 +485,46 @@ const L = {
       },
     };
   },
-  // A wide table: room for a pinball field of bumpers.
   table: ({ R }: Rand, len: number): Layout => {
-    const hw = R(6.5, 9), Lh = 20 + len * 10;
+    const hw = R(6.5, 9),
+      Lh = 20 + len * 10;
     return {
       kind: "table",
-      path: along([{ x: 0, y: 0, hw: 3.5 }, { x: 0, y: -Lh, hw: 3.5 }]),
+      path: along([
+        { x: 0, y: 0, hw: 3.5 },
+        { x: 0, y: -Lh, hw: 3.5 },
+      ]),
       legs: [],
-      rooms: [{ c: v(0, -Lh * 0.5), r: hw - 2 }, { c: v(0, -Lh * 0.25), r: hw - 2.5 }, { c: v(0, -Lh * 0.75), r: hw - 2.5 }],
+      rooms: [
+        { c: v(0, -Lh * 0.5), r: hw - 2 },
+        { c: v(0, -Lh * 0.25), r: hw - 2.5 },
+        { c: v(0, -Lh * 0.75), r: hw - 2.5 },
+      ],
       draw: (F) => {
         const b = box(v(0, 0), v(0, -Lh), hw, 3, 3, R(2, 4));
         F.apply(b.bb, b.f);
       },
     };
   },
-  // Islands in the void, each with a speed pad and a ramp pointing at the next.
   islands: ({ R, pick }: Rand, len: number): Layout => {
     const n = len > 0.5 ? 3 : 2;
     const pts: (Vec & { hw: number })[] = [];
     const isl: { a: Vec; b: Vec; hw: number }[] = [];
-    let y = 0, x = 0;
+    let y = 0,
+      x = 0;
     const zones: Zone[] = [];
     for (let k = 0; k < n; k++) {
-      const hw = R(3.8, 5), Lk = k === n - 1 ? R(9, 12) : R(10, 13);
-      const a = v(x, y), b = v(x, y - Lk);
+      const hw = R(3.8, 5),
+        Lk = k === n - 1 ? R(9, 12) : R(10, 13);
+      const a = v(x, y),
+        b = v(x, y - Lk);
       isl.push({ a, b, hw });
       pts.push({ ...a, hw }, { ...b, hw });
       if (k < n - 1) {
-        zones.push({ kind: "boost", poly: rect(x - 1.3, b.y + 4.2, 2.6, 2.6), dir: v(0, -1), strength: 45 }, { kind: "ramp", poly: rect(x - 1.5, b.y - 1.2, 3, 3), dir: v(0, -1), lift: 0.6 });
+        zones.push(
+          { kind: "boost", poly: rect(x - 1.3, b.y + 4.2, 2.6, 2.6), dir: v(0, -1), strength: 45 },
+          { kind: "ramp", poly: rect(x - 1.5, b.y - 1.2, 3, 3), dir: v(0, -1), lift: 0.6 },
+        );
         y = b.y - R(4, 6) - 2.8 * 2;
         x += pick([-1, 0, 1]) * R(0, 2.5);
       }
@@ -389,11 +544,17 @@ const L = {
       },
     };
   },
-  // A diagonal zigzag: legs at 45 degrees, rounded where they meet.
   zigzag: ({ R, pick }: Rand, len: number): Layout => {
-    const w = R(3.3, 4.2), side = pick([-1, 1]), step = 8 + len * 5, legs = len > 0.5 ? 3 : 2;
-    const pts: (Vec & { hw: number })[] = [{ x: 0, y: 0, hw: w }, { x: 0, y: -4, hw: w }];
-    let x = 0, y = -4;
+    const w = R(3.3, 4.2),
+      side = pick([-1, 1]),
+      step = 8 + len * 5,
+      legs = len > 0.5 ? 3 : 2;
+    const pts: (Vec & { hw: number })[] = [
+      { x: 0, y: 0, hw: w },
+      { x: 0, y: -4, hw: w },
+    ];
+    let x = 0,
+      y = -4;
     for (let k = 0; k < legs; k++) {
       x += (k % 2 ? -side : side) * step;
       y -= step;
@@ -403,7 +564,10 @@ const L = {
     return {
       kind: "zigzag",
       path: along(pts),
-      legs: pts.slice(1, -1).map((p, i) => ({ a: p, b: pts[i + 2], hw: w })).slice(0, legs),
+      legs: pts
+        .slice(1, -1)
+        .map((p, i) => ({ a: p, b: pts[i + 2], hw: w }))
+        .slice(0, legs),
       rooms: [],
       draw: (F) => {
         for (let i = 1; i < pts.length; i++) {
@@ -420,15 +584,13 @@ const L = {
 };
 const MINI = ["straight", "dogleg", "zbend", "hairpin", "snake", "crown", "table", "islands", "zigzag"] as const;
 
-// --- Things in the way ---
-
 type Build = {
   rand: Rand;
   ice: boolean;
-  open: boolean; // a fairway hole: no rails
-  hazards: number; // 0 few, 1 some, 2 lots
+  open: boolean;
+  hazards: number;
   lay: Layout;
-  inside: (p: Vec, margin?: number) => boolean; // on the board, with room
+  inside: (p: Vec, margin?: number) => boolean;
   bumpers: Bumper[];
   walls: Wall[];
   zones: Zone[];
@@ -436,18 +598,17 @@ type Build = {
   mines: Vec[];
   portals: Portal[];
   boxes: Vec[];
-  taken: { c: Vec; r: number }[]; // what's already there, to keep clear of
+  taken: { c: Vec; r: number }[];
 };
 const free = (b: Build, p: Vec, r: number) => b.taken.every((t) => hyp(t.c.x - p.x, t.c.y - p.y) > t.r + r) && b.inside(p, r);
 const take = (b: Build, p: Vec, r: number) => b.taken.push({ c: p, r });
-// A point on the path a fraction of the way along, nudged across it by `off` (in half widths).
 function onPath(b: Build, t: number, off = 0) {
-  const P = b.lay.path, s = P[Math.max(0, Math.min(P.length - 1, Math.round(t * (P.length - 1))))];
+  const P = b.lay.path,
+    s = P[Math.max(0, Math.min(P.length - 1, Math.round(t * (P.length - 1))))];
   return { p: v(s.x - s.dy * off * s.hw, s.y + s.dx * off * s.hw), s };
 }
 
 const OBSTACLES: Record<string, (b: Build) => boolean> = {
-  // A bumper right on the line, a little to one side, so there's a way past on the other.
   bumper: (b) => {
     const { p } = onPath(b, b.rand.R(0.3, 0.75), b.rand.R(-0.35, 0.35));
     const r = b.rand.R(0.75, 1.1);
@@ -456,12 +617,15 @@ const OBSTACLES: Record<string, (b: Build) => boolean> = {
     take(b, p, r + 0.4);
     return true;
   },
-  // A little cluster in an open space: a triangle, or a pair.
   cluster: (b) => {
     const room = b.lay.rooms.length ? b.rand.pick(b.lay.rooms) : null;
     if (!room || room.r < 3) return false;
-    const n = b.rand.pick([2, 3, 3, 4]), rad = Math.min(room.r - 1.2, b.rand.R(2.2, 3.5)), a0 = b.rand.R(0, Math.PI * 2);
-    const pts = Array.from({ length: n }, (_, k) => v(room.c.x + dcos(a0 + (k * Math.PI * 2) / n) * rad, room.c.y + dsin(a0 + (k * Math.PI * 2) / n) * rad));
+    const n = b.rand.pick([2, 3, 3, 4]),
+      rad = Math.min(room.r - 1.2, b.rand.R(2.2, 3.5)),
+      a0 = b.rand.R(0, Math.PI * 2);
+    const pts = Array.from({ length: n }, (_, k) =>
+      v(room.c.x + dcos(a0 + (k * Math.PI * 2) / n) * rad, room.c.y + dsin(a0 + (k * Math.PI * 2) / n) * rad),
+    );
     if (!pts.every((p) => free(b, p, 2.1))) return false;
     for (const p of pts) {
       b.bumpers.push({ at: p, r: 0.8, kick: 5 });
@@ -469,20 +633,22 @@ const OBSTACLES: Record<string, (b: Build) => boolean> = {
     }
     return true;
   },
-  // A baffle across a straight leg from one side, leaving a gap at the other. Two make a chicane.
   baffle: (b) => {
     const legs = b.lay.legs.filter((l) => hyp(l.b.x - l.a.x, l.b.y - l.a.y) > 12);
     if (!legs.length || b.open) return false;
-    const leg = b.rand.pick(legs), n = b.rand.chance(0.5) ? 2 : 1;
-    const dx = leg.b.x - leg.a.x, dy = leg.b.y - leg.a.y, Lg = hyp(dx, dy), ux = dx / Lg, uy = dy / Lg;
+    const leg = b.rand.pick(legs),
+      n = b.rand.chance(0.5) ? 2 : 1;
+    const dx = leg.b.x - leg.a.x,
+      dy = leg.b.y - leg.a.y,
+      Lg = hyp(dx, dy),
+      ux = dx / Lg,
+      uy = dy / Lg;
     let side = b.rand.pick([-1, 1]);
     const made: Wall[] = [];
     for (let k = 0; k < n; k++) {
       const t = n === 1 ? b.rand.R(0.4, 0.6) : k === 0 ? 0.35 : 0.68;
       const c = v(leg.a.x + dx * t, leg.a.y + dy * t);
       const cover = leg.hw * 2 * b.rand.R(0.55, 0.68);
-      // From the wall on `side` inwards.
-      // From the rail itself (a touch inside it, so it joins), never out past it.
       const edge = v(c.x - uy * side * (leg.hw - 0.1), c.y + ux * side * (leg.hw - 0.1));
       const tip = v(edge.x + uy * side * cover, edge.y - ux * side * cover);
       if (!free(b, c, 1)) return false;
@@ -493,48 +659,55 @@ const OBSTACLES: Record<string, (b: Build) => boolean> = {
     for (const w of made) take(b, w.pts[1], 1.4);
     return true;
   },
-  // A speed pad along the way: quick, if you're lined up.
   pad: (b) => {
     const { p, s } = onPath(b, b.rand.R(0.15, 0.55), b.rand.R(-0.3, 0.3));
     if (!free(b, p, 1.9)) return false;
-    b.zones.push({ kind: "boost", poly: rect(p.x - 1.3, p.y - 1.3, 2.6, 2.6), dir: v(Math.round(s.dx * 1e6) / 1e6, Math.round(s.dy * 1e6) / 1e6), strength: 45 });
+    b.zones.push({
+      kind: "boost",
+      poly: rect(p.x - 1.3, p.y - 1.3, 2.6, 2.6),
+      dir: v(Math.round(s.dx * 1e6) / 1e6, Math.round(s.dy * 1e6) / 1e6),
+      strength: 45,
+    });
     take(b, p, 1.9);
     return true;
   },
-  // Sand by the cup (snow on ice): a brake in the wrong place.
   sand: (b) => {
     const { p } = onPath(b, b.rand.R(0.78, 0.9), b.rand.pick([-0.6, 0.6]));
-    const rx = b.rand.R(1.4, 2.4), ry = b.rand.R(1.2, 2);
+    const rx = b.rand.R(1.4, 2.4),
+      ry = b.rand.R(1.2, 2);
     if (!free(b, p, Math.max(rx, ry) + 0.4)) return false;
     b.zones.push({ kind: b.ice ? "snow" : "sand", poly: blob(p.x, p.y, rx, ry, Math.floor(b.rand.R(1, 99)), 0.12, 20) });
     take(b, p, Math.max(rx, ry));
     return true;
   },
-  // A pond on one side of the way, with the other side open.
   pond: (b) => {
     const { p, s } = onPath(b, b.rand.R(0.3, 0.7), 0);
     if (s.hw < 3.4) return false;
-    const side = b.rand.pick([-1, 1]), cover = s.hw * b.rand.R(0.8, 1.1);
+    const side = b.rand.pick([-1, 1]),
+      cover = s.hw * b.rand.R(0.8, 1.1);
     const c = v(p.x - s.dy * side * (s.hw - cover / 2 + 0.6), p.y + s.dx * side * (s.hw - cover / 2 + 0.6));
     const len = b.rand.R(3, 6);
     if (!free(b, c, cover / 2 + 0.6)) return false;
     const ang = datan2(s.dy, s.dx);
-    const poly = blob(0, 0, len / 2, cover / 2, Math.floor(b.rand.R(1, 99)), 0.1, 24).map((q) => v(c.x + q.x * dcos(ang) - q.y * dsin(ang), c.y + q.x * dsin(ang) + q.y * dcos(ang)));
+    const poly = blob(0, 0, len / 2, cover / 2, Math.floor(b.rand.R(1, 99)), 0.1, 24).map((q) =>
+      v(c.x + q.x * dcos(ang) - q.y * dsin(ang), c.y + q.x * dsin(ang) + q.y * dcos(ang)),
+    );
     b.zones.push({ kind: "water", poly });
     take(b, c, Math.max(len, cover) / 2 + 0.6);
     return true;
   },
-  // A sheet of ice across the way (on grass it's a shock).
   ice: (b) => {
     const { p, s } = onPath(b, b.rand.R(0.3, 0.7), 0);
     const len = b.rand.R(4, 9);
     if (!b.taken.every((t) => hyp(t.c.x - p.x, t.c.y - p.y) > t.r + 1)) return false;
-    const ang = datan2(s.dy, s.dx), hw = s.hw + 1;
-    const poly = [v(-len / 2, -hw), v(len / 2, -hw), v(len / 2, hw), v(-len / 2, hw)].map((q) => v(p.x + q.x * dcos(ang) - q.y * dsin(ang), p.y + q.x * dsin(ang) + q.y * dcos(ang)));
+    const ang = datan2(s.dy, s.dx),
+      hw = s.hw + 1;
+    const poly = [v(-len / 2, -hw), v(len / 2, -hw), v(len / 2, hw), v(-len / 2, hw)].map((q) =>
+      v(p.x + q.x * dcos(ang) - q.y * dsin(ang), p.y + q.x * dsin(ang) + q.y * dcos(ang)),
+    );
     b.zones.push({ kind: "ice", poly });
     return true;
   },
-  // A bar spinning in an open space.
   spinner: (b) => {
     const room = b.lay.rooms.find((r) => r.r >= 3.6);
     if (!room || b.movers.length) return false;
@@ -544,38 +717,57 @@ const OBSTACLES: Record<string, (b: Build) => boolean> = {
     take(b, room.c, L + 0.6);
     return true;
   },
-  // A crate sliding across a straight leg.
   crate: (b) => {
     const legs = b.lay.legs.filter((l) => hyp(l.b.x - l.a.x, l.b.y - l.a.y) > 10);
     if (!legs.length || b.movers.length || b.open) return false;
-    const leg = b.rand.pick(legs), t = b.rand.R(0.4, 0.65);
-    const dx = leg.b.x - leg.a.x, dy = leg.b.y - leg.a.y, Lg = hyp(dx, dy), ux = dx / Lg, uy = dy / Lg;
+    const leg = b.rand.pick(legs),
+      t = b.rand.R(0.4, 0.65);
+    const dx = leg.b.x - leg.a.x,
+      dy = leg.b.y - leg.a.y,
+      Lg = hyp(dx, dy),
+      ux = dx / Lg,
+      uy = dy / Lg;
     const c = v(leg.a.x + dx * t, leg.a.y + dy * t);
     if (!free(b, c, 2.2)) return false;
     const reach = leg.hw - 1.1;
-    b.movers.push({ kind: "slider", a: v(c.x - uy * reach, c.y + ux * reach), b: v(c.x + uy * reach, c.y - ux * reach), size: v(Math.abs(ux) > 0.5 ? 1.6 : 1.4, Math.abs(ux) > 0.5 ? 1.4 : 1.6), period: b.rand.R(2.6, 4), phase: b.rand.r() });
+    b.movers.push({
+      kind: "slider",
+      a: v(c.x - uy * reach, c.y + ux * reach),
+      b: v(c.x + uy * reach, c.y - ux * reach),
+      size: v(Math.abs(ux) > 0.5 ? 1.6 : 1.4, Math.abs(ux) > 0.5 ? 1.4 : 1.6),
+      period: b.rand.R(2.6, 4),
+      phase: b.rand.r(),
+    });
     take(b, c, 2);
     return true;
   },
-  // A slope pushing sideways across the way.
   slope: (b) => {
     const { p, s } = onPath(b, b.rand.R(0.3, 0.7), 0);
     if (!b.taken.every((t) => hyp(t.c.x - p.x, t.c.y - p.y) > t.r + 1)) return false;
-    const side = b.rand.pick([-1, 1]), len = b.rand.R(5, 9), hw = s.hw + 1, ang = datan2(s.dy, s.dx);
-    const poly = [v(-len / 2, -hw), v(len / 2, -hw), v(len / 2, hw), v(-len / 2, hw)].map((q) => v(p.x + q.x * dcos(ang) - q.y * dsin(ang), p.y + q.x * dsin(ang) + q.y * dcos(ang)));
+    const side = b.rand.pick([-1, 1]),
+      len = b.rand.R(5, 9),
+      hw = s.hw + 1,
+      ang = datan2(s.dy, s.dx);
+    const poly = [v(-len / 2, -hw), v(len / 2, -hw), v(len / 2, hw), v(-len / 2, hw)].map((q) =>
+      v(p.x + q.x * dcos(ang) - q.y * dsin(ang), p.y + q.x * dsin(ang) + q.y * dcos(ang)),
+    );
     b.zones.push({ kind: "slope", poly, dir: v(-s.dy * side, s.dx * side), strength: b.rand.R(4, 7) });
     return true;
   },
-  // A hill on the way to the cup, or a bowl round it.
   mound: (b) => {
     const bowl = b.rand.chance(0.5);
     const { p } = bowl ? { p: b.lay.path[b.lay.path.length - 1] } : onPath(b, b.rand.R(0.4, 0.7), b.rand.R(-0.3, 0.3));
     const radius = b.rand.R(2.5, 4);
     if (!bowl && !free(b, p, 1)) return false;
-    b.zones.push({ kind: "mound", poly: circle(p.x, p.y, radius, 20), center: p, radius, strength: bowl ? -b.rand.R(3, 5) : b.rand.R(5, 9) });
+    b.zones.push({
+      kind: "mound",
+      poly: circle(p.x, p.y, radius, 20),
+      center: p,
+      radius,
+      strength: bowl ? -b.rand.R(3, 5) : b.rand.R(5, 9),
+    });
     return true;
   },
-  // Mines, a few, off the middle of the way.
   mines: (b) => {
     let n = 0;
     for (let k = 0; k < 12 && n < 3; k++) {
@@ -588,33 +780,44 @@ const OBSTACLES: Record<string, (b: Build) => boolean> = {
     return n > 0;
   },
 };
-// What each kind of hole can have, roughly in order of how often.
 const MENU_MINI = ["bumper", "bumper", "baffle", "pad", "sand", "pond", "cluster", "slope", "mound", "spinner", "crate", "ice", "mines"];
 const MENU_ICE = ["bumper", "ice", "ice", "baffle", "sand", "pond", "slope", "cluster", "pad", "mound", "crate", "spinner"];
 
-// --- Fairway holes ---
-
-// A stretch of land with the fairway down the middle: rough either side, the green round the cup, bunkers,
-// maybe a river with a bridge and a pond. In a lake, or floating in the void with no rail.
 function fairway(rand: Rand, len: number, ice: boolean, hazards: number) {
   const { R, pick, chance } = rand;
-  // A full putt rolls about 70 on the fairway: two or three of those makes a par 4 or 5.
-  const Lh = 75 + len * 85, hw = R(3.6, 5);
-  // Mostly a dogleg (straight out to where a drive lands, then a real turn toward the green), sometimes an
-  // S, now and then dead straight.
+  const Lh = 75 + len * 85,
+    hw = R(3.6, 5);
   const shape = chance(0.15) ? "straight" : chance(0.65) ? "dogleg" : "s";
   const side = pick([-1, 1]);
   const ctl: (Vec & { hw: number })[] =
-    shape === "straight" ? [{ x: 0, y: 0, hw }, { x: 0, y: -Lh * 0.5, hw }, { x: R(-4, 4), y: -Lh, hw: hw + 0.5 }]
-    : shape === "dogleg"
-      ? (() => {
-          const a = Lh * R(0.5, 0.65), b = R(18, 32), c = R(6, 16);
-          return [{ x: 0, y: 0, hw }, { x: 0, y: -a * 0.55, hw }, { x: side * 2, y: -a, hw }, { x: side * b * 0.55, y: -a - c * 0.7, hw: hw * 0.9 }, { x: side * b, y: -a - c, hw: hw + 0.5 }];
-        })()
-      : [{ x: 0, y: 0, hw }, { x: 0, y: -Lh * 0.28, hw }, { x: side * R(12, 20), y: -Lh * 0.55, hw: hw * 0.9 }, { x: side * R(-2, 6), y: -Lh * 0.82, hw }, { x: side * R(-4, 4), y: -Lh, hw: hw + 0.5 }];
+    shape === "straight"
+      ? [
+          { x: 0, y: 0, hw },
+          { x: 0, y: -Lh * 0.5, hw },
+          { x: R(-4, 4), y: -Lh, hw: hw + 0.5 },
+        ]
+      : shape === "dogleg"
+        ? (() => {
+            const a = Lh * R(0.5, 0.65),
+              b = R(18, 32),
+              c = R(6, 16);
+            return [
+              { x: 0, y: 0, hw },
+              { x: 0, y: -a * 0.55, hw },
+              { x: side * 2, y: -a, hw },
+              { x: side * b * 0.55, y: -a - c * 0.7, hw: hw * 0.9 },
+              { x: side * b, y: -a - c, hw: hw + 0.5 },
+            ];
+          })()
+        : [
+            { x: 0, y: 0, hw },
+            { x: 0, y: -Lh * 0.28, hw },
+            { x: side * R(12, 20), y: -Lh * 0.55, hw: hw * 0.9 },
+            { x: side * R(-2, 6), y: -Lh * 0.82, hw },
+            { x: side * R(-4, 4), y: -Lh, hw: hw + 0.5 },
+          ];
   const bends = shape === "straight" ? 0 : shape === "dogleg" ? 1 : 2;
   const raw = curve(ctl, 8);
-  // Wider where a drive lands, about 60 out.
   let run = 0;
   const widen = R(1.5, 3);
   const pts = raw.map((p, i) => {
@@ -626,7 +829,6 @@ function fairway(rand: Rand, len: number, ice: boolean, hazards: number) {
   const tee = path[0];
   const rough = R(3.5, 6.5);
   const zones: Zone[] = [];
-  // The fairway itself.
   const fw = (F: Field, extra: number, cut = false) => {
     for (let i = 1; i < pts.length; i++) {
       const c = capsule(pts[i - 1], pts[i], pts[i - 1].hw + extra, pts[i].hw + extra);
@@ -636,37 +838,86 @@ function fairway(rand: Rand, len: number, ice: boolean, hazards: number) {
   return { path, pts, rough, zones, tee, cup, fw, Lh, hazards, bends };
 }
 
-// Where the fairway turns hardest, and which way (+1 left, -1 right, as seen going along it).
 function sharpest(path: Sample[]) {
   let best: { i: number; turn: number; k: number } | null = null;
   for (let i = 6; i < path.length - 6; i++) {
-    const a = path[i - 6], b = path[i + 6];
+    const a = path[i - 6],
+      b = path[i + 6];
     const cross = a.dx * b.dy - a.dy * b.dx;
     if (!best || Math.abs(cross) > best.k) best = { i, turn: Math.sign(cross) || 1, k: Math.abs(cross) };
   }
   return best && best.k > 0.25 ? best : null;
 }
 
-// --- Names ---
-
-const GRASS_A = ["Maple", "Heron", "Willow", "Clover", "Foxglove", "Bramble", "Thistle", "Juniper", "Meadow", "Badger", "Kestrel", "Fern", "Mossy", "Oak", "Wren", "Lark", "Hazel", "Sorrel", "Pebble", "Duck"];
-const GRASS_B = ["Bend", "Run", "Crossing", "Hollow", "Rise", "Dell", "Green", "Glen", "Reach", "Turn", "Brook", "Way", "Knoll", "Corner", "Lane", "Links"];
-const ICE_A = ["Frost", "Glacier", "Sleet", "Rime", "Polar", "Tundra", "Icicle", "Blizzard", "Floe", "Snowdrift", "Permafrost", "Hoarfrost", "Igloo", "Yeti", "Penguin", "Fjord"];
+const GRASS_A = [
+  "Maple",
+  "Heron",
+  "Willow",
+  "Clover",
+  "Foxglove",
+  "Bramble",
+  "Thistle",
+  "Juniper",
+  "Meadow",
+  "Badger",
+  "Kestrel",
+  "Fern",
+  "Mossy",
+  "Oak",
+  "Wren",
+  "Lark",
+  "Hazel",
+  "Sorrel",
+  "Pebble",
+  "Duck",
+];
+const GRASS_B = [
+  "Bend",
+  "Run",
+  "Crossing",
+  "Hollow",
+  "Rise",
+  "Dell",
+  "Green",
+  "Glen",
+  "Reach",
+  "Turn",
+  "Brook",
+  "Way",
+  "Knoll",
+  "Corner",
+  "Lane",
+  "Links",
+];
+const ICE_A = [
+  "Frost",
+  "Glacier",
+  "Sleet",
+  "Rime",
+  "Polar",
+  "Tundra",
+  "Icicle",
+  "Blizzard",
+  "Floe",
+  "Snowdrift",
+  "Permafrost",
+  "Hoarfrost",
+  "Igloo",
+  "Yeti",
+  "Penguin",
+  "Fjord",
+];
 const ICE_B = ["Bend", "Run", "Slide", "Shelf", "Pass", "Field", "Drop", "Sheet", "Ridge", "Spill", "Rink", "Trail"];
-// Every hole in a course gets its own name: the nth step through every first-and-last pair, from a start
-// the seed picks, by a stride that never lands on the same pair twice in a course.
 function nameOf(o: GenOpts, ice: boolean) {
-  const A = ice ? ICE_A : GRASS_A, B = ice ? ICE_B : GRASS_B;
+  const A = ice ? ICE_A : GRASS_A,
+    B = ice ? ICE_B : GRASS_B;
   const k = (mix(o.seed, 99) + o.n * 37) % (A.length * B.length);
   return `${A[k % A.length]} ${B[Math.floor(k / A.length) % B.length]}`;
 }
 
-// --- Putting it together ---
-
 const THEME = (ice: boolean): Theme => (ice ? "ice" : "hills");
 const WALL = (ice: boolean): WallStyle => (ice ? "ice" : "wood");
 
-// Moves everything on a hole by (dx, dy).
 function shift(c: Course, dx: number, dy: number): Course {
   const m = (p: Vec) => v(p.x + dx, p.y + dy);
   const mp = (ps: Vec[]) => ps.map(m);
@@ -678,34 +929,46 @@ function shift(c: Course, dx: number, dy: number): Course {
     zones: c.zones.map((z) => (z.kind === "mound" ? { ...z, poly: mp(z.poly), center: m(z.center) } : { ...z, poly: mp(z.poly) })),
     walls: c.walls.map((w) => ({ ...w, pts: mp(w.pts) })),
     bumpers: c.bumpers.map((b) => ({ ...b, at: m(b.at) })),
-    movers: c.movers.map((mv) => (mv.kind === "spinner" ? { ...mv, at: m(mv.at) } : mv.kind === "slider" ? { ...mv, a: m(mv.a), b: m(mv.b) } : { ...mv, hub: m(mv.hub), mouth: [m(mv.mouth[0]), m(mv.mouth[1])] as [Vec, Vec] })),
+    movers: c.movers.map((mv) =>
+      mv.kind === "spinner"
+        ? { ...mv, at: m(mv.at) }
+        : mv.kind === "slider"
+          ? { ...mv, a: m(mv.a), b: m(mv.b) }
+          : { ...mv, hub: m(mv.hub), mouth: [m(mv.mouth[0]), m(mv.mouth[1])] as [Vec, Vec] },
+    ),
     portals: c.portals.map((p) => ({ a: m(p.a), b: m(p.b) })),
     boxes: mp(c.boxes),
     mines: mp(c.mines ?? []),
   };
 }
 
-// One candidate: a board, things on it, and boxes. Not checked yet.
 function candidate(seed: number, o: GenOpts, kindIndex: number): { c: Course; ramps: boolean; kind: string; thin?: boolean } {
   const rand = randOf(seed);
   const ice = o.terrain === 1 || (o.terrain === 2 && rand.chance(0.5));
   const open = o.style === 1 || (o.style === 2 && rand.chance(0.35));
-  // Holes get longer through a nine, with some give either way.
   const pos = o.n % 9;
   const len = Math.max(0, Math.min(1, (pos <= 1 ? 0.15 : pos >= 6 ? 0.7 : 0.45) + rand.R(-0.2, 0.25)));
   const budget = [1, 2, 3][o.hazards] + (rand.chance(0.5) ? 1 : 0) + (len > 0.6 ? 1 : 0);
-  // Fairways are long: more on them.
   if (open) return { ...fairwayHole(rand, o, len, ice, budget + 3), kind: "fairway" };
 
   const kind = MINI[kindIndex % MINI.length];
   const lay = L[kind](rand, len);
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const p of lay.path) (x0 = Math.min(x0, p.x - p.hw)), (y0 = Math.min(y0, p.y - p.hw)), (x1 = Math.max(x1, p.x + p.hw)), (y1 = Math.max(y1, p.y + p.hw));
+  let x0 = Infinity,
+    y0 = Infinity,
+    x1 = -Infinity,
+    y1 = -Infinity;
+  for (const p of lay.path) {
+    x0 = Math.min(x0, p.x - p.hw);
+    y0 = Math.min(y0, p.y - p.hw);
+    x1 = Math.max(x1, p.x + p.hw);
+    y1 = Math.max(y1, p.y + p.hw);
+  }
   const pad = 14;
   const F = new Field(x0 - pad, y0 - pad, Math.ceil((x1 - x0 + pad * 2) / G), Math.ceil((y1 - y0 + pad * 2) / G));
   lay.draw(F);
   const boards = trace(F);
-  const tee = lay.path[0], cup = lay.path[lay.path.length - 1];
+  const tee = lay.path[0],
+    cup = lay.path[lay.path.length - 1];
   const onBoard = (p: Vec) => {
     let n = 0;
     for (const g of boards) if (inPoly(p, g)) n++;
@@ -713,10 +976,11 @@ function candidate(seed: number, o: GenOpts, kindIndex: number): { c: Course; ra
   };
   const edgeDist = (p: Vec) => {
     let d = Infinity;
-    for (const g of boards) for (const [a, b] of edges(g)) {
-      const q = closest(p, a, b);
-      d = Math.min(d, hyp(p.x - q.x, p.y - q.y));
-    }
+    for (const g of boards)
+      for (const [a, b] of edges(g)) {
+        const q = closest(p, a, b);
+        d = Math.min(d, hyp(p.x - q.x, p.y - q.y));
+      }
     return d;
   };
   const b: Build = {
@@ -733,18 +997,21 @@ function candidate(seed: number, o: GenOpts, kindIndex: number): { c: Course; ra
     mines: [],
     portals: [],
     boxes: [],
-    taken: [{ c: tee, r: 3.2 }, { c: cup, r: 2.6 }, ...(lay.bumpers ?? []).map((x) => ({ c: x.at, r: x.r + 0.6 })), ...(lay.zones ?? []).map((z) => ({ c: v(z.poly[0].x + 1.4, z.poly[0].y + 1.4), r: 2.2 }))],
+    taken: [
+      { c: tee, r: 3.2 },
+      { c: cup, r: 2.6 },
+      ...(lay.bumpers ?? []).map((x) => ({ c: x.at, r: x.r + 0.6 })),
+      ...(lay.zones ?? []).map((z) => ({ c: v(z.poly[0].x + 1.4, z.poly[0].y + 1.4), r: 2.2 })),
+    ],
   };
   let made = 0;
   if (!lay.noObstacles) {
     const menu = ice ? MENU_ICE : MENU_MINI;
     const used = new Set<string>();
-    // A table's the pinball one: it always gets its bumpers.
     if (kind === "table") for (let k = 0; k < 6 && !used.has("cluster"); k++) if (OBSTACLES.cluster(b)) used.add("cluster");
     const want = kind === "crown" ? Math.min(1, budget) : budget;
     for (let k = 0; k < 90 && made < want; k++) {
       const what = rand.pick(menu);
-      // Mines only when the hazards are up; never the same big thing twice.
       if (what === "mines" && o.hazards < 2) continue;
       if (used.has(what) && what !== "bumper") continue;
       if (OBSTACLES[what](b)) {
@@ -754,8 +1021,6 @@ function candidate(seed: number, o: GenOpts, kindIndex: number): { c: Course; ra
     }
   }
   placeBoxes(b, len);
-  // A hole with next to nothing on it isn't worth playing: at least two things in the way (one with few
-  // hazards), counting what the shape brings (a crown's ring, an island's ramps).
   const floor = o.hazards === 0 ? 1 : 2;
   const thin = !lay.noObstacles && made + (lay.bumpers?.length ? 1 : 0) + (lay.ramps ? 1 : 0) < floor;
   const course: Course = {
@@ -786,10 +1051,9 @@ function candidate(seed: number, o: GenOpts, kindIndex: number): { c: Course; ra
   return { c: framed(clipZones(course)), ramps: !!lay.ramps, kind, thin };
 }
 
-// On ice, sand or water, or a slope: not somewhere for a box or a mine.
-const onPatch = (b: Build, p: Vec) => b.zones.some((z) => z.kind !== "boost" && z.kind !== "ramp" && z.kind !== "mound" && z.kind !== "wind" && inPoly(p, z.poly));
+const onPatch = (b: Build, p: Vec) =>
+  b.zones.some((z) => z.kind !== "boost" && z.kind !== "ramp" && z.kind !== "mound" && z.kind !== "wind" && inPoly(p, z.poly));
 
-// Boxes along the way, a little off the line: one or two a hole, three on a long one.
 function placeBoxes(b: Build, len: number) {
   const want = 1 + (b.rand.chance(0.5) ? 1 : 0) + (len > 0.65 ? 1 : 0);
   for (let k = 0; k < 40 && b.boxes.length < want; k++) {
@@ -800,9 +1064,9 @@ function placeBoxes(b: Build, len: number) {
   }
 }
 
-// Distance to a polygon's edge, positive inside (even-odd, for boards with holes).
 function polySdf(polys: Vec[][], x: number, y: number) {
-  let inside = false, d = Infinity;
+  let inside = false,
+    d = Infinity;
   const p = v(x, y);
   for (const poly of polys) {
     if (inPoly(p, poly)) inside = !inside;
@@ -814,24 +1078,29 @@ function polySdf(polys: Vec[][], x: number, y: number) {
   return inside ? d : -d;
 }
 
-// Every zone cut to the board, so nothing hangs off into the void. It matters for more than looks: the ground
-// under a ball is the zone's before the board's, so a slope or a sheet of ice hanging out past the rail would
-// be ground to land on out there.
 function clipZones(c: Course): Course {
   const boards = c.greens.map((g) => g.poly);
   const zones: Zone[] = [];
   for (const z of c.zones) {
-    // Pads are placed clear of the edge; a bridge is cut to the land like the rest.
     if (z.kind === "boost" || z.kind === "ramp") {
       zones.push(z);
       continue;
     }
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const q of z.poly) (x0 = Math.min(x0, q.x)), (y0 = Math.min(y0, q.y)), (x1 = Math.max(x1, q.x)), (y1 = Math.max(y1, q.y));
+    let x0 = Infinity,
+      y0 = Infinity,
+      x1 = -Infinity,
+      y1 = -Infinity;
+    for (const q of z.poly) {
+      x0 = Math.min(x0, q.x);
+      y0 = Math.min(y0, q.y);
+      x1 = Math.max(x1, q.x);
+      y1 = Math.max(y1, q.y);
+    }
     const F = new Field(x0 - 1, y0 - 1, Math.ceil((x1 - x0 + 2) / G) + 1, Math.ceil((y1 - y0 + 2) / G) + 1);
     for (let j = 0; j < F.ny; j++)
       for (let i = 0; i < F.nx; i++) {
-        const x = F.x0 + i * G, y = F.y0 + j * G;
+        const x = F.x0 + i * G,
+          y = F.y0 + j * G;
         F.a[j * F.nx + i] = Math.min(polySdf([z.poly], x, y), polySdf(boards, x, y));
       }
     for (const poly of trace(F, 1.5)) zones.push({ ...z, poly } as Zone);
@@ -839,10 +1108,18 @@ function clipZones(c: Course): Course {
   return { ...c, zones };
 }
 
-// Sized to the board, with a margin all round, everything moved to match.
 function framed(c: Course): Course {
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const g of c.greens) for (const p of g.poly) (x0 = Math.min(x0, p.x)), (y0 = Math.min(y0, p.y)), (x1 = Math.max(x1, p.x)), (y1 = Math.max(y1, p.y));
+  let x0 = Infinity,
+    y0 = Infinity,
+    x1 = -Infinity,
+    y1 = -Infinity;
+  for (const g of c.greens)
+    for (const p of g.poly) {
+      x0 = Math.min(x0, p.x);
+      y0 = Math.min(y0, p.y);
+      x1 = Math.max(x1, p.x);
+      y1 = Math.max(y1, p.y);
+    }
   const m = c.off === "water" ? 6 : 3;
   const out = shift(c, m - x0, m - y0);
   return { ...out, w: x1 - x0 + m * 2, h: y1 - y0 + m * 2 };
@@ -851,18 +1128,28 @@ function framed(c: Course): Course {
 function fairwayHole(rand: Rand, o: GenOpts, len: number, ice: boolean, budget: number): { c: Course; ramps: boolean } {
   const f = fairway(rand, len, ice, o.hazards);
   const { path, pts, tee, cup } = f;
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const p of pts) (x0 = Math.min(x0, p.x - p.hw)), (y0 = Math.min(y0, p.y - p.hw)), (x1 = Math.max(x1, p.x + p.hw)), (y1 = Math.max(y1, p.y + p.hw));
+  let x0 = Infinity,
+    y0 = Infinity,
+    x1 = -Infinity,
+    y1 = -Infinity;
+  for (const p of pts) {
+    x0 = Math.min(x0, p.x - p.hw);
+    y0 = Math.min(y0, p.y - p.hw);
+    x1 = Math.max(x1, p.x + p.hw);
+    y1 = Math.max(y1, p.y + p.hw);
+  }
   const pad = 22;
   const land = new Field(x0 - pad, y0 - pad, Math.ceil((x1 - x0 + pad * 2) / G), Math.ceil((y1 - y0 + pad * 2) / G));
-  // The land: the fairway with rough round it, wider here and there, and a tee box and a green apron.
   f.fw(land, f.rough);
   for (let k = 0; k < 3; k++) {
     const s = path[Math.floor(rand.R(0.15, 0.85) * (path.length - 1))];
     const d = disk(v(s.x + rand.R(-2, 2), s.y + rand.R(-2, 2)), s.hw + f.rough + rand.R(0.5, 2.5));
     land.apply(d.bb, d.f);
   }
-  for (const [c, r0] of [[tee, 5], [cup, 7.5]] as const) {
+  for (const [c, r0] of [
+    [tee, 5],
+    [cup, 7.5],
+  ] as const) {
     const d = disk(c, r0 + rand.R(0, 2));
     land.apply(d.bb, d.f);
   }
@@ -881,45 +1168,56 @@ function fairwayHole(rand: Rand, o: GenOpts, len: number, ice: boolean, budget: 
   };
   const inFair = (p: Vec) => fairways.some((x) => inPoly(p, x));
   const zones: Zone[] = fairways.map((poly) => ({ kind: (ice ? "packed" : "green") as Ground, poly }));
-  const taken: { c: Vec; r: number }[] = [{ c: tee, r: 4 }, { c: cup, r: 3.4 }];
+  const taken: { c: Vec; r: number }[] = [
+    { c: tee, r: 4 },
+    { c: cup, r: 3.4 },
+  ];
   const clear = (p: Vec, r: number) => taken.every((t) => hyp(t.c.x - p.x, t.c.y - p.y) > t.r + r);
   const water: Vec[][] = [];
   const sand: Vec[][] = [];
   const bridges: { poly: Vec[]; ends: [Vec, Vec] }[] = [];
-  const overlapsAny = (poly: Vec[], others: Vec[][], margin: number) => others.some((o2) => poly.some((p) => inPoly(p, o2) || o2.some((q) => hyp(q.x - p.x, q.y - p.y) < margin)));
+  const overlapsAny = (poly: Vec[], others: Vec[][], margin: number) =>
+    others.some((o2) => poly.some((p) => inPoly(p, o2) || o2.some((q) => hyp(q.x - p.x, q.y - p.y) < margin)));
   let made = 0;
-  // A river across, with a bridge over it, sometimes.
   if (rand.chance(0.45 + 0.15 * o.hazards)) {
     const at = path[Math.floor(rand.R(0.35, 0.6) * (path.length - 1))];
-    const nx = -at.dy, ny = at.dx, half = rand.R(1.6, 2.6);
+    const nx = -at.dy,
+      ny = at.dx,
+      half = rand.R(1.6, 2.6);
     const span = 40;
-    const ctl = [-1, -0.5, 0, 0.5, 1].map((k, i) => ({ x: at.x + nx * k * span + at.dx * (i % 2 ? rand.R(-2, 2) : 0), y: at.y + ny * k * span + at.dy * (i % 2 ? rand.R(-2, 2) : 0), hw: half }));
+    const ctl = [-1, -0.5, 0, 0.5, 1].map((k, i) => ({
+      x: at.x + nx * k * span + at.dx * (i % 2 ? rand.R(-2, 2) : 0),
+      y: at.y + ny * k * span + at.dy * (i % 2 ? rand.R(-2, 2) : 0),
+      hw: half,
+    }));
     const river = new Field(land.x0, land.y0, land.nx, land.ny);
     const rp = curve(ctl, 6);
     for (let i = 1; i < rp.length; i++) {
       const c = capsule(rp[i - 1], rp[i], half, half);
       river.apply(c.bb, c.f);
     }
-    // Only where there's land: the lake round it is water anyway.
     for (let k = 0; k < river.a.length; k++) river.a[k] = Math.min(river.a[k], land.a[k] - 0.3);
     const loops = trace(river);
     if (loops.length && clear(at, half + 2)) {
       water.push(...loops);
-      // The bridge: along the fairway, a little wider than the river, and narrower than the fairway.
-      const bw = rand.R(2.2, 3), bl = half + 1.6;
+      const bw = rand.R(2.2, 3),
+        bl = half + 1.6;
       const ang = datan2(at.dy, at.dx);
-      const poly = [v(-bl, -bw), v(bl, -bw), v(bl, bw), v(-bl, bw)].map((q) => v(at.x + q.x * dcos(ang) - q.y * dsin(ang), at.y + q.x * dsin(ang) + q.y * dcos(ang)));
-      bridges.push({ poly, ends: [v(at.x - at.dx * (bl + 0.6), at.y - at.dy * (bl + 0.6)), v(at.x + at.dx * (bl + 0.6), at.y + at.dy * (bl + 0.6))] });
+      const poly = [v(-bl, -bw), v(bl, -bw), v(bl, bw), v(-bl, bw)].map((q) =>
+        v(at.x + q.x * dcos(ang) - q.y * dsin(ang), at.y + q.x * dsin(ang) + q.y * dcos(ang)),
+      );
+      bridges.push({
+        poly,
+        ends: [v(at.x - at.dx * (bl + 0.6), at.y - at.dy * (bl + 0.6)), v(at.x + at.dx * (bl + 0.6), at.y + at.dy * (bl + 0.6))],
+      });
       taken.push({ c: at, r: half + 2 });
       made++;
     }
   }
-  // First the ones that make you choose: a bunker on the outside of the bend where a drive lands, a pond
-  // on the inside of it (cut the corner and risk it), and bunkers guarding the green.
   const bend = sharpest(path);
   if (bend && o.hazards > 0) {
     const s = path[bend.i];
-    const outside = -bend.turn; // which way's the outside of the bend
+    const outside = -bend.turn;
     const c = v(s.x - s.dy * outside * (s.hw + rand.R(0.2, 1.4)), s.y + s.dx * outside * (s.hw + rand.R(0.2, 1.4)));
     const poly = blob(c.x, c.y, rand.R(1.8, 2.8), rand.R(1.2, 1.8), Math.floor(rand.R(1, 99)), 0.15, 20);
     if (clear(c, 2.2) && poly.every(inLand)) {
@@ -938,13 +1236,17 @@ function fairwayHole(rand: Rand, o: GenOpts, len: number, ice: boolean, budget: 
     }
   }
   for (let g = 0; g < (o.hazards === 0 ? 1 : 2); g++) {
-    const end = path[path.length - 1], back = path[Math.max(0, path.length - 6)];
-    const fx = end.x - back.x, fy = end.y - back.y, fl = hyp(fx, fy) || 1;
+    const end = path[path.length - 1],
+      back = path[Math.max(0, path.length - 6)];
+    const fx = end.x - back.x,
+      fy = end.y - back.y,
+      fl = hyp(fx, fy) || 1;
     const side = g === 0 ? rand.pick([-1, 1]) : 0;
-    // Front left or right of the green, or (the second) behind it.
     const ang = side ? side * rand.R(0.9, 1.5) : Math.PI + rand.R(-0.4, 0.4);
-    const ux = -fx / fl, uy = -fy / fl;
-    const dx = ux * dcos(ang) - uy * dsin(ang), dy = ux * dsin(ang) + uy * dcos(ang);
+    const ux = -fx / fl,
+      uy = -fy / fl;
+    const dx = ux * dcos(ang) - uy * dsin(ang),
+      dy = ux * dsin(ang) + uy * dcos(ang);
     const off = rand.R(4.3, 5.4);
     const c = v(end.x + dx * off, end.y + dy * off);
     const poly = blob(c.x, c.y, rand.R(1.3, 2.2), rand.R(1, 1.6), Math.floor(rand.R(1, 99)), 0.15, 20);
@@ -953,30 +1255,31 @@ function fairwayHole(rand: Rand, o: GenOpts, len: number, ice: boolean, budget: 
     taken.push({ c, r: 2.1 });
     made++;
   }
-  // Then whatever else there's room for: ponds biting into the edge, more bunkers, a hump, a gust.
   for (let k = 0; k < 12 && made < budget; k++) {
     const what = rand.pick(["pond", "bunker", "bunker", "green-bunker", "pond", "mound", "wind"]);
     if (what === "pond") {
       const s = path[Math.floor(rand.R(0.2, 0.85) * (path.length - 1))];
-      const side = rand.pick([-1, 1]), off = s.hw + rand.R(1, 4);
+      const side = rand.pick([-1, 1]),
+        off = s.hw + rand.R(1, 4);
       const c = v(s.x - s.dy * side * off, s.y + s.dx * side * off);
-      const rx = rand.R(2.5, 5), ry = rand.R(2, 3.5);
+      const rx = rand.R(2.5, 5),
+        ry = rand.R(2, 3.5);
       const poly = blob(c.x, c.y, rx, ry, Math.floor(rand.R(1, 99)), 0.12, 24);
       if (!clear(c, Math.max(rx, ry) + 1) || overlapsAny(poly, sand, 1.2)) continue;
       if (inPoly(tee, poly) || inPoly(cup, poly)) continue;
-      // On ice, some ponds have frozen over.
       if (ice && rand.chance(0.4)) zones.push({ kind: "ice", poly });
       else water.push(poly);
       taken.push({ c, r: Math.max(rx, ry) });
       made++;
     } else if (what === "bunker" || what === "green-bunker") {
       const s = what === "green-bunker" ? path[path.length - 1] : path[Math.floor(rand.R(0.25, 0.8) * (path.length - 1))];
-      const side = rand.pick([-1, 1]), off = what === "green-bunker" ? rand.R(4.2, 5.5) : s.hw + rand.R(-0.5, 1.5);
+      const side = rand.pick([-1, 1]),
+        off = what === "green-bunker" ? rand.R(4.2, 5.5) : s.hw + rand.R(-0.5, 1.5);
       const ang = rand.R(-0.6, 0.6);
       const c = v(s.x - (s.dy * dcos(ang) + s.dx * dsin(ang)) * side * off, s.y + (s.dx * dcos(ang) - s.dy * dsin(ang)) * side * off);
-      const rx = rand.R(1.4, 2.6), ry = rand.R(1.1, 1.9);
+      const rx = rand.R(1.4, 2.6),
+        ry = rand.R(1.1, 1.9);
       const poly = blob(c.x, c.y, rx, ry, Math.floor(rand.R(1, 99)), 0.15, 20);
-      // Never in a pond, never on the tee or in the cup's way.
       if (!clear(c, Math.max(rx, ry) + 0.5) || overlapsAny(poly, water, 1.2) || !poly.every(inLand)) continue;
       sand.push(poly);
       taken.push({ c, r: Math.max(rx, ry) + 0.3 });
@@ -999,11 +1302,11 @@ function fairwayHole(rand: Rand, o: GenOpts, len: number, ice: boolean, budget: 
   zones.push(...sand.map((poly) => ({ kind: (ice ? "snow" : "sand") as Ground, poly })));
   zones.push(...water.map((poly) => ({ kind: "water" as Ground, poly })));
   zones.push(...bridges.map((br) => ({ kind: "bridge" as Ground, poly: br.poly })));
-  // A box or two in the rough, worth the detour.
   const boxes: Vec[] = [];
   for (let k = 0; k < 30 && boxes.length < 1 + (rand.chance(0.6) ? 1 : 0) + (len > 0.6 ? 1 : 0); k++) {
     const s = path[Math.floor(rand.R(0.2, 0.85) * (path.length - 1))];
-    const side = rand.pick([-1, 1]), off = s.hw + rand.R(0.5, f.rough - 1);
+    const side = rand.pick([-1, 1]),
+      off = s.hw + rand.R(0.5, f.rough - 1);
     const p = v(s.x - s.dy * side * off, s.y + s.dx * side * off);
     if (!clear(p, 1.5) || !inLand(p) || water.some((w) => inPoly(p, w)) || sand.some((w) => inPoly(p, w))) continue;
     boxes.push(p);
@@ -1039,9 +1342,6 @@ function fairwayHole(rand: Rand, o: GenOpts, len: number, ice: boolean, budget: 
   return { c: framed(clipZones(course)), ramps: false };
 }
 
-// --- Checks ---
-
-// Everything that should be true of any hole, whatever the bot makes of it. A reason, or null if it's fine.
 export function problems(c: Course, ramps = false): string | null {
   const w = compile(c);
   const ground = (p: Vec) => groundAt(w, p);
@@ -1065,14 +1365,11 @@ export function problems(c: Course, ramps = false): string | null {
   if (["sand", "snow", "ice", "water"].includes(ground(c.cup))) return "cup in a hazard";
   if (ground(c.tee) === "sand" || (ground(c.tee) === "snow" && c.surface !== "snow")) return "tee in the sand";
   for (const t of [c.tee, ...(c.tees ?? [])]) if (wallDist(t) < 0.9) return "tee against a wall";
-  // Sand and water never overlap.
   const sands = c.zones.filter((z) => z.kind === "sand" || z.kind === "snow");
   const waters = c.zones.filter((z) => z.kind === "water");
   for (const s of sands) for (const p of s.poly) if (waters.some((wz) => inPoly(p, wz.poly))) return "sand in the water";
   for (const wz of waters) for (const p of wz.poly) if (sands.some((s) => inPoly(p, s.poly))) return "water in the sand";
-  // (Corners alone can miss two shapes crossing edge to edge.)
   for (const sz of sands) for (const wz of waters) if (edgesCross(sz.poly, wz.poly)) return "sand across the water";
-  // Bridges land on something you can stand on at both ends.
   for (const z of c.zones)
     if (z.kind === "bridge") {
       const [a, b, cc, d] = z.poly;
@@ -1080,7 +1377,6 @@ export function problems(c: Course, ramps = false): string | null {
       const out = (p: Vec, q: Vec) => v(p.x + (p.x - q.x) * 0.15, p.y + (p.y - q.y) * 0.15);
       if (!playable(ground(out(ends[0], ends[1]))) || !playable(ground(out(ends[1], ends[0])))) return "bridge to nowhere";
     }
-  // Bumpers: on the board and dry, and either against a wall or with room for a ball between.
   for (const b of c.bumpers) {
     if (!onBoard(b.at) || !playable(ground(b.at))) return "bumper off the board";
     const gap = wallDist(b.at) - b.r;
@@ -1092,11 +1388,9 @@ export function problems(c: Course, ramps = false): string | null {
     }
   }
   for (const m of c.mines ?? []) if (!onBoard(m) || !playable(ground(m)) || ground(m) === "ice") return "mine off the board, or on ice";
-  // On a mini hole a box sits on the board itself, not out on the ice.
   for (const b of c.boxes) if (ground(b) === "ice" && c.surface !== "snow") return "box on the ice";
   for (const b of c.boxes) {
     const g = ground(b);
-    // (Deep snow's the rough on an ice fairway; a drift on a mini hole is a hazard.)
     if (!onBoard(b) || !playable(g) || g === "sand" || (g === "snow" && c.surface !== "snow")) return "box in a hazard";
     if (wallDist(b) < 1) return "box against a wall";
   }
@@ -1113,29 +1407,26 @@ function edgesCross(a: Vec[], b: Vec[]) {
   const side = (p: Vec, q: Vec, r: Vec) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
   for (const [p1, p2] of edges(a))
     for (const [q1, q2] of edges(b)) {
-      const d1 = side(q1, q2, p1), d2 = side(q1, q2, p2), d3 = side(p1, p2, q1), d4 = side(p1, p2, q2);
+      const d1 = side(q1, q2, p1),
+        d2 = side(q1, q2, p2),
+        d3 = side(p1, p2, q1),
+        d4 = side(p1, p2, q2);
       if (d1 * d2 < 0 && d3 * d4 < 0) return true;
     }
   return false;
 }
 
-// How the bot does: four goes with shaky hands. Par from how many it takes on average (which matched the
-// pars set by hand on the hand-made holes best); null if it can't do it.
 function judge(c: Course): number | null {
   const w = compile(c);
   const runs: number[] = [];
   for (const sd of [1, 2, 3, 4]) {
     const r = rng(sd * 7919 + c.tee.x * 13);
     const n = playHole(c, w, { limit: 9, shaky: () => r() * 2 - 1, angles: 24, powers: [0.14, 0.24, 0.36, 0.5, 0.66, 0.84, 1] });
-    // Either of the first two going wrong is enough: don't spend longer on a hole that's a slog.
     if (n === null && sd < 4) return null;
     runs.push(n ?? 11);
   }
   const avg = runs.reduce((a, b) => a + b, 0) / runs.length;
-  if (avg < 1.34) return null; // in one nearly every time: not a hole
-  // Par has to make sense for the length too: about a stroke per 9 units on a mini hole (a putt there is
-  // rarely a long one), one per 60 on a fairway. A hole the bot needs far more than that for is a slog,
-  // not a test, and gets made again.
+  if (avg < 1.34) return null;
   const fair = c.surface === "rough" || c.surface === "snow";
   const length = distanceField(c, w)(c.tee.x, c.tee.y);
   const most = fair ? Math.ceil(length / 60) + 3 : Math.ceil(length / 9) + 1;
@@ -1143,8 +1434,6 @@ function judge(c: Course): number | null {
   return Math.max(2, Math.min(fair ? 7 : 6, most, Math.round(avg)));
 }
 
-// Hole `n` from the seed: candidates until one passes, the nth of a shuffled list of shapes so a course
-// mixes them up. A plain straight hole if nothing passes, which never happens in practice.
 const idOf = (o: GenOpts) => `gen-${o.seed}-${o.n}-t${o.terrain}s${o.style}h${o.hazards}`;
 export function generateHole(o: GenOpts, debug?: (msg: string) => void): Course {
   const order = [...MINI];
@@ -1161,7 +1450,6 @@ export function generateHole(o: GenOpts, debug?: (msg: string) => void): Course 
       debug?.(`${raw.name}: too empty`);
       continue;
     }
-    // An id unique to everything that shaped it: compiled walls and distances are cached by id.
     const c = withTees({ ...raw, id: `${idOf(o)}-${attempt}` });
     const why = problems(c, ramps);
     if (why) {

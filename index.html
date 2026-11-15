@@ -5,9 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover" />
     <meta name="theme-color" content="#0a291c" />
     <script>
-      // Apply saved appearance before first paint so there's no flash. The page's color is set right here too:
-      // the stylesheet isn't in yet when iOS reopens the app from cold, and without it the page paints white.
-      // Each mode keeps its own color, so "system" opens in the right one whatever the time of day.
+      // platform: iOS paints the page before the stylesheet arrives when it reopens the app from cold.
       try {
         var t = localStorage.getItem("theme") || "system";
         var dark = t === "dark" || (t === "system" && matchMedia("(prefers-color-scheme: dark)").matches);

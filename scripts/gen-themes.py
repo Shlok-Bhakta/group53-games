@@ -1,6 +1,4 @@
-# Regenerate the theme block in src/style.css: python3 scripts/gen-themes.py > /tmp/themes.css, then paste it over the "/* Themes." section.
-# Generates the theme section of src/style.css. Each theme has light and dark modes.
-import sys
+import pathlib
 
 W = "#ffffff"
 def t(bg, fg, card, primary, pfg, muted, mfg, border, green, yellow, gray, hit,
@@ -11,11 +9,9 @@ def t(bg, fg, card, primary, pfg, muted, mfg, border, green, yellow, gray, hit,
         input=border, ring=primary, destructive=destructive or hit, **{"card-foreground": fg, "popover-foreground": fg},
         **{"tile-green": green, "tile-yellow": yellow, "tile-gray": gray, "tile-hit": hit, "tile-ink": ink,
            "tile-yellow-ink": yink, "tile-gray-ink": gink, "tile-hit-ink": hink or ink, "tile-blank": blank or card, "tile-edge": edge or border},
-        # Stonks' chart lines: prices up and down. Drawn as 2px lines on cards, so each needs 3:1 there.
         up=up or green, down=down or destructive or hit)
 
 THEMES = {
-  # Poker night: felt table, gold chips.
   "felt": (
     t("oklch(0.955 0.012 160)", "oklch(0.22 0.04 165)", "oklch(0.99 0.004 160)", "oklch(0.43 0.09 162)", "oklch(0.98 0.01 160)",
       "oklch(0.915 0.017 160)", "oklch(0.46 0.03 165)", "oklch(0.86 0.02 160)",
@@ -25,7 +21,7 @@ THEMES = {
       "oklch(0.6 0.14 148)", "oklch(0.8 0.15 82)", "oklch(0.47 0.03 160)", "oklch(0.62 0.21 22)", popover="oklch(0.32 0.05 162)", destructive="oklch(0.76 0.15 22)",
       blank="oklch(0.34 0.05 162)", edge="oklch(0.46 0.05 162)"),
   ),
-  "catppuccin": (  # Latte / Mocha
+  "catppuccin": (
     t("#e6e9ef", "#4c4f69", "#eff1f5", "#8839ef", "#eff1f5", "#dce0e8", "#5c5f77", "#ccd0da",
       "#40a02b", "#df8e1d", "#7c7f93", "#d20f39", yink="#303446", blank="#eff1f5", edge="#bcc0cc", up="#388e25"),
     t("#181825", "#cdd6f4", "#1e1e2e", "#cba6f7", "#11111b", "#313244", "#a6adc8", "#313244",
@@ -39,28 +35,28 @@ THEMES = {
       "#b8bb26", "#fabd2f", "#665c54", "#fb4934", ink="#1d2021", yink="#1d2021", gink="#ebdbb2", popover="#32302f", destructive="#fe6f5e",
       blank="#3c3836", edge="#504945"),
   ),
-  "nord": (  # Snow Storm / Polar Night
+  "nord": (
     t("#e5e9f0", "#2e3440", "#eceff4", "#4b6a93", "#eceff4", "#d8dee9", "#4c566a", "#d8dee9",
       "#a3be8c", "#ebcb8b", "#7b88a1", "#bf616a", ink="#2e3440", yink="#2e3440", blank="#eceff4", edge="#c2cad8", destructive="#a5434e", up="#5e8a45"),
     t("#2e3440", "#eceff4", "#3b4252", "#88c0d0", "#2e3440", "#434c5e", "#b4bccb", "#434c5e",
       "#a3be8c", "#ebcb8b", "#4c566a", "#bf616a", ink="#2e3440", yink="#2e3440", gink="#eceff4", popover="#434c5e", destructive="#eba3aa",
       blank="#434c5e", edge="#4c566a", down="#e0828c"),
   ),
-  "tokyonight": (  # Day / Night
+  "tokyonight": (
     t("#e1e2e7", "#3760bf", "#e9e9ec", "#2563c7", W, "#d0d5e3", "#4e5a8f", "#c4c8da",
       "#587539", "#8c6c3e", "#848cb5", "#f52a65", yink=W, blank="#e9e9ec", edge="#b4b8cc", destructive="#c71a50"),
     t("#16161e", "#c0caf5", "#1a1b26", "#7aa2f7", "#16161e", "#292e42", "#a9b1d6", "#292e42",
       "#9ece6a", "#e0af68", "#414868", "#f7768e", ink="#16161e", yink="#16161e", gink="#c0caf5", popover="#292e42",
       blank="#292e42", edge="#3b4261"),
   ),
-  "dracula": (  # Alucard / Dracula
+  "dracula": (
     t("#f5f1de", "#1f1f1f", "#fffbeb", "#644ac9", W, "#ece7cf", "#6c664b", "#dedccf",
       "#14710a", "#846e15", "#8a8672", "#cb3a2a", yink=W, blank="#fffbeb", edge="#cfcbb4"),
     t("#21222c", "#f8f8f2", "#282a36", "#bd93f9", "#21222c", "#343746", "#b6bad0", "#44475a",
       "#50fa7b", "#f1fa8c", "#44475a", "#ff5555", ink="#21222c", yink="#21222c", gink="#f8f8f2", popover="#343746", destructive="#ff7a7a",
       blank="#343746", edge="#44475a"),
   ),
-  "rosepine": (  # Dawn / Main
+  "rosepine": (
     t("#faf4ed", "#575279", "#fffaf3", "#286983", "#fffaf3", "#f2e9e1", "#625e7d", "#dfdad9",
       "#286983", "#ea9d34", "#86819a", "#b4637a", yink="#575279", blank="#fffaf3", edge="#cecacd", destructive="#9a4560"),
     t("#191724", "#e0def4", "#1f1d2e", "#ebbcba", "#191724", "#26233a", "#908caa", "#26233a",
@@ -73,7 +69,7 @@ THEMES = {
     t("#0f172a", "#f1f5f9", "#1e293b", "#f1f5f9", "#0f172a", "#334155", "#94a3b8", "#334155",
       "#16a34a", "#eab308", "#475569", "#ef4444", popover="#1e293b", destructive="#f87171", blank="#1e293b", edge="#475569"),
   ),
-  "varsity": (  # Oxblood and gold
+  "varsity": (
     t("oklch(0.962 0.009 20)", "oklch(0.22 0.03 15)", W, "oklch(0.43 0.14 18)", "oklch(0.98 0.01 20)",
       "oklch(0.925 0.013 20)", "oklch(0.47 0.03 18)", "oklch(0.87 0.015 20)",
       "oklch(0.58 0.14 148)", "oklch(0.79 0.16 82)", "oklch(0.62 0.02 20)", "oklch(0.58 0.22 25)", blank=W, edge="oklch(0.8 0.02 20)", destructive="oklch(0.5 0.2 25)"),
@@ -90,7 +86,6 @@ THEMES = {
   ),
 }
 
-# Board squares (light, dark) per theme and mode.
 BOARDS = {
   "felt": (("#ebecd0", "#739552"), ("#e6e8c7", "#5f8a4a")),
   "catppuccin": (("#e6e9ef", "#8c8fa1"), ("#bac2de", "#585b70")),
@@ -104,10 +99,32 @@ BOARDS = {
   "wordle": (("#ebecd0", "#6aaa64"), ("#d3d6da", "#538d4e")),
 }
 
+SHARED_LIGHT = {
+    "radius": "16px",
+    "ui-font": '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", sans-serif',
+    "online": "#30d158",
+    "online-ink": "#04210d",
+    "discord": "#5865f2",
+    "discord-ink": W,
+    "scrim": "oklch(0 0 0 / 40%)",
+    "shade": "#000000",
+    "deep": "62%",
+    "series-1": "#2a78d6", "series-2": "#eb6834", "series-3": "#1baf7a", "series-4": "#eda100",
+    "series-5": "#e87ba4", "series-6": "#008300", "series-7": "#6250d6", "series-8": "#e34948",
+}
+SHARED_DARK = {
+    "deep": "80%",
+    "series-1": "#3987e5", "series-2": "#d95926", "series-3": "#199e70", "series-4": "#c98500",
+    "series-5": "#d55181", "series-6": "#008300", "series-7": "#9085e9", "series-8": "#e66767",
+}
+
+START = "/* gen-themes.py: start */"
+END = "/* gen-themes.py: end */"
+
 def block(sel, vals):
     return sel + " {\n" + "\n".join(f"  --{k}: {v};" for k, v in vals.items()) + "\n}\n"
 
-out = ["/* Themes. Felt is the default; the rest switch on data-palette (on <html>, or on any element for previews). */\n"]
+out = []
 for name, (light, dark) in THEMES.items():
     (bl, bd), (dl, dd) = BOARDS[name]
     light = {**light, "board-light": bl, "board-dark": bd}
@@ -115,4 +132,10 @@ for name, (light, dark) in THEMES.items():
     lsel = f'[data-palette="{name}"]' + (", :root" if name == "felt" else "")
     dsel = f':is(.dark[data-palette="{name}"], .dark [data-palette="{name}"])' + (", .dark" if name == "felt" else "")
     out.append(block(lsel, light) + block(dsel, dark))
-sys.stdout.write("\n".join(out))
+out.append(block(":root", SHARED_LIGHT) + block(".dark", SHARED_DARK))
+
+css = pathlib.Path(__file__).resolve().parent.parent / "src" / "style.css"
+text = css.read_text()
+head, rest = text.split(START, 1)
+_, tail = rest.split(END, 1)
+css.write_text(head + START + "\n" + "\n".join(out) + END + tail)

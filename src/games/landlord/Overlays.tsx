@@ -1,17 +1,40 @@
 import { AnimatePresence, motion } from "motion/react";
 import { BusIcon, CrownSimpleIcon } from "@phosphor-icons/react";
+import type { CameraView } from "./camera";
 import type { Shown } from "./show";
-
-// What floats over the board for a moment, in the middle of the open part of the screen: the dice as they land,
-// and a card as it's drawn.
 
 const PIPS: Record<number, [number, number][]> = {
   1: [[1, 1]],
-  2: [[0, 0], [2, 2]],
-  3: [[0, 0], [1, 1], [2, 2]],
-  4: [[0, 0], [0, 2], [2, 0], [2, 2]],
-  5: [[0, 0], [0, 2], [1, 1], [2, 0], [2, 2]],
-  6: [[0, 0], [0, 2], [1, 0], [1, 2], [2, 0], [2, 2]],
+  2: [
+    [0, 0],
+    [2, 2],
+  ],
+  3: [
+    [0, 0],
+    [1, 1],
+    [2, 2],
+  ],
+  4: [
+    [0, 0],
+    [0, 2],
+    [2, 0],
+    [2, 2],
+  ],
+  5: [
+    [0, 0],
+    [0, 2],
+    [1, 1],
+    [2, 0],
+    [2, 2],
+  ],
+  6: [
+    [0, 0],
+    [0, 2],
+    [1, 0],
+    [1, 2],
+    [2, 0],
+    [2, 2],
+  ],
 };
 
 function Die({ n, i, speed }: { n: number; i: number; speed?: boolean }) {
@@ -25,7 +48,11 @@ function Die({ n, i, speed }: { n: number; i: number; speed?: boolean }) {
       aria-label={speed ? (n <= 3 ? `Speed die ${n}` : n === 6 ? "Speed die: bus" : "Speed die: Mr. Monopoly") : `${n}`}
     >
       {speed && n > 3 ? (
-        n === 6 ? <BusIcon weight="fill" size={30} /> : <CrownSimpleIcon weight="fill" size={30} />
+        n === 6 ? (
+          <BusIcon weight="fill" size={30} />
+        ) : (
+          <CrownSimpleIcon weight="fill" size={30} />
+        )
       ) : (
         PIPS[n].map(([r, c], k) => <span key={k} className="ll-pip" style={{ gridRow: r + 1, gridColumn: c + 1 }} />)
       )}
@@ -33,9 +60,12 @@ function Die({ n, i, speed }: { n: number; i: number; speed?: boolean }) {
   );
 }
 
-export function Overlays({ shown, top, bottom }: { shown: Shown; top: number; bottom: number }) {
+export function Overlays({ shown, view }: { shown: Shown; view: CameraView }) {
   return (
-    <div className="pointer-events-none absolute inset-x-0 z-10 px-6" style={{ top, bottom }}>
+    <div
+      className="pointer-events-none absolute z-10 px-6"
+      style={{ top: view.top, bottom: view.bottom, left: view.left, right: view.right }}
+    >
       <div className="absolute inset-x-0 top-3 flex justify-center">
         <AnimatePresence>
           {shown.dice && (
@@ -49,23 +79,23 @@ export function Overlays({ shown, top, bottom }: { shown: Shown; top: number; bo
         </AnimatePresence>
       </div>
       <div className="absolute inset-0 grid place-items-center px-6">
-      <AnimatePresence>
-        {shown.card && (
-          <motion.div
-            key={`c${shown.card.key}`}
-            className="ll-card w-full max-w-72"
-            data-deck={shown.card.deck}
-            initial={{ rotateY: 90, scale: 0.8, opacity: 0 }}
-            animate={{ rotateY: 0, scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0, y: 20 }}
-            transition={{ type: "spring", stiffness: 220, damping: 22 }}
-            role="status"
-          >
-            <div className="font-display text-heading">{shown.card.deck === "chance" ? "Chance" : "Community Chest"}</div>
-            <p className="text-body">{shown.card.text}</p>
-          </motion.div>
-        )}
-      </AnimatePresence>
+        <AnimatePresence>
+          {shown.card && (
+            <motion.div
+              key={`c${shown.card.key}`}
+              className="ll-card w-full max-w-72"
+              data-deck={shown.card.deck}
+              initial={{ rotateY: 90, scale: 0.8, opacity: 0 }}
+              animate={{ rotateY: 0, scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: "spring", stiffness: 220, damping: 22 }}
+              role="status"
+            >
+              <div className="font-display text-heading">{shown.card.deck === "chance" ? "Chance" : "Community Chest"}</div>
+              <p className="text-body">{shown.card.text}</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

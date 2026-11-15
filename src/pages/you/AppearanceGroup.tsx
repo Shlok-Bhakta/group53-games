@@ -2,12 +2,14 @@ import { useState } from "react";
 import { CheckIcon, PaletteIcon, TextAaIcon } from "@phosphor-icons/react";
 import { motion } from "motion/react";
 import { Section } from "@/components/parts";
+import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/Segmented";
 import { useTheme } from "@/theme";
 import { FONTS, PALETTES } from "@/themes";
 import { cn } from "@/lib/utils";
 import { PickSheet } from "./PickSheet";
-import { SettingsRow, TINT } from "./SettingsRow";
+import { SettingsRow } from "./SettingsRow";
+import { TINT } from "./palette";
 
 export function AppearanceGroup() {
   const { theme, setTheme, palette, setPalette, font, setFont } = useTheme();
@@ -26,24 +28,39 @@ export function AppearanceGroup() {
           ]}
         />
       </div>
-      <SettingsRow icon={PaletteIcon} tint={TINT.orange} label="Theme" value={PALETTES.find((p) => p.id === palette)?.name} onClick={() => setSheet("theme")} />
-      <SettingsRow icon={TextAaIcon} tint={TINT.cyan} label="Heading font" value={FONTS.find((f) => f.id === font)?.name} onClick={() => setSheet("font")} />
+      <SettingsRow
+        icon={PaletteIcon}
+        tint={TINT.orange}
+        label="Theme"
+        value={PALETTES.find((p) => p.id === palette)?.name}
+        onClick={() => setSheet("theme")}
+      />
+      <SettingsRow
+        icon={TextAaIcon}
+        tint={TINT.cyan}
+        label="Heading font"
+        value={FONTS.find((f) => f.id === font)?.name}
+        onClick={() => setSheet("font")}
+      />
 
       <PickSheet open={sheet === "theme"} onClose={() => setSheet(null)} title="Theme">
         <div className="grid grid-cols-2 gap-3">
           {PALETTES.map((p) => (
-            <motion.button
+            <Button
               key={p.id}
-              type="button"
-              whileTap={{ scale: 0.96 }}
+              variant="bare"
+              size="option"
               data-palette={p.id}
               aria-pressed={palette === p.id}
               onClick={() => setPalette(p.id)}
-              className="relative flex touch-manipulation flex-col gap-3 rounded-lg bg-background p-3 text-left text-foreground outline-none ring-1 ring-border focus-visible:ring-3 focus-visible:ring-ring/50"
+              className="flex-col items-stretch justify-start gap-3 bg-background p-3 text-foreground ring-1 ring-border active:scale-[0.96]"
             >
-              {/* 19px is the card's 16 plus the 3px it sits out, so the ring runs parallel to the corner. */}
               {palette === p.id && (
-                <motion.span layoutId="theme-selected" className="absolute -inset-[3px] rounded-[19px] border-[3px] border-primary" transition={{ type: "spring", bounce: 0, duration: 0.3 }} />
+                <motion.span
+                  layoutId="theme-selected"
+                  className="absolute inset-0 rounded-lg outline-3 outline-primary"
+                  transition={{ type: "spring", bounce: 0, duration: 0.3 }}
+                />
               )}
               <span className="flex items-center gap-1" aria-hidden="true">
                 {(["green", "yellow", "gray", "hit"] as const).map((c) => (
@@ -57,7 +74,7 @@ export function AppearanceGroup() {
                 </span>
                 <span className="size-5 shrink-0 rounded-full bg-primary" />
               </span>
-            </motion.button>
+            </Button>
           ))}
         </div>
       </PickSheet>
@@ -65,25 +82,22 @@ export function AppearanceGroup() {
       <PickSheet open={sheet === "font"} onClose={() => setSheet(null)} title="Heading font">
         <div className="flex flex-col gap-2">
           {FONTS.map((f) => (
-            <motion.button
+            <Button
               key={f.id}
-              type="button"
-              whileTap={{ scale: 0.98 }}
+              variant="card"
+              size="option"
               data-font={f.id}
               aria-pressed={font === f.id}
               onClick={() => setFont(f.id)}
               style={{ fontFamily: "var(--app-font)" }}
-              className={cn(
-                "flex min-h-[72px] touch-manipulation items-center justify-between gap-3 rounded-lg border-2 bg-card px-4 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                font === f.id ? "border-primary" : "border-transparent",
-              )}
+              className={cn("min-h-[72px] border-2 px-4", font === f.id ? "border-primary" : "border-transparent")}
             >
               <span>
                 <span className="block font-display text-heading">Group 53</span>
                 <span className="block text-footnote text-muted-foreground">{f.name}</span>
               </span>
               {font === f.id && <CheckIcon size={22} weight="bold" className="shrink-0 text-primary" />}
-            </motion.button>
+            </Button>
           ))}
         </div>
       </PickSheet>

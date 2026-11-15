@@ -4,7 +4,7 @@ import { Link } from "react-router";
 import { motion, useInView } from "motion/react";
 import { HammerIcon, LockSimpleIcon, PlayIcon, ShareNetworkIcon } from "@phosphor-icons/react";
 import { games } from "@/games";
-import { Button } from "@/components/ui/button";
+import { Button, IconButton } from "@/components/ui/button";
 import { LargeTitle } from "@/components/AppHeader";
 import { NotificationBanner } from "@/components/NotificationBanner";
 import { AvatarStack } from "@/components/PlayerAvatar";
@@ -13,7 +13,6 @@ import { usePlayingIn } from "@/presence";
 import { shareLink } from "@/share";
 import { cn } from "@/lib/utils";
 
-// Every game, one card each, with its art playing in once when you scroll to it.
 export function Games() {
   const convex = useConvex();
   const push = useNotifications();
@@ -30,6 +29,7 @@ export function Games() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", bounce: 0, duration: 0.45, delay: i * 0.06 }}
+          data-slot="card"
           className="overflow-hidden rounded-lg bg-card"
         >
           <div className="relative grid place-items-center bg-muted/60 px-4 py-9 [background-image:radial-gradient(color-mix(in_oklch,var(--foreground)_9%,transparent)_1px,transparent_1px)] [background-size:14px_14px]">
@@ -63,9 +63,14 @@ export function Games() {
                   </Link>
                 </Button>
               )}
-              <Button size="xl" variant="secondary" className="w-14 px-0" aria-label={`Share ${g.name}`} onClick={() => void shareLink(g.path, `${g.name} on Group 53:`)}>
+              <IconButton
+                label={`Share ${g.name}`}
+                variant="secondary"
+                size="icon-xl"
+                onClick={() => void shareLink(g.path, `${g.name} on Group 53:`)}
+              >
                 <ShareNetworkIcon weight="bold" />
-              </Button>
+              </IconButton>
             </div>
           </div>
         </motion.article>
@@ -74,23 +79,18 @@ export function Games() {
   );
 }
 
-// Only people actually in this game, not everyone with the app open.
 function PlayingNow({ gamePath }: { gamePath: string }) {
   const playing = usePlayingIn(gamePath);
   if (playing.length === 0) return null;
   const label = playing.length === 1 ? `${playing[0].name} is playing` : `${playing.length} playing`;
   return (
     <span className="flex min-w-0 items-center gap-2 text-footnote font-medium text-muted-foreground">
-      {/* Just faces, no frames. */}
       <AvatarStack people={playing.map((p) => ({ name: p.name, image: p.image }))} size={24} />
       <span className="truncate">{label}</span>
     </span>
   );
 }
 
-// A card's art plays in when it mounts, so it waits, hidden but taking its space (nothing shifts), until most
-// of it is on screen, then mounts afresh and plays there. Once.
-// A card on screen is also when its game starts loading what Play opens (`onSeen`), so Play is instant.
 function PlayWhenSeen({ children, onSeen }: { children: ReactNode; onSeen?: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const seen = useInView(ref, { once: true, amount: 0.6 });
@@ -100,8 +100,12 @@ function PlayWhenSeen({ children, onSeen }: { children: ReactNode; onSeen?: () =
     if (seen) onSeenRef.current?.();
   }, [seen]);
   return (
-    <div ref={ref} className={cn("w-full", !seen && "invisible")} aria-hidden={seen ? undefined : true} data-art={seen ? "played" : "waiting"}>
-      {/* Centred like the card centres its art: full-width art fills it, fixed-width art sits in the middle. */}
+    <div
+      ref={ref}
+      className={cn("w-full", !seen && "invisible")}
+      aria-hidden={seen ? undefined : true}
+      data-art={seen ? "played" : "waiting"}
+    >
       <div key={seen ? "seen" : "waiting"} className="grid w-full place-items-center">
         {children}
       </div>

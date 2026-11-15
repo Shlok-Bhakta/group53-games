@@ -2,7 +2,7 @@
 
 # Group 53 Games
 
-Small games for a small group. React and Vite on the front end, a self-hosted Convex backend on kiwi (SQLite), and Discord sign-in through Convex Auth. Home gathers every game that wants you; Games is where you start one. Chess comes in classic (async, with turn notifications and 8-hour reminders) and real-time (Kung Fu Chess rules, like rtchess.org), each for two or four players, with an Elo leaderboard per mode. PvP Wordle is a work in progress.
+Small games for a small group, played from an installed PWA on phones: chess (async and real-time, two or four players), Scrabble, poker, golf, Monopoly, Stonks (paper trading on live prices) and Journey Across Mereddia, with PvP Wordle next. React and Vite on the front end, a self-hosted Convex backend on kiwi (SQLite), and Discord sign-in through Convex Auth. Home gathers every game that wants you; Games is where you start one. `AGENTS.md` is the guide to the code.
 
 ## Local development
 
@@ -34,15 +34,17 @@ In the console, select a task and press `s` to start it, `r` to restart it, and 
 
 The sign-in is mocked by two variables, both set for you: `VITE_DEV_AUTH=1` on `web` (`dekit.yaml`) swaps Discord for the picker, and `DEV_AUTH=1` on the local Convex backend (`scripts/dev.mjs`) lets those players in. It refuses on any backend that isn't on this machine (`convex/devAuth.ts`).
 
-Pushes, installing to a home screen and Discord sign-in need the real thing, so try those on a deployed build. Open a PR when your change is ready: only Shlok can approve one, and merging doesn't deploy it.
+Pushes, installing to a home screen and Discord sign-in need the real thing, so try those on a deployed build. Open a PR when your change is ready: only Shlok can approve one, and once it's merged it deploys itself.
 
-## Tests
+## Checks and tests
 
-`npm test` runs the unit tests (Convex functions and theme contrast). `npm run test:e2e` runs the Playwright suite against a throwaway Convex backend in Docker; run `npm run test:e2e:install` once first. See `AGENTS.md` for details.
+`npm run verify` runs everything a push needs, in order: formatting, lint, dead code, typecheck, unit tests, build, the sidecar's tests and e2e. It needs Docker and [Bun](https://bun.sh) (golf's determinism check runs under it). Commit first: the pre-push hook only pushes a commit that passed a full run on a clean tree, and `npm install` turns the hooks on. `npm run verify -- --only=lint,types` runs some steps.
+
+`npm test` runs the unit tests on their own, and `npm run test:e2e` the Playwright suite against a throwaway Convex backend in Docker (run `npm run test:e2e:install` once first; `npm run test:e2e -- chess` for one spec). See `AGENTS.md` for details.
 
 ## Kiwi deployment
 
-The stack lives in `~/Services/group53` on kiwi. `compose.yaml` runs Convex, its dashboard, the web app, the `og` link-preview service, and a Cloudflare Tunnel (`group53-games`). Convex stores SQLite and files at `/home/shlok/ssd-data/group53/convex-data` on the SSD (the 5TB USB disk is SMR and far too slow for it). `.env` there holds `INSTANCE_SECRET`, `CONVEX_URL`, and `CONVEX_SITE_URL`. `secrets/` holds the tunnel credentials and the admin key, both mode 600.
+The stack lives in `~/Services/group53` on kiwi. `compose.yaml` runs Convex, its dashboard, the web app, the `og` link-preview service, the stonks sidecar, a Cloudflare Tunnel (`group53-games`), and the deployer. Convex stores SQLite and files at `/home/shlok/ssd-data/group53/convex-data` on the SSD (the 5TB USB disk is SMR and far too slow for it). `.env` there holds `INSTANCE_SECRET`, `CONVEX_URL`, and `CONVEX_SITE_URL`. `secrets/` holds the tunnel credentials and the admin key, both mode 600.
 
 | Hostname | Target |
 | --- | --- |
@@ -52,7 +54,7 @@ The stack lives in `~/Services/group53` on kiwi. `compose.yaml` runs Convex, its
 
 On the tailnet, the web app is at port 38440, the API at 38441, HTTP actions at 38442, and the dashboard at 38443.
 
-Whatever lands on `main` deploys itself through the deployer on kiwi (`deploy/README.md`).
+Whatever lands on `main` deploys itself: the deployer on kiwi fetches `main` every minute and deploys it, Convex functions first, then the app swapped in place under nginx, then `og` and `stonks` (`deploy/README.md`). There's no manual deploy command.
 
 ## Discord sign-in
 
@@ -60,7 +62,7 @@ The Discord application's redirect URI is `https://group53-site.shlokbhakta.dev/
 
 ## Link previews
 
-nginx sends link unfurlers (Discordbot, Slackbot, iMessage, and similar) to `og/`, which returns Open Graph tags and renders a 1200×630 card from live Convex data with satori. It reads data through internal queries in `convex/previews.ts` using the admin key, so nothing is exposed publicly. Card image URLs carry a hash of the data, and the in-app Share button adds a random `s` parameter, so Discord unfurls each shared link fresh. To add a preview for a new page, add an entry to `PAGES` and a card to `CARDS` in `og/server.mjs`.
+nginx sends link unfurlers (Discordbot, Slackbot, iMessage, and similar) to `og/`, which returns Open Graph tags and renders a 1200×630 card from live Convex data with satori. It reads data through internal queries in `convex/previews.ts` using the admin key, so nothing is exposed publicly. Card image URLs carry a hash of the data, and the in-app Share button adds a random `s` parameter, so Discord unfurls each shared link fresh. Each game's card is `og/games/<game>.mjs`, registered in `MATCH_GAMES` and `PAGE_GAMES` in `og/server.mjs`. `node e2e/og-preview.mjs` renders them.
 
 ## Credits
 

@@ -3,7 +3,6 @@ import { NavBar } from "@/components/AppHeader";
 import { NotificationBanner } from "@/components/NotificationBanner";
 import { useNotifications } from "@/notifications";
 
-// Games are locked until push is on, including when someone opens a game link straight from Discord.
 export function NotificationsRequired({ children }: { children: ReactNode }) {
   const push = useNotifications();
   if (push.state === "on" || push.state === "unsupported" || import.meta.env.VITE_DEV_AUTH) return <>{children}</>;

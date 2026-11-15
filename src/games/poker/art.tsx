@@ -2,7 +2,6 @@ import { motion } from "motion/react";
 import type { ModeKey } from "../../../convex/modes";
 import { PlayingCard } from "@/components/ui/playing-card";
 
-// The Poker card's art: a royal flush dealt into a fan, one card at a time. About a second, once.
 const ROYAL = ["Ts", "Js", "Qs", "Ks", "As"];
 
 export function PokerBanner() {
@@ -27,8 +26,6 @@ export function PokerBanner() {
   );
 }
 
-// Each mode's hand in a little fan: two cards for Hold'em, four for Omaha, Short Deck's 6 and Ace, and a draw
-// hand with one card lifted out to swap.
 const HANDS: Record<string, string[]> = {
   "poker:holdem": ["Ah", "Ks"],
   "poker:omaha": ["Ac", "Ad", "Kh", "Qs"],

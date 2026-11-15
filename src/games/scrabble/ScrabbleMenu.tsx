@@ -7,6 +7,7 @@ import { settingsOf, type ModeKey } from "../../../convex/modes";
 import type { ScrabbleState } from "../../../convex/scrabble/engine";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { GameMenu } from "@/components/GameMenu";
+import { Button } from "@/components/ui/button";
 import { ResignButton } from "@/components/match";
 import { SeatDot } from "@/components/game/SeatDot";
 import { useHere } from "@/presence";
@@ -15,8 +16,6 @@ import type { Player } from "@/games/types";
 import { cn } from "@/lib/utils";
 import { scrabbleRules } from "./rules";
 
-// The menu: everyone's score and who's up, the words played (tap one for its meaning), then what every
-// game's menu has (settings, how to play, sharing), and resigning, well away from the buttons you tap all game.
 export function ScrabbleMenu({
   open,
   onOpenChange,
@@ -34,7 +33,10 @@ export function ScrabbleMenu({
   planning: { userId: Id<"users">; count: number }[] | undefined;
   playing: boolean;
 }) {
-  const plays = state.moves.map((m, i) => ({ m, i })).filter(({ m }) => m.kind === "play").reverse();
+  const plays = state.moves
+    .map((m, i) => ({ m, i }))
+    .filter(({ m }) => m.kind === "play")
+    .reverse();
   return (
     <GameMenu
       open={open}
@@ -47,7 +49,11 @@ export function ScrabbleMenu({
           <ResignButton
             match={match}
             className="h-14 w-full rounded-lg"
-            detail={match.players.length > 2 ? "Your tiles go back in the bag and the others play on. You place last." : "The other player wins and gets the rating points."}
+            detail={
+              match.players.length > 2
+                ? "Your tiles go back in the bag and the others play on. You place last."
+                : "The other player wins and gets the rating points."
+            }
           />
         )
       }
@@ -57,7 +63,14 @@ export function ScrabbleMenu({
           .map((p, seat) => ({ p, seat }))
           .sort((a, b) => state.scores[b.seat] - state.scores[a.seat])
           .map(({ p, seat }) => (
-            <PlayerRow key={p.userId} player={p} seat={seat} state={state} isMe={p.userId === meId} planning={planning?.find((x) => x.userId === p.userId)?.count ?? 0} />
+            <PlayerRow
+              key={p.userId}
+              player={p}
+              seat={seat}
+              state={state}
+              isMe={p.userId === meId}
+              planning={planning?.find((x) => x.userId === p.userId)?.count ?? 0}
+            />
           ))}
       </ol>
       <p className="px-1 pt-3 text-footnote text-muted-foreground">
@@ -69,7 +82,13 @@ export function ScrabbleMenu({
           <h2 className="px-1 pb-2 font-display text-heading">Words played</h2>
           <ul className="divide-y divide-border overflow-hidden rounded-lg bg-muted/50">
             {plays.map(({ m, i }) => (
-              <PlayedWords key={i} words={m.words!} by={match.players[m.seat]} isMe={match.players[m.seat]?.userId === meId} score={m.score} />
+              <PlayedWords
+                key={i}
+                words={m.words!}
+                by={match.players[m.seat]}
+                isMe={match.players[m.seat]?.userId === meId}
+                score={m.score}
+              />
             ))}
           </ul>
         </section>
@@ -78,12 +97,31 @@ export function ScrabbleMenu({
   );
 }
 
-function PlayerRow({ player, seat, state, isMe, planning }: { player: Player; seat: number; state: ScrabbleState; isMe: boolean; planning: number }) {
+function PlayerRow({
+  player,
+  seat,
+  state,
+  isMe,
+  planning,
+}: {
+  player: Player;
+  seat: number;
+  state: ScrabbleState;
+  isMe: boolean;
+  planning: number;
+}) {
   const { online } = useHere(player.userId);
   const up = state.turn === seat;
   const out = state.out.includes(seat);
   return (
-    <li className={cn("flex min-h-14 items-center gap-3 rounded-lg px-3 py-2", up ? "bg-primary/12 ring-2 ring-inset ring-primary" : "bg-muted/50", out && "opacity-50")} aria-current={up ? "true" : undefined}>
+    <li
+      className={cn(
+        "flex min-h-14 items-center gap-3 rounded-lg px-3 py-2",
+        up ? "bg-primary/12 ring-2 ring-inset ring-primary" : "bg-muted/50",
+        out && "opacity-50",
+      )}
+      aria-current={up ? "true" : undefined}
+    >
       <PlayerAvatar player={player} size={36} online={online} dotRing="card" />
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5 font-semibold">
@@ -106,8 +144,17 @@ function PlayerRow({ player, seat, state, isMe, planning }: { player: Player; se
   );
 }
 
-// One turn's words. Tap a word for what it means (from the free dictionary at dictionaryapi.dev).
-function PlayedWords({ words, by, isMe, score }: { words: { word: string; score: number }[]; by: Player | undefined; isMe: boolean; score: number }) {
+function PlayedWords({
+  words,
+  by,
+  isMe,
+  score,
+}: {
+  words: { word: string; score: number }[];
+  by: Player | undefined;
+  isMe: boolean;
+  score: number;
+}) {
   const [open, setOpen] = useState<string | null>(null);
   return (
     <li className="px-3 py-2">
@@ -118,10 +165,23 @@ function PlayedWords({ words, by, isMe, score }: { words: { word: string; score:
       </div>
       <div className="mt-1 flex flex-wrap gap-1.5">
         {words.map((w) => (
-          // 44px to tap, drawn 36px: the extra reaches into the gaps around it without moving anything.
-          <button key={w.word} type="button" onClick={() => setOpen((o) => (o === w.word ? null : w.word))} aria-expanded={open === w.word} className="-my-1 touch-manipulation py-1">
-            <span className={cn("grid min-h-9 place-items-center rounded-md px-2.5 font-display text-callout tracking-wide transition-colors", open === w.word ? "bg-primary text-primary-foreground" : "bg-card")}>{w.word}</span>
-          </button>
+          <Button
+            key={w.word}
+            variant="bare"
+            size="pill"
+            onClick={() => setOpen((o) => (o === w.word ? null : w.word))}
+            aria-expanded={open === w.word}
+            className="-my-1 py-1"
+          >
+            <span
+              className={cn(
+                "grid min-h-9 place-items-center rounded-md px-2.5 font-display text-callout tracking-wide transition-colors",
+                open === w.word ? "bg-primary text-primary-foreground" : "bg-card",
+              )}
+            >
+              {w.word}
+            </span>
+          </Button>
         ))}
       </div>
       <AnimatePresence initial={false}>{open && <Definition key={open} word={open} />}</AnimatePresence>
@@ -156,9 +216,16 @@ function Definition({ word }: { word: string }) {
     };
   }, [word]);
   return (
-    <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden text-footnote">
+    <motion.p
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: "auto" }}
+      exit={{ opacity: 0, height: 0 }}
+      className="overflow-hidden text-footnote"
+    >
       <span className="block pt-2">
-        {def === undefined ? "Looking it up…" : def ? (
+        {def === undefined ? (
+          "Looking it up…"
+        ) : def ? (
           <>
             <span className="italic text-muted-foreground">{def.part}. </span>
             {def.text}

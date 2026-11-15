@@ -11,9 +11,21 @@ import { Button } from "@/components/ui/button";
 import { Scorecard } from "./Scorecard";
 import { golfRules } from "./rules";
 
-// A golf game's menu: the scorecard, the seed (to copy, or to play the same holes again), then what every
-// game's menu has, and resigning at the bottom.
-export function GolfMenu({ open, onOpenChange, match, st, meId, playing }: { open: boolean; onOpenChange: (o: boolean) => void; match: MatchView; st: GolfState; meId: Id<"users"> | undefined; playing: boolean }) {
+export function GolfMenu({
+  open,
+  onOpenChange,
+  match,
+  st,
+  meId,
+  playing,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  match: MatchView;
+  st: GolfState;
+  meId: Id<"users"> | undefined;
+  playing: boolean;
+}) {
   return (
     <GameMenu
       open={open}
@@ -21,7 +33,19 @@ export function GolfMenu({ open, onOpenChange, match, st, meId, playing }: { ope
       match={match}
       title="Scorecard"
       rules={golfRules(match.mode as ModeKey, settingsOf(match.mode, match.settings))}
-      footer={playing && <ResignButton match={match} className="h-14 w-full rounded-lg" detail={match.players.length - st.out.length > 2 ? "Your ball comes off the course and you place last. Everyone else plays on." : "The other player wins and gets the rating points."} />}
+      footer={
+        playing && (
+          <ResignButton
+            match={match}
+            className="h-14 w-full rounded-lg"
+            detail={
+              match.players.length - st.out.length > 2
+                ? "Your ball comes off the course and you place last. Everyone else plays on."
+                : "The other player wins and gets the rating points."
+            }
+          />
+        )
+      }
     >
       <Scorecard match={match} st={st} meId={meId} />
       <SeedRow match={match} />
@@ -29,7 +53,6 @@ export function GolfMenu({ open, onOpenChange, match, st, meId, playing }: { ope
   );
 }
 
-// A generated course's seed: copy it, or start a new game on the same holes with the same settings.
 export function SeedRow({ match }: { match: MatchView }) {
   const navigate = useNavigate();
   const s = settingsOf(match.mode, match.settings);

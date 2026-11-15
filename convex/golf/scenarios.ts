@@ -3,11 +3,6 @@ import { worldOf } from "./holes";
 import { SANDBOX } from "./sandbox";
 import { advance, applyCmd, cmdOrder, fingerprint, newWorld, pack, TPS, unpack, type Cmd, type Packed, type Rules } from "./world";
 
-// Games played by script, for checking that every JavaScript engine (Safari's on iPhones, Chrome's on
-// Android and the server) comes out with exactly the same world. See src/games/golf/determinism.test.ts.
-
-// Eight players for a minute: random shots at random moments, and everyone's bag full of the items that
-// throw other balls about.
 export function chaos(seed = 1): { cmds: Cmd[]; checkpoints: number[] } {
   const r = rng(seed);
   const cmds: Cmd[] = [];
@@ -25,14 +20,13 @@ export function chaos(seed = 1): { cmds: Cmd[]; checkpoints: number[] } {
   return { cmds: cmds.sort(cmdOrder), checkpoints: [TPS * 5, TPS * 20, TPS * 40, TPS * 61] };
 }
 
-// The same, turn-based: each shot or item comes on its player's own turn, given just before it.
 function turned(scn: { cmds: Cmd[]; checkpoints: number[] }) {
-  const cmds = scn.cmds.flatMap((c) => (c.kind === "join" ? [c] : [{ tick: c.tick, by: c.by, seq: c.seq - 0.5, kind: "turn" as const }, c]));
+  const cmds = scn.cmds.flatMap((c) =>
+    c.kind === "join" ? [c] : [{ tick: c.tick, by: c.by, seq: c.seq - 0.5, kind: "turn" as const }, c],
+  );
   return { cmds: cmds.sort(cmdOrder), checkpoints: scn.checkpoints };
 }
 
-// Runs a scenario and returns the world's fingerprint at each checkpoint. `bags` fills everyone's bag
-// once they've joined, so the items get used.
 export function play(scn: { cmds: Cmd[]; checkpoints: number[] }, bags: Power[] = ["laser", "railgun", "mine"], rules?: Rules) {
   const W = compile(SANDBOX);
   const s = newWorld(SANDBOX, { rules });
@@ -60,27 +54,22 @@ export function allFingerprints() {
     chaos1: play(chaos(1)),
     chaos2: play(chaos(2), ["bouncy", "jumbo", "spring"]),
     chaos3: play(chaos(3), ["cart", "rocket", "laser"]),
-    // Everything that reaches other players: missiles, storms, guns, ice, honey, shields, coffee.
     chaos4: play(chaos(4), ["missile", "storm", "pistol"]),
     chaos5: play(chaos(5), ["freeze", "elephant", "horn"]),
     chaos6: play(chaos(6), ["honey", "coffee", "shield"]),
     chaos7: play(chaos(7), ["flash", "missile", "freeze"]),
-    // A game's rules: balls done when they're in or out of strokes, knocks free, balls by the cup marked.
     rules8: play(chaos(8), ["missile", "railgun", "laser"], { cap: 6, turns: false, knockFree: true, markR: 3.2 }),
-    // Turn-based statuses that last until the next turn (no "turn" commands, so they never wear off here).
     rules9: play(turned(chaos(9)), ["freeze", "honey", "shield"], { cap: 99, turns: true, knockFree: true, markR: 0 }),
   };
 }
 
-// One player alone on a hole, for scripts/golf-solve.ts and the test that replays what it finds.
 const ME = "solver";
-const MAX_ROLL = 16; // seconds a shot may take
+const MAX_ROLL = 16;
 export function start(c: Course) {
   const s = newWorld(c);
   applyCmd(s, c, { tick: 0, by: ME, seq: 0, kind: "join" });
   return pack(s);
 }
-// One shot from a state: the state once the ball's stopped, and whether it went in.
 export function takeShot(c: Course, from: Packed, a: number, p: number) {
   const w = worldOf(c);
   const s = unpack(from);

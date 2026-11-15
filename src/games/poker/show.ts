@@ -6,12 +6,6 @@ import { resultText } from "../../../convex/poker/text";
 import { sfx } from "@/sound";
 import { sum } from "./format";
 
-// The table plays things out one step at a time, though the server gets there at once: one mutation can end a
-// hand and deal the next. So the screen draws a `Show`, which follows the real state through each step in
-// turn (chips in, swept to the pot, cards out, the showdown, the payout, the deal), and catches up to wherever
-// the game has got to. Nobody's waiting on it: moves still go straight to the server.
-
-// How fast it all plays. Everything below is scaled by this, so it's the one number to change.
 export const PACE = 1.2;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms * PACE));
 
@@ -24,21 +18,17 @@ export type Show = {
   stacks: number[];
   folded: boolean[];
   turn: number;
-  // Cards out so far in this deal (see dealOrder), and how many of mine are turned over.
   dealtCards: number;
   faceUp: number;
   sweeping: boolean;
   shown: (Card[] | null)[];
-  // A finished hand: the winning five, who's being paid, and the line saying so.
   best: Card[] | null;
   paying: { seat: number; net: number }[] | null;
   banner: string | null;
   spell: Spell | null;
-  // A hand's ending or a deal is playing, so there's nothing to act on yet.
   busy: boolean;
 };
 
-// Everyone in, one card at a time, starting on the button's left, for as many rounds as there are hole cards.
 export function dealOrder(s: PokerState) {
   const n = s.stacks.length;
   const seats = Array.from({ length: n }, (_, k) => (s.button + 1 + k) % n).filter((i) => s.dealt[i]);
@@ -46,7 +36,9 @@ export function dealOrder(s: PokerState) {
 }
 export function cardsHeld(s: PokerState, seat: number, dealtCards: number) {
   if (dealtCards === Infinity) return VARIANTS[s.variant].hole;
-  return dealOrder(s).slice(0, dealtCards).filter((x) => x === seat).length;
+  return dealOrder(s)
+    .slice(0, dealtCards)
+    .filter((x) => x === seat).length;
 }
 
 const blankShown = (s: PokerState) => s.stacks.map(() => null);
@@ -73,15 +65,23 @@ const winningHand = (s: PokerState, r: HandResult) => {
   const cards = r.shown[topWinner(r)];
   return r.showdown && cards ? bestHand(s.variant, cards, r.board) : null;
 };
-// A game that's over stays on its last hand.
 function settled(s: PokerState, nameOf: (seat: number) => string): Show {
   const r = s.last;
   if (s.turn !== -1 || !r) return steady(s);
   return { ...steady(s), board: r.board, shown: r.shown, best: winningHand(s, r)?.cards ?? null, banner: resultText(r, nameOf) };
 }
-const undealt = (s: PokerState): Show => ({ ...steady(s), board: [], bets: s.bets.map(() => 0), paid: s.paid.map(() => 0), stacks: s.start, turn: -1, dealtCards: 0, faceUp: 0, busy: true });
+const undealt = (s: PokerState): Show => ({
+  ...steady(s),
+  board: [],
+  bets: s.bets.map(() => 0),
+  paid: s.paid.map(() => 0),
+  stacks: s.start,
+  turn: -1,
+  dealtCards: 0,
+  faceUp: 0,
+  busy: true,
+});
 
-// A flush or better gets its name spelled over the board.
 function bigHand(s: PokerState, r: HandResult): string | null {
   const hand = winningHand(s, r);
   if (!hand || hand.category < 5) return null;
@@ -102,7 +102,7 @@ export function useShow(state: PokerState, opts: { mySeat: number; nameOf: (seat
   const [show, setShow] = useState<Show>(() => (opts.fresh && !still ? undealt(state) : settled(state, opts.nameOf)));
   const latest = useRef(state);
   latest.current = state;
-  // What the screen has caught up to. A brand new game hasn't even been dealt yet.
+  const content = JSON.stringify(state);
   const drawn = useRef<PokerState | null>(opts.fresh && !still ? null : state);
   const running = useRef(false);
   const alive = useRef(true);
@@ -114,12 +114,10 @@ export function useShow(state: PokerState, opts: { mySeat: number; nameOf: (seat
     };
   }, []);
 
-  // A new state never interrupts what's playing: the runner picks up the newest one when it gets there.
   useEffect(() => {
     const patch = (p: Partial<Show>) => {
       if (alive.current) setShow((d) => ({ ...d, ...p }));
     };
-    // Whoever's left the table doesn't hear the rest of it.
     const play: typeof sfx = (name, opts) => {
       if (alive.current) sfx(name, { ...opts, live: true });
     };
@@ -135,7 +133,7 @@ export function useShow(state: PokerState, opts: { mySeat: number; nameOf: (seat
       const gap = Math.min(75, 1500 / order.length);
       for (let i = 0; i < order.length && alive.current; i++) {
         patch({ dealtCards: i + 1 });
-        play("deal", { count: 1 + i % VARIANTS[to.variant].hole });
+        play("deal", { count: 1 + (i % VARIANTS[to.variant].hole) });
         await sleep(gap);
       }
       await sleep(380);
@@ -151,11 +149,9 @@ export function useShow(state: PokerState, opts: { mySeat: number; nameOf: (seat
       turnChime(null, to);
     };
 
-    // Bets as they ended up on the street that just finished, sent to the pot.
     const sweep = async (from: PokerState, paid: number[], stacks: number[], folded: boolean[]) => {
       const bets = paid.map((p, i) => Math.max(0, p - (from.paid[i] - from.bets[i])));
       patch({ turn: -1, busy: true, paid, stacks, folded, bets });
-      // The move that finished the street, which the street's end would otherwise swallow.
       if (sum(paid) > sum(from.paid)) play("chips", { count: 2 });
       else if (folded.some((f, i) => f && !from.folded[i])) play("recall");
       else play("knock");
@@ -238,11 +234,9 @@ export function useShow(state: PokerState, opts: { mySeat: number; nameOf: (seat
           if (to.turn === -1) setShow(settled(to, nameOf));
           else await deal(to);
         } else if (to.hand !== from.hand) {
-          // Over already: a later hand finished the game before this phone got there.
           if (to.turn === -1) setShow(settled(to, nameOf));
           else await deal(to);
-        }
-        else if (to.street !== from.street) await nextStreet(from, to);
+        } else if (to.street !== from.street) await nextStreet(from, to);
         else {
           setShow(settled(to, nameOf));
           const moves = to.log.slice(from.log.length);
@@ -252,7 +246,6 @@ export function useShow(state: PokerState, opts: { mySeat: number; nameOf: (seat
           if (shove) {
             patch({ spell: { word: "ALL IN", tone: "hit" } });
             play("slam");
-            // It doesn't hold anything up: the call can land while it's still on the table.
             setTimeout(() => setShow((d) => (d.spell?.word === "ALL IN" ? { ...d, spell: null } : d)), 1150 * PACE);
           }
         }
@@ -260,9 +253,7 @@ export function useShow(state: PokerState, opts: { mySeat: number; nameOf: (seat
       running.current = false;
     };
     void run();
-    // Only the game's content moves this along: every update is a new object with the same numbers.
-  }, [JSON.stringify(state), still]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [content, still]);
 
-  // The state's moved on and the show hasn't started on it yet (its effect runs after this render).
-  return { ...show, behind: !drawn.current || JSON.stringify(drawn.current) !== JSON.stringify(state) };
+  return { ...show, behind: !drawn.current || JSON.stringify(drawn.current) !== content };
 }

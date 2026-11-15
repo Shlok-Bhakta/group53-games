@@ -1,22 +1,27 @@
-// Golf physics: a top-down ball on a 2D course, stepped at a fixed rate so a shot is fully determined by
-// where it starts, its angle and power, and the time it's taken. That's what lets async play replay other
-// players' shots exactly, and every phone in a multiplayer game run the same world (convex/golf/world.ts;
-// the same idea as the real-time chess engine). Keep it free of browser imports, and use the math in
-// dmath.ts, never Math.sin, cos, atan2, hypot or pow: those differ in the last bit between engines.
-//
-// Units: 1 is about a ball's width and a half (ball radius 0.32, cup radius 0.62). y points down, so
-// north is up the screen.
-
 import { datan2, dcos, dpow, dsin, hyp } from "./dmath";
 
 export type Vec = { x: number; y: number };
 export type Theme = "hills" | "desert" | "ice" | "volcano" | "arcade" | "orbit" | "server" | "zen";
 
-// What the ball rolls on. Hazards end the shot: one stroke penalty and back to where it was hit from.
-export type Ground = "green" | "fringe" | "rough" | "dune" | "sand" | "quicksand" | "snow" | "ice" | "bridge" | "stone" | "honey" | "packed" | "water" | "lava" | "void" | "coolant" | "oob";
-// "oob" is everything outside the course's walls: only a ball in the air can get there.
+export type Ground =
+  | "green"
+  | "fringe"
+  | "rough"
+  | "dune"
+  | "sand"
+  | "quicksand"
+  | "snow"
+  | "ice"
+  | "bridge"
+  | "stone"
+  | "honey"
+  | "packed"
+  | "water"
+  | "lava"
+  | "void"
+  | "coolant"
+  | "oob";
 export const HAZARDS: Ground[] = ["water", "lava", "void", "coolant", "oob"];
-// Rolling resistance (units/s²). Green is a fast mini-golf carpet, ice barely slows anything.
 export const DECEL: Record<Ground, number> = {
   green: 4.6,
   fringe: 6,
@@ -28,7 +33,7 @@ export const DECEL: Record<Ground, number> = {
   sand: 19,
   quicksand: 34,
   honey: 30,
-  packed: 2.6, // Cold Start's fairways: packed snow, about half as grippy as grass
+  packed: 2.6,
   ice: 0.9,
   water: 0,
   lava: 0,
@@ -37,29 +42,42 @@ export const DECEL: Record<Ground, number> = {
   oob: 0,
 };
 
-// Zones either set the ground (later zones win) or push the ball around on top of it.
 export type Zone =
   | { kind: Ground; poly: Vec[] }
-  | { kind: "slope"; poly: Vec[]; dir: Vec; strength: number } // dir points downhill
-  | { kind: "mound"; poly: Vec[]; center: Vec; radius: number; strength: number } // > 0 a hill, < 0 a bowl
+  | { kind: "slope"; poly: Vec[]; dir: Vec; strength: number }
+  | { kind: "mound"; poly: Vec[]; center: Vec; radius: number; strength: number }
   | { kind: "boost"; poly: Vec[]; dir: Vec; strength: number }
   | { kind: "ramp"; poly: Vec[]; dir: Vec; lift: number }
   | { kind: "conveyor"; poly: Vec[]; dir: Vec; speed: number }
-  // Wind gusts along `dir`: a nudge on the ground, a real push in the air.
   | { kind: "wind"; poly: Vec[]; dir: Vec; strength: number };
 
-// Something a player put down for a while: ice where a Freeze Bomb hit water (you can roll across it),
-// or a puddle of Honey (you can't, quickly).
-// `by`: who put it down, in a turn-based game, where it lasts until their next turn.
 export type Patch = { kind: "ice" | "honey"; x: number; y: number; r: number; until: number; by?: string };
 
-export type WallStyle = "rim" | "wood" | "stone" | "hedge" | "adobe" | "ice" | "obsidian" | "neon" | "metal" | "rack" | "timber" | "fence" | "rail";
+export type WallStyle =
+  "rim" | "wood" | "stone" | "hedge" | "adobe" | "ice" | "obsidian" | "neon" | "metal" | "rack" | "timber" | "fence" | "rail";
 export type Wall = { pts: Vec[]; w: number; h: number; style: WallStyle; bounce?: number; closed?: boolean };
 export type BlockStyle = "mill" | "roof" | "mesa" | "rock" | "cabin" | "pillar" | "rack" | "crate" | "pagoda" | "ice";
 export type Block = { poly: Vec[]; h: number; style: BlockStyle; roof?: boolean };
 export type PropKind =
-  | "tree" | "pine" | "palm" | "cactus" | "rock" | "bush" | "flowers" | "snowman" | "lamp" | "lantern" | "crystal"
-  | "cherry" | "maple" | "asteroid" | "beacon" | "tuft" | "skull" | "vent" | "fern";
+  | "tree"
+  | "pine"
+  | "palm"
+  | "cactus"
+  | "rock"
+  | "bush"
+  | "flowers"
+  | "snowman"
+  | "lamp"
+  | "lantern"
+  | "crystal"
+  | "cherry"
+  | "maple"
+  | "asteroid"
+  | "beacon"
+  | "tuft"
+  | "skull"
+  | "vent"
+  | "fern";
 export type Prop = { kind: PropKind; at: Vec; r: number; h: number; solid?: boolean; seed?: number };
 export type Bumper = { at: Vec; r: number; kick: number };
 export type Mover =
@@ -72,18 +90,18 @@ export type Well = { at: Vec; r: number; strength: number };
 export type Course = {
   id: string;
   name: string;
-  course: string; // the course this hole belongs to
+  course: string;
   theme: Theme;
   par: number;
-  open?: boolean; // an open-world map: one big hole, the camera follows the ball
+  open?: boolean;
   w: number;
   h: number;
   tee: Vec;
   cup: Vec;
-  cups?: Vec[]; // more cups, on an open map with several flags
-  tees?: Vec[]; // more places to start, on a map many players share
-  off: Ground; // the ground outside every green
-  surface?: Ground; // the ground on the greens themselves, if it isn't grass
+  cups?: Vec[];
+  tees?: Vec[];
+  off: Ground;
+  surface?: Ground;
   greens: { poly: Vec[]; rim?: boolean }[];
   zones: Zone[];
   walls: Wall[];
@@ -94,9 +112,9 @@ export type Course = {
   portals: Portal[];
   wells: Well[];
   lamps: Vec[];
-  boxes: Vec[]; // mystery boxes: roll through one for a random power-up
-  mines?: Vec[]; // landmines: roll over one and it throws the ball
-  powers?: Power[]; // what the boxes give, if not every item (a game's settings)
+  boxes: Vec[];
+  mines?: Vec[];
+  powers?: Power[];
 };
 
 export const BALL_R = 0.38;
@@ -105,38 +123,90 @@ export const MAX_SPEED = 32;
 export const GRAVITY = 30;
 export const DT = 1 / 240;
 export const MAX_STROKES = 10;
-const TOUCHING = 0.15; // how high a ball can be and still set off a mine or open a box: it flies over them
+const TOUCHING = 0.15;
 
-// Ours (Ghost, Magnet, Brake, Mulligan, Big cup, Jump, Bouncy), every one of Super Battle Golf's, made
-// to work on a ball on a board (Rocket Driver, Spring Boots, Golf Cart, Jumbo Burger, Smoke Bomb, Orbital
-// Laser, Landmine, Rail Gun, Rocket Launcher, Air Horn, Dueling Pistol, Elephant Gun, Coffee,
-// Electromagnet, Freeze Bomb, Flash Camera, Thunderstorm), and Golf With Your Friends' Honey.
 export type Power =
-  | "rocket" | "ghost" | "magnet" | "brake" | "mulligan" | "bigcup" | "jump" | "bouncy"
-  | "spring" | "cart" | "jumbo" | "smoke" | "laser" | "mine" | "railgun"
-  | "missile" | "horn" | "pistol" | "elephant" | "coffee" | "shield" | "freeze" | "flash" | "storm" | "honey";
-// What a box can give on your own, and with other players around (the rest only do anything to them).
-export const SOLO_POWERS: Power[] = ["rocket", "ghost", "magnet", "brake", "mulligan", "bigcup", "jump", "bouncy", "spring", "cart", "jumbo", "smoke", "laser", "mine", "railgun", "coffee"];
+  | "rocket"
+  | "ghost"
+  | "magnet"
+  | "brake"
+  | "mulligan"
+  | "bigcup"
+  | "jump"
+  | "bouncy"
+  | "spring"
+  | "cart"
+  | "jumbo"
+  | "smoke"
+  | "laser"
+  | "mine"
+  | "railgun"
+  | "missile"
+  | "horn"
+  | "pistol"
+  | "elephant"
+  | "coffee"
+  | "shield"
+  | "freeze"
+  | "flash"
+  | "storm"
+  | "honey";
+export const SOLO_POWERS: Power[] = [
+  "rocket",
+  "ghost",
+  "magnet",
+  "brake",
+  "mulligan",
+  "bigcup",
+  "jump",
+  "bouncy",
+  "spring",
+  "cart",
+  "jumbo",
+  "smoke",
+  "laser",
+  "mine",
+  "railgun",
+  "coffee",
+];
 export const POWERS: Power[] = [...SOLO_POWERS, "missile", "horn", "pistol", "elephant", "shield", "freeze", "flash", "storm", "honey"];
 export const BAG_SIZE = 3;
-// Instant power-ups happen when tapped; targeted ones need a spot (or a direction) picked first; the
-// rest are armed for the next shot. Rocket Launcher, Air Horn and Flash Camera reach other players, so
-// the world (world.ts) works them out.
 export const INSTANT: Power[] = ["mulligan", "bigcup", "coffee", "shield", "missile", "horn", "flash"];
+const WORLD_ONLY_TARGETED: Power[] = ["storm", "pistol", "elephant"];
 export const TARGETED: Power[] = ["laser", "mine", "railgun", "freeze", "storm", "pistol", "elephant", "honey"];
-// How long things last, in seconds.
 export const SHIELD_S = 7;
 export const COFFEE_S = 12;
 export const FREEZE_S = 4;
 export const ICE_S = 15;
 export const HONEY_S = 40;
 export const BLIND_S = 3.5;
-export const JUMBO = 2.2; // how much bigger a Jumbo Burger makes the ball
+export const JUMBO = 2.2;
 
 export type Ev =
   | {
-      type: "hit" | "bounce" | "bump" | "splash" | "sink" | "launch" | "land" | "warp" | "lip" | "stop" | "clack" | "spawn"
-        | "horn" | "flash" | "freeze" | "bolt" | "shield" | "coffee" | "honey" | "missile" | "stun" | "fizzle";
+      type:
+        | "hit"
+        | "bounce"
+        | "bump"
+        | "splash"
+        | "sink"
+        | "launch"
+        | "land"
+        | "warp"
+        | "lip"
+        | "stop"
+        | "clack"
+        | "spawn"
+        | "horn"
+        | "flash"
+        | "freeze"
+        | "bolt"
+        | "shield"
+        | "coffee"
+        | "honey"
+        | "missile"
+        | "stun"
+        | "fizzle";
       x: number;
       y: number;
       power: number;
@@ -148,7 +218,6 @@ export type Ev =
 type Seg = { a: Vec; b: Vec; r: number; h: number; bounce: number; rim: boolean };
 export type World = { course: Course; segs: Seg[]; cells: Map<number, Seg[]> };
 
-// Walls are bucketed into a coarse grid so a ball only checks the ones near it.
 const CELL = 4;
 const cellKey = (i: number, j: number) => i * 4096 + j;
 export function nearSegs(world: World, x: number, y: number): Seg[] {
@@ -170,40 +239,34 @@ export type Sim = {
   strokes: number;
   rest: Vec;
   cupScale: number;
-  armed: Power | null; // waiting for the next shot
-  shot: Power | null; // in effect for the shot rolling now
+  armed: Power | null;
+  shot: Power | null;
   bag: Power[];
-  boxes: boolean[]; // taken
+  boxes: boolean[];
   portalLock: number;
   onRamp: boolean;
-  ramp: number; // the ramp it's on (an index into the course's zones), or -1
+  ramp: number;
   lipT: number;
-  r: number; // the ball's radius: bigger after a Jumbo Burger
-  cartT: number; // seconds left of a Golf Cart's full speed
-  gone: boolean[]; // bumpers blown up
+  r: number;
+  cartT: number;
+  gone: boolean[];
   mines: { x: number; y: number; live: boolean }[];
-  strikes: { x: number; y: number; t: number }[]; // Orbital Lasers on their way
+  strikes: { x: number; y: number; t: number }[];
   outGround: Ground | null;
   history: Snapshot[];
   events: Ev[];
   seed: number;
-  multi: boolean; // in a world with other players: boxes give from the whole pool
-  // Until when (in the ball's own time, `t`) each of these lasts. Times, not countdowns, so a world
-  // jumping ahead while it's quiet ends them exactly as stepping would.
-  shieldUntil: number; // Electromagnet: items don't touch it
-  frozenUntil: number; // a Freeze Bomb: an ice cube, going nowhere
-  stunUntil: number; // shot by a pistol or struck by lightning: can't putt
-  blindUntil: number; // a Flash Camera: no aim line
-  coffeeUntil: number; // can putt again while still rolling
-  rattled: boolean; // an Air Horn went off: the next putt overshoots and pulls
-  patches: Patch[]; // shared, like `mines`
-  // Moved while it sat still, by another ball or someone's item. With `knockFree` (a game's rules) a ball
-  // knocked into a hazard goes back where it sat without a penalty stroke.
+  multi: boolean;
+  shieldUntil: number;
+  frozenUntil: number;
+  stunUntil: number;
+  blindUntil: number;
+  coffeeUntil: number;
+  rattled: boolean;
+  patches: Patch[];
   knocked: boolean;
   knockFree: boolean;
 };
-
-// --- Geometry ---
 
 export const v = (x: number, y: number): Vec => ({ x, y });
 export const len = hyp;
@@ -211,14 +274,16 @@ export const len = hyp;
 export function inPoly(p: Vec, poly: Vec[]) {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const a = poly[i], b = poly[j];
+    const a = poly[i],
+      b = poly[j];
     if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
   }
   return inside;
 }
 
 export function closest(p: Vec, a: Vec, b: Vec): Vec {
-  const dx = b.x - a.x, dy = b.y - a.y;
+  const dx = b.x - a.x,
+    dy = b.y - a.y;
   const l2 = dx * dx + dy * dy;
   const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2));
   return { x: a.x + dx * t, y: a.y + dy * t };
@@ -230,7 +295,6 @@ export function edges(poly: Vec[], closed = true): [Vec, Vec][] {
   return out;
 }
 
-// A seeded random number generator (mulberry32), so power-up draws replay the same everywhere.
 export function rng(seed: number) {
   let a = seed >>> 0;
   return () => {
@@ -241,8 +305,6 @@ export function rng(seed: number) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-
-// --- World ---
 
 export function compile(course: Course): World {
   const segs: Seg[] = [];
@@ -256,23 +318,22 @@ export function compile(course: Course): World {
     if (bl.roof) continue;
     for (const [a, b] of edges(bl.poly)) segs.push({ a, b, r: 0.04, h: bl.h, bounce: 0.6, rim: false });
   }
-  // The map's own edge, so nothing ever rolls off the world. Only where something could: off a board in
-  // the void or the sea, a ball just keeps flying until it comes down, and that's the end of the shot.
   if (!HAZARDS.includes(course.off)) {
     const m = 0.2;
     const box = [v(m, m), v(course.w - m, m), v(course.w - m, course.h - m), v(m, course.h - m)];
     for (const [a, b] of edges(box)) segs.push({ a, b, r: 0.2, h: 99, bounce: 0.6, rim: true });
   }
-  // Each wall goes in every cell within reach of a ball touching it, including the cells next door.
   const cells = new Map<number, Seg[]>();
   for (const s of segs) {
     const pad = s.r + BALL_R + 0.5;
-    const i0 = Math.floor((Math.min(s.a.x, s.b.x) - pad) / CELL) - 1, i1 = Math.floor((Math.max(s.a.x, s.b.x) + pad) / CELL) + 1;
-    const j0 = Math.floor((Math.min(s.a.y, s.b.y) - pad) / CELL) - 1, j1 = Math.floor((Math.max(s.a.y, s.b.y) + pad) / CELL) + 1;
+    const i0 = Math.floor((Math.min(s.a.x, s.b.x) - pad) / CELL) - 1,
+      i1 = Math.floor((Math.max(s.a.x, s.b.x) + pad) / CELL) + 1;
+    const j0 = Math.floor((Math.min(s.a.y, s.b.y) - pad) / CELL) - 1,
+      j1 = Math.floor((Math.max(s.a.y, s.b.y) + pad) / CELL) + 1;
     for (let i = Math.max(-1, i0); i <= i1; i++)
       for (let j = Math.max(-1, j0); j <= j1; j++) {
-        // Skip cells the segment's capsule doesn't come near.
-        const cx = (i + 0.5) * CELL, cy = (j + 0.5) * CELL;
+        const cx = (i + 0.5) * CELL,
+          cy = (j + 0.5) * CELL;
         const q = closest({ x: cx, y: cy }, s.a, s.b);
         if (hyp(q.x - cx, q.y - cy) > CELL * 1.5 + pad) continue;
         const k = cellKey(i, j);
@@ -290,13 +351,11 @@ export function groundAt(world: World, p: Vec): Ground {
     const z = c.zones[i];
     if (z.kind in DECEL && inPoly(p, z.poly)) return z.kind as Ground;
   }
-  // Greens are even-odd: a loop inside another is a hole in it (an island in the fairway).
   let inside = false;
   for (const g of c.greens) if (inPoly(p, g.poly)) inside = !inside;
   return inside ? (c.surface ?? "green") : c.off;
 }
 
-// The ground under a ball, with what players have put down: ice over water, honey over anything else.
 export function groundUnder(world: World, sim: Sim, p: Vec = sim): Ground {
   let g = groundAt(world, p);
   for (const pt of sim.patches) {
@@ -308,9 +367,7 @@ export function groundUnder(world: World, sim: Sim, p: Vec = sim): Ground {
 }
 
 export type MoverPose =
-  | { kind: "windmill"; angle: number; closed: boolean }
-  | { kind: "spinner"; angle: number }
-  | { kind: "slider"; at: Vec; vel: Vec };
+  { kind: "windmill"; angle: number; closed: boolean } | { kind: "spinner"; angle: number } | { kind: "slider"; at: Vec; vel: Vec };
 
 export function poseOf(m: Mover, t: number): MoverPose {
   if (m.kind === "windmill") {
@@ -318,8 +375,7 @@ export function poseOf(m: Mover, t: number): MoverPose {
     const step = (Math.PI * 2) / m.arms;
     let closed = false;
     for (let k = 0; k < m.arms; k++) {
-      // Blade k points straight down when its angle is π.
-      const a = (((angle + k * step - Math.PI) % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI;
+      const a = ((((angle + k * step - Math.PI) % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
       if (Math.abs(a) < 0.36) closed = true;
     }
     return { kind: "windmill", angle, closed };
@@ -337,11 +393,10 @@ export function poseOf(m: Mover, t: number): MoverPose {
 }
 
 export function sliderRect(at: Vec, size: Vec): Vec[] {
-  const hx = size.x / 2, hy = size.y / 2;
+  const hx = size.x / 2,
+    hy = size.y / 2;
   return [v(at.x - hx, at.y - hy), v(at.x + hx, at.y - hy), v(at.x + hx, at.y + hy), v(at.x - hx, at.y + hy)];
 }
-
-// --- Simulation ---
 
 export function newSim(course: Course, seed = 53): Sim {
   return {
@@ -390,9 +445,7 @@ export function newSim(course: Course, seed = 53): Sim {
 
 export const maxSpeed = (sim: Sim) => MAX_SPEED * (sim.armed === "rocket" ? 1.8 : 1);
 
-// Whether a putt would go: the ball's still (or rolling, on Coffee), and it isn't frozen or stunned.
 export function canShoot(sim: Sim) {
-  // A hole stops at MAX_STROKES on your own; the open world has no limit.
   if ((!sim.multi && sim.strokes >= MAX_STROKES) || sim.t < sim.frozenUntil || sim.t < sim.stunUntil) return false;
   return sim.mode === "aim" || (sim.mode === "roll" && sim.z <= 0 && sim.t < sim.coffeeUntil);
 }
@@ -401,9 +454,9 @@ export function shoot(sim: Sim, angle: number, power: number) {
   if (!canShoot(sim)) return;
   sim.history.push({ x: sim.x, y: sim.y, strokes: sim.strokes, bag: [...sim.bag], boxes: [...sim.boxes], cupScale: sim.cupScale });
   if (sim.history.length > 3) sim.history.shift();
-  let a = angle, k = Math.max(0, Math.min(1, power));
+  let a = angle,
+    k = Math.max(0, Math.min(1, power));
   if (sim.rattled) {
-    // An Air Horn in your ear: it goes too far and pulls one way or the other.
     sim.rattled = false;
     k = Math.min(1.45, k * 1.4 + 0.08);
     a += (rng(sim.seed + Math.round(sim.t * 240))() - 0.5) * 0.36;
@@ -413,7 +466,6 @@ export function shoot(sim: Sim, angle: number, power: number) {
   sim.vy = dsin(a) * speed;
   sim.shot = sim.armed;
   sim.armed = null;
-  // Spring Boots: up and over everything. Golf Cart: no slowing down for a moment. Jumbo: a big ball.
   if (sim.shot === "spring") {
     sim.vz = 6 + power * 8;
     sim.z = 0.02;
@@ -427,12 +479,10 @@ export function shoot(sim: Sim, angle: number, power: number) {
   sim.events.push({ type: "hit", x: sim.x, y: sim.y, power });
 }
 
-// Tap a power-up in the bag: instant ones happen now, the rest wait for the next shot.
 export function activate(sim: Sim, i: number) {
   const p = sim.bag[i];
   if (!p) return;
   if (sim.mode !== "aim" || TARGETED.includes(p)) return;
-  // These reach other players; the world handles them (world.ts).
   if (p === "missile" || p === "horn" || p === "flash") return;
   if (p === "coffee" || p === "shield") {
     sim.bag.splice(i, 1);
@@ -445,7 +495,6 @@ export function activate(sim: Sim, i: number) {
     const last = sim.history.pop();
     if (!last) return;
     sim.bag.splice(i, 1);
-    // Back to before the last shot. Boxes it opened stay opened, so a rewind can't farm them.
     Object.assign(sim, { x: last.x, y: last.y, strokes: last.strokes, cupScale: last.cupScale, rest: { x: last.x, y: last.y } });
     return;
   }
@@ -459,12 +508,12 @@ export function activate(sim: Sim, i: number) {
 
 export const LASER_R = 3;
 
-// Thrown away from a point, up into the air: a mine going off, or a laser landing close.
 export function blast(sim: Sim, x: number, y: number, speed: number) {
-  // An Electromagnet shrugs it off; an ice cube shatters and goes flying.
   if (sim.t < sim.shieldUntil) return;
   sim.frozenUntil = 0;
-  const dx = sim.x - x, dy = sim.y - y, d = hyp(dx, dy) || 1;
+  const dx = sim.x - x,
+    dy = sim.y - y,
+    d = hyp(dx, dy) || 1;
   const a = d < 0.05 ? sim.seed : datan2(dy, dx);
   sim.vx = (d < 0.05 ? dcos(a) : dx / d) * speed;
   sim.vy = (d < 0.05 ? dsin(a) : dy / d) * speed;
@@ -476,8 +525,6 @@ export function blast(sim: Sim, x: number, y: number, speed: number) {
   }
 }
 
-// Targeted items: an Orbital Laser lands on a spot a moment later, a Landmine is dropped on one, and a
-// Rail Gun fires a line from the ball that takes out every bumper and mine along it.
 export function fireTargeted(sim: Sim, course: Course, i: number, at: Vec) {
   const p = sim.bag[i];
   if (!p || !TARGETED.includes(p) || sim.mode !== "aim") return;
@@ -488,13 +535,12 @@ export function fireTargeted(sim: Sim, course: Course, i: number, at: Vec) {
     sim.patches.push({ kind: "honey", x: at.x, y: at.y, r: 2.4, until: sim.t + HONEY_S });
     sim.events.push({ type: "honey", x: at.x, y: at.y, power: 1 });
   } else if (p === "freeze") {
-    // Water under it turns to ice for a while; the world freezes any balls caught in it.
     sim.patches.push({ kind: "ice", x: at.x, y: at.y, r: 4.2, until: sim.t + ICE_S });
     sim.events.push({ type: "freeze", x: at.x, y: at.y, power: 1 });
-  } else if (p === "storm" || p === "pistol" || p === "elephant") {
-    // Only other players feel these (world.ts).
-  } else {
-    const dx = at.x - sim.x, dy = at.y - sim.y, d = hyp(dx, dy) || 1;
+  } else if (!WORLD_ONLY_TARGETED.includes(p)) {
+    const dx = at.x - sim.x,
+      dy = at.y - sim.y,
+      d = hyp(dx, dy) || 1;
     const end = { x: sim.x + (dx / d) * 80, y: sim.y + (dy / d) * 80 };
     course.bumpers.forEach((b, k) => {
       const q = closest(b.at, sim, end);
@@ -508,7 +554,6 @@ export function fireTargeted(sim: Sim, course: Course, i: number, at: Vec) {
   }
 }
 
-// Jump: a hop mid-roll, high enough to clear walls, hedges and water. Once per shot it's armed for.
 export function hop(sim: Sim) {
   if (sim.mode !== "roll" || sim.shot !== "jump" || sim.z > 0) return;
   sim.vz = 11;
@@ -517,7 +562,6 @@ export function hop(sim: Sim) {
   sim.events.push({ type: "launch", x: sim.x, y: sim.y, power: 0.6 });
 }
 
-// The brake: stops the ball dead, once, during a shot it was armed for.
 export function brake(sim: Sim) {
   if (sim.mode !== "roll" || sim.shot !== "brake" || sim.z > 0) return;
   sim.vx = sim.vy = 0;
@@ -533,25 +577,28 @@ export function setMode(sim: Sim, mode: Sim["mode"]) {
 
 function collide(sim: Sim, a: Vec, b: Vec, r: number, bounce: number, vs?: Vec): number {
   const q = closest(sim, a, b);
-  let dx = sim.x - q.x, dy = sim.y - q.y;
+  let dx = sim.x - q.x,
+    dy = sim.y - q.y;
   const d = hyp(dx, dy);
   const R = r + sim.r;
   if (d >= R) return 0;
   if (d < 1e-6) {
-    // Dead on the line: push out along its normal.
     dx = -(b.y - a.y);
     dy = b.x - a.x;
   }
   const n = 1 / hyp(dx, dy);
-  const nx = dx * n, ny = dy * n;
+  const nx = dx * n,
+    ny = dy * n;
   sim.x = q.x + nx * R;
   sim.y = q.y + ny * R;
-  const sx = vs?.x ?? 0, sy = vs?.y ?? 0;
-  const rx = sim.vx - sx, ry = sim.vy - sy;
+  const sx = vs?.x ?? 0,
+    sy = vs?.y ?? 0;
+  const rx = sim.vx - sx,
+    ry = sim.vy - sy;
   const vn = rx * nx + ry * ny;
   if (vn >= 0) return 0;
-  // Reflect the normal part, keep most of the tangential part.
-  const tx = rx - vn * nx, ty = ry - vn * ny;
+  const tx = rx - vn * nx,
+    ty = ry - vn * ny;
   sim.vx = sx + tx * 0.94 - vn * bounce * nx;
   sim.vy = sy + ty * 0.94 - vn * bounce * ny;
   return -vn;
@@ -567,15 +614,20 @@ function hazard(sim: Sim, g: Ground) {
   sim.events.push({ type: "splash", x: sim.x, y: sim.y, power: 1 });
 }
 
-// One ball on its own (the single-player game): lasers land, then the ball moves.
 export function step(sim: Sim, world: World, dt = DT) {
   landStrikes(world.course, sim.t + dt, [sim], sim.strikes, sim.gone, sim.mines, sim.events);
   stepBall(sim, world, dt);
 }
 
-// Orbital Lasers landing, whether anything's moving or not: they take out bumpers and mines nearby, and
-// throw every ball close enough. `strikes` is changed in place, so balls sharing it all see it.
-export function landStrikes(c: Course, t: number, balls: Sim[], strikes: Sim["strikes"], gone: boolean[], mines: Sim["mines"], events: Ev[]) {
+export function landStrikes(
+  c: Course,
+  t: number,
+  balls: Sim[],
+  strikes: Sim["strikes"],
+  gone: boolean[],
+  mines: Sim["mines"],
+  events: Ev[],
+) {
   for (let k = 0; k < strikes.length; k++) {
     const st = strikes[k];
     if (t < st.t) continue;
@@ -583,14 +635,13 @@ export function landStrikes(c: Course, t: number, balls: Sim[], strikes: Sim["st
       if (hyp(b.at.x - st.x, b.at.y - st.y) < LASER_R + b.r) gone[i] = true;
     });
     for (const m of mines) if (hyp(m.x - st.x, m.y - st.y) < LASER_R) m.live = false;
-    for (const b of balls) if ((b.mode === "aim" || b.mode === "roll") && hyp(b.x - st.x, b.y - st.y) < LASER_R + 1) blast(b, st.x, st.y, 24);
+    for (const b of balls)
+      if ((b.mode === "aim" || b.mode === "roll") && hyp(b.x - st.x, b.y - st.y) < LASER_R + 1) blast(b, st.x, st.y, 24);
     events.push({ type: "boom", x: st.x, y: st.y, power: 1 });
     strikes.splice(k--, 1);
   }
 }
 
-// One ball's physics for one step. Things it shares with other balls (boxes, bumpers, mines) it reads
-// and changes in place.
 export function stepBall(sim: Sim, world: World, dt = DT) {
   const c = world.course;
   sim.t += dt;
@@ -608,7 +659,6 @@ export function stepBall(sim: Sim, world: World, dt = DT) {
     }
     return;
   }
-  // Frozen solid: it stops where it is until the ice melts (or something shatters it).
   if (sim.t < sim.frozenUntil) {
     sim.vx = sim.vy = sim.vz = sim.z = 0;
     if (sim.mode === "roll") {
@@ -620,7 +670,6 @@ export function stepBall(sim: Sim, world: World, dt = DT) {
   }
 
   const ghost = sim.shot === "ghost";
-  // Moving obstacles push the ball even when it's sitting still.
   let shoved = 0;
   for (const m of c.movers) {
     const pose = poseOf(m, sim.t);
@@ -651,12 +700,14 @@ export function stepBall(sim: Sim, world: World, dt = DT) {
   sim.rollT += dt;
   const p = { x: sim.x, y: sim.y };
   const grounded = sim.z <= 0;
-  let ax = 0, ay = 0; // forces that keep a ball rolling even when it's slow
-  let svx = 0, svy = 0; // the ground's own velocity (conveyors)
+  let ax = 0,
+    ay = 0;
+  let svx = 0,
+    svy = 0;
 
-  // Gravity wells bend whatever flies over them; balls on the ground are held by the deck.
   for (const w of grounded ? [] : c.wells) {
-    const dx = w.at.x - p.x, dy = w.at.y - p.y;
+    const dx = w.at.x - p.x,
+      dy = w.at.y - p.y;
     const d = hyp(dx, dy);
     if (d < w.r && d > 0.01) {
       const f = w.strength * dpow(1 - d / w.r, 0.6);
@@ -665,7 +716,6 @@ export function stepBall(sim: Sim, world: World, dt = DT) {
     }
   }
 
-  // Wind blows hardest on a ball in the air.
   for (const z of c.zones) {
     if (z.kind !== "wind" || !inPoly(p, z.poly)) continue;
     const gust = z.strength * (0.65 + 0.35 * dsin(sim.t * 1.4 + z.dir.x * 3 + z.dir.y));
@@ -685,10 +735,10 @@ export function stepBall(sim: Sim, world: World, dt = DT) {
         ax += z.dir.x * z.strength;
         ay += z.dir.y * z.strength;
       } else if (z.kind === "mound") {
-        const dx = p.x - z.center.x, dy = p.y - z.center.y;
+        const dx = p.x - z.center.x,
+          dy = p.y - z.center.y;
         const d = hyp(dx, dy);
         if (d < z.radius && d > 0.05) {
-          // Steepest halfway out, flat on top and at the foot.
           const f = z.strength * dsin((d / z.radius) * Math.PI);
           ax += (dx / d) * f;
           ay += (dy / d) * f;
@@ -701,12 +751,13 @@ export function stepBall(sim: Sim, world: World, dt = DT) {
         if (!inPoly(p, z.poly)) continue;
         inRamp = true;
         sim.ramp = zi;
-        // Climbing it costs a little speed.
         const along = sim.vx * z.dir.x + sim.vy * z.dir.y;
-        if (along > 0) ax -= z.dir.x * 3, ay -= z.dir.y * 3;
+        if (along > 0) {
+          ax -= z.dir.x * 3;
+          ay -= z.dir.y * 3;
+        }
       }
     }
-    // Off the top of a ramp and into the air.
     const rz = sim.ramp >= 0 ? c.zones[sim.ramp] : null;
     if (sim.onRamp && !inRamp && rz?.kind === "ramp") {
       const along = sim.vx * rz.dir.x + sim.vy * rz.dir.y;
@@ -720,10 +771,10 @@ export function stepBall(sim: Sim, world: World, dt = DT) {
     sim.onRamp = inRamp;
     sim.vx += ax * dt;
     sim.vy += ay * dt;
-    // Rolling resistance acts on the ball's speed relative to the ground under it.
     const decel = sim.cartT > 0 ? 0 : DECEL[g];
     sim.cartT = Math.max(0, sim.cartT - dt);
-    const rx = sim.vx - svx, ry = sim.vy - svy;
+    const rx = sim.vx - svx,
+      ry = sim.vy - svy;
     const rs = hyp(rx, ry);
     if (rs > 0) {
       const drop = Math.min(rs, (decel + rs * 0.12) * dt);
@@ -758,28 +809,27 @@ export function stepBall(sim: Sim, world: World, dt = DT) {
   sim.x += sim.vx * dt;
   sim.y += sim.vy * dt;
 
-  // Walls, then everything round.
   let hit = 0;
   for (const s of nearSegs(world, sim.x, sim.y)) {
     if (s.h <= sim.z) continue;
     if (ghost && !s.rim) continue;
-    // Bouncy: walls fire the ball back harder than it came in.
     hit = Math.max(hit, collide(sim, s.a, s.b, s.r, sim.shot === "bouncy" && !s.rim ? 1.35 : sim.shot === "bouncy" ? 1.15 : s.bounce));
   }
   if (hit > 1) sim.events.push({ type: "bounce", x: sim.x, y: sim.y, power: Math.min(1, hit / MAX_SPEED) });
   c.bumpers.forEach((b, i) => {
     if (sim.z > 0.8 || sim.gone[i] || sim.shot === "smoke") return;
-    const dx = sim.x - b.at.x, dy = sim.y - b.at.y;
+    const dx = sim.x - b.at.x,
+      dy = sim.y - b.at.y;
     const d = hyp(dx, dy);
     const R = b.r + sim.r;
     if (d < R && d > 0 && sim.shot === "jumbo") {
-      // Too big to bounce: it flattens the bumper and barely slows down.
       sim.gone[i] = true;
       sim.vx *= 0.85;
       sim.vy *= 0.85;
       sim.events.push({ type: "smash", x: b.at.x, y: b.at.y, power: 1 });
     } else if (d < R && d > 0) {
-      const nx = dx / d, ny = dy / d;
+      const nx = dx / d,
+        ny = dy / d;
       sim.x = b.at.x + nx * R;
       sim.y = b.at.y + ny * R;
       const vn = sim.vx * nx + sim.vy * ny;
@@ -794,7 +844,6 @@ export function stepBall(sim: Sim, world: World, dt = DT) {
     }
   });
 
-  // Landmines.
   for (const m of sim.mines) {
     if (!m.live || sim.z > TOUCHING || sim.shot === "smoke" || hyp(sim.x - m.x, sim.y - m.y) > sim.r + 0.55) continue;
     m.live = false;
@@ -804,11 +853,13 @@ export function stepBall(sim: Sim, world: World, dt = DT) {
 
   for (const pr of c.props) {
     if (!pr.solid || pr.h <= sim.z || ghost) continue;
-    const dx = sim.x - pr.at.x, dy = sim.y - pr.at.y;
+    const dx = sim.x - pr.at.x,
+      dy = sim.y - pr.at.y;
     const d = hyp(dx, dy);
     const R = pr.r + sim.r;
     if (d < R && d > 0) {
-      const nx = dx / d, ny = dy / d;
+      const nx = dx / d,
+        ny = dy / d;
       sim.x = pr.at.x + nx * R;
       sim.y = pr.at.y + ny * R;
       const vn = sim.vx * nx + sim.vy * ny;
@@ -820,14 +871,13 @@ export function stepBall(sim: Sim, world: World, dt = DT) {
     }
   }
 
-  // Nothing gets faster than this, however many bouncy walls it meets.
-  const sp = hyp(sim.vx, sim.vy), cap = MAX_SPEED * 2;
+  const sp = hyp(sim.vx, sim.vy),
+    cap = MAX_SPEED * 2;
   if (sp > cap) {
     sim.vx *= cap / sp;
     sim.vy *= cap / sp;
   }
 
-  // Mystery boxes.
   c.boxes.forEach((b, i) => {
     if (sim.boxes[i] || sim.z > TOUCHING || len(sim.x - b.x, sim.y - b.y) > 1.1) return;
     if (sim.bag.length >= BAG_SIZE) return;
@@ -839,7 +889,6 @@ export function stepBall(sim: Sim, world: World, dt = DT) {
     sim.events.push({ type: "box", x: b.x, y: b.y, power: 1, item });
   });
 
-  // Portals, both ways. A ball that just came out of one can't go straight back in.
   if (sim.portalLock >= 0) {
     const pt = portalPoint(c, sim.portalLock);
     if (len(sim.x - pt.x, sim.y - pt.y) > 1.1) sim.portalLock = -1;
@@ -860,11 +909,11 @@ export function stepBall(sim: Sim, world: World, dt = DT) {
       }
     }
 
-  // The cup: slow enough and it drops; too fast and it lips out. On a map with several, the nearest.
   const cupR = CUP_R * sim.cupScale;
   let cup = c.cup;
   for (const k of c.cups ?? []) if (hyp(k.x - sim.x, k.y - sim.y) < hyp(cup.x - sim.x, cup.y - sim.y)) cup = k;
-  const dx = cup.x - sim.x, dy = cup.y - sim.y;
+  const dx = cup.x - sim.x,
+    dy = cup.y - sim.y;
   const d = hyp(dx, dy);
   const speed = hyp(sim.vx, sim.vy);
   if (sim.shot === "magnet" && d < 4.5 && d > 0.01 && sim.z < 0.2) {
@@ -887,11 +936,12 @@ export function stepBall(sim: Sim, world: World, dt = DT) {
       return;
     }
     if (sim.lipT === 0) {
-      // Rattle round the rim: knocked sideways and slowed.
       const cross = Math.sign(dx * sim.vy - dy * sim.vx) || 1;
       const turn = cross * 0.35;
-      const cs = dcos(turn), sn = dsin(turn);
-      const nvx = (sim.vx * cs - sim.vy * sn) * 0.78, nvy = (sim.vx * sn + sim.vy * cs) * 0.78;
+      const cs = dcos(turn),
+        sn = dsin(turn);
+      const nvx = (sim.vx * cs - sim.vy * sn) * 0.78,
+        nvy = (sim.vx * sn + sim.vy * cs) * 0.78;
       sim.vx = nvx;
       sim.vy = nvy;
       sim.lipT = 0.25;
@@ -911,21 +961,23 @@ export function portalPoint(c: Course, i: number): Vec {
   return i & 1 ? p.b : p.a;
 }
 
-// The aim line: straight out to the first wall, then a short bounce off it.
 export function preview(world: World, from: Vec, angle: number, power: number, ghost = false): Vec[] {
   const pts: Vec[] = [{ ...from }];
-  let dx = dcos(angle), dy = dsin(angle);
+  let dx = dcos(angle),
+    dy = dsin(angle);
   let left = 2.5 + power * 9;
   let p = { ...from };
   let bounces = 0;
   const stepLen = 0.06;
   while (left > 0) {
-    const nx = p.x + dx * stepLen, ny = p.y + dy * stepLen;
+    const nx = p.x + dx * stepLen,
+      ny = p.y + dy * stepLen;
     let hitN: Vec | null = null;
     for (const s of nearSegs(world, nx, ny)) {
       if (ghost && !s.rim) continue;
       const q = closest({ x: nx, y: ny }, s.a, s.b);
-      const ex = nx - q.x, ey = ny - q.y;
+      const ex = nx - q.x,
+        ey = ny - q.y;
       const d = hyp(ex, ey);
       if (d < s.r + BALL_R) {
         hitN = d > 0 ? { x: ex / d, y: ey / d } : { x: -dy, y: dx };
@@ -948,7 +1000,15 @@ export function preview(world: World, from: Vec, angle: number, power: number, g
   return pts;
 }
 
-export const SCORE_NAMES: Record<number, string> = { [-3]: "Albatross", [-2]: "Eagle", [-1]: "Birdie", 0: "Par", 1: "Bogey", 2: "Double bogey", 3: "Triple bogey" };
+export const SCORE_NAMES: Record<number, string> = {
+  [-3]: "Albatross",
+  [-2]: "Eagle",
+  [-1]: "Birdie",
+  0: "Par",
+  1: "Bogey",
+  2: "Double bogey",
+  3: "Triple bogey",
+};
 export function scoreName(strokes: number, par: number) {
   if (strokes === 1) return "Hole in one";
   return SCORE_NAMES[strokes - par] ?? `+${strokes - par}`;

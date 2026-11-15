@@ -1,6 +1,15 @@
-import { test as base, devices, expect, type BrowserContext, type BrowserContextOptions, type Page } from "@playwright/test";
+import { test as base, devices, expect, type BrowserContext, type BrowserContextOptions, type Frame, type Page } from "@playwright/test";
 import { ConvexHttpClient } from "convex/browser";
-import { anyApi, type FunctionReference } from "convex/server";
+import {
+  anyApi,
+  getFunctionName,
+  makeFunctionReference,
+  type FunctionArgs,
+  type FunctionReference,
+  type FunctionReturnType,
+  type FunctionType,
+  type FunctionVisibility,
+} from "convex/server";
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -10,10 +19,7 @@ const STATE_FILE = path.resolve("e2e/.state/backend.json");
 type State = { url: string; adminKey: string };
 const state = (): State => JSON.parse(readFileSync(STATE_FILE, "utf8"));
 
-// --- The admin client -----------------------------------------------------------------------------
-
-// Every call on its own connection. Pooled keep-alive sockets were sometimes closed by the backend just
-// as a call went out on one, which failed the call with "fetch failed" though the backend was fine.
+// platform: the backend sometimes closed a pooled keep-alive socket just as a call went out on it ("fetch failed"), so every call gets its own connection.
 const closingFetch: typeof fetch = (input, init) => {
   const headers = new Headers(init?.headers);
   headers.set("connection", "close");
@@ -21,7 +27,6 @@ const closingFetch: typeof fetch = (input, init) => {
 };
 
 const failedToFetch = (e: unknown) => e instanceof Error && /fetch failed/.test(e.message);
-// Only a call that never reached the backend is safe to send again whatever it does.
 const neverSent = (e: unknown) => {
   const code = (e as { cause?: { code?: string } }).cause?.code;
   return failedToFetch(e) && (code === "ECONNREFUSED" || code === "UND_ERR_CONNECT_TIMEOUT");
@@ -37,28 +42,25 @@ async function retrying<T>(call: () => Promise<T>, again: (e: unknown) => boolea
   }
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-export type Admin = {
-  query(fn: FunctionReference<"query", any>, args?: Record<string, unknown>): Promise<any>;
-  mutation(fn: FunctionReference<"mutation", any>, args?: Record<string, unknown>): Promise<any>;
-  action(fn: FunctionReference<"action", any>, args?: Record<string, unknown>): Promise<any>;
-};
-/* eslint-enable @typescript-eslint/no-explicit-any */
+type Ref<K extends FunctionType> = FunctionReference<K, FunctionVisibility>;
+type Call<K extends FunctionType> = <F extends Ref<K>>(fn: F, args?: FunctionArgs<F>) => Promise<FunctionReturnType<F>>;
+export type Admin = { query: Call<"query">; mutation: Call<"mutation">; action: Call<"action"> };
+
+// platform: ConvexHttpClient's types only take public functions, though admin auth reaches internal ones; calling by name needs no cast.
+const byName = <K extends FunctionType, F extends Ref<K>>(fn: F) =>
+  makeFunctionReference<K, FunctionArgs<F>, FunctionReturnType<F>>(getFunctionName(fn));
 
 let cached: { url: string; admin: Admin } | null = null;
 
-// The throwaway backend with its admin key, which can call internal functions (convex/testing.ts and
-// the sidecar's). One client for the whole run. Queries are retried once if the request fails; mutations
-// and actions only when it never got out, since running one twice isn't always harmless.
 export function admin(): Admin {
   const { url, adminKey } = state();
   if (cached?.url === url) return cached.admin;
   const http = new ConvexHttpClient(url, { fetch: closingFetch });
   (http as unknown as { setAdminAuth: (k: string) => void }).setAdminAuth(adminKey);
   const client: Admin = {
-    query: (fn, args = {}) => retrying(() => http.query(fn, args), failedToFetch),
-    mutation: (fn, args = {}) => retrying(() => http.mutation(fn, args), neverSent),
-    action: (fn, args = {}) => retrying(() => http.action(fn, args), neverSent),
+    query: (fn, args) => retrying(() => http.query(byName<"query", typeof fn>(fn), args ?? {}), failedToFetch),
+    mutation: (fn, args) => retrying(() => http.mutation(byName<"mutation", typeof fn>(fn), args ?? {}), neverSent),
+    action: (fn, args) => retrying(() => http.action(byName<"action", typeof fn>(fn), args ?? {}), neverSent),
   };
   cached = { url, admin: client };
   return client;
@@ -66,7 +68,6 @@ export function admin(): Admin {
 
 export const getMatch = (id: string) => admin().query(anyApi.testing.getMatch, { id });
 
-// The match a game screen (/chess/:id, /scrabble/:id?accept=1...) is showing.
 export const matchIdOf = (page: Page) => new URL(page.url()).pathname.split("/")[2];
 
 export type Player = { userId: string; token: string; refreshToken: string; name: string };
@@ -76,28 +77,22 @@ export async function createPlayer(name: string, profile: Record<string, unknown
   return { ...p, name };
 }
 
-// --- Phones -------------------------------------------------------------------------------------
-
 export type PhoneOptions = {
   installed?: boolean;
   player?: Player;
-  // "default" leaves notifications off; "granted" also fakes a working push subscription.
   notifications?: "default" | "granted" | "denied";
   colorScheme?: "light" | "dark";
-  // A push subscription this phone already has (and the server knows about): push is on from the start.
   pushEndpoint?: string;
 };
 
-// An iPhone-sized Chromium page that looks like the installed PWA, optionally signed in.
 export async function phone(context: BrowserContext, opts: PhoneOptions = {}): Promise<Page> {
+  await watchForNestedCards(context);
   const { url } = state();
   const ns = url.replace(/[^a-zA-Z0-9]/g, "");
   await context.addInitScript(
     ([installed, ns, token, refresh, notifications, endpoint]) => {
       if (installed) Object.defineProperty(navigator, "standalone", { get: () => true });
-      // src/sound.ts logs every effect it's asked to play here, so tests can hear them.
       (window as unknown as { __sfx: string[] }).__sfx = [];
-      // Once per tab, so a reload (or signing out) keeps what the app did with it since.
       if (!sessionStorage.getItem("e2e-seeded")) {
         if (token) {
           localStorage.setItem(`__convexAuthJWT_${ns}`, token);
@@ -110,18 +105,32 @@ export async function phone(context: BrowserContext, opts: PhoneOptions = {}): P
         sessionStorage.setItem("e2e-seeded", "1");
       }
 
-      // Convex's traffic on this page, so tests can wait until every query on screen has its answer and
-      // nothing's in flight instead of guessing how long that takes (see convexIdle).
       type Net = { open: number; last: number; sent: number; acked: number; inflight: Set<string>; chunks: string[] };
       const net: Net = { open: 0, last: 0, sent: 0, acked: 0, inflight: new Set(), chunks: [] };
       (window as unknown as { __convexNet: Net }).__convexNet = net;
-      const onServer = (msg: { type?: string; requestId?: string; endVersion?: { querySet: number }; chunk?: string; partNumber?: number; totalParts?: number }) => {
+      const parsed = (data: unknown) => {
+        if (typeof data !== "string") return null;
+        try {
+          return JSON.parse(data);
+        } catch {
+          return null;
+        }
+      };
+      const onServer = (msg: {
+        type?: string;
+        requestId?: string;
+        endVersion?: { querySet: number };
+        chunk?: string;
+        partNumber?: number;
+        totalParts?: number;
+      }) => {
         if (msg.type === "TransitionChunk") {
           net.chunks[msg.partNumber!] = msg.chunk!;
           if (net.chunks.filter((c) => c !== undefined).length < msg.totalParts!) return;
-          const whole = net.chunks.join("");
+          const whole = parsed(net.chunks.join(""));
           net.chunks = [];
-          return onServer(JSON.parse(whole));
+          if (whole) onServer(whole);
+          return;
         }
         if (msg.type === "Transition") net.acked = Math.max(net.acked, msg.endVersion?.querySet ?? 0);
         if (msg.type === "MutationResponse" || msg.type === "ActionResponse") net.inflight.delete(String(msg.requestId));
@@ -133,30 +142,25 @@ export async function phone(context: BrowserContext, opts: PhoneOptions = {}): P
           this.addEventListener("open", () => void net.open++);
           this.addEventListener("close", () => {
             net.open--;
-            // A new connection starts its queries over from version 0, and resends what was in flight.
             net.sent = net.acked = 0;
             net.inflight.clear();
           });
           this.addEventListener("message", (e) => {
             net.last = performance.now();
-            try {
-              if (typeof e.data === "string") onServer(JSON.parse(e.data));
-            } catch {}
+            const msg = parsed(e.data);
+            if (msg) onServer(msg);
           });
         }
         send(data: string | ArrayBufferLike | Blob | ArrayBufferView) {
-          try {
-            const msg = typeof data === "string" ? JSON.parse(data) : null;
-            if (msg?.type === "ModifyQuerySet") net.sent = Math.max(net.sent, msg.newVersion);
-            if (msg?.type === "Mutation" || msg?.type === "Action") net.inflight.add(String(msg.requestId));
-          } catch {}
+          const msg = parsed(data);
+          if (msg?.type === "ModifyQuerySet") net.sent = Math.max(net.sent, msg.newVersion);
+          if (msg?.type === "Mutation" || msg?.type === "Action") net.inflight.add(String(msg.requestId));
           super.send(data);
         }
       }
       window.WebSocket = Tracked as unknown as typeof WebSocket;
 
-      // Headless Chromium has no push service, so stand in a fake one. Like a real phone, the
-      // subscription and permission survive reloads.
+      // platform: headless Chromium has no push service, so a fake one stands in, keeping its subscription and permission across reloads like a phone.
       let permission = (localStorage.getItem("e2e-push-permission") ?? notifications) as NotificationPermission;
       const makeSub = (endpoint: string) =>
         ({
@@ -193,34 +197,47 @@ export async function phone(context: BrowserContext, opts: PhoneOptions = {}): P
           subscribe,
         },
       };
-      // An event target, so tests can deliver the messages public/sw.js posts on a notification tap.
       const sw = Object.assign(new EventTarget(), { ready: Promise.resolve(reg), register: async () => reg, startMessages() {} });
       Object.defineProperty(navigator, "serviceWorker", { value: sw, configurable: true });
     },
-    [opts.installed ?? true, ns, opts.player?.token ?? "", opts.player?.refreshToken ?? "", opts.notifications ?? "default", opts.pushEndpoint ?? ""] as const,
+    [
+      opts.installed ?? true,
+      ns,
+      opts.player?.token ?? "",
+      opts.player?.refreshToken ?? "",
+      opts.notifications ?? "default",
+      opts.pushEndpoint ?? "",
+    ] as const,
   );
   return await context.newPage();
 }
 
 export const iPhone = { ...devices["iPhone 15 Pro"], browserName: "chromium" as const, defaultBrowserType: "chromium" as const };
-// What every phone after a test's first gets (the first is the test's own context, from the config).
 const OTHER_PHONE: BrowserContextOptions = { viewport: { width: 393, height: 852 }, isMobile: true, hasTouch: true };
 
 export type OpenOptions = PhoneOptions & {
-  // "on": push is already on for this phone, so games are unlocked from the first screen. Only the
-  // tests about the gate itself turn it on through the UI (enablePush).
   push?: "on";
-  // Plays every animation's end at once: the poker table jumps straight to where the show ends.
   reducedMotion?: boolean;
-  // Its own browser context with these options (a different phone or browser).
   context?: BrowserContextOptions;
 };
 
 export type Phones = {
-  // A phone for this test. The first one is the test's own context; each after it gets its own, and all
-  // of them close when the test ends, however it ends.
   open(opts?: OpenOptions): Promise<Page>;
+  context(opts: BrowserContextOptions): Promise<BrowserContext>;
 };
+
+const OCC = /OptimisticConcurrencyControlFailure/;
+
+async function resetDatabase() {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      if ((await admin().mutation(anyApi.testing.reset, {})).done) return;
+    } catch (error) {
+      if (attempt < 5 && OCC.test(String(error))) continue;
+      throw error;
+    }
+  }
+}
 
 async function seedPush(player: Player) {
   const endpoint = `https://push.example.com/${randomBytes(6).toString("hex")}`;
@@ -228,22 +245,19 @@ async function seedPush(player: Player) {
   return endpoint;
 }
 
-// Turns push on the way a player would; game screens stay locked until it's on.
 export async function enablePush(page: Page) {
   await page.goto("/");
   await page.getByRole("button", { name: "Turn on notifications" }).click();
   await expect(page.getByText("Turn on notifications to play")).toHaveCount(0);
 }
 
-// --- Waiting for the screen ---------------------------------------------------------------------
-
-// Every query the page has asked Convex for has its answer, and no mutation or action is waiting on one.
 export async function convexIdle(page: Page) {
   await expect
     .poll(
       () =>
         page.evaluate(() => {
-          const n = (window as unknown as { __convexNet?: { open: number; sent: number; acked: number; inflight: Set<string> } }).__convexNet;
+          const n = (window as unknown as { __convexNet?: { open: number; sent: number; acked: number; inflight: Set<string> } })
+            .__convexNet;
           return !!n && n.open > 0 && n.acked >= n.sent && n.inflight.size === 0;
         }),
       { message: "Convex has answered everything the page asked for" },
@@ -251,18 +265,19 @@ export async function convexIdle(page: Page) {
     .toBe(true);
 }
 
-// Nothing on screen is moving: no finite animation running and every control where it was a frame
-// later. Looping ones (card frames, live dots) are left out, since they never end.
-export async function holdsStill(page: Page) {
+export async function holdsStill(page: Page | Frame) {
   await expect
     .poll(
       () =>
         page.evaluate(async () => {
           const running = document.getAnimations().some((a) => a.playState === "running" && a.effect?.getTiming().iterations !== Infinity);
-          const layout = () => [...document.querySelectorAll("button, a, h1, h2, [role=img]")].map((el) => {
-            const r = el.getBoundingClientRect();
-            return `${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.width)},${Math.round(r.height)}`;
-          }).join(" ");
+          const layout = () =>
+            [...document.querySelectorAll("button, a, h1, h2, [role=img]")]
+              .map((el) => {
+                const r = el.getBoundingClientRect();
+                return `${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.width)},${Math.round(r.height)}`;
+              })
+              .join(" ");
           const before = layout();
           await new Promise((r) => setTimeout(r, 120));
           return !running && layout() === before;
@@ -272,40 +287,90 @@ export async function holdsStill(page: Page) {
     .toBe(true);
 }
 
-// A tab or screen that has finished arriving: its title is up, nothing's loading, Convex has answered,
-// and it's stopped moving.
 export async function ready(page: Page) {
   await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
   await expect(page.locator("[aria-busy=true], [data-slot=skeleton]")).toHaveCount(0);
   await convexIdle(page);
   await holdsStill(page);
+  expect([...(nestedCards.get(page.context()) ?? []), ...(await nestedCardsOn(page))], NESTED_CARDS).toEqual([]);
 }
 
-// The screen on top of the stack. While one slides away it's still drawn (and found by text and CSS
-// locators), but it's inert: role locators already skip it, and this skips it for the rest.
-export const onScreen = (page: Page) => page.locator("[data-screen]:not([inert])");
+export async function readyForShot(page: Page) {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => {
+          await document.fonts.ready;
+          return [...document.images].every((img) => img.complete || img.loading === "lazy");
+        }),
+      { message: "fonts and images have loaded" },
+    )
+    .toBe(true);
+  await holdsStill(page);
+}
 
-// --- Games --------------------------------------------------------------------------------------
+const nestedCards = new Map<BrowserContext, string[]>();
+const NESTED_CARDS = "a card sits inside another card (AGENTS.md: never put cards inside cards)";
+
+type NestingWindow = { __nestedCards: () => string[]; __nestedCard: (report: string) => Promise<void> };
+
+async function nestedCardsOn(page: Page) {
+  const reports = await page.evaluate(() => (window as unknown as Partial<NestingWindow>).__nestedCards?.() ?? []);
+  const path = new URL(page.url()).pathname;
+  return reports.map((r) => `${r} on ${path}`);
+}
+
+async function watchForNestedCards(context: BrowserContext) {
+  if (nestedCards.has(context)) return;
+  const found: string[] = [];
+  nestedCards.set(context, found);
+  await context.exposeBinding("__nestedCard", ({ page }, report: string) => {
+    const where = `${report} on ${new URL(page.url()).pathname}`;
+    if (!found.includes(where)) found.push(where);
+  });
+  await context.addInitScript(() => {
+    const CARD = '[data-slot="card"]';
+    const named = (el: Element) => {
+      const label = el.getAttribute("aria-label") ?? (el.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 40);
+      return `<${el.tagName.toLowerCase()} class="${String(el.getAttribute("class") ?? "").slice(0, 60)}"> "${label}"`;
+    };
+    const nested = () => [...document.querySelectorAll(`${CARD} ${CARD}`)];
+    const describe = (inner: Element) => `${named(inner.parentElement!.closest(CARD)!)} holds the card ${named(inner)}`;
+    const w = window as unknown as NestingWindow;
+    w.__nestedCards = () => nested().map(describe);
+    const reported = new WeakSet<Element>();
+    const addsElements = (records: MutationRecord[]) =>
+      records.some((r) => r.type === "attributes" || [...r.addedNodes].some((n) => n.nodeType === Node.ELEMENT_NODE));
+    new MutationObserver((records) => {
+      if (!addsElements(records)) return;
+      for (const inner of nested()) {
+        if (reported.has(inner)) continue;
+        reported.add(inner);
+        w.__nestedCard(describe(inner)).catch(() => {});
+      }
+    }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-slot"] });
+  });
+}
+
+export const onScreen = (page: Page) => page.locator("[data-screen]:not([inert])");
 
 export async function resign(page: Page) {
   await page.getByRole("button", { name: "Resign" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Resign" }).click();
 }
 
-// The host opens a lobby for a game the host starts (Scrabble, Poker), choosing settings on the mode
-// page first: radio group name to option name, as on the screen.
 export async function openLobby(host: Page, game: string, mode: string, settings: Record<string, string> = {}) {
   await host.goto(`/${game}/mode/${mode}`);
   if (Object.keys(settings).length) {
     await host.getByRole("button", { name: "Settings" }).click();
-    for (const [group, option] of Object.entries(settings)) await host.getByRole("radiogroup", { name: group }).getByRole("radio", { name: option, exact: true }).click();
+    for (const [group, option] of Object.entries(settings))
+      await host.getByRole("radiogroup", { name: group }).getByRole("radio", { name: option, exact: true }).click();
   }
   await host.getByRole("button", { name: "Open a game" }).click();
   await expect(host.getByRole("heading", { name: "Waiting for players" })).toBeVisible();
   return matchIdOf(host);
 }
 
-// Everyone else takes a seat through the link a push carries, then the host starts the game.
 export async function fillLobby(host: Page, guests: Page[]) {
   const id = matchIdOf(host);
   const game = new URL(host.url()).pathname.split("/")[1];
@@ -316,24 +381,25 @@ export async function fillLobby(host: Page, guests: Page[]) {
   await host.getByRole("button", { name: `Start with ${guests.length + 1}` }).click();
 }
 
-// A real-time chess game already under way on two phones, the countdown over. Fast settings make a test
-// that has to wait out travel and cooldowns quicker (Cooldown and Piece speed, as in convex/modes.ts).
 export async function realtimePair(phones: Phones, settings?: { cooldown?: number; speed?: number }) {
   const [shlok, chris] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
-  const id: string = await admin().action(anyApi.testing.startMatch, { mode: "chess:realtime", a: shlok.userId, b: chris.userId, settings });
-  // startMatch seats its first player as white.
+  const id: string = await admin().action(anyApi.testing.startMatch, {
+    mode: "chess:realtime",
+    a: shlok.userId,
+    b: chris.userId,
+    settings,
+  });
   const [white, black] = await Promise.all([phones.open({ player: shlok, push: "on" }), phones.open({ player: chris, push: "on" })]);
   await Promise.all([white.goto(`/chess/${id}`), black.goto(`/chess/${id}`)]);
-  for (const p of [white, black]) await expect(p.getByRole("grid", { name: "Real-time chess board" })).toHaveAttribute("data-playing", "true", { timeout: 15_000 });
+  for (const p of [white, black])
+    await expect(p.getByRole("grid", { name: "Real-time chess board" })).toHaveAttribute("data-playing", "true", { timeout: 15_000 });
   return { id, white, black, whitePlayer: shlok, blackPlayer: chris };
 }
 
-// Polls until the value stops changing (the same over `window` ms), and returns it: for counting what a
-// burst of taps made once the last of them has landed.
 export async function settled<T>(read: () => Promise<T>, window = 600): Promise<T> {
   let last = JSON.stringify(await read());
   let since = Date.now();
-  for (const end = Date.now() + 10_000; Date.now() < end; ) {
+  for (const end = Date.now() + 10_000; Date.now() < end;) {
     await new Promise((r) => setTimeout(r, 150));
     const value = await read();
     const now = JSON.stringify(value);
@@ -343,34 +409,37 @@ export async function settled<T>(read: () => Promise<T>, window = 600): Promise<
   throw new Error(`Never settled: ${last}`);
 }
 
-// --- The test -----------------------------------------------------------------------------------
-
-export const test = base.extend<{ resetDb: void; phones: Phones }>({
-  resetDb: [
-    async ({}, use) => {
-      while (!(await admin().mutation(anyApi.testing.reset, {})).done);
-      await use();
+export const test = base.extend<{ phones: Phones }>({
+  phones: [
+    async ({ browser, context }, use) => {
+      await resetDatabase();
+      const owned: BrowserContext[] = [];
+      let first = true;
+      await use({
+        async open(opts = {}) {
+          let ctx = context;
+          if (!first || opts.context) {
+            ctx = await browser.newContext({ ...OTHER_PHONE, ...opts.context });
+            owned.push(ctx);
+          }
+          if (!opts.context) first = false;
+          const endpoint = opts.push === "on" ? await seedPush(opts.player!) : undefined;
+          const page = await phone(ctx, { notifications: opts.push === "on" ? "granted" : undefined, ...opts, pushEndpoint: endpoint });
+          if (opts.reducedMotion) await page.emulateMedia({ reducedMotion: "reduce" });
+          return page;
+        },
+        async context(opts) {
+          const ctx = await browser.newContext(opts);
+          owned.push(ctx);
+          return ctx;
+        },
+      });
+      const nested = [...nestedCards.values()].flat();
+      nestedCards.clear();
+      await Promise.all(owned.map((c) => c.close().catch(() => {})));
+      expect(nested, NESTED_CARDS).toEqual([]);
     },
     { auto: true },
   ],
-  phones: async ({ browser, context }, use) => {
-    const owned: BrowserContext[] = [];
-    let first = true;
-    await use({
-      async open(opts = {}) {
-        let ctx = context;
-        if (!first || opts.context) {
-          ctx = await browser.newContext({ ...OTHER_PHONE, ...opts.context });
-          owned.push(ctx);
-        }
-        if (!opts.context) first = false;
-        const endpoint = opts.push === "on" ? await seedPush(opts.player!) : undefined;
-        const page = await phone(ctx, { notifications: opts.push === "on" ? "granted" : undefined, ...opts, pushEndpoint: endpoint });
-        if (opts.reducedMotion) await page.emulateMedia({ reducedMotion: "reduce" });
-        return page;
-      },
-    });
-    await Promise.all(owned.map((c) => c.close().catch(() => {})));
-  },
 });
 export { expect };

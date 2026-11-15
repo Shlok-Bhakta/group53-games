@@ -1,5 +1,3 @@
-// `dekit start test/smoke`: is everything dekit started really working? Two tabs of one phone browser sign in
-// as two players without Discord and get past the gates, and the link previews and the sidecar answer.
 import { devices, chromium } from "@playwright/test";
 import { ConvexHttpClient } from "convex/browser";
 
@@ -23,8 +21,10 @@ try {
   const ada = await signIn("Ada");
   const grace = await signIn("Grace");
 
-  // Each tab has to still be its own player once the other has signed in.
-  for (const [page, name] of [[ada, "Ada"], [grace, "Grace"]]) {
+  for (const [page, name] of [
+    [ada, "Ada"],
+    [grace, "Grace"],
+  ]) {
     await page.goto(`${WEB}/you`);
     await page.getByText(name, { exact: true }).first().waitFor();
     pass(`that tab is still ${name}`);
@@ -44,7 +44,7 @@ try {
   if (!card.ok) throw new Error(`og couldn't render a card: ${card.status}`);
   pass("og renders link previews");
 
-  // Prices need Yahoo, which isn't ours to promise, so nothing fails over them.
+  // platform: prices need Yahoo, which isn't ours to promise, so a missing price only warns.
   const convex = new ConvexHttpClient(CONVEX);
   const end = Date.now() + 60_000;
   let quotes = 0;
@@ -52,7 +52,9 @@ try {
     quotes = (await convex.query("stonks:board", {})).rows.length;
     if (quotes === 0) await new Promise((r) => setTimeout(r, 3000));
   }
-  console.log(quotes ? `✔ the sidecar has written ${quotes} prices` : "⚠ no prices yet: is the stonks task still building, or Yahoo unreachable?");
+  console.log(
+    quotes ? `✔ the sidecar has written ${quotes} prices` : "⚠ no prices yet: is the stonks task still building, or Yahoo unreachable?",
+  );
   console.log("\nAll good.");
 } catch (err) {
   console.error(`\n✘ ${err.message}`);

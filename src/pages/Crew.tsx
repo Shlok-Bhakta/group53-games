@@ -13,7 +13,6 @@ import { Sheet } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { lastSeenText, usePresence } from "@/presence";
 
-// The people: everyone's card, whoever's on first.
 export function Crew() {
   const me = useQuery(api.users.me);
   const crew = useQuery(api.profiles.crew);
@@ -22,7 +21,6 @@ export function Crew() {
   const [openId, setOpenId] = useState<Id<"users"> | null>(null);
   const show = (id: Id<"users">) => (id === me?._id ? navigate("/you") : setOpenId(id));
 
-  // Online first, then you, then join order.
   const sorted =
     crew &&
     [...crew].sort(
@@ -48,13 +46,9 @@ export function Crew() {
           <ul className="grid grid-cols-2 gap-3">
             {sorted.map((p) => (
               <motion.li key={p._id} layout transition={{ type: "spring", bounce: 0, duration: 0.4 }}>
-                <button
-                  type="button"
-                  className="block w-full touch-manipulation rounded-lg text-left outline-none transition-transform duration-100 ease-out focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.97]"
-                  onClick={() => show(p._id)}
-                >
+                <Button variant="bare" size="card" onClick={() => show(p._id)}>
                   <PlayerCard player={p} online={isOnline(p._id)} />
-                </button>
+                </Button>
               </motion.li>
             ))}
           </ul>
@@ -65,7 +59,9 @@ export function Crew() {
         {open && (
           <div className="mx-auto w-full max-w-sm pt-3">
             <PlayerCard player={open} online={isOnline(open._id)} size="hero" />
-            <DrawerDescription className="mt-4 text-center">{lastSeenText(isOnline(open._id), byUser.get(open._id)?.lastSeen)}</DrawerDescription>
+            <DrawerDescription className="mt-4 text-center">
+              {lastSeenText(isOnline(open._id), byUser.get(open._id)?.lastSeen)}
+            </DrawerDescription>
             <Button size="xl" variant="secondary" className="mt-4 w-full" asChild>
               <Link to={`/stonks/u/${open._id}`}>
                 <ChartLineUpIcon weight="bold" /> Stonks profile

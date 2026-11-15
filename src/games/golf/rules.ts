@@ -3,7 +3,6 @@ import type { ModeKey, Settings } from "../../../convex/modes";
 const hours = (m: number) => (m === 60 ? "an hour" : m === 1440 ? "a day" : `${m / 60} hours`);
 const COURSE = ["holes generated from the seed", "Bumper Plains, made by hand", "Cold Start, made by hand on ice"];
 
-// How to play golf, with the game's settings filled in.
 export function golfRules(mode: ModeKey, s: Settings): string[] {
   const live = mode === "golf:live";
   const hits = s.collide !== 0;
@@ -20,6 +19,12 @@ export function golfRules(mode: ModeKey, s: Settings): string[] {
     hits
       ? `Balls knock into each other. Getting knocked never costs you a stroke: knocked into the water, you go back where you were.${s.mark !== 0 ? " Balls sitting close to the cup are marked, so nobody can knock them away (items still can)." : ""}`
       : "Balls roll straight through each other this game. Items still reach other players.",
-    ...(live ? [] : [s.shotTime ? `We ping you when it's your shot. Leave it ${hours(s.shotTime)} and your caddie has a go for you (never better than a putt for the cup); three in a row and they keep at it till you open the game again.` : "We ping you when it's your shot, and it waits for you, however long you take."]),
+    ...(live
+      ? []
+      : [
+          s.shotTime
+            ? `We ping you when it's your shot. Leave it ${hours(s.shotTime)} and your caddie has a go for you (never better than a putt for the cup); three in a row and they keep at it till you open the game again.`
+            : "We ping you when it's your shot, and it waits for you, however long you take.",
+        ]),
   ];
 }

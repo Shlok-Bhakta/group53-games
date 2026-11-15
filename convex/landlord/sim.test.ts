@@ -4,8 +4,6 @@ import { DECKS } from "./cards";
 import { DEFAULT_RULES, POT, act, actor, alive, newGame, type Game, type MonoState, type Rules } from "./engine";
 import { botMove, spare } from "./bot";
 
-// Bots play whole games under every mix of rules, and after every action the state has to make sense.
-
 export function mulberry(seed: number) {
   let a = seed >>> 0;
   return () => {
@@ -24,7 +22,6 @@ function check(g: Game, before: MonoState) {
   };
   for (const p of s.players) if (p.cash < 0 || !Number.isFinite(p.cash)) fail("Negative cash");
   if (s.pot < 0) fail("Negative pot");
-  // Every payment event accounts for every change in cash.
   const cash = before.players.map((p) => p.cash);
   let pot = before.pot;
   for (const e of g.events) {
@@ -52,7 +49,8 @@ function check(g: Game, before: MonoState) {
       if (group.some((j) => s.props[j]!.owner !== prop.owner)) fail("Buildings without the whole group");
       if (group.some((j) => s.props[j]!.mortgaged)) fail("Buildings on a mortgaged group");
       const hs = group.map((j) => s.props[j]!.houses);
-      if (Math.max(...hs) - Math.min(...hs) > 1 && !(s.rules.short && Math.max(...hs) === 5 && Math.min(...hs) === 3)) fail(`Uneven buildings ${hs}`);
+      if (Math.max(...hs) - Math.min(...hs) > 1 && !(s.rules.short && Math.max(...hs) === 5 && Math.min(...hs) === 3))
+        fail(`Uneven buildings ${hs}`);
     }
     if (prop.owner < 0 && (prop.mortgaged || prop.houses)) fail("The bank's property is mortgaged or built on");
   }
@@ -64,11 +62,10 @@ function check(g: Game, before: MonoState) {
   if (s.phase.k !== "over") {
     const who = actor(s);
     if (who < 0 || s.players[who].out) fail("Waiting on nobody");
-    // A bankrupt player's turn only lasts while their properties are auctioned or their creditor pays the
-    // interest on what they got.
     if (s.players[s.current].out && s.phase.k !== "auction" && s.phase.k !== "debt") fail("An out player's turn");
     if (s.phase.k === "auction" && s.phase.leader >= 0 && !s.phase.in.includes(s.phase.leader)) fail("Auction leader dropped");
-    if (s.phase.k === "debt" && s.phase.from >= 0 && s.players[s.phase.from].cash >= s.phase.amount) fail("A debt left unpaid that could be paid");
+    if (s.phase.k === "debt" && s.phase.from >= 0 && s.players[s.phase.from].cash >= s.phase.amount)
+      fail("A debt left unpaid that could be paid");
     if (alive(s).length < 2) fail("One left and not over");
   }
   for (const t of s.trades) if (s.players[t.from].out || s.players[t.to].out) fail("A trade with someone out");
@@ -91,8 +88,6 @@ function playOut(seed: number, n: number, rules: Partial<Rules>, maxActions = 60
   let g = newGame(n, { ...DEFAULT_RULES, ...rules }, rng);
   let actions = 0;
   for (; actions < maxActions && g.s.phase.k !== "over"; actions++) {
-    // Mostly whoever the game's waiting on; sometimes someone else doing what they can any time, answering
-    // an offer, or bidding out of turn.
     const s = g.s;
     let seat = alive(s)[Math.floor(rng() * alive(s).length)];
     let a = rng() < 0.15 ? spare(s, seat, rng) : null;
@@ -130,7 +125,6 @@ describe("bots playing whole games", () => {
         const { g } = playOut(seed * 1000 + i, n, rules);
         if (g.s.phase.k === "over") finished++;
       }
-      // Bots build and trade, so most games end in the cap.
       expect(finished).toBeGreaterThan(30);
     }, 120_000);
   }

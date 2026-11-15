@@ -11,7 +11,6 @@ const KINDS = {
 } as const;
 const KIND_ORDER = ["async", "realtime"] as const;
 
-// "1v1", "4-Player", "2–8": the section heading already says async or real-time.
 const seatLabel = (mode: ModeKey) => {
   const m = MODES[mode];
   if (m.minPlayers < m.players) return `${m.minPlayers}–${m.players}`;
@@ -22,15 +21,14 @@ type Props = {
   game: string;
   art: (mode: ModeKey) => ReactNode;
   badge?: (mode: ModeKey) => string | null;
-  // My rating in the mode, and whether I've played it.
   rating?: (mode: ModeKey) => { rating: number; games: number } | null;
 };
 
-// A game's modes, grouped by kind: a heading per kind, then a row of mode cards with my Elo on each. The
-// row scrolls sideways when a kind has more than two modes. A game with one mode of each kind shows them side
-// by side, each card naming its kind. Shared by every game.
 export function ModePicker({ game, art, badge, rating }: Props) {
-  const groups = KIND_ORDER.map((kind) => ({ kind, modes: MODE_KEYS.filter((m) => MODES[m].game === game && MODES[m].kind === kind) })).filter((g) => g.modes.length);
+  const groups = KIND_ORDER.map((kind) => ({
+    kind,
+    modes: MODE_KEYS.filter((m) => MODES[m].game === game && MODES[m].kind === kind),
+  })).filter((g) => g.modes.length);
   if (groups.every((g) => g.modes.length === 1)) {
     return (
       <div className="grid grid-cols-2 gap-3">
@@ -51,7 +49,6 @@ export function ModePicker({ game, art, badge, rating }: Props) {
   return (
     <div className="flex flex-col gap-6">
       {groups.map(({ kind, modes }, gi) => {
-        // Modes that seat the same can't be told apart by seats, so every card in the row says its name.
         const titled = new Set(modes.map(seatLabel)).size < modes.length;
         return (
           <section key={kind} aria-label={KINDS[kind].title} className="flex flex-col gap-2.5">
@@ -59,7 +56,7 @@ export function ModePicker({ game, art, badge, rating }: Props) {
               {KINDS[kind].icon}
               {KINDS[kind].title}
             </h2>
-            <div className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 [scrollbar-width:none]">
+            <div className="bleed-x flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-page [scrollbar-width:none]">
               {modes.map((mode, i) => (
                 <motion.div
                   key={mode}
@@ -79,13 +76,26 @@ export function ModePicker({ game, art, badge, rating }: Props) {
   );
 }
 
-// `named` cards say their kind (async or real-time); `titled` ones their mode's name, for rows where seat
-// counts don't tell the modes apart (poker's games).
-function ModeCard({ mode, art, badge, rating, named, titled }: { mode: ModeKey; art: ReactNode; badge: string | null; rating: { rating: number; games: number } | null; named?: boolean; titled?: boolean }) {
+function ModeCard({
+  mode,
+  art,
+  badge,
+  rating,
+  named,
+  titled,
+}: {
+  mode: ModeKey;
+  art: ReactNode;
+  badge: string | null;
+  rating: { rating: number; games: number } | null;
+  named?: boolean;
+  titled?: boolean;
+}) {
   const m = MODES[mode];
   return (
     <Link
       to={modePath(mode)}
+      data-slot="card"
       className="relative flex min-h-44 flex-col gap-2 overflow-hidden rounded-lg bg-card p-3.5 transition-[transform,background-color] duration-100 ease-out active:scale-[0.97] active:bg-muted"
       aria-label={titled ? m.name : `${KINDS[m.kind].title} ${seatLabel(mode)}`}
       data-mode={mode}
@@ -100,7 +110,10 @@ function ModeCard({ mode, art, badge, rating, named, titled }: { mode: ModeKey; 
               {seatLabel(mode)}
             </span>
             {rating && (
-              <span className={cn("font-display text-body tabular-nums", rating.games === 0 && "text-muted-foreground")} aria-label={`Your rating ${rating.rating}`}>
+              <span
+                className={cn("font-display text-body tabular-nums", rating.games === 0 && "text-muted-foreground")}
+                aria-label={`Your rating ${rating.rating}`}
+              >
                 {rating.rating}
               </span>
             )}
@@ -118,7 +131,10 @@ function ModeCard({ mode, art, badge, rating, named, titled }: { mode: ModeKey; 
               {seatLabel(mode)}
             </span>
             {rating && (
-              <span className={cn("font-display text-body tabular-nums", rating.games === 0 && "text-muted-foreground")} aria-label={`Your rating ${rating.rating}`}>
+              <span
+                className={cn("font-display text-body tabular-nums", rating.games === 0 && "text-muted-foreground")}
+                aria-label={`Your rating ${rating.rating}`}
+              >
                 {rating.rating}
               </span>
             )}
@@ -128,7 +144,10 @@ function ModeCard({ mode, art, badge, rating, named, titled }: { mode: ModeKey; 
         <span className="mt-auto flex items-end justify-between gap-2">
           <span className="font-display text-heading">{seatLabel(mode)}</span>
           {rating && (
-            <span className={cn("font-display text-heading tabular-nums", rating.games === 0 && "text-muted-foreground")} aria-label={`Your rating ${rating.rating}`}>
+            <span
+              className={cn("font-display text-heading tabular-nums", rating.games === 0 && "text-muted-foreground")}
+              aria-label={`Your rating ${rating.rating}`}
+            >
               {rating.rating}
             </span>
           )}

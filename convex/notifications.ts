@@ -9,7 +9,6 @@ export const vapidPublicKey = query({
   handler: async () => process.env.VAPID_PUBLIC_KEY ?? null,
 });
 
-// Whether the server holds this device's subscription. The client compares its own endpoint against this.
 export const hasEndpoint = query({
   args: { endpoint: v.string() },
   handler: async (ctx, { endpoint }) => {

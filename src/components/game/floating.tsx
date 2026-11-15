@@ -1,11 +1,7 @@
 import { useEffect, type ComponentProps } from "react";
+import { Button, IconButton } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-// The parts of a fullscreen game (Scrabble, Golf): the game fills the screen, right up under the status bar,
-// and everything else floats over it. Buttons are round and see-through, info sits in pills, and the top bar
-// starts below the band iOS blurs under the status bar (see TopEdge).
-
-// The game runs up under the status bar, so the solid strip that normally covers that band steps aside.
 export function useFullbleed(on = true) {
   useEffect(() => {
     if (!on) return;
@@ -14,24 +10,24 @@ export function useFullbleed(on = true) {
   }, [on]);
 }
 
-// The whole screen, edge to edge, out of the page's padding. Sets fullbleed while it's up.
 export function FullscreenStage({ className, ...props }: ComponentProps<"div">) {
   useFullbleed();
-  return <div className={cn("relative -mx-4 -mb-[calc(env(safe-area-inset-bottom)+16px)] h-[100dvh] overflow-hidden bg-background", className)} {...props} />;
-}
-
-// The row floating over the top: a back button, a pill, a menu button. Only what's in it takes taps.
-export function FloatingTopBar({ className, ...props }: ComponentProps<"div">) {
-  return <div className={cn("pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top)+34px)] z-20 flex items-center gap-2 px-3", className)} {...props} />;
-}
-
-// A round 44px button over the game.
-export function FloatButton({ className, type = "button", ...props }: ComponentProps<"button">) {
   return (
-    <button
-      type={type}
+    <div
+      data-wide
+      className={cn("relative bleed-x -mb-[calc(var(--safe-bottom)+16px)] h-screen-true overflow-hidden bg-background", className)}
+      {...props}
+    />
+  );
+}
+
+export function FloatingTopBar({ className, ...props }: ComponentProps<"div">) {
+  return (
+    <div
+      data-floating-bar
       className={cn(
-        "pointer-events-auto grid size-11 shrink-0 touch-manipulation place-items-center rounded-full bg-card/90 shadow-md backdrop-blur-md transition-transform duration-100 active:scale-[0.94] disabled:opacity-50",
+        "pointer-events-none absolute inset-x-0 top-[calc(var(--safe-top)+34px)] z-20 flex items-center gap-2 px-3",
+        "phone-landscape:inset-x-auto phone-landscape:top-[max(12px,var(--safe-top))] phone-landscape:bottom-[max(12px,var(--safe-bottom))] phone-landscape:left-[max(12px,var(--safe-left))] phone-landscape:max-w-[40vw] phone-landscape:flex-col phone-landscape:items-start phone-landscape:px-0 phone-landscape:*:flex-none phone-landscape:*:last:mt-auto",
         className,
       )}
       {...props}
@@ -39,10 +35,21 @@ export function FloatButton({ className, type = "button", ...props }: ComponentP
   );
 }
 
+export function FloatButton({
+  "aria-label": label,
+  className,
+  ...props
+}: Omit<ComponentProps<typeof IconButton>, "label"> & { "aria-label": string }) {
+  return <IconButton label={label} variant="float" size="float" className={className} {...props} />;
+}
+
 export const floatPill = "pointer-events-auto flex min-h-11 min-w-0 items-center gap-2 rounded-full bg-card/90 shadow-md backdrop-blur-md";
 
-// Whatever the game says in the top bar, in a see-through pill. Give it `onClick` and it's a button.
-export function FloatPill({ className, onClick, ...props }: ComponentProps<"div"> & { onClick?: () => void }) {
-  if (onClick) return <button type="button" onClick={onClick} className={cn(floatPill, "text-left", className)} {...(props as ComponentProps<"button">)} />;
+type FloatPillProps = Pick<ComponentProps<"div">, "className" | "style" | "children" | "role" | "id" | "aria-label" | "aria-live"> & {
+  onClick?: () => void;
+};
+
+export function FloatPill({ className, onClick, ...props }: FloatPillProps) {
+  if (onClick) return <Button variant="float" size="pill" onClick={onClick} className={className} {...props} />;
   return <div className={cn(floatPill, className)} {...props} />;
 }

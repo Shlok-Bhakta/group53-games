@@ -1,0 +1,15 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": ["deploy/*.mjs", "e2e/*.{mjs,ts}", "public/sw.js", "scripts/*.{mjs,ts}", ".claude/hooks/*.mjs"],
+      "ignore": ["convex/_generated/**", "og/**"],
+      "ignoreDependencies": ["@resvg/resvg-js"]
+    },
+    "og": {
+      "entry": ["server.mjs"]
+    }
+  },
+  "ignoreBinaries": ["flock"],
+  "ignoreExportsUsedInFile": true
+}

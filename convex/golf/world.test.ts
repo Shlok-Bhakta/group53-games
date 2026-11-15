@@ -3,14 +3,33 @@ import { canShoot, compile, groundUnder, ICE_S, poseOf, rng, type Power } from "
 import { datan, datan2, dcos, dexp, dlog, dpow, dsin, hyp } from "./dmath";
 import { courseOf, worldOf } from "./holes";
 import { SANDBOX } from "./sandbox";
-import { advance, applyCmd, BOX_BACK, carryOf, cmdOrder, fingerprint, MINE_BACK, newWorld, pack, quiet, REACH, STORM, stepWorld, TPS, unpack, withPending, type Cmd, type Packed, type Pending, type WorldState } from "./world";
+import {
+  advance,
+  applyCmd,
+  BOX_BACK,
+  carryOf,
+  cmdOrder,
+  fingerprint,
+  MINE_BACK,
+  newWorld,
+  pack,
+  quiet,
+  REACH,
+  STORM,
+  stepWorld,
+  TPS,
+  unpack,
+  withPending,
+  type Cmd,
+  type Packed,
+  type Pending,
+  type WorldState,
+} from "./world";
 
 const W = compile(SANDBOX);
 const at = (s: WorldState, id: string) => s.balls.find((b) => b.id === id)!;
 const angleTo = (s: WorldState, id: string, x: number, y: number) => datan2(y - at(s, id).y, x - at(s, id).x);
 
-// A game three players play: they join, shoot about, use items. Shots are given as targets so they
-// still mean something if the map changes; the angles are worked out with the portable math.
 function script(): Cmd[] {
   let seq = 0;
   const c = (tick: number, by: string, kind: Cmd["kind"], extra: Partial<Cmd> = {}): Cmd => ({ tick, by, seq: seq++, kind, ...extra });
@@ -18,7 +37,6 @@ function script(): Cmd[] {
     c(0, "ann", "join"),
     c(5, "bo", "join"),
     c(9, "cy", "join"),
-    // Ann straight up the plaza toward the lagoon; Bo across at Ann's tee; Cy into the bumper park.
     c(20, "ann", "shot", { a: -1.5707963267948966, p: 0.62 }),
     c(24, "bo", "shot", { a: 3.0, p: 0.4 }),
     c(30, "cy", "shot", { a: -2.2, p: 0.95 }),
@@ -46,7 +64,8 @@ describe("portable math", () => {
       const x = (r() - 0.5) * 60;
       expect(Math.abs(dsin(x) - Math.sin(x))).toBeLessThan(1e-13);
       expect(Math.abs(dcos(x) - Math.cos(x))).toBeLessThan(1e-13);
-      const y = (r() - 0.5) * 40, z = (r() - 0.5) * 40;
+      const y = (r() - 0.5) * 40,
+        z = (r() - 0.5) * 40;
       expect(Math.abs(datan2(y, z) - Math.atan2(y, z))).toBeLessThan(1e-13);
       expect(Math.abs(hyp(y, z) - Math.hypot(y, z))).toBeLessThan(1e-12);
       const p = r() * 3;
@@ -65,8 +84,6 @@ describe("the world", () => {
   test("a scripted game always ends the same way (pinned)", () => {
     const s = run(TPS * 14);
     expect(s.balls.map((b) => b.id)).toEqual(["ann", "bo", "cy"]);
-    // If this changes, the physics changed: every phone must update together, and replays of old
-    // games would come out differently. Update it only on purpose.
     expect(fingerprint(s)).toBe(PINNED);
   });
 
@@ -82,7 +99,6 @@ describe("the world", () => {
     for (const cut of [25, TPS * 2 + 17, TPS * 6 + 1, TPS * 9]) {
       const s = newWorld(SANDBOX);
       advance(s, W, cut, cmds);
-      // Through JSON, the way it's stored in Convex and sent to phones.
       const back = unpack(JSON.parse(JSON.stringify(pack(s))));
       advance(back, W, TPS * 14, cmds);
       expect(fingerprint(back)).toBe(fingerprint(straight));
@@ -97,8 +113,6 @@ describe("the world", () => {
     expect(fingerprint(s)).toBe(fingerprint(run(TPS * 14)));
   });
 
-  // It takes tens of milliseconds; stepping every tick of the day would take minutes. The bound is loose so
-  // a busy machine doesn't fail it, and still catches that.
   test("an idle world catches up a day in no time", () => {
     const s = newWorld(SANDBOX);
     const t0 = performance.now();
@@ -112,7 +126,8 @@ describe("the world", () => {
     for (const id of ["a", "b", "c", "d", "e", "f", "g", "h"]) applyCmd(s, SANDBOX, { tick: 0, by: id, seq: 0, kind: "join" });
     applyCmd(s, SANDBOX, { tick: 0, by: "a", seq: 1, kind: "join" });
     expect(s.balls).toHaveLength(8);
-    for (let i = 0; i < 8; i++) for (let j = i + 1; j < 8; j++) expect(hyp(s.balls[i].x - s.balls[j].x, s.balls[i].y - s.balls[j].y)).toBeGreaterThan(1.4);
+    for (let i = 0; i < 8; i++)
+      for (let j = i + 1; j < 8; j++) expect(hyp(s.balls[i].x - s.balls[j].x, s.balls[i].y - s.balls[j].y)).toBeGreaterThan(1.4);
   });
 });
 
@@ -145,7 +160,6 @@ describe("players affect each other", () => {
     at(s, "a").bag.push("laser");
     const b = at(s, "b");
     const from = { x: b.x, y: b.y };
-    // Looked at in flight: thrown that hard it usually ends up in the sea, which puts it back.
     advance(s, W, TPS * 1.5, [{ tick: 5, by: "a", seq: 1, kind: "fire", i: 0, x: b.x + 0.5, y: b.y }]);
     expect(hyp(at(s, "b").x - from.x, at(s, "b").y - from.y)).toBeGreaterThan(1);
     expect(at(s, "a").bag).toEqual([]);
@@ -167,7 +181,6 @@ describe("the map keeps itself going", () => {
   test("an opened box comes back", () => {
     const s = newWorld(SANDBOX);
     applyCmd(s, SANDBOX, { tick: 0, by: "a", seq: 0, kind: "join" });
-    // Box 2 sits straight up the plaza from the first tee.
     const box = SANDBOX.boxes[2];
     advance(s, W, TPS * 8, [{ tick: 3, by: "a", seq: 1, kind: "shot", a: angleTo(s, "a", box.x, box.y), p: 0.45 }]);
     expect(s.boxes[2]).toBe(true);
@@ -183,13 +196,11 @@ describe("the map keeps itself going", () => {
     applyCmd(s, SANDBOX, { tick: 0, by: "a", seq: 0, kind: "join" });
     const a = at(s, "a");
     a.bag.push("mine");
-    // A mine dropped a little way up from the ball, then a shot through it.
     advance(s, W, TPS * 6, [
       { tick: 2, by: "a", seq: 1, kind: "fire", i: 0, x: a.x, y: a.y - 4 },
       { tick: 4, by: "a", seq: 2, kind: "shot", a: -Math.PI / 2, p: 0.35 },
     ]);
     expect(s.mines).toHaveLength(SANDBOX.mines!.length);
-    // One of the map's own: set it off by hand and watch it come back.
     s.mines[0].live = false;
     advance(s, W, s.tick + 2, []);
     expect(s.mines[0].back).toBeGreaterThan(s.tick);
@@ -201,7 +212,6 @@ describe("the map keeps itself going", () => {
     const s = newWorld(SANDBOX);
     applyCmd(s, SANDBOX, { tick: 0, by: "a", seq: 0, kind: "join" });
     const a = at(s, "a");
-    // Right next to the beach flag, then a tap in.
     const cup = SANDBOX.cups![2];
     Object.assign(a, { x: cup.x + 1.5, y: cup.y, rest: { x: cup.x + 1.5, y: cup.y } });
     advance(s, W, TPS * 5, [{ tick: 1, by: "a", seq: 1, kind: "shot", a: Math.PI, p: 0.22 }]);
@@ -211,7 +221,6 @@ describe("the map keeps itself going", () => {
   });
 });
 
-// Everyone on open grass on the plaza's north side, in a row, with whatever items they're given.
 function crowd(ids: string[], items: Record<string, Power[]> = {}, xs = ids.map((_, i) => 40 + i * 6)) {
   const s = newWorld(SANDBOX);
   ids.forEach((id, i) => {
@@ -232,7 +241,6 @@ describe("Super Battle Golf's items, on other players", () => {
     advance(s, W, TPS * 2, [cmd(5, "a", "use", { i: 0 })]);
     expect(at(s, "a").bag).toEqual([]);
     expect(evs(s, "missile", "a")).toHaveLength(1);
-    // b was nearest; c, further off, wasn't the target.
     expect(evs(s, "mine", "b")).toHaveLength(1);
     expect(evs(s, "mine", "c")).toHaveLength(0);
     expect(s.missiles).toEqual([]);
@@ -247,7 +255,11 @@ describe("Super Battle Golf's items, on other players", () => {
   test("an Electromagnet pops missiles and shrugs off lasers", () => {
     const s = crowd(["a", "b"], { a: ["missile", "laser"], b: ["shield"] });
     const from = { x: at(s, "b").x, y: at(s, "b").y };
-    advance(s, W, TPS * 3, [cmd(2, "b", "use", { i: 0 }), cmd(5, "a", "use", { i: 0 }), cmd(8, "a", "fire", { i: 0, x: from.x, y: from.y })]);
+    advance(s, W, TPS * 3, [
+      cmd(2, "b", "use", { i: 0 }),
+      cmd(5, "a", "use", { i: 0 }),
+      cmd(8, "a", "fire", { i: 0, x: from.x, y: from.y }),
+    ]);
     expect(evs(s, "shield", "b")).toHaveLength(1);
     expect(evs(s, "fizzle", "b")).toHaveLength(1);
     expect(moved(s, "b", from)).toBe(0);
@@ -259,10 +271,11 @@ describe("Super Battle Golf's items, on other players", () => {
       advance(s, W, TPS * 6, [cmd(2, "a", "use", { i: 0 }), cmd(10, "b", "shot", { a: 0, p: 0.3 })]);
       return { s, x: at(s, "b").x };
     };
-    const quiet = putt(false), loud = putt(true);
+    const quiet = putt(false),
+      loud = putt(true);
     expect(loud.x - 46).toBeGreaterThan((quiet.x - 46) * 1.3);
-    expect(at(loud.s, "b").rattled).toBe(false); // used up by the putt
-    expect(at(loud.s, "c").rattled).toBe(false); // too far away to hear it
+    expect(at(loud.s, "b").rattled).toBe(false);
+    expect(at(loud.s, "c").rattled).toBe(false);
   });
 
   test("a Flash Camera blinds everyone close for a moment", () => {
@@ -274,14 +287,13 @@ describe("Super Battle Golf's items, on other players", () => {
 
   test("a Dueling Pistol knocks the first ball on its line and stuns it", () => {
     const s = crowd(["a", "b", "c"], { a: ["pistol"] }, [40, 46, 52]);
-    const b0 = { x: 46, y: 61 }, c0 = { x: 52, y: 61 };
+    const b0 = { x: 46, y: 61 },
+      c0 = { x: 52, y: 61 };
     advance(s, W, 30, [cmd(2, "a", "fire", { i: 0, x: 60, y: 61 }), cmd(20, "b", "shot", { a: 3, p: 0.5 })]);
     expect(evs(s, "tracer", "a")).toHaveLength(1);
     expect(moved(s, "b", b0)).toBeGreaterThan(0);
     expect(at(s, "b").stunUntil).toBeGreaterThan(at(s, "b").t);
-    // Stunned: the putt it tried didn't happen.
     expect(at(s, "b").strokes).toBe(0);
-    // b took the bullet; c behind it didn't.
     expect(moved(s, "c", c0)).toBeLessThan(1);
   });
 
@@ -299,7 +311,6 @@ describe("Super Battle Golf's items, on other players", () => {
     expect(b.frozenUntil).toBeGreaterThan(b.t);
     expect(b.mode).toBe("aim");
     expect(b.strokes).toBe(0);
-    // Over the lagoon: ice, then water again.
     const t2 = newWorld(SANDBOX);
     applyCmd(t2, SANDBOX, { tick: 0, by: "a", seq: 0, kind: "join" });
     const a2 = at(t2, "a");
@@ -326,7 +337,6 @@ describe("Super Battle Golf's items, on other players", () => {
       advance(s, W, TPS * 6, [cmd(2, "a", "fire", { i: 0, x: 48, y: 61 }), cmd(5, "b", "shot", { a: Math.PI, p: 0.5 })]);
       return at(s, "b").x;
     };
-    // b rolls west into it and stops well short of where it would have.
     expect(roll(true)).toBeGreaterThan(roll(false) + 2);
   });
 
@@ -338,7 +348,6 @@ describe("Super Battle Golf's items, on other players", () => {
 });
 
 test("strokes never stop you putting in the open world, however many pile up", () => {
-  // A real case: splashes add a stroke after the putt, and a ball reached 10 (single player's limit).
   const s = crowd(["a"]);
   at(s, "a").strokes = 25;
   advance(s, W, TPS * 3, [cmd(1, "a", "shot", { a: 0, p: 0.3 })]);
@@ -372,7 +381,8 @@ describe("the board fights back", () => {
     delete old.patches;
     delete old.missiles;
     delete old.storms;
-    for (const b of old.balls! as Record<string, unknown>[]) for (const k of ["shieldUntil", "frozenUntil", "stunUntil", "blindUntil", "coffeeUntil", "rattled"]) delete b[k];
+    for (const b of old.balls! as Record<string, unknown>[])
+      for (const k of ["shieldUntil", "frozenUntil", "stunUntil", "blindUntil", "coffeeUntil", "rattled"]) delete b[k];
     const back = unpack(JSON.parse(JSON.stringify(old)));
     advance(back, W, TPS * 3, [cmd(1, "a", "shot", { a: 0, p: 0.3 })]);
     expect(at(back, "a").x).toBeGreaterThan(41);
@@ -411,7 +421,8 @@ describe("off the ground", () => {
 
   test("blown off the board, it sails out with no invisible wall, comes down and goes back to its last shot", () => {
     const { s, b } = flying(14, 20, 20, 0);
-    let last = b.x, turnedBack = false;
+    let last = b.x,
+      turnedBack = false;
     for (let i = 0; i < TPS && b.mode === "roll"; i++) {
       stepWorld(s, WH);
       if (b.x < last) turnedBack = true;
@@ -428,8 +439,6 @@ describe("off the ground", () => {
 
 describe("time keeps moving in a still world", () => {
   test("a moving obstacle keeps going while every ball sits still", () => {
-    // Regression: obstacles are drawn from the ball's clock, which stopped while the world was quiet, so
-    // they froze when you stopped and jumped when you shot.
     for (const key of ["cold-7", "cold-9"]) {
       const c = courseOf(key)!;
       const s = newWorld(c);
@@ -459,7 +468,6 @@ describe("time keeps moving in a still world", () => {
 
   test("the clock lands where stepping would have left it, to the last bit", () => {
     const c = courseOf("cold-7")!;
-    // A world that's quiet jumps; one kept busy by a second, rolling ball steps every tick.
     const jumped = newWorld(c);
     applyCmd(jumped, c, { tick: 0, by: "a", seq: 0, kind: "join" });
     advance(jumped, worldOf(c), 500, []);
@@ -494,7 +502,6 @@ describe("items through a run", () => {
     advance(s, WH, TPS / 2, [cmd]);
     expect(at(s, "a").mode).toBe("sunk");
     expect(carryOf(at(s, "a"))).toEqual(expect.arrayContaining(["laser", "coffee"]));
-    // Back on the tee for another go: the bag's what you came in with, and the carry's kept for the next.
     advance(s, WH, TPS * 5, [cmd]);
     expect(at(s, "a").mode).toBe("aim");
     expect(at(s, "a").bag).toEqual(["laser"]);
@@ -507,7 +514,6 @@ describe("items through a run", () => {
     Object.assign(at(s, "a"), { bag: ["laser", "coffee", "ghost"] });
     applyCmd(s, hole, { tick: 0, by: "a", seq: 1, kind: "reset" });
     expect(at(s, "a").bag).toEqual(["laser"]);
-    // Not finished, so nothing goes on.
     expect(carryOf(at(s, "a"))).toBeNull();
   });
 });
@@ -529,7 +535,6 @@ describe("a phone's own unconfirmed commands", () => {
   });
 
   test("survive the server's list not having them yet, even with a newer snapshot", () => {
-    // Older than the snapshot and unconfirmed: played from the snapshot on, not lost.
     const { cmds, pending } = withPending([], [shot(9, 7)], 20);
     expect(cmds.map((c) => c.tick)).toEqual([20]);
     expect(pending).toHaveLength(1);
@@ -556,7 +561,6 @@ describe("playing a hole", () => {
     expect(s.balls.map((b) => b.id)).toEqual(["b"]);
     join(s, "c");
     expect(at(s, "c").color).toBe(0);
-    // Leaving twice, or joining with a ball, changes nothing.
     applyCmd(s, hole, { tick: 0, by: "a", seq: 2, kind: "leave" });
     join(s, "b");
     expect(s.balls).toHaveLength(2);
@@ -565,7 +569,8 @@ describe("playing a hole", () => {
   test("a few players start on separate tees", () => {
     const s = newWorld(hole);
     for (const id of ["a", "b", "c", "d"]) join(s, id);
-    for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) expect(hyp(s.balls[i].x - s.balls[j].x, s.balls[i].y - s.balls[j].y)).toBeGreaterThan(1.4);
+    for (let i = 0; i < 4; i++)
+      for (let j = i + 1; j < 4; j++) expect(hyp(s.balls[i].x - s.balls[j].x, s.balls[i].y - s.balls[j].y)).toBeGreaterThan(1.4);
   });
 
   test("a sink reports its strokes, then it's a fresh start on the tee", () => {
@@ -605,8 +610,6 @@ describe("playing a hole", () => {
   });
 });
 
-// Ticks are whole engine steps: a second of ticks is a second on every ball's clock, whether the world
-// stepped through it (a ball rolling) or jumped it (everything still).
 test("a second of ticks is a second of world time, stepping or quiet", () => {
   const s = crowd(["a"]);
   advance(s, W, TPS, [{ tick: 0, by: "a", seq: 1, kind: "shot", a: 0, p: 0.5 }]);

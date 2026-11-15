@@ -2,9 +2,6 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
 
-// State players mustn't see, in the `secrets` table: one row per player (a rack, a hand) and one for the game
-// itself (no userId: the bag, the deck). Only ever returned to its owner.
-
 async function secretRow(ctx: QueryCtx, matchId: Id<"matches">, userId?: Id<"users">) {
   return await ctx.db
     .query("secrets")
@@ -22,7 +19,6 @@ export async function writeSecret<T>(ctx: MutationCtx, matchId: Id<"matches">, u
   else await ctx.db.insert("secrets", { matchId, userId, data });
 }
 
-// The signed-in player's own secret, for a query: null when signed out or there's none.
 export async function mySecret<T>(ctx: QueryCtx, matchId: Id<"matches">): Promise<T | null> {
   const userId = await getAuthUserId(ctx);
   if (userId === null) return null;

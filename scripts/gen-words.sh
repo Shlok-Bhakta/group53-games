@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Rebuilds convex/scrabble/words.ts from the ENABLE word list.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 src=$(mktemp)

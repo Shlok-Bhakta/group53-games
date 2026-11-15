@@ -7,9 +7,6 @@ import { cn } from "@/lib/utils";
 import { PACE, type Show } from "../show";
 import { DECK_W, FLIGHT, SPRING, toward } from "./motion";
 
-// The middle of the table: the pot's pile of chips, the deck and the board.
-
-// The chips gathered so far, a few for each seat that's put something in, in their colors.
 export function Pile({ show, match }: { show: Show; match: MatchView }) {
   const bb = show.state.bb || 1;
   const pile = show.paid.flatMap((paid, seat) => {
@@ -36,7 +33,6 @@ export function Pile({ show, match }: { show: Show; match: MatchView }) {
   );
 }
 
-// A little stack of backs, which gives a shake when it's shuffled, and where every card flies from and to.
 export function Deck({ hand, shuffling }: { hand: number; shuffling: boolean }) {
   return (
     <motion.span
@@ -69,7 +65,6 @@ export function Board({ show, rung }: { show: Show; rung: string[] }) {
     watch.observe(el);
     return () => watch.disconnect();
   }, [s.variant]);
-  // No flights for what's already out when the table first appears.
   const opened = useRef(false);
   useEffect(() => {
     opened.current = true;
@@ -81,26 +76,59 @@ export function Board({ show, rung }: { show: Show; rung: string[] }) {
       {Array.from({ length: 5 }, (_, i) => {
         const card = show.board[i];
         const best = !!card && rung.includes(card);
-        return <BoardCard key={card ? `${s.hand}${card}` : `slot${i}`} card={card} width={width} best={best} lift={ending && best} dim={ending && !best} fly={opened.current} />;
+        return (
+          <BoardCard
+            key={card ? `${s.hand}${card}` : `slot${i}`}
+            card={card}
+            width={width}
+            best={best}
+            lift={ending && best}
+            dim={ending && !best}
+            fly={opened.current}
+          />
+        );
       })}
     </div>
   );
 }
 
-function BoardCard({ card, width, best, lift, dim, fly }: { card?: string; width: number; best: boolean; lift: boolean; dim: boolean; fly: boolean }) {
+function BoardCard({
+  card,
+  width,
+  best,
+  lift,
+  dim,
+  fly,
+}: {
+  card?: string;
+  width: number;
+  best: boolean;
+  lift: boolean;
+  dim: boolean;
+  fly: boolean;
+}) {
   const ref = useRef<HTMLSpanElement>(null);
   const still = useReducedMotion();
+  const arrival = useRef({ card, fly, still });
   useLayoutEffect(() => {
+    const { card, fly, still } = arrival.current;
     if (!card || !fly || still || !ref.current) return;
     const from = toward(ref.current, "[data-deck]");
     if (!from) return;
-    const flight = animate(ref.current, { x: [from.x, 0], y: [from.y, 0], scale: [0.45, 1], rotateY: [90, 0], opacity: [0.6, 1] }, { duration: 0.4 * PACE, ease: FLIGHT, scale: { duration: 0.4 * PACE, ease: SPRING } });
+    const flight = animate(
+      ref.current,
+      { x: [from.x, 0], y: [from.y, 0], scale: [0.45, 1], rotateY: [90, 0], opacity: [0.6, 1] },
+      { duration: 0.4 * PACE, ease: FLIGHT, scale: { duration: 0.4 * PACE, ease: SPRING } },
+    );
     return () => flight.cancel();
-    // Only ever on arriving.
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
   return (
     <span ref={ref} className="block shrink-0">
-      {card ? <PlayingCard card={card} width={width} best={best} className={cn(dim && "opacity-40", lift && "-translate-y-[5px]")} /> : <PlayingCard slot width={width} />}
+      {card ? (
+        <PlayingCard card={card} width={width} best={best} className={cn(dim && "opacity-40", lift && "-translate-y-[5px]")} />
+      ) : (
+        <PlayingCard slot width={width} />
+      )}
     </span>
   );
 }

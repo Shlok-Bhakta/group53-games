@@ -202,7 +202,9 @@ const pruneSite = () => {
     .sort((a, b) => b.at - a.at);
   const kept = builds.slice(0, KEEP_BUILDS).map((b) => b.id);
   for (const { id } of builds) if (!kept.includes(id) && id !== live) fs.rmSync(path.join(BUILDS, id), { recursive: true, force: true });
-  const referenced = new Set(kept.flatMap((id) => fs.readdirSync(path.join(BUILDS, id, "assets"), { withFileTypes: true }).map((f) => f.name)));
+  const referenced = new Set(
+    kept.flatMap((id) => fs.readdirSync(path.join(BUILDS, id, "assets"), { withFileTypes: true }).map((f) => f.name)),
+  );
   const cutoff = Date.now() - KEEP_ASSETS_DAYS * 86_400_000;
   for (const name of fs.readdirSync(ASSETS)) {
     const file = path.join(ASSETS, name);

@@ -1,14 +1,14 @@
-// Helpers for end-to-end tests and screenshots. Internal (admin key only), and they refuse to run
-// unless the deployment sets ALLOW_TEST_HELPERS=1, which only the throwaway test backend does.
 import { v } from "convex/values";
+import { DEFAULT_POSITION } from "chess.js";
+import { COLORS4 } from "./chess/four/board";
 import { initialFour } from "./chess/four/classic";
 import { playTiles } from "./scrabble";
 import { play as landlordPlay } from "./landlord";
 import { addPlayer } from "./matches";
-import { botMove } from "./landlord/bot";
-import { actor as landlordActor, type MonoState } from "./landlord/engine";
+import { botMove, nextBotSeat } from "./landlord/bot";
+import type { MonoState } from "./landlord/engine";
 import { SignJWT, importPKCS8 } from "jose";
-import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { DEFAULT_PROFILE } from "./profileOptions";
 import schema from "./schema";
@@ -40,7 +40,6 @@ export const insertPlayer = internalMutation({
   },
 });
 
-// Creates a player and signs a session token for them, the same way Convex Auth does.
 export const createPlayer = internalAction({
   args: { name: v.string(), username: v.optional(v.string()), image: v.optional(v.string()), ...profileArgs },
   handler: async (ctx, args): Promise<{ userId: string; token: string; refreshToken: string }> => {
@@ -70,12 +69,13 @@ export const profileOf = internalQuery({
   args: { userId: v.id("users") },
   handler: async (ctx, { userId }) => {
     assertTestDeployment();
-    return await ctx.db.query("profiles").withIndex("by_user", (q) => q.eq("userId", userId)).unique();
+    return await ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
   },
 });
 
-// Push already on for a player's phone, without the tap: the subscription the fake push service in
-// e2e/fixtures.ts hands out, saved the way notifications:subscribe saves it.
 export const seedPush = internalMutation({
   args: { userId: v.id("users"), endpoint: v.string() },
   handler: async (ctx, { userId, endpoint }) => {
@@ -84,13 +84,16 @@ export const seedPush = internalMutation({
   },
 });
 
-// A golf world as the server has it: whether it's still ticking, and the snapshot phones start from.
-// The pushes a test player would have got, oldest first (see notify).
 export const pushesOf = internalQuery({
   args: { userId: v.id("users") },
   handler: async (ctx, { userId }) => {
     assertTestDeployment();
-    return (await ctx.db.query("testPushes").withIndex("by_user", (q) => q.eq("userId", userId)).collect()).map(({ title, body, url, tag, badge }) => ({ title, body, url, tag, badge }));
+    return (
+      await ctx.db
+        .query("testPushes")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .collect()
+    ).map(({ title, body, url, tag, badge }) => ({ title, body, url, tag, badge }));
   },
 });
 
@@ -98,9 +101,15 @@ export const golfWorld = internalQuery({
   args: { key: v.string() },
   handler: async (ctx, { key }) => {
     assertTestDeployment();
-    const w = await ctx.db.query("golfWorlds").withIndex("by_key", (q) => q.eq("key", key)).unique();
+    const w = await ctx.db
+      .query("golfWorlds")
+      .withIndex("by_key", (q) => q.eq("key", key))
+      .unique();
     if (!w) return null;
-    const snap = await ctx.db.query("golfSnapshots").withIndex("by_world", (q) => q.eq("worldId", w._id)).unique();
+    const snap = await ctx.db
+      .query("golfSnapshots")
+      .withIndex("by_world", (q) => q.eq("worldId", w._id))
+      .unique();
     return { awake: w.awake, snapshotTick: snap?.tick ?? null };
   },
 });
@@ -109,7 +118,10 @@ export const rtCommands = internalQuery({
   args: { id: v.id("matches") },
   handler: async (ctx, { id }) => {
     assertTestDeployment();
-    return await ctx.db.query("rtCommands").withIndex("by_match_tick", (q) => q.eq("matchId", id)).collect();
+    return await ctx.db
+      .query("rtCommands")
+      .withIndex("by_match_tick", (q) => q.eq("matchId", id))
+      .collect();
   },
 });
 
@@ -121,55 +133,77 @@ export const allMatches = internalQuery({
   },
 });
 
-// The mode's settings a test game is played with (only what differs from the defaults, like a lobby's).
-const settingsArg = v.optional(v.record(v.string(), v.number()));
+const changedSettingsArg = v.optional(v.record(v.string(), v.number()));
 
-// Seats two players straight into an active game, the same way a joined lobby would.
 export const startMatch = internalAction({
-  args: { mode: v.string(), a: v.id("users"), b: v.id("users"), settings: settingsArg },
+  args: { mode: v.string(), a: v.id("users"), b: v.id("users"), settings: changedSettingsArg },
   handler: async (ctx, args): Promise<string> => ctx.runMutation(internal.testing.insertActive, args),
 });
 export const insertActive = internalMutation({
-  args: { mode: v.string(), a: v.id("users"), b: v.id("users"), settings: settingsArg },
+  args: { mode: v.string(), a: v.id("users"), b: v.id("users"), settings: changedSettingsArg },
   handler: async (ctx, { mode, a, b, settings }) => {
-    if (mode !== "chess:classic" && mode !== "chess:realtime") throw new Error(`startMatch builds two-player chess only, not ${mode}: open a lobby for other games.`);
+    if (mode !== "chess:classic" && mode !== "chess:realtime")
+      throw new Error(`startMatch builds two-player chess only, not ${mode}: open a lobby for other games.`);
     assertTestDeployment();
     const now = Date.now();
-    const state = mode === "chess:realtime" ? { kind: "realtime", ready: [], startAt: null } : { kind: "classic", fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", moves: [] };
+    const state =
+      mode === "chess:realtime" ? { kind: "realtime", ready: [], startAt: null } : { kind: "classic", fen: DEFAULT_POSITION, moves: [] };
     return await ctx.db.insert("matches", {
-      mode, status: "active", createdBy: a, players: [{ userId: a, color: "w" }, { userId: b, color: "b" }], invited: [], state, ...(settings ? { settings } : {}),
-      turn: mode === "chess:classic" ? a : undefined, moveCount: 0, startedAt: now, lastActivityAt: now,
+      mode,
+      status: "active",
+      createdBy: a,
+      players: [
+        { userId: a, color: "w" },
+        { userId: b, color: "b" },
+      ],
+      invited: [],
+      state,
+      ...(settings ? { settings } : {}),
+      turn: mode === "chess:classic" ? a : undefined,
+      moveCount: 0,
+      startedAt: now,
+      lastActivityAt: now,
     });
   },
 });
 
-// A four-player game already under way, seats in color order (red, blue, yellow, green).
 export const startFour = internalAction({
-  args: { mode: v.string(), players: v.array(v.id("users")), settings: settingsArg },
+  args: { mode: v.string(), players: v.array(v.id("users")), settings: changedSettingsArg },
   handler: async (ctx, args): Promise<string> => ctx.runMutation(internal.testing.insertFour, args),
 });
 export const insertFour = internalMutation({
-  args: { mode: v.string(), players: v.array(v.id("users")), settings: settingsArg },
+  args: { mode: v.string(), players: v.array(v.id("users")), settings: changedSettingsArg },
   handler: async (ctx, { mode, players, settings }) => {
-    if (mode !== "chess:four" && mode !== "chess:realtime4") throw new Error(`startFour builds four-player chess only, not ${mode}: open a lobby for other games.`);
+    if (mode !== "chess:four" && mode !== "chess:realtime4")
+      throw new Error(`startFour builds four-player chess only, not ${mode}: open a lobby for other games.`);
     assertTestDeployment();
     const now = Date.now();
-    const colors = ["red", "blue", "yellow", "green"];
     const state = mode === "chess:realtime4" ? { kind: "realtime", ready: [], startAt: null } : initialFour();
     return await ctx.db.insert("matches", {
-      mode, status: "active", createdBy: players[0], players: players.map((userId, i) => ({ userId, color: colors[i] })), invited: [], state, ...(settings ? { settings } : {}),
-      turn: mode === "chess:four" ? players[0] : undefined, moveCount: 0, startedAt: now, lastActivityAt: now,
+      mode,
+      status: "active",
+      createdBy: players[0],
+      players: players.map((userId, i) => ({ userId, color: COLORS4[i] })),
+      invited: [],
+      state,
+      ...(settings ? { settings } : {}),
+      turn: mode === "chess:four" ? players[0] : undefined,
+      moveCount: 0,
+      startedAt: now,
+      lastActivityAt: now,
     });
   },
 });
 
-// Sets a player's Scrabble rack, so tests know what they can spell.
 export const setRack = internalMutation({
   args: { id: v.id("matches"), userId: v.id("users"), letters: v.string() },
   handler: async (ctx, { id, userId, letters }) => {
     assertTestDeployment();
     const rack = [...letters].map((letter, i) => ({ id: 1000 + i + Math.floor(Math.random() * 1e6) * 100, letter }));
-    const row = await ctx.db.query("secrets").withIndex("by_match_user", (q) => q.eq("matchId", id).eq("userId", userId)).unique();
+    const row = await ctx.db
+      .query("secrets")
+      .withIndex("by_match_user", (q) => q.eq("matchId", id).eq("userId", userId))
+      .unique();
     if (row) await ctx.db.patch(row._id, { data: { rack } });
     else await ctx.db.insert("secrets", { matchId: id, userId, data: { rack } });
     return rack;
@@ -180,21 +214,26 @@ export const rackOf = internalQuery({
   args: { id: v.id("matches"), userId: v.id("users") },
   handler: async (ctx, { id, userId }) => {
     assertTestDeployment();
-    const row = await ctx.db.query("secrets").withIndex("by_match_user", (q) => q.eq("matchId", id).eq("userId", userId)).unique();
+    const row = await ctx.db
+      .query("secrets")
+      .withIndex("by_match_user", (q) => q.eq("matchId", id).eq("userId", userId))
+      .unique();
     return row?.data.rack ?? [];
   },
 });
 
-// Plays a word for a player, for screenshots that need a board with something on it.
 export const playAs = internalMutation({
-  args: { id: v.id("matches"), userId: v.id("users"), tiles: v.array(v.object({ id: v.number(), x: v.number(), y: v.number(), letter: v.optional(v.string()) })) },
+  args: {
+    id: v.id("matches"),
+    userId: v.id("users"),
+    tiles: v.array(v.object({ id: v.number(), x: v.number(), y: v.number(), letter: v.optional(v.string()) })),
+  },
   handler: async (ctx, { id, userId, tiles }) => {
     assertTestDeployment();
     return await playTiles(ctx, id, tiles, userId);
   },
 });
 
-// Seats a test player in a waiting lobby, as if they'd tapped its link: bots joining a game a phone opened.
 export const joinAs = internalMutation({
   args: { id: v.id("matches"), userId: v.id("users") },
   handler: async (ctx, { id, userId }) => {
@@ -204,8 +243,6 @@ export const joinAs = internalMutation({
   },
 });
 
-// Landlord: bots play for everyone except `human` until the game waits on them (or `steps` moves), so a test
-// or playtest can play one phone against the bots. Returns how many moves they made.
 export const landlordBots = internalMutation({
   args: { id: v.id("matches"), human: v.optional(v.id("users")), steps: v.optional(v.number()) },
   handler: async (ctx, { id, human, steps = 200 }) => {
@@ -215,9 +252,8 @@ export const landlordBots = internalMutation({
       const m = (await ctx.db.get(id))!;
       if (m.status !== "active") break;
       const s = m.state as MonoState;
-      const offers = s.trades.filter((t) => m.players[t.to].userId !== human);
-      const seat = offers.length ? offers[0].to : landlordActor(s);
-      if (m.players[seat].userId === human) break;
+      const seat = nextBotSeat(s, (i) => m.players[i].userId === human);
+      if (seat === null) break;
       const a = botMove(s, seat, Math.random);
       if (!a) break;
       await landlordPlay(ctx, id, a, m.players[seat].userId);
@@ -226,7 +262,6 @@ export const landlordBots = internalMutation({
   },
 });
 
-// Landlord: change the public state directly, for a test's setup (who owns what, cash, where everyone is).
 export const landlordPatch = internalMutation({
   args: { id: v.id("matches"), state: v.any() },
   handler: async (ctx, { id, state }) => {
@@ -236,25 +271,29 @@ export const landlordPatch = internalMutation({
   },
 });
 
-// Every table in the schema, so a new one is never left holding the last test's rows.
-const TABLES = Object.keys(schema.tables) as TableNames[];
-// Rows deleted per call. A big table (stockSymbols, seeded with thousands of listings) takes a few calls,
-// so one transaction never runs into Convex's write limits; call it until it says it's done.
-const BUDGET = 4000;
+const EVERY_TABLE = Object.keys(schema.tables) as TableNames[];
+// platform: Convex caps the writes in one transaction, so reset deletes at most this many rows and is called until it returns done.
+const ROWS_DELETED_PER_CALL = 4000;
 
-// Wipes everything. Refuses if any real (non-test) player exists, so it can't touch prod data.
+async function cancelEverythingScheduled(ctx: MutationCtx) {
+  for (const job of await ctx.db.system.query("_scheduled_functions").collect())
+    if (job.state.kind === "pending") await ctx.scheduler.cancel(job._id);
+}
+
+async function replayGolfWorldsFromCommands(ctx: MutationCtx) {
+  for (const s of await ctx.db.query("golfSnapshots").collect()) await ctx.db.delete(s._id);
+}
+
 export const reset = internalMutation({
   args: {},
   handler: async (ctx): Promise<{ done: boolean }> => {
     assertTestDeployment();
     const users = await ctx.db.query("users").collect();
     if (users.some((u) => !u.isTest)) throw new Error("Refusing to reset: real players exist. Use removeTestData.");
-    // Whatever the last test left scheduled (real-time and golf ticks, turn timers, reminders, pushes)
-    // would otherwise run against the next test's data.
-    for (const job of await ctx.db.system.query("_scheduled_functions").collect()) if (job.state.kind === "pending") await ctx.scheduler.cancel(job._id);
+    await cancelEverythingScheduled(ctx);
     for (const f of await ctx.db.query("hostedFiles").collect()) await ctx.storage.delete(f.storageId);
-    let left = BUDGET;
-    for (const table of TABLES) {
+    let left = ROWS_DELETED_PER_CALL;
+    for (const table of EVERY_TABLE) {
       const docs = await ctx.db.query(table).take(left);
       for (const doc of docs) await ctx.db.delete(doc._id);
       left -= docs.length;
@@ -264,7 +303,6 @@ export const reset = internalMutation({
   },
 });
 
-// Removes test players and everything that involves them, leaving real players' data alone.
 export const removeTestData = internalMutation({
   args: {},
   handler: async (ctx) => {
@@ -273,25 +311,50 @@ export const removeTestData = internalMutation({
     let removed = 0;
     for (const m of await ctx.db.query("matches").collect()) {
       if (!m.players.some((p) => testIds.has(p.userId)) && !testIds.has(m.createdBy)) continue;
-      for (const c of await ctx.db.query("rtCommands").withIndex("by_match_tick", (q) => q.eq("matchId", m._id)).collect()) await ctx.db.delete(c._id);
-      for (const s of await ctx.db.query("rtSnapshots").withIndex("by_match", (q) => q.eq("matchId", m._id)).collect()) await ctx.db.delete(s._id);
-      for (const s of await ctx.db.query("secrets").withIndex("by_match_user", (q) => q.eq("matchId", m._id)).collect()) await ctx.db.delete(s._id);
-      for (const d of await ctx.db.query("drafts").withIndex("by_match_user", (q) => q.eq("matchId", m._id)).collect()) await ctx.db.delete(d._id);
+      for (const c of await ctx.db
+        .query("rtCommands")
+        .withIndex("by_match_tick", (q) => q.eq("matchId", m._id))
+        .collect())
+        await ctx.db.delete(c._id);
+      for (const s of await ctx.db
+        .query("rtSnapshots")
+        .withIndex("by_match", (q) => q.eq("matchId", m._id))
+        .collect())
+        await ctx.db.delete(s._id);
+      for (const s of await ctx.db
+        .query("secrets")
+        .withIndex("by_match_user", (q) => q.eq("matchId", m._id))
+        .collect())
+        await ctx.db.delete(s._id);
+      for (const d of await ctx.db
+        .query("drafts")
+        .withIndex("by_match_user", (q) => q.eq("matchId", m._id))
+        .collect())
+        await ctx.db.delete(d._id);
       await ctx.db.delete(m._id);
       removed++;
     }
-    // Golf's open world: their balls and everything they did. The snapshot goes too, so the world is
-    // worked out again from the real players' commands alone.
-    let golf = false;
+    let touchedGolfWorlds = false;
     for (const table of ["golfCommands", "golfPlayers"] as const)
       for (const doc of await ctx.db.query(table).collect())
         if (testIds.has("by" in doc ? doc.by : doc.userId)) {
           await ctx.db.delete(doc._id);
-          golf = true;
+          touchedGolfWorlds = true;
         }
-    if (golf) for (const s of await ctx.db.query("golfSnapshots").collect()) await ctx.db.delete(s._id);
-    for (const table of ["golfScores", "golfBags"] as const) for (const r of await ctx.db.query(table).collect()) if (testIds.has(r.userId)) await ctx.db.delete(r._id);
-    for (const table of ["ratings", "presence", "taps", "profiles", "pushSubscriptions", "handoffs", "stockAccounts", "stockPositions", "stockOrders"] as const) {
+    if (touchedGolfWorlds) await replayGolfWorldsFromCommands(ctx);
+    for (const table of ["golfScores", "golfBags"] as const)
+      for (const r of await ctx.db.query(table).collect()) if (testIds.has(r.userId)) await ctx.db.delete(r._id);
+    for (const table of [
+      "ratings",
+      "presence",
+      "taps",
+      "profiles",
+      "pushSubscriptions",
+      "handoffs",
+      "stockAccounts",
+      "stockPositions",
+      "stockOrders",
+    ] as const) {
       for (const doc of await ctx.db.query(table).collect()) if (testIds.has(doc.userId)) await ctx.db.delete(doc._id);
     }
     for (const row of await ctx.db.query("stockWorth").collect()) {
@@ -300,7 +363,11 @@ export const removeTestData = internalMutation({
     }
     for (const s of await ctx.db.query("authSessions").collect()) {
       if (!testIds.has(s.userId)) continue;
-      for (const r of await ctx.db.query("authRefreshTokens").withIndex("sessionId", (q) => q.eq("sessionId", s._id)).collect()) await ctx.db.delete(r._id);
+      for (const r of await ctx.db
+        .query("authRefreshTokens")
+        .withIndex("sessionId", (q) => q.eq("sessionId", s._id))
+        .collect())
+        await ctx.db.delete(r._id);
       await ctx.db.delete(s._id);
     }
     for (const id of testIds) await ctx.db.delete(id as Id<"users">);

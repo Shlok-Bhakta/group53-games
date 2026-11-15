@@ -3,16 +3,10 @@ import { datan2, hyp } from "./dmath";
 import { distanceField, type Field } from "./distance";
 import { advance, applyCmd, newWorld, pack, TPS, unpack, type Packed, type Rules, type WorldState } from "./world";
 
-// A golfer that plays through the real world: before each shot it tries a fan of angles and powers, plays
-// each one out, and takes the one that ends nearest the cup by walking distance (distance.ts). It's the
-// caddie that shoots for someone whose time ran out (convex/golf.ts), and how the generator (gen.ts)
-// proves a hole can be sunk and sets its par.
-
 const MAX_ROLL_S = 12;
 
 export type Try = { a: number; p: number; score: number; sunk: boolean };
 
-// One shot by `id` from `from`: where it ends up, and whether it went in. Nobody else acts meanwhile.
 export function tryShot(w: World, from: Packed, id: string, a: number, p: number) {
   const s = unpack(from);
   applyCmd(s, w.course, { tick: s.tick, by: id, seq: 1, kind: "shot", a, p });
@@ -32,9 +26,13 @@ export function tryShot(w: World, from: Packed, id: string, a: number, p: number
   return { s, sunk };
 }
 
-// The best of a fan of shots. `angles` round the full circle, plus a few straight at the cup. With `sinkWithin`,
-// it only goes for the cup from that close: from further out, a shot that would drop is left alone.
-export function bestShot(w: World, from: Packed, id: string, field: Field = distanceField(w.course, w), opts: { angles?: number; powers?: number[]; sinkWithin?: number } = {}): Try | null {
+export function bestShot(
+  w: World,
+  from: Packed,
+  id: string,
+  field: Field = distanceField(w.course, w),
+  opts: { angles?: number; powers?: number[]; sinkWithin?: number } = {},
+): Try | null {
   const c = w.course;
   const me = from.balls.find((b) => b.id === id);
   if (!me) return null;
@@ -42,7 +40,6 @@ export function bestShot(w: World, from: Packed, id: string, field: Field = dist
   const powers = opts.powers ?? [0.12, 0.2, 0.3, 0.42, 0.56, 0.72, 0.88, 1];
   const toCup = datan2(c.cup.y - me.y, c.cup.x - me.x);
   const angles = [...Array.from({ length: n }, (_, i) => -Math.PI + (i * 2 * Math.PI) / n), toCup - 0.06, toCup, toCup + 0.06];
-  // Straight at the cup, at about the power that would get there on flat carpet.
   const d = hyp(c.cup.x - me.x, c.cup.y - me.y);
   const near = Math.min(1, Math.sqrt(d / 60) + 0.05);
   const mayHole = opts.sinkWithin === undefined || d <= opts.sinkWithin;
@@ -61,9 +58,11 @@ export function bestShot(w: World, from: Packed, id: string, field: Field = dist
   return best;
 }
 
-// Plays a hole from the tee on its own, greedily, up to `limit` strokes: how many it took, or null if it
-// never went in. `shaky` misses each shot by a little, the way people do.
-export function playHole(c: Course, w: World, opts: { limit?: number; shaky?: (k: number) => number; angles?: number; powers?: number[] } = {}) {
+export function playHole(
+  c: Course,
+  w: World,
+  opts: { limit?: number; shaky?: (k: number) => number; angles?: number; powers?: number[] } = {},
+) {
   const limit = opts.limit ?? 8;
   const field = distanceField(c, w);
   const rules: Rules = { cap: 99, turns: false, knockFree: false, markR: 0 };
@@ -73,7 +72,8 @@ export function playHole(c: Course, w: World, opts: { limit?: number; shaky?: (k
     const from = pack(s);
     const shot = bestShot(w, from, "bot", field, opts);
     if (!shot) return null;
-    const a = shot.a + (opts.shaky ? opts.shaky(0) * 0.08 : 0), p = Math.min(1, Math.max(0.05, shot.p * (1 + (opts.shaky ? opts.shaky(1) * 0.08 : 0))));
+    const a = shot.a + (opts.shaky ? opts.shaky(0) * 0.08 : 0),
+      p = Math.min(1, Math.max(0.05, shot.p * (1 + (opts.shaky ? opts.shaky(1) * 0.08 : 0))));
     const r = tryShot(w, from, "bot", a, p);
     if (r.sunk) return stroke;
     s = r.s;

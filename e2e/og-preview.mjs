@@ -1,10 +1,8 @@
-// Renders link previews against a throwaway backend with a real game in progress.
-// node e2e/og-preview.mjs  ->  e2e/.state/og-*.png (chess, four-player, Scrabble and poker games, and cards)
 import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { ConvexHttpClient } from "convex/browser";
 import { anyApi } from "convex/server";
-import { startBackend, stopBackend } from "./backend.mjs";
+import { startBackend, stopBackend, waitForUrl } from "./backend.mjs";
 
 const b = await startBackend();
 const admin = new ConvexHttpClient(b.url);
@@ -15,42 +13,73 @@ const player = async (name, image) => {
   client.setAuth(p.token);
   return { ...p, client };
 };
-const a = await player("WashableBowl700", "https://cdn.discordapp.com/avatars/719077732042014761/44639fc5bce7c79f99de5625f7fed7a8.png?size=256");
+const a = await player(
+  "WashableBowl700",
+  "https://cdn.discordapp.com/avatars/719077732042014761/44639fc5bce7c79f99de5625f7fed7a8.png?size=256",
+);
 const c = await player("chrisis14", "https://cdn.discordapp.com/avatars/492431153375084547/f69aa29f75cacbf294c0d465c351d701.png?size=256");
 const id = await a.client.mutation(anyApi.matches.queue, { mode: "chess:classic" });
 await c.client.mutation(anyApi.matches.queue, { mode: "chess:classic" });
 const m = await admin.query(anyApi.testing.getMatch, { id });
 const white = m.players.find((p) => p.color === "w").userId === a.userId ? a : c;
 const black = white === a ? c : a;
-for (const [p, from, to] of [[white, "e2", "e4"], [black, "e7", "e5"], [white, "g1", "f3"], [black, "b8", "c6"], [white, "f1", "c4"]]) {
+for (const [p, from, to] of [
+  [white, "e2", "e4"],
+  [black, "e7", "e5"],
+  [white, "g1", "f3"],
+  [black, "b8", "c6"],
+  [white, "f1", "c4"],
+]) {
   await p.client.mutation(anyApi.chess.move, { id, from, to });
 }
 
-// A four-player game a few moves in.
 const s4 = await player("samwise");
 const a4 = await player("alex_dev");
 const four = [a, c, s4, a4];
 const fid = await admin.action(anyApi.testing.startFour, { mode: "chess:four", players: four.map((p) => p.userId) });
 const sq = (s) => ({ x: s.charCodeAt(0) - 97, y: Number(s.slice(1)) - 1 });
-for (const [i, from, to] of [[0, "e2", "e4"], [1, "b5", "d5"], [2, "f13", "f11"], [3, "m10", "k10"]]) {
+for (const [i, from, to] of [
+  [0, "e2", "e4"],
+  [1, "b5", "d5"],
+  [2, "f13", "f11"],
+  [3, "m10", "k10"],
+]) {
   const f = sq(from);
   const t = sq(to);
   await four[i].client.mutation(anyApi.chess.fourMove, { id: fid, fromX: f.x, fromY: f.y, toX: t.x, toY: t.y });
 }
 
-// A three-player Scrabble game with two words down.
 const sid = await a.client.mutation(anyApi.matches.queue, { mode: "scrabble:classic" });
 await c.client.mutation(anyApi.matches.queue, { mode: "scrabble:classic" });
 await s4.client.mutation(anyApi.matches.queue, { mode: "scrabble:classic" });
 await a.client.mutation(anyApi.matches.startGame, { id: sid });
 const sm = await admin.query(anyApi.testing.getMatch, { id: sid });
-for (const [seat, word, cells] of [[0, "QUIZ", [[6, 7], [7, 7], [8, 7], [9, 7]]], [1, "ONE", [[9, 8], [9, 9], [9, 10]]]]) {
+for (const [seat, word, cells] of [
+  [
+    0,
+    "QUIZ",
+    [
+      [6, 7],
+      [7, 7],
+      [8, 7],
+      [9, 7],
+    ],
+  ],
+  [
+    1,
+    "ONE",
+    [
+      [9, 8],
+      [9, 9],
+      [9, 10],
+    ],
+  ],
+]) {
   const userId = sm.players[seat].userId;
   const rack = await admin.mutation(anyApi.testing.setRack, { id: sid, userId, letters: word.padEnd(7, "E") });
   await admin.mutation(anyApi.testing.playAs, { id: sid, userId, tiles: cells.map(([x, y], i) => ({ id: rack[i].id, x, y })) });
 }
 
-// A three-way Hold'em game on the flop.
 const pid = await a.client.mutation(anyApi.matches.queue, { mode: "poker:holdem" });
 await c.client.mutation(anyApi.matches.queue, { mode: "poker:holdem" });
 await s4.client.mutation(anyApi.matches.queue, { mode: "poker:holdem" });
@@ -64,58 +93,117 @@ for (let i = 0; i < 3; i++) {
   await p.client.mutation(anyApi.poker.move, { id: pid, hand: pm.state.hand, street: pm.state.street, kind: owe > 0 ? "call" : "check" });
 }
 
-// A three-way Landlord game a few dozen moves in, bots playing every seat.
 const lid = await a.client.mutation(anyApi.matches.queue, { mode: "landlord:classic" });
 await c.client.mutation(anyApi.matches.queue, { mode: "landlord:classic" });
 await s4.client.mutation(anyApi.matches.queue, { mode: "landlord:classic" });
 await a.client.mutation(anyApi.matches.startGame, { id: lid });
 await admin.mutation(anyApi.testing.landlordBots, { id: lid, steps: 120 });
 
-// Stonks: the index and a stock with a day of prices.
 const day = Date.parse("2026-10-30T08:00:00Z");
-const walk = (base, k) => Array.from({ length: 16 * 60 }, (_, i) => [day + i * 60_000, +(base * (1 + 0.012 * Math.sin(i / (30 + k)) + i * 0.00002 * (k - 1))).toFixed(2)]);
-await admin.mutation(anyApi.stonks.holdings, { asOf: "2026-10-29", holdings: [{ symbol: "NVDA", name: "NVIDIA CORP", weight: 7.77, base: 200 }, { symbol: "AAPL", name: "APPLE INC", weight: 7.65, base: 270 }] });
-for (const [k, symbol, base, name] of [[0, "^GSPC", 6800, "S&P 500"], [2, "NVDA", 200, "NVIDIA Corporation"], [0.2, "AAPL", 270, "Apple Inc."]]) {
+const walk = (base, k) =>
+  Array.from({ length: 16 * 60 }, (_, i) => [
+    day + i * 60_000,
+    +(base * (1 + 0.012 * Math.sin(i / (30 + k)) + i * 0.00002 * (k - 1))).toFixed(2),
+  ]);
+await admin.mutation(anyApi.stonks.holdings, {
+  asOf: "2026-10-29",
+  holdings: [
+    { symbol: "NVDA", name: "NVIDIA CORP", weight: 7.77, base: 200 },
+    { symbol: "AAPL", name: "APPLE INC", weight: 7.65, base: 270 },
+  ],
+});
+for (const [k, symbol, base, name] of [
+  [0, "^GSPC", 6800, "S&P 500"],
+  [2, "NVDA", 200, "NVIDIA Corporation"],
+  [0.2, "AAPL", 270, "Apple Inc."],
+]) {
   const points = walk(base, k);
   await admin.mutation(anyApi.stonks.series, { symbol, range: "1D", points, prevClose: base, name });
-  await admin.mutation(anyApi.stonks.ingest, { ticks: [{ symbol, price: points.at(-1)[1], time: points.at(-1)[0], recv: Date.now(), source: "yahoo", session: "post" }] });
+  await admin.mutation(anyApi.stonks.ingest, {
+    ticks: [{ symbol, price: points.at(-1)[1], time: points.at(-1)[0], recv: Date.now(), source: "yahoo", session: "post" }],
+  });
 }
 
 mkdirSync("e2e/.state", { recursive: true });
 writeFileSync("e2e/.state/admin_key", b.adminKey);
 const pieces = spawn("python3", ["-m", "http.server", "8789", "-d", "public"], { stdio: "ignore" });
 const og = spawn("node", ["og/server.mjs"], {
-  env: { ...process.env, CONVEX_URL: b.url, ADMIN_KEY_FILE: "e2e/.state/admin_key", PORT: "8788", PIECES_URL: "http://127.0.0.1:8789/pieces" },
+  env: {
+    ...process.env,
+    CONVEX_URL: b.url,
+    ADMIN_KEY_FILE: "e2e/.state/admin_key",
+    PORT: "8788",
+    PIECES_URL: "http://127.0.0.1:8789/pieces",
+  },
   stdio: "inherit",
 });
-await new Promise((r) => setTimeout(r, 1500));
+await Promise.all([waitForUrl("http://127.0.0.1:8788/og/health"), waitForUrl("http://127.0.0.1:8789/")]);
 try {
   const html = await (await fetch(`http://127.0.0.1:8788/chess/${id}`)).text();
-  console.log(html.split("\n").filter((l) => /og:(title|description)"/.test(l)).join("\n"));
+  console.log(
+    html
+      .split("\n")
+      .filter((l) => /og:(title|description)"/.test(l))
+      .join("\n"),
+  );
   const img = html.match(/og\/match\/[a-z0-9]+\.png\?v=[a-z0-9]+/)[0];
   writeFileSync("e2e/.state/og-match.png", Buffer.from(await (await fetch(`http://127.0.0.1:8788/${img}`)).arrayBuffer()));
   const html4 = await (await fetch(`http://127.0.0.1:8788/chess/${fid}`)).text();
-  console.log(html4.split("\n").filter((l) => /og:(title|description)"/.test(l)).join("\n"));
+  console.log(
+    html4
+      .split("\n")
+      .filter((l) => /og:(title|description)"/.test(l))
+      .join("\n"),
+  );
   const img4 = html4.match(/og\/match\/[a-z0-9]+\.png\?v=[a-z0-9]+/)[0];
   writeFileSync("e2e/.state/og-four.png", Buffer.from(await (await fetch(`http://127.0.0.1:8788/${img4}`)).arrayBuffer()));
   const htmlS = await (await fetch(`http://127.0.0.1:8788/scrabble/${sid}`)).text();
-  console.log(htmlS.split("\n").filter((l) => /og:(title|description)"/.test(l)).join("\n"));
+  console.log(
+    htmlS
+      .split("\n")
+      .filter((l) => /og:(title|description)"/.test(l))
+      .join("\n"),
+  );
   const imgS = htmlS.match(/og\/match\/[a-z0-9]+\.png\?v=[a-z0-9]+/)[0];
   writeFileSync("e2e/.state/og-scrabble-match.png", Buffer.from(await (await fetch(`http://127.0.0.1:8788/${imgS}`)).arrayBuffer()));
   const htmlP = await (await fetch(`http://127.0.0.1:8788/poker/${pid}`)).text();
-  console.log(htmlP.split("\n").filter((l) => /og:(title|description)"/.test(l)).join("\n"));
+  console.log(
+    htmlP
+      .split("\n")
+      .filter((l) => /og:(title|description)"/.test(l))
+      .join("\n"),
+  );
   const imgP = htmlP.match(/og\/match\/[a-z0-9]+\.png\?v=[a-z0-9]+/)[0];
   writeFileSync("e2e/.state/og-poker-match.png", Buffer.from(await (await fetch(`http://127.0.0.1:8788/${imgP}`)).arrayBuffer()));
   const htmlL = await (await fetch(`http://127.0.0.1:8788/landlord/${lid}`)).text();
-  console.log(htmlL.split("\n").filter((l) => /og:(title|description)"/.test(l)).join("\n"));
+  console.log(
+    htmlL
+      .split("\n")
+      .filter((l) => /og:(title|description)"/.test(l))
+      .join("\n"),
+  );
   const imgL = htmlL.match(/og\/match\/[a-z0-9]+\.png\?v=[a-z0-9]+/)[0];
   writeFileSync("e2e/.state/og-landlord-match.png", Buffer.from(await (await fetch(`http://127.0.0.1:8788/${imgL}`)).arrayBuffer()));
-  writeFileSync("e2e/.state/og-landlord.png", Buffer.from(await (await fetch("http://127.0.0.1:8788/og/image/landlord.png")).arrayBuffer()));
+  writeFileSync(
+    "e2e/.state/og-landlord.png",
+    Buffer.from(await (await fetch("http://127.0.0.1:8788/og/image/landlord.png")).arrayBuffer()),
+  );
   writeFileSync("e2e/.state/og-poker.png", Buffer.from(await (await fetch("http://127.0.0.1:8788/og/image/poker.png")).arrayBuffer()));
-  writeFileSync("e2e/.state/og-scrabble.png", Buffer.from(await (await fetch("http://127.0.0.1:8788/og/image/scrabble.png")).arrayBuffer()));
-  for (const [path, file] of [["/stonks", "og-stonks.png"], ["/stonks/NVDA", "og-stonks-nvda.png"]]) {
+  writeFileSync(
+    "e2e/.state/og-scrabble.png",
+    Buffer.from(await (await fetch("http://127.0.0.1:8788/og/image/scrabble.png")).arrayBuffer()),
+  );
+  for (const [path, file] of [
+    ["/stonks", "og-stonks.png"],
+    ["/stonks/NVDA", "og-stonks-nvda.png"],
+  ]) {
     const htmlT = await (await fetch(`http://127.0.0.1:8788${path}`)).text();
-    console.log(htmlT.split("\n").filter((l) => /og:(title|description)"/.test(l)).join("\n"));
+    console.log(
+      htmlT
+        .split("\n")
+        .filter((l) => /og:(title|description)"/.test(l))
+        .join("\n"),
+    );
     const imgT = htmlT.match(/og\/stonks\/[^"]+\.png\?v=[a-z0-9]+/)[0];
     writeFileSync(`e2e/.state/${file}`, Buffer.from(await (await fetch(`http://127.0.0.1:8788/${imgT}`)).arrayBuffer()));
   }

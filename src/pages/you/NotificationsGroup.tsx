@@ -3,7 +3,8 @@ import { toast } from "sonner";
 import { Section } from "@/components/parts";
 import { Switch } from "@/components/ui/switch";
 import { useNotifications } from "@/notifications";
-import { SettingsRow, TINT } from "./SettingsRow";
+import { SettingsRow } from "./SettingsRow";
+import { TINT } from "./palette";
 
 export function NotificationsGroup() {
   const push = useNotifications();
@@ -14,8 +15,10 @@ export function NotificationsGroup() {
       toast.error((err as Error).message);
     }
   };
-  // Only when there's something to do about it.
-  const footer = push.state === "blocked" ? "Notifications are blocked for Group 53. Turn them on in your phone's settings, then reopen the app." : undefined;
+  const footer =
+    push.state === "blocked"
+      ? "Notifications are blocked for Group 53. Turn them on in your phone's settings, then reopen the app."
+      : undefined;
   return (
     <Section title="Notifications" footer={footer}>
       <SettingsRow icon={BellRingingIcon} tint={TINT.red} label="Notifications" htmlFor="push-switch">

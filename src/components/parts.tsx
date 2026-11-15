@@ -8,6 +8,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import type { MatchView } from "../../convex/matches";
 import { GAMES, MODES, flexibleSeats, matchPath, seedSummary, type ModeKey } from "../../convex/modes";
 import { AvatarStack, PlayerAvatar } from "@/components/PlayerAvatar";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { AsyncButton } from "@/components/AsyncButton";
 import { lastMove } from "@/games/summary";
@@ -15,15 +16,12 @@ import { listNames, ordinal, reasonText } from "@/lib/text";
 import { ago } from "@/lib/time";
 import { ListRow } from "@/components/ListRow";
 
-// A mode's one name, the same everywhere: "Classic", "4-Player", "Real-time", "Real-time 4-Player". Lists that
-// can mix games put the game first: "Chess Classic", "Scrabble Live".
 const modeLabel = (mode: string) => MODES[mode as ModeKey]?.name ?? mode;
 export const fullModeLabel = (mode: string) => {
   const m = MODES[mode as ModeKey];
   return m ? `${GAMES[m.game].name} ${m.name}` : mode;
 };
 
-// A section heading. Headings carry sections; never small grey labels.
 export function SectionTitle({ children, action, className }: { children: ReactNode; action?: ReactNode; className?: string }) {
   return (
     <div className={cn("flex items-end justify-between gap-3 px-1 pb-2.5", className)}>
@@ -33,9 +31,21 @@ export function SectionTitle({ children, action, className }: { children: ReactN
   );
 }
 
-// A titled group of rows. The heading carries the section; the group is a single flat surface. `bare` leaves
-// out the group, for sections that lay out their own content; `footer` is a line of fine print under it.
-export function Section({ title, children, action, footer, bare, className }: { title: string; children: ReactNode; action?: ReactNode; footer?: ReactNode; bare?: boolean; className?: string }) {
+export function Section({
+  title,
+  children,
+  action,
+  footer,
+  bare,
+  className,
+}: {
+  title: string;
+  children: ReactNode;
+  action?: ReactNode;
+  footer?: ReactNode;
+  bare?: boolean;
+  className?: string;
+}) {
   return (
     <section aria-label={title} className={className}>
       <SectionTitle action={action}>{title}</SectionTitle>
@@ -46,28 +56,22 @@ export function Section({ title, children, action, footer, bare, className }: { 
 }
 
 export function Group({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("divide-y divide-border overflow-hidden rounded-lg bg-card", className)}>{children}</div>;
-}
-
-// Small status label at the end of a row.
-export function Chip({ tone = "primary", children }: { tone?: "primary" | "live" | "win" | "quiet"; children: ReactNode }) {
   return (
-    <span
-      className={cn(
-        "flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-footnote font-bold",
-        tone === "primary" && "bg-primary text-primary-foreground",
-        tone === "live" && "bg-[var(--tile-hit)] text-[var(--tile-hit-ink)]",
-        tone === "win" && "bg-[var(--tile-green)] text-[var(--tile-ink)]",
-        tone === "quiet" && "px-0 font-medium text-muted-foreground",
-      )}
-    >
-      {tone === "live" && <span className="size-1.5 rounded-full bg-current" />}
+    <div data-slot="card" className={cn("divide-y divide-border overflow-hidden rounded-lg bg-card", className)}>
       {children}
-    </span>
+    </div>
   );
 }
 
-// The line under a game's names: its mode, the last move, and how long ago.
+export function Chip({ tone = "primary", children }: { tone?: "primary" | "live" | "win" | "quiet"; children: ReactNode }) {
+  return (
+    <Badge variant={tone} className="flex">
+      {tone === "live" && <span className="size-1.5 rounded-full bg-current" />}
+      {children}
+    </Badge>
+  );
+}
+
 function detail(match: MatchView) {
   const parts: string[] = [fullModeLabel(match.mode)];
   const seats = MODES[match.mode as ModeKey]?.players ?? 2;
@@ -81,7 +85,6 @@ function detail(match: MatchView) {
     if (last) parts.push(last);
     if (MODES[match.mode as ModeKey]?.kind === "async") parts.push(ago(Date.now() - match.lastActivityAt));
   }
-  // A finished game keeps its seed in the list, to play the same holes again.
   if (match.status === "finished") {
     const seed = seedSummary(match.mode, match.settings);
     if (seed) parts.push(seed.toLowerCase());
@@ -89,7 +92,6 @@ function detail(match: MatchView) {
   return parts.join(", ");
 }
 
-// One game in a list. Shows the other players (or everyone, for games you're watching), and a status.
 export function MatchRow({ match, meId, status, vs }: { match: MatchView; meId?: Id<"users">; status: ReactNode; vs?: boolean }) {
   const others = vs ? match.players : match.players.filter((p) => p.userId !== meId);
   const label = others.map((p) => p.name).join(vs && others.length === 2 ? " vs " : ", ");
@@ -129,13 +131,15 @@ export function ResultChip({ match, meId }: { match: MatchView; meId?: Id<"users
   }
   const winners = match.players.filter((p) => r.winners.includes(p.userId)).map((p) => p.name);
   return (
-    <span className="max-w-[40%] truncate text-right text-footnote font-medium text-muted-foreground" title={reasonText(r.reason, match.mode)}>
+    <span
+      className="max-w-[40%] truncate text-right text-footnote font-medium text-muted-foreground"
+      title={reasonText(r.reason, match.mode)}
+    >
       {r.draw ? "Draw" : `${listNames(winners)} won`}
     </span>
   );
 }
 
-// A challenge waiting on me, answerable in place.
 export function InviteCard({ match }: { match: MatchView }) {
   const join = useMutation(api.matches.join);
   const decline = useMutation(api.matches.decline);
@@ -150,6 +154,7 @@ export function InviteCard({ match }: { match: MatchView }) {
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.97 }}
       transition={{ type: "spring", bounce: 0, duration: 0.3 }}
+      data-slot="card"
       className="flex flex-col gap-3 rounded-lg bg-card p-3.5 ring-2 ring-primary/60"
       aria-label={`Challenge from ${host.name}`}
     >
@@ -170,10 +175,7 @@ export function InviteCard({ match }: { match: MatchView }) {
         <AsyncButton
           size="lg"
           icon={<SwordIcon weight="bold" />}
-          onClick={async () => {
-            await join({ id: match._id });
-            navigate(matchPath(match));
-          }}
+          onClick={() => join({ id: match._id }).then(() => navigate(matchPath(match)))}
         >
           Accept
         </AsyncButton>
@@ -182,7 +184,6 @@ export function InviteCard({ match }: { match: MatchView }) {
   );
 }
 
-// Rank as a letter tile: gold, green, then grey. No games yet reads as a dash.
 export function RankTile({ rank }: { rank: number | null }) {
   if (!rank) return <span className="w-[30px] shrink-0 text-center font-display text-body text-muted-foreground">–</span>;
   const tone = rank === 1 ? "tile-yellow" : rank === 2 ? "tile-green" : "tile-gray";
@@ -201,7 +202,11 @@ export function Leaderboard({ mode, meId, onPick }: { mode: ModeKey; meId?: Id<"
   const four = MODES[mode].players > 2;
   let rank = 0;
   return (
-    <ol className="divide-y divide-border overflow-hidden rounded-lg bg-card" aria-label={`${modeLabel(mode)} leaderboard`}>
+    <ol
+      data-slot="card"
+      className="divide-y divide-border overflow-hidden rounded-lg bg-card"
+      aria-label={`${modeLabel(mode)} leaderboard`}
+    >
       {rows.map((r) => {
         const p = people.get(r.userId);
         if (!p) return null;
@@ -215,7 +220,11 @@ export function Leaderboard({ mode, meId, onPick }: { mode: ModeKey; meId?: Id<"
             </>
           ),
           title: r.userId === meId ? "You" : p.name,
-          detail: ranked && <span className="tabular-nums">{four ? `${r.wins} won of ${r.games}` : `${r.wins} won, ${r.losses} lost${r.draws ? `, ${r.draws} drawn` : ""}`}</span>,
+          detail: ranked && (
+            <span className="tabular-nums">
+              {four ? `${r.wins} won of ${r.games}` : `${r.wins} won, ${r.losses} lost${r.draws ? `, ${r.draws} drawn` : ""}`}
+            </span>
+          ),
           trailing: <span className={cn("font-display text-heading tabular-nums", !ranked && "text-muted-foreground")}>{r.rating}</span>,
           selected: r.userId === meId,
         };

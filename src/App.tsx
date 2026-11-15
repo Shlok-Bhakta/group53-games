@@ -28,7 +28,6 @@ import { wantMusic } from "@/sound";
 import { useDeepLinks } from "@/deepLinks";
 import { BoardSkeleton, PlayerRoute, PlayerSkeleton, StockRoute, StockSkeleton, StonksBoardRoute } from "./games/stonks/load";
 
-// Golf loads only when someone opens it, so chess and Scrabble players never download it.
 const GolfHub = lazy(() => import("./games/golf/GolfHub").then((m) => ({ default: m.GolfHub })));
 const GolfOpenWorld = lazy(() => import("./games/golf/GolfHub").then((m) => ({ default: m.GolfOpenWorld })));
 const GolfHole = lazy(() => import("./games/golf/GolfHub").then((m) => ({ default: m.GolfHole })));
@@ -37,34 +36,38 @@ const golfRoute = (path: string, element: ReactNode) => (
     path={path}
     element={
       <NotificationsRequired>
-        <Suspense fallback={<Skeleton className="mt-[calc(env(safe-area-inset-top)+44px)] h-96 w-full rounded-lg" />}>{element}</Suspense>
+        <Suspense fallback={<Skeleton className="mt-[calc(var(--safe-top)+44px)] h-96 w-full rounded-lg" />}>{element}</Suspense>
       </NotificationsRequired>
     }
   />
 );
 
-
 export function App() {
+  useViewportGap();
   useVersionCheck();
   return (
     <MotionConfig reducedMotion="user">
       <InstallGate>
         <AuthLoading>
-          <div className="mx-auto flex max-w-md flex-col gap-4 px-4 pt-[calc(env(safe-area-inset-top)+44px)]">
+          <div className="mx-auto flex max-w-md flex-col gap-4 px-page pt-[calc(var(--safe-top)+44px)]">
             <Skeleton className="h-10 w-32" />
             <Skeleton className="h-48 w-full rounded-lg" />
           </div>
         </AuthLoading>
         <Unauthenticated>
-          <div className="mx-auto max-w-md px-5 pt-[env(safe-area-inset-top)]">
+          <div className="mx-auto max-w-md px-5 pt-[var(--safe-top)]">
             <SignIn />
           </div>
         </Unauthenticated>
         <Authenticated>
           <SignedIn />
         </Authenticated>
-        {/* Phones use mobileOffset, not offset. Toasts sit below the band iOS blurs under the status bar. */}
-        <Toaster position="top-center" offset={{ top: "calc(env(safe-area-inset-top) + 44px)" }} mobileOffset={{ top: "calc(env(safe-area-inset-top) + 44px)" }} />
+        {/* platform: sonner uses mobileOffset on phones, not offset. */}
+        <Toaster
+          position="top-center"
+          offset={{ top: "calc(var(--safe-top) + 44px)" }}
+          mobileOffset={{ top: "calc(var(--safe-top) + 44px)" }}
+        />
         <UpdateOverlay />
         <TopEdge />
       </InstallGate>
@@ -78,13 +81,10 @@ function SignedIn() {
   const inTabs = TAB_ROUTES.includes(location.pathname);
   const direction = useNavDirection();
   const goBack = useGoBack("/");
-  // Taps are shared in the main UI only, not inside games.
   usePresenceReporter({ shareTaps: inTabs });
   useDeepLinks();
   useScrollMemory(direction);
   useAppBadge();
-  useViewportGap();
-  // Music plays all over the app once you're signed in, not just in games.
   useEffect(() => {
     wantMusic(true);
     return () => wantMusic(false);
@@ -92,10 +92,10 @@ function SignedIn() {
 
   return (
     <>
-      <main className="relative mx-auto w-full max-w-md overflow-x-clip px-4">
+      <main className="relative mx-auto w-full max-w-md overflow-x-clip px-page phone-landscape:max-w-[calc(36rem+var(--gutter-left)+var(--gutter-right))] phone-landscape:has-[[data-wide]]:max-w-none">
         <AnimatePresence mode="popLayout" initial={false} custom={direction}>
           <Page key={location.pathname} direction={direction} onBack={inTabs ? null : goBack}>
-            <div style={{ paddingBottom: inTabs ? TAB_BAR_SPACE : "calc(env(safe-area-inset-bottom) + 16px)" }}>
+            <div style={{ paddingBottom: inTabs ? TAB_BAR_SPACE : "calc(var(--safe-bottom) + 16px)" }}>
               <Routes location={location}>
                 <Route path="/" element={<Home />} />
                 <Route path="/games" element={<Games />} />
@@ -105,16 +105,78 @@ function SignedIn() {
                 <Route path="/wordle" element={<Wordle />} />
                 {golfRoute("/mereddia", <HostedGame game="mereddia" title="Journey Across Mereddia" />)}
                 {golfRoute("/golf/practice", <GolfHub />)}
-                {golfRoute("/golf/world", <><HoldUpdates /><GolfOpenWorld /></>)}
-                {golfRoute("/golf/:course/:hole", <><HoldUpdates /><GolfHole /></>)}
-                {/* Stonks' code loads before it's opened (src/games/stonks/load.tsx); the skeletons are its exact shape. */}
-                <Route path="/stonks" element={<NotificationsRequired><Suspense fallback={<BoardSkeleton />}><StonksBoardRoute /></Suspense></NotificationsRequired>} />
-                <Route path="/stonks/u/:id" element={<NotificationsRequired><Suspense fallback={<PlayerSkeleton />}><PlayerRoute /></Suspense></NotificationsRequired>} />
-                <Route path="/stonks/:symbol" element={<NotificationsRequired><Suspense fallback={<StockSkeleton />}><StockRoute /></Suspense></NotificationsRequired>} />
+                {golfRoute(
+                  "/golf/world",
+                  <>
+                    <HoldUpdates />
+                    <GolfOpenWorld />
+                  </>,
+                )}
+                {golfRoute(
+                  "/golf/:course/:hole",
+                  <>
+                    <HoldUpdates />
+                    <GolfHole />
+                  </>,
+                )}
+                <Route
+                  path="/stonks"
+                  element={
+                    <NotificationsRequired>
+                      <Suspense fallback={<BoardSkeleton />}>
+                        <StonksBoardRoute />
+                      </Suspense>
+                    </NotificationsRequired>
+                  }
+                />
+                <Route
+                  path="/stonks/u/:id"
+                  element={
+                    <NotificationsRequired>
+                      <Suspense fallback={<PlayerSkeleton />}>
+                        <PlayerRoute />
+                      </Suspense>
+                    </NotificationsRequired>
+                  }
+                />
+                <Route
+                  path="/stonks/:symbol"
+                  element={
+                    <NotificationsRequired>
+                      <Suspense fallback={<StockSkeleton />}>
+                        <StockRoute />
+                      </Suspense>
+                    </NotificationsRequired>
+                  }
+                />
                 {Object.values(GAME_UI).flatMap((g) => [
-                  <Route key={g.key} path={g.path} element={<NotificationsRequired><GameHub game={g} /></NotificationsRequired>} />,
-                  <Route key={`${g.key}-mode`} path={`${g.path}/mode/:slug`} element={<NotificationsRequired><ModePage game={g} /></NotificationsRequired>} />,
-                  <Route key={`${g.key}-match`} path={`${g.path}/:id`} element={<NotificationsRequired><MatchScreen game={g} /></NotificationsRequired>} />,
+                  <Route
+                    key={g.key}
+                    path={g.path}
+                    element={
+                      <NotificationsRequired>
+                        <GameHub game={g} />
+                      </NotificationsRequired>
+                    }
+                  />,
+                  <Route
+                    key={`${g.key}-mode`}
+                    path={`${g.path}/mode/:slug`}
+                    element={
+                      <NotificationsRequired>
+                        <ModePage game={g} />
+                      </NotificationsRequired>
+                    }
+                  />,
+                  <Route
+                    key={`${g.key}-match`}
+                    path={`${g.path}/:id`}
+                    element={
+                      <NotificationsRequired>
+                        <MatchScreen game={g} />
+                      </NotificationsRequired>
+                    }
+                  />,
                 ])}
                 <Route path="*" element={<NotFound />} />
               </Routes>
@@ -133,7 +195,6 @@ function NotFound() {
   return (
     <div>
       <NavBar title="Not found" />
-      <p className="pt-4 text-callout text-muted-foreground">Nothing lives at this address.</p>
     </div>
   );
 }

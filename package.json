@@ -11,9 +11,11 @@
     "preview": "vite preview --host 0.0.0.0",
     "test:e2e": "node e2e/run.mjs",
     "game:publish": "node scripts/publish-hosted.mjs",
-    "test:all": "vitest run && node e2e/run.mjs",
-    "golf:build": "vite build --config prototypes/golf/vite.config.ts",
-    "test:e2e:install": "PLAYWRIGHT_BROWSERS_PATH=0 playwright install chromium chromium-headless-shell"
+    "test:e2e:install": "PLAYWRIGHT_BROWSERS_PATH=0 playwright install chromium chromium-headless-shell",
+    "verify": "node scripts/verify.mjs",
+    "prepare": "git config core.hooksPath .githooks || true",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write ."
   },
   "dependencies": {
     "@auth/core": "^0.41.3",
@@ -45,16 +47,28 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
     "@edge-runtime/vm": "^5.0.0",
+    "@eslint/css": "^2.0.1",
+    "@eslint/js": "^9.39.5",
     "@playwright/test": "^1.64.1",
     "@types/culori": "^4.0.1",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/web-push": "^3.6.4",
+    "@typescript-eslint/typescript-estree": "^8.72.2",
     "@vitejs/plugin-react": "^6.1.2",
     "convex-test": "^0.0.65",
     "culori": "^4.0.2",
+    "eslint": "^9.39.5",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
+    "knip": "^6.45.1",
+    "pixelmatch": "^8.0.0",
+    "pngjs": "^7.0.0",
+    "prettier": "^3.10.1",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.2",
     "vite": "^8.3.5",
     "vitest": "^5.0.5"
   }

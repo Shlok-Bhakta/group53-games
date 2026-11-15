@@ -1,14 +1,28 @@
-// The New York Stock Exchange's clock, shared by the server and phones. Times are ms since the epoch;
-// everything else is New York wall time, worked out with Intl (no tz database of our own).
-
 export const INDEX = "^GSPC";
 export const RANGES = ["1D", "1W", "1M", "1Y", "5Y"] as const;
 export type Range = (typeof RANGES)[number];
 
-// Full closures and 1pm closes, through 2027.
 const HOLIDAYS = new Set([
-  "2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03", "2026-05-25", "2026-06-19", "2026-07-03", "2026-09-07", "2026-11-26", "2026-12-25",
-  "2027-01-01", "2027-01-18", "2027-02-15", "2027-03-26", "2027-05-31", "2027-06-18", "2027-07-05", "2027-09-06", "2027-11-25", "2027-12-24",
+  "2026-01-01",
+  "2026-01-19",
+  "2026-02-16",
+  "2026-04-03",
+  "2026-05-25",
+  "2026-06-19",
+  "2026-07-03",
+  "2026-09-07",
+  "2026-11-26",
+  "2026-12-25",
+  "2027-01-01",
+  "2027-01-18",
+  "2027-02-15",
+  "2027-03-26",
+  "2027-05-31",
+  "2027-06-18",
+  "2027-07-05",
+  "2027-09-06",
+  "2027-11-25",
+  "2027-12-24",
 ]);
 const EARLY = new Set(["2026-11-27", "2026-12-24", "2027-11-26"]);
 
@@ -30,11 +44,10 @@ function wall(ms: number): Wall {
 }
 const dayKey = (w: { y: number; m: number; d: number }) => `${w.y}-${String(w.m).padStart(2, "0")}-${String(w.d).padStart(2, "0")}`;
 
-/** The instant New York's clock reads hh:mm on that day. */
 function at(y: number, m: number, d: number, hh: number, mm: number) {
   const guess = Date.UTC(y, m - 1, d, hh, mm);
   const w = wall(guess);
-  const off = Date.UTC(w.y, w.m - 1, w.d, w.hh, w.mm) - guess; // New York minus UTC
+  const off = Date.UTC(w.y, w.m - 1, w.d, w.hh, w.mm) - guess;
   return guess - off;
 }
 
@@ -50,13 +63,12 @@ function shift(y: number, m: number, d: number, by: number) {
   return [t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate()] as const;
 }
 
-/** The trading day `ms` falls on, or the last one before it. */
 export function sessionDay(ms: number): Day {
   const w = wall(ms);
   for (let i = 0; i < 10; i++) {
     const [y, m, d] = shift(w.y, w.m, w.d, -i);
     const day = tradingDay(y, m, d);
-    if (day && (i > 0 || ms >= day.open - 5.5 * 3600_000)) return day; // from 4am on, today is the day
+    if (day && (i > 0 || ms >= day.open - 5.5 * 3600_000)) return day;
   }
   throw new Error("no trading day in ten days");
 }
@@ -74,26 +86,54 @@ export function nextOpen(ms: number): number {
 export type Clock = { state: "open" | "pre" | "post" | "closed"; day: Day; nextOpen: number };
 export function marketClock(ms: number): Clock {
   const day = sessionDay(ms);
-  const state = ms >= day.open && ms < day.close ? "open" : ms < day.open && ms >= day.open - 5.5 * 3600_000 ? "pre" : ms >= day.close && ms < day.close + 4 * 3600_000 ? "post" : "closed";
+  const state =
+    ms >= day.open && ms < day.close
+      ? "open"
+      : ms < day.open && ms >= day.open - 5.5 * 3600_000
+        ? "pre"
+        : ms >= day.close && ms < day.close + 4 * 3600_000
+          ? "post"
+          : "closed";
   return { state, day, nextOpen: nextOpen(ms) };
 }
 
-// Yahoo writes share classes with a dash (BRK-B), which everyone else writes with a dot. BTC-USD stays as it is.
+// platform: Yahoo writes share classes with a dash (BRK-B), which everyone else writes with a dot. BTC-USD stays as it is.
 export const display = (symbol: string) => (symbol === INDEX ? "S&P 500" : symbol.replace(/-(?=[A-Z]$)/, "."));
 
-// ---- Everything else on Yahoo ----
+const YAHOO_NEW_YORK_EXCHANGES = new Set([
+  "NMS",
+  "NYQ",
+  "NGM",
+  "NCM",
+  "ASE",
+  "PCX",
+  "BTS",
+  "NAS",
+  "PNK",
+  "OQB",
+  "OQX",
+  "PIN",
+  "SNP",
+  "DJI",
+  "NIM",
+  "WCB",
+  "CXI",
+]);
 
-// Yahoo's codes for New York's markets, which run on the clock above. Anywhere else, its own quote says.
-const NEW_YORK = new Set(["NMS", "NYQ", "NGM", "NCM", "ASE", "PCX", "BTS", "NAS", "PNK", "OQB", "OQX", "PIN", "SNP", "DJI", "NIM", "WCB", "CXI"]);
-
-export type Instrument = { type?: string; exchange?: string; state?: string; periodOpen?: number; periodClose?: number; time?: number; recv?: number };
+export type Instrument = {
+  type?: string;
+  exchange?: string;
+  state?: string;
+  periodOpen?: number;
+  periodClose?: number;
+  time?: number;
+  recv?: number;
+};
 export type Market = {
   kind: "newYork" | "always" | "other";
   open: boolean;
-  /** The regular session the day's chart runs over, when it has one. */
   day: { open: number; close: number } | null;
   clock: Clock | null;
-  /** How far behind the feed is, in minutes, when that's worth saying: Tokyo's runs 15 late. */
   late: number;
 };
 
@@ -102,12 +142,15 @@ export function marketOf(q: Instrument | null | undefined, now: number): Market 
   const behind = fresh ? Math.round((q!.recv! - q!.time!) / 60_000) : 0;
   const late = behind >= 5 ? behind : 0;
   if (q?.type === "CRYPTOCURRENCY") return { kind: "always", open: true, day: null, clock: null, late };
-  const newYork = !q?.exchange || NEW_YORK.has(q.exchange);
+  const newYork = !q?.exchange || YAHOO_NEW_YORK_EXCHANGES.has(q.exchange);
   if (newYork && (!q?.type || ["EQUITY", "ETF", "INDEX"].includes(q.type))) {
     const clock = marketClock(now);
     return { kind: "newYork", open: clock.state === "open", day: clock.day, clock, late };
   }
   const open = q?.state === "REGULAR";
-  const session = q?.type !== "CURRENCY" && q?.type !== "FUTURE" && q?.type !== "MUTUALFUND" && q?.periodOpen && q.periodClose ? { open: q.periodOpen, close: q.periodClose } : null;
+  const session =
+    q?.type !== "CURRENCY" && q?.type !== "FUTURE" && q?.type !== "MUTUALFUND" && q?.periodOpen && q.periodClose
+      ? { open: q.periodOpen, close: q.periodClose }
+      : null;
   return { kind: "other", open, day: session, clock: null, late };
 }

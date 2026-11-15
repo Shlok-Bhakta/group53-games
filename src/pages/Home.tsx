@@ -13,7 +13,6 @@ import { LargeTitle } from "@/components/AppHeader";
 import { NotificationBanner } from "@/components/NotificationBanner";
 import { useNotifications } from "@/notifications";
 
-// Home: what's going on with your games. Each section shows up only when it has something in it.
 export function Home() {
   const push = useNotifications();
   const locked = push.state !== "on" && push.state !== "unsupported";
@@ -69,7 +68,13 @@ export function Home() {
                   key={m._id}
                   match={m}
                   meId={meId}
-                  status={m.status === "waiting" ? <Chip tone="quiet">{m.players.length > 1 || m.invited.length === 0 ? "Open" : "Sent"}</Chip> : <TurnChip match={m} meId={meId} />}
+                  status={
+                    m.status === "waiting" ? (
+                      <Chip tone="quiet">{m.players.length > 1 || m.invited.length === 0 ? "Open" : "Sent"}</Chip>
+                    ) : (
+                      <TurnChip match={m} meId={meId} />
+                    )
+                  }
                 />
               ))}
             </Section>
@@ -77,7 +82,13 @@ export function Home() {
           {inbox.watch.length > 0 && (
             <Section title="Happening now">
               {inbox.watch.map((m) => (
-                <MatchRow key={m._id} match={m} meId={meId} vs status={<Chip tone={MODES[m.mode as keyof typeof MODES]?.kind === "realtime" ? "live" : "quiet"}>Watch</Chip>} />
+                <MatchRow
+                  key={m._id}
+                  match={m}
+                  meId={meId}
+                  vs
+                  status={<Chip tone={MODES[m.mode as keyof typeof MODES]?.kind === "realtime" ? "live" : "quiet"}>Watch</Chip>}
+                />
               ))}
             </Section>
           )}
@@ -87,7 +98,6 @@ export function Home() {
   );
 }
 
-// Old pushes and links pointed at /?new=<mode>; send them to that mode's page.
 function useLegacyNewGameLink() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -112,7 +122,6 @@ function AllClear() {
   );
 }
 
-// My rating in each mode I've played, as small stat cards.
 function Stats() {
   const ratings = useQuery(api.ratings.mine);
   const played = MODE_KEYS.filter((m) => (ratings?.[m]?.games ?? 0) > 0);
@@ -136,8 +145,16 @@ function Stats() {
 
 function StatCard({ to, label, value, delay, children }: { to: string; label: string; value: number; delay: number; children: ReactNode }) {
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ type: "spring", bounce: 0, duration: 0.4, delay }}>
-      <Link to={to} className="flex min-h-[88px] flex-col justify-between rounded-lg bg-card p-3.5 transition-[transform,background-color] duration-100 ease-out active:scale-[0.97] active:bg-muted">
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: "spring", bounce: 0, duration: 0.4, delay }}
+    >
+      <Link
+        to={to}
+        data-slot="card"
+        className="flex min-h-[88px] flex-col justify-between rounded-lg bg-card p-3.5 transition-[transform,background-color] duration-100 ease-out active:scale-[0.97] active:bg-muted"
+      >
         <span className="truncate text-footnote font-semibold text-muted-foreground">{label}</span>
         <span className="flex items-end justify-between gap-2">
           <span className="font-display text-title tabular-nums">{value}</span>

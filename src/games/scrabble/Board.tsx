@@ -1,46 +1,44 @@
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { AnimatePresence, animate, motion } from "motion/react";
 import { layout, type Placed } from "../../../convex/scrabble/engine";
 import { cn } from "@/lib/utils";
+import { INK_ON_SEAT_COLOR } from "./palette";
 import { LetterTile, PREMIUM_STYLE } from "./Tile";
 
+export type BoardView = { width: number; height: number; padTop?: number; padRight?: number; padBottom?: number; padLeft?: number };
 export type DraftTile = { id: number; x: number; y: number; letter: string; blank: boolean };
 export type BoardHandle = {
-  // The square under a point on screen, if it's on the board and inside the visible part of it.
   cellAt: (clientX: number, clientY: number) => [number, number] | null;
 };
 type Props = {
   size: number;
-  // The board's side on screen at its smallest, in px, and the window it's seen through (which can be
-  // taller than the board, so it fills the screen and you pan around it).
   px: number;
-  // `padTop` and `padBottom` are what floats over the board's edges (a top bar, a dock): the board runs
-  // underneath them, but any square can be brought out into the open part between.
-  view?: { width: number; height: number; padTop?: number; padBottom?: number };
+  view?: BoardView;
   tiles: Placed[];
   draft: DraftTile[];
   seatColor: (seat: number) => string;
-  // Squares from the latest move, which pop in and stay outlined in their player's color.
   fresh: Set<string>;
   freshSeat: number | null;
-  // Where a dragged tile would land.
   target: [number, number] | null;
-  // How the tiles I've laid out read: still checking, all real words, or not.
   tone: "idle" | "ok" | "bad";
-  // The score of what I've laid out, by the end of the main word.
   bubble: { x: number; y: number; text: string } | null;
-  // A draft tile that's being dragged, so it isn't drawn twice.
   hidden: number | null;
-  // Where to look first: the middle of what's on the board, or the centre star.
   focus: [number, number];
   zoomOnDoubleTap: boolean;
-  // Squares to bring into view when `key` changes: a word someone just played.
   reveal?: { key: number; cells: [number, number][] };
-  // Where whoever's turn it is has laid tiles out, face down, in their color.
   ghosts: { cells: [number, number][]; color: string } | null;
-  // The latest play's score, floating up off its last tile.
   scored: { key: number; x: number; y: number; text: string; color: string } | null;
-  // Bumped to shake my tiles when they don't make real words.
   shake: number;
   onCellTap: (x: number, y: number) => void;
   onDraftDown: (id: number, e: ReactPointerEvent) => void;
@@ -50,12 +48,48 @@ const MAX_CELL = 64;
 const START_CELL = 44;
 const key = (x: number, y: number) => `${x},${y}`;
 
-// The board: pinch or double-tap to zoom, drag to look around. Moves happen in the DOM directly, not
-// through React, so panning stays smooth on a full board.
 export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoard(props, ref) {
-  const { size, px, view, tiles, draft, seatColor, fresh, freshSeat, target, tone, bubble, hidden, focus, zoomOnDoubleTap, reveal, ghosts, scored, shake, onCellTap, onDraftDown } = props;
-  // Fresh tiles land in reading order, one after another, in time with the notes of the play sound.
-  const freshOrder = useMemo(() => new Map([...fresh].sort((a, b) => a.split(",").map(Number).reduce((s, v) => s + v, 0) - b.split(",").map(Number).reduce((s, v) => s + v, 0)).map((k, i) => [k, i])), [fresh]);
+  const {
+    size,
+    px,
+    view,
+    tiles,
+    draft,
+    seatColor,
+    fresh,
+    freshSeat,
+    target,
+    tone,
+    bubble,
+    hidden,
+    focus,
+    zoomOnDoubleTap,
+    reveal,
+    ghosts,
+    scored,
+    shake,
+    onCellTap,
+    onDraftDown,
+  } = props;
+  const freshOrder = useMemo(
+    () =>
+      new Map(
+        [...fresh]
+          .sort(
+            (a, b) =>
+              a
+                .split(",")
+                .map(Number)
+                .reduce((s, v) => s + v, 0) -
+              b
+                .split(",")
+                .map(Number)
+                .reduce((s, v) => s + v, 0),
+          )
+          .map((k, i) => [k, i]),
+      ),
+    [fresh],
+  );
   const base = px / size;
   const maxScale = Math.max(1, MAX_CELL / base);
   const startScale = Math.min(maxScale, Math.max(1, START_CELL / base));
@@ -67,8 +101,8 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
   const vh = view?.height ?? px;
   const padTop = view?.padTop ?? 0;
   const padBottom = view?.padBottom ?? 0;
-  // Keeps the board in view. Smaller than the open part of the window, it sits in the middle of it; bigger,
-  // it can be dragged until its edge meets the edge of the open part, never further.
+  const padLeft = view?.padLeft ?? 0;
+  const padRight = view?.padRight ?? 0;
   const clamp = useCallback(
     (s: number, tx: number, ty: number) => {
       const sc = Math.min(maxScale, Math.max(1, s));
@@ -77,9 +111,9 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
         const open = dim - lo - hi;
         return side <= open ? lo + (open - side) / 2 : Math.min(lo, Math.max(dim - hi - side, v));
       };
-      return { s: sc, tx: axis(tx, vw), ty: axis(ty, vh, padTop, padBottom) };
+      return { s: sc, tx: axis(tx, vw, padLeft, padRight), ty: axis(ty, vh, padTop, padBottom) };
     },
-    [maxScale, px, vw, vh, padTop, padBottom],
+    [maxScale, px, vw, vh, padTop, padBottom, padLeft, padRight],
   );
   const apply = useCallback((next: { s: number; tx: number; ty: number }) => {
     t.current = next;
@@ -89,19 +123,18 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
     el.style.setProperty("--s", String(next.s));
   }, []);
   const centredOn = useCallback(
-    (s: number, cx: number, cy: number) => clamp(s, vw / 2 - (cx + 0.5) * base * s, (vh + padTop - padBottom) / 2 - (cy + 0.5) * base * s),
-    [base, clamp, vw, vh, padTop, padBottom],
+    (s: number, cx: number, cy: number) =>
+      clamp(s, (vw + padLeft - padRight) / 2 - (cx + 0.5) * base * s, (vh + padTop - padBottom) / 2 - (cy + 0.5) * base * s),
+    [base, clamp, vw, vh, padTop, padBottom, padLeft, padRight],
   );
 
-  // Start zoomed in on the action, once we know how big the board is.
   const started = useRef<string>("");
   useLayoutEffect(() => {
-    // Not keyed on the pads: the dock changing height (swap mode) mustn't jump the view.
     const k = `${px}:${size}:${vw}`;
     if (!px || started.current === k) return;
     started.current = k;
     apply(centredOn(startScale, focus[0], focus[1]));
-  }, [px, size, startScale, focus, apply, centredOn]);
+  }, [px, size, vw, startScale, focus, apply, centredOn]);
 
   const zoomTo = useCallback(
     (next: { s: number; tx: number; ty: number }) => {
@@ -110,13 +143,13 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
         type: "spring",
         bounce: 0,
         duration: 0.35,
-        onUpdate: (p) => apply({ s: from.s + (next.s - from.s) * p, tx: from.tx + (next.tx - from.tx) * p, ty: from.ty + (next.ty - from.ty) * p }),
+        onUpdate: (p) =>
+          apply({ s: from.s + (next.s - from.s) * p, tx: from.tx + (next.tx - from.tx) * p, ty: from.ty + (next.ty - from.ty) * p }),
       });
     },
     [apply],
   );
 
-  // --- Gestures: one finger pans (or taps), two pinch. ---
   const g = useRef({
     pts: new Map<number, { x: number; y: number }>(),
     mode: "none" as "none" | "maybe" | "pan" | "pinch",
@@ -126,7 +159,6 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
     lastTap: { at: 0, x: 0, y: 0 },
   });
 
-  // A new word landed out of view: glide over to it, unless a finger is on the board.
   const revealed = useRef(reveal?.key);
   useEffect(() => {
     if (!reveal || revealed.current === reveal.key || !px) return;
@@ -136,27 +168,27 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
     const seen = ([x, y]: [number, number]) => {
       const sx = tx + (x + 0.5) * base * s;
       const sy = ty + (y + 0.5) * base * s;
-      return sx > 0 && sy > padTop && sx < vw && sy < vh - padBottom;
+      return sx > padLeft && sy > padTop && sx < vw - padRight && sy < vh - padBottom;
     };
     if (reveal.cells.every(seen)) return;
     const cx = reveal.cells.reduce((a, [x]) => a + x, 0) / reveal.cells.length;
     const cy = reveal.cells.reduce((a, [, y]) => a + y, 0) / reveal.cells.length;
     zoomTo(centredOn(s, cx, cy));
-  }, [reveal, px, base, zoomTo, centredOn, padTop, padBottom, vw, vh]);
+  }, [reveal, px, base, zoomTo, centredOn, padTop, padBottom, padLeft, padRight, vw, vh]);
 
   const cellAt = useCallback(
     (clientX: number, clientY: number): [number, number] | null => {
       const el = viewport.current;
       if (!el) return null;
       const r = el.getBoundingClientRect();
-      // Only the open part counts: a tile over the dock is over the rack, not the squares under it.
-      if (clientX < r.left || clientX > r.right || clientY < r.top + padTop || clientY > r.bottom - padBottom) return null;
+      if (clientX < r.left + padLeft || clientX > r.right - padRight || clientY < r.top + padTop || clientY > r.bottom - padBottom)
+        return null;
       const { s, tx, ty } = t.current;
       const x = Math.floor((clientX - r.left - tx) / s / base);
       const y = Math.floor((clientY - r.top - ty) / s / base);
       return x >= 0 && y >= 0 && x < size && y < size ? [x, y] : null;
     },
-    [base, size, padTop, padBottom],
+    [base, size, padTop, padBottom, padLeft, padRight],
   );
   useImperativeHandle(ref, () => ({ cellAt }), [cellAt]);
 
@@ -224,7 +256,6 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
       if (st.pts.size === 1) st.mode = "pan";
     }
   };
-  // Trackpads and mouse wheels, for desktop.
   useEffect(() => {
     const el = viewport.current;
     if (!el) return;
@@ -258,7 +289,7 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
     >
-      <div ref={layer} className="absolute left-0 top-0 origin-top-left rounded-[3px] bg-border" style={{ width: px, height: px }}>
+      <div ref={layer} className="absolute left-0 top-0 origin-top-left rounded-xs bg-border" style={{ width: px, height: px }}>
         <Squares size={size} base={base} />
         {tiles.map((tile) => {
           const k = key(tile.x, tile.y);
@@ -268,13 +299,23 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
               key={k}
               data-cell={k}
               data-letter={tile.letter}
-              className="absolute grid place-items-center rounded-[3px]"
-              style={{ left: tile.x * base, top: tile.y * base, width: base, height: base, background: isFresh && freshSeat !== null ? `color-mix(in oklch, ${seatColor(freshSeat)} 55%, transparent)` : undefined }}
+              className="absolute grid place-items-center rounded-xs"
+              style={{
+                left: tile.x * base,
+                top: tile.y * base,
+                width: base,
+                height: base,
+                background: isFresh && freshSeat !== null ? `color-mix(in oklch, ${seatColor(freshSeat)} 55%, transparent)` : undefined,
+              }}
             >
               <motion.span
                 className="grid place-items-center"
                 initial={isFresh ? { y: -base * 0.8, scale: 0.6, opacity: 0 } : false}
-                animate={isFresh ? { y: [-base * 0.8, 0, -base * 0.28, 0], scale: [0.6, 1.08, 1, 0.9], opacity: [0, 1, 1, 1] } : { y: 0, scale: 1, opacity: 1 }}
+                animate={
+                  isFresh
+                    ? { y: [-base * 0.8, 0, -base * 0.28, 0], scale: [0.6, 1.08, 1, 0.9], opacity: [0, 1, 1, 1] }
+                    : { y: 0, scale: 1, opacity: 1 }
+                }
                 transition={{ duration: 0.62, times: [0, 0.42, 0.7, 1], ease: "easeOut", delay: 0.07 * (freshOrder.get(k) ?? 0) }}
               >
                 <LetterTile letter={tile.letter} blank={tile.blank} size={base - 2} seat={seatColor(tile.seat)} />
@@ -296,8 +337,14 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
                 exit={{ scale: 0.4, opacity: 0, rotate: 10 }}
                 transition={{ type: "spring", bounce: 0.45, duration: 0.4 }}
               >
-                {/* Face down: a solid tile back in the player's color, so nothing shows through. */}
-                <LetterTile letter="?" size={base - 2} seat={ghosts.color} style={{ background: `linear-gradient(color-mix(in oklch, ${ghosts.color} 30%, #fbf0d6), color-mix(in oklch, ${ghosts.color} 42%, #efdcb4))` }} />
+                <LetterTile
+                  letter="?"
+                  size={base - 2}
+                  seat={ghosts.color}
+                  style={{
+                    background: `linear-gradient(color-mix(in oklch, ${ghosts.color} 30%, var(--color-tile-cream)), color-mix(in oklch, ${ghosts.color} 42%, var(--color-tile-cream-shade)))`,
+                  }}
+                />
               </motion.div>
             ))}
         </AnimatePresence>
@@ -308,7 +355,7 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
             data-draft={d.id}
             data-cell={key(d.x, d.y)}
             data-letter={d.letter}
-            className={cn("absolute grid touch-none place-items-center rounded-[4px]", d.id === hidden && "opacity-0")}
+            className={cn("absolute grid touch-none place-items-center rounded-xs", d.id === hidden && "opacity-0")}
             style={{ width: base, height: base, boxShadow: `inset 0 0 0 2px ${ring}` }}
             initial={{ left: d.x * base, top: d.y * base, scale: 1.3 }}
             animate={{ left: d.x * base, top: d.y * base, scale: 1 }}
@@ -326,8 +373,14 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
         ))}
         {target && (
           <div
-            className="pointer-events-none absolute rounded-[3px] ring-2 ring-primary ring-offset-0"
-            style={{ left: target[0] * base, top: target[1] * base, width: base, height: base, background: "color-mix(in oklch, var(--primary) 25%, transparent)" }}
+            className="pointer-events-none absolute rounded-xs ring-2 ring-primary ring-offset-0"
+            style={{
+              left: target[0] * base,
+              top: target[1] * base,
+              width: base,
+              height: base,
+              background: "color-mix(in oklch, var(--primary) 25%, transparent)",
+            }}
           />
         )}
         <AnimatePresence>
@@ -340,8 +393,10 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
               animate={{ opacity: [0, 1, 1, 0], y: [0, -base * 0.9, -base * 1.3, -base * 1.8] }}
               transition={{ duration: 1.8, times: [0, 0.2, 0.7, 1], delay: 0.35 }}
             >
-              {/* White ink on the player's seat color, which is the same in every theme. */}
-              <span className="block -translate-x-1/2 rounded-full px-2.5 py-1 font-display text-callout tabular-nums text-white shadow-lg" style={{ scale: "calc(1 / var(--s, 1))", background: scored.color }}>
+              <span
+                className="block -translate-x-1/2 rounded-full px-2.5 py-1 font-display text-callout tabular-nums shadow-lg"
+                style={{ scale: "calc(1 / var(--s, 1))", background: scored.color, color: INK_ON_SEAT_COLOR }}
+              >
                 {scored.text}
               </span>
             </motion.div>
@@ -358,7 +413,11 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
           >
             <span
               className="block origin-bottom-left -translate-x-1/3 -translate-y-2/3 rounded-full px-2 py-0.5 text-footnote font-bold tabular-nums shadow"
-              style={{ scale: "calc(1 / var(--s, 1))", background: ring, color: tone === "idle" ? "var(--primary-foreground)" : tone === "ok" ? "var(--tile-ink)" : "var(--tile-hit-ink)" }}
+              style={{
+                scale: "calc(1 / var(--s, 1))",
+                background: ring,
+                color: tone === "idle" ? "var(--primary-foreground)" : tone === "ok" ? "var(--tile-ink)" : "var(--tile-hit-ink)",
+              }}
             >
               {bubble.text}
             </span>
@@ -369,12 +428,14 @@ export const ScrabbleBoard = forwardRef<BoardHandle, Props>(function ScrabbleBoa
   );
 });
 
-// Little puffs of smoke where face-down tiles appear or vanish.
 function Puffs({ cells, base, color }: { cells: [number, number][]; base: number; color: string }) {
   const prev = useRef(new Set<string>());
   const [puffs, setPuffs] = useState<{ id: number; x: number; y: number }[]>([]);
   const nextId = useRef(0);
-  const sig = cells.map(([x, y]) => key(x, y)).sort().join("|");
+  const sig = cells
+    .map(([x, y]) => key(x, y))
+    .sort()
+    .join("|");
   useEffect(() => {
     const now = new Set(sig ? sig.split("|") : []);
     const changed = [...now].filter((k) => !prev.current.has(k)).concat([...prev.current].filter((k) => !now.has(k)));
@@ -412,18 +473,20 @@ function Puffs({ cells, base, color }: { cells: [number, number][]; base: number
   );
 }
 
-// The empty squares and their bonuses. Never changes during a game, so it's drawn once.
 const Squares = memo(function Squares({ size, base }: { size: number; base: number }) {
   const rows = useMemo(() => layout(size), [size]);
   return (
-    <div className="absolute inset-0 grid" style={{ gridTemplateColumns: `repeat(${size}, 1fr)`, gridTemplateRows: `repeat(${size}, 1fr)` }}>
+    <div
+      className="absolute inset-0 grid"
+      style={{ gridTemplateColumns: `repeat(${size}, 1fr)`, gridTemplateRows: `repeat(${size}, 1fr)` }}
+    >
       {rows.flatMap((row, y) =>
         [...row].map((c, x) => {
           const p = PREMIUM_STYLE[c as keyof typeof PREMIUM_STYLE];
           return (
             <span
               key={`${x},${y}`}
-              className="m-px grid place-items-center rounded-[2px] font-bold leading-none"
+              className="m-px grid place-items-center rounded-xs font-bold leading-none"
               style={{ background: p?.bg ?? "var(--muted)", color: p?.ink, fontSize: Math.max(7, base * 0.34) }}
             >
               {p?.label}

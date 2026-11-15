@@ -10,24 +10,35 @@ import { same, viewFor, type Sq } from "./geometry";
 import { GameFrame } from "@/components/game/GameFrame";
 import { ConfirmMove, draftTargets, realSquare, useMoveDraft, useSendMove, type Dock } from "./dock";
 import { BackToNow, MoveChip, MoveLine, useHistory, type History } from "./history";
+import { BesideTheBoard, usePhoneLandscape } from "./landscape";
 import { SeatDot } from "@/components/game/SeatDot";
-// The armies' colors match the piece art (scripts/gen-four-pieces.mjs), so they stay the same in every theme.
 import { SEAT_COLORS } from "@/games/seats";
 
-export function FourGame({ match, meId, overlay, below, dock }: { match: MatchView; meId: Id<"users"> | undefined; overlay?: ReactNode; below?: ReactNode; dock: Dock }) {
+export function FourGame({
+  match,
+  meId,
+  overlay,
+  below,
+  dock,
+}: {
+  match: MatchView;
+  meId: Id<"users"> | undefined;
+  overlay?: ReactNode;
+  below?: ReactNode;
+  dock: Dock;
+}) {
   const state = match.state as FourState;
   const me = match.players.find((p) => p.userId === meId);
   const myColor = me?.color as Color4 | undefined;
   const view = useMemo(() => viewFor("four", myColor), [myColor]);
+  const landscape = usePhoneLandscape();
   const myTurn = match.status === "active" && !!myColor && state.turn === myColor;
   const [selected, setSelected] = useState<Sq | null>(null);
   const position = useMemo(() => `${match._id}:${match.status}:${JSON.stringify(state)}`, [match._id, match.status, state]);
   const [draft, setDraft] = useMoveDraft<{ from: Sq; to: Sq }>(position);
   const [sending, send] = useSendMove(state.moves.length);
-  // The position after the waiting move, shown on the board until it's confirmed.
   const preview = useMemo(() => (draft && myTurn ? move4(state, draft.from, draft.to) : null), [state, draft, myTurn]);
   const history = useHistory(match._id, state.moves.length);
-  // Stepped back through the game: every board it's been through, worked out once on the first step back.
   const boards = useMemo(() => (history.live ? null : fourBoards(state)), [history.live, state]);
   const board = boards?.[history.at];
   const past = board ? { ...state, ...board } : null;
@@ -47,10 +58,12 @@ export function FourGame({ match, meId, overlay, below, dock }: { match: MatchVi
   const moved = shown && state.pieces.find((p) => !p.dead && p.x === shown.from[0] && p.y === shown.from[1]);
   if (shown && moved) pieces.push({ key: "ghost", color: moved.color, kind: moved.kind, x: moved.x, y: moved.y, ghost: true });
 
-  // While a move waits you can still pick up any of your pieces, the waiting one included, and move it instead.
   const pickable = myTurn && !sending;
   const mineIn = (s: FourState, [x, y]: Sq) => s.pieces.some((p) => p.color === myColor && !p.dead && p.x === x && p.y === y);
-  const mine = pickable && !past ? display.pieces.map((p): Sq => [p.x, p.y]).filter((sq) => mineIn(display, sq) && mineIn(state, realSquare(shown, sq))) : [];
+  const mine =
+    pickable && !past
+      ? display.pieces.map((p): Sq => [p.x, p.y]).filter((sq) => mineIn(display, sq) && mineIn(state, realSquare(shown, sq)))
+      : [];
   const from = selected && realSquare(shown, selected);
   const targets = from && pickable ? draftTargets(shown, from, legalTargetsFrom(state, from[0], from[1])) : [];
   const last = past ? state.moves[history.at - 1] : state.moves.at(-1);
@@ -65,13 +78,29 @@ export function FourGame({ match, meId, overlay, below, dock }: { match: MatchVi
     setDraft(shown && same(from, shown.from) && same(to, shown.from) ? null : { from, to });
   };
   const text = preview?.moves.at(-1)?.text;
-  const confirm = (d: { from: Sq; to: Sq }, text: string) => send(text, () => move({ id: match._id, fromX: d.from[0], fromY: d.from[1], toX: d.to[0], toY: d.to[1] }));
+  const confirm = (d: { from: Sq; to: Sq }, text: string) =>
+    send(text, () => move({ id: match._id, fromX: d.from[0], fromY: d.from[1], toX: d.to[0], toY: d.to[1] }));
+  const moveList = <FourMoves state={state} history={history} />;
 
   return (
     <GameFrame
-      dock={dock(sending ? <ConfirmMove move={sending} busy /> : shown && text ? <ConfirmMove move={text} onCancel={() => setDraft(null)} onConfirm={() => void confirm(shown, text)} /> : undefined)}
+      dock={dock(
+        sending ? (
+          <ConfirmMove move={sending} busy />
+        ) : shown && text ? (
+          <ConfirmMove move={text} onCancel={() => setDraft(null)} onConfirm={() => void confirm(shown, text)} />
+        ) : undefined,
+      )}
+      aside={
+        landscape && (
+          <BesideTheBoard>
+            {below}
+            {moveList}
+          </BesideTheBoard>
+        )
+      }
     >
-      <div className="relative -mx-2.5">
+      <div className="relative -mx-2.5 phone-landscape:mx-0 phone-landscape:square-fit">
         <Board
           label="4-player chess board"
           pieces={pieces}
@@ -90,8 +119,8 @@ export function FourGame({ match, meId, overlay, below, dock }: { match: MatchVi
         </Board>
         <BackToNow history={history} />
       </div>
-      {below}
-      <FourMoves state={state} history={history} />
+      {!landscape && below}
+      {!landscape && moveList}
     </GameFrame>
   );
 }

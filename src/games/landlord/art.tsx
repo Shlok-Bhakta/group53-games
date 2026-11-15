@@ -1,7 +1,5 @@
 import { motion } from "motion/react";
 
-// The Landlord card's art: a hand of deeds dealt into a fan, then a house dropped on the last. About a second,
-// once.
 const DEEDS = [
   { group: "sky", name: "Vermont Avenue", price: "$100" },
   { group: "orange", name: "New York Avenue", price: "$200" },

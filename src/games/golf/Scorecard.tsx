@@ -6,8 +6,6 @@ import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { seatColor } from "@/games/seats";
 import { cn } from "@/lib/utils";
 
-// The card: a row per hole with everyone's strokes, totals at the foot. Holes still to come show their par
-// once they're built. Scrolls sideways with a big table.
 export function Scorecard({ match, st, meId }: { match: MatchView; st: GolfState; meId: Id<"users"> | undefined }) {
   const seats = match.players.map((p, i) => ({ p, i }));
   const t = totals(st, match.players.length);
@@ -37,7 +35,15 @@ export function Scorecard({ match, st, meId }: { match: MatchView; st: GolfState
                 const x = st.scores[n]?.[i];
                 const under = x != null && h && x < h.par;
                 return (
-                  <td key={p.userId} className={cn("px-1 py-2 text-center font-display tabular-nums", under && "text-primary", p.userId === meId && "font-bold")} aria-label={x != null && h ? `${p.name}: ${x}, ${scoreName(x, h.par)}` : undefined}>
+                  <td
+                    key={p.userId}
+                    className={cn(
+                      "px-1 py-2 text-center font-display tabular-nums",
+                      under && "text-primary",
+                      p.userId === meId && "font-bold",
+                    )}
+                    aria-label={x != null && h ? `${p.name}: ${x}, ${scoreName(x, h.par)}` : undefined}
+                  >
                     {x ?? (st.scores[n] ? "–" : "")}
                     {st.sunk[n] && x != null && !st.sunk[n][i] && <span className="text-caption text-muted-foreground">↑</span>}
                   </td>

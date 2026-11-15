@@ -3,7 +3,6 @@ import { BOARD, HOUSES, JAIL } from "./board";
 import { DECKS } from "./cards";
 import { BANK, DEFAULT_RULES, act, actor, newGame, rentOf, standings, worth, type Action, type Game, type Rules } from "./engine";
 
-// Dice that come up as given, in order (each die is one call).
 const dice = (...ds: number[]) => {
   const q = ds.map((d) => (d - 1) / 6 + 0.01);
   return () => {
@@ -93,14 +92,12 @@ describe("moving round the board", () => {
     expect(h.s.players[0].cash).toBe(1900);
   });
   test("doubles roll again, and a third pair sends you to jail", () => {
-    // Income tax is on 4: it's paid and the roll comes back to you.
     let g = roll(game(), 0, 2, 2);
-    expect(g.s.players[0].cash).toBe(1300);
-    expect(g.s.current).toBe(0);
+    expect(g.s.players[0].cash, "income tax on square 4 is paid").toBe(1300);
+    expect(g.s.current, "doubles bring the roll back").toBe(0);
     expect(g.s.phase.k).toBe("roll");
     g = roll(g, 0, 1, 1);
     g = play(g, 0, { k: "decline" });
-    // Nobody bids: the auction is everyone dropping out.
     g = play(play(g, 0, { k: "fold" }), 1, { k: "fold" });
     expect(g.s.current).toBe(0);
     g = roll(g, 0, 1, 1);
@@ -135,7 +132,10 @@ describe("jail", () => {
   });
   test("three misses: pay $50 and move by the third roll", () => {
     let g = jailed();
-    for (const [a, b] of [[6, 5], [1, 2]]) {
+    for (const [a, b] of [
+      [6, 5],
+      [1, 2],
+    ]) {
       g = roll(g, 0, 1, 2);
       expect(g.s.players[0].pos).toBe(JAIL);
       g = roll(g, 1, a, b);
@@ -403,8 +403,7 @@ describe("debts and bankruptcy", () => {
     expect(g.s.players[0].out).toBe(true);
     expect(g.s.props[1]!.owner).toBe(1);
     expect(g.s.props[12]!.owner).toBe(1);
-    // 100 cash, the utility isn't mortgaged; 10% of Mediterranean Avenue's $30 is $3.
-    expect(g.s.players[1].cash).toBe(1500 + 100 - 3);
+    expect(g.s.players[1].cash, "their $100 cash, less 10% of Mediterranean Avenue's $30 mortgage").toBe(1500 + 100 - 3);
     expect(g.s.current).toBe(1);
     expect(standings(g.s).at(-1)).toEqual([0]);
   });
@@ -483,7 +482,9 @@ describe("trades", () => {
     let g = game(3);
     own(g, 0, 1, 3);
     g.s.props[3]!.houses = 1;
-    expect(() => play(g, 0, { k: "offer", to: 1, give: { cash: 0, props: [1], free: [] }, get: { cash: 10, props: [], free: [] } })).toThrow("Sell the buildings");
+    expect(() =>
+      play(g, 0, { k: "offer", to: 1, give: { cash: 0, props: [1], free: [] }, get: { cash: 10, props: [], free: [] } }),
+    ).toThrow("Sell the buildings");
     g.s.props[3]!.houses = 0;
     g = play(g, 0, { k: "offer", to: 1, give: { cash: 0, props: [1], free: [] }, get: { cash: 10, props: [], free: [] } });
     g = play(g, 0, { k: "offer", to: 2, give: { cash: 0, props: [1], free: [] }, get: { cash: 20, props: [], free: [] } });
@@ -521,8 +522,10 @@ describe("the speed die", () => {
     for (const i of g.s.props.keys()) if (g.s.props[i]) g.s.props[i]!.owner = i === 5 ? 0 : 1;
     g.s.props[6]!.mortgaged = true;
     g = roll(g, 0, 1, 2, 5);
-    // Rent on Baltic Avenue, then past the station (mine) and Oriental Avenue (mortgaged) to Vermont Avenue.
-    expect(g.events.filter((e) => e.t === "move").at(-1)).toMatchObject({ to: 8 });
+    expect(
+      g.events.filter((e) => e.t === "move").at(-1),
+      "past the station (mine) and Oriental Avenue (mortgaged) to Vermont Avenue",
+    ).toMatchObject({ to: 8 });
   });
   test("the bus moves by either die or both", () => {
     let g = roll(lapped(), 0, 1, 5, 6);

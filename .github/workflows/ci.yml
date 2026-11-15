@@ -1,5 +1,7 @@
-# Every PR and every push to main: the typecheck, both test suites and the sidecar's tests, the same ones
-# AGENTS.md asks for before shipping. Nothing here deploys; that's still `npm run deploy` from Shlok's machine.
+# Every PR and every push to main runs the same checks as `npm run verify` (scripts/verify.mjs), split into three
+# jobs. Nothing here deploys: whatever lands on main is deployed by the deployer on kiwi, which pulls main from this
+# public repo every minute (deploy/README.md). So main should only ever get commits that passed these.
+# Require these job names on main: check, sidecar, e2e.
 name: CI
 
 on:
@@ -13,9 +15,9 @@ concurrency:
 
 jobs:
   check:
-    name: Typecheck, unit tests, build
+    name: check
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,24 +27,25 @@ jobs:
       # Bun runs golf's determinism check under JavaScriptCore, the engine iPhones use.
       - uses: oven-sh/setup-bun@v2
       - run: npm ci
-      - run: npx tsc -b
-      - run: npm test
-      - run: npx vite build
+      - run: npm run verify -- --only=format,lint,dead,types,unit,build
 
   sidecar:
-    name: Stonks sidecar
+    name: sidecar
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: stonks
-      - run: cargo test --manifest-path stonks/Cargo.toml
+      - run: npm run verify -- --only=sidecar
 
   e2e:
-    name: End-to-end (Playwright)
+    name: e2e
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -57,7 +60,7 @@ jobs:
       - run: npx playwright install --with-deps chromium chromium-headless-shell
       # The throwaway Convex backend, pinned to kiwi's image (e2e/backend.mjs).
       - run: docker pull ghcr.io/convex/convex-backend@sha256:01aaebb72d7e9a32c82d183b3a25ffe15278f4dc656ecf30b21777691929d1ab
-      - run: npm run test:e2e
+      - run: npm run verify -- --only=e2e
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

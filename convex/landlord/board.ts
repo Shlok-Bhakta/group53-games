@@ -1,18 +1,26 @@
-// The board: forty squares round a square, the standard property-trading layout, with every price and rent of
-// the classic US Monopoly board (2008 and later: $200 income tax, $100 luxury tax).
-// Shared by the server and phones.
-
 export type Group = "brown" | "sky" | "pink" | "orange" | "red" | "yellow" | "green" | "navy";
 
-// `rent` for a street: unimproved, 1 to 4 houses, a hotel.
 export type Square =
   | { kind: "go" | "jail" | "parking" | "gotojail"; name: string }
-  | { kind: "street"; name: string; group: Group; price: number; house: number; rent: readonly [number, number, number, number, number, number] }
+  | {
+      kind: "street";
+      name: string;
+      group: Group;
+      price: number;
+      house: number;
+      rent: readonly [number, number, number, number, number, number];
+    }
   | { kind: "rail" | "util"; name: string; price: number }
   | { kind: "tax"; name: string; amount: number }
   | { kind: "chance" | "chest"; name: string };
 
-const street = (name: string, group: Group, price: number, house: number, ...rent: [number, number, number, number, number, number]): Square => ({
+const street = (
+  name: string,
+  group: Group,
+  price: number,
+  house: number,
+  ...rent: [number, number, number, number, number, number]
+): Square => ({
   kind: "street",
   name,
   group,
@@ -73,7 +81,6 @@ export const JAIL = 10;
 export const GO_TO_JAIL = 30;
 export const GO_SALARY = 200;
 export const JAIL_FINE = 50;
-// The bank's buildings. Run out and nobody can build until some come back.
 export const HOUSES = 32;
 export const HOTELS = 12;
 
@@ -82,14 +89,12 @@ export const isBuyable = (sq: Square): sq is Buyable => sq.kind === "street" || 
 export const BUYABLE = BOARD.flatMap((sq, i) => (isBuyable(sq) ? [i] : []));
 export const priceOf = (pos: number) => (BOARD[pos] as Buyable).price;
 export const mortgageOf = (pos: number) => priceOf(pos) / 2;
-// Lifting a mortgage costs it plus 10% interest, rounded up ($75 comes to $83).
 export const unmortgageOf = (pos: number) => mortgageOf(pos) + Math.ceil(mortgageOf(pos) / 10);
 export const houseCostOf = (pos: number) => {
   const sq = BOARD[pos];
   return sq.kind === "street" ? sq.house : 0;
 };
 
-// Every square of a group (a color, the stations, the utilities), in board order.
 export const groupKey = (pos: number): string => {
   const sq = BOARD[pos];
   return sq.kind === "street" ? sq.group : sq.kind;

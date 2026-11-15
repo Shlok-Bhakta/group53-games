@@ -3,7 +3,6 @@ import type { NewsItem } from "../../../convex/stonks/profile";
 import { Section } from "@/components/parts";
 import { ago } from "@/lib/time";
 
-// Stories, each opening outside the app: the market's on the board, a company's on its page.
 export function News({ title, items, now }: { title: string; items: NewsItem[]; now: number }) {
   return (
     <Section title={title}>
@@ -23,7 +22,17 @@ export function News({ title, items, now }: { title: string; items: NewsItem[]; 
               <ArrowSquareOutIcon className="shrink-0" aria-label="opens outside the app" />
             </span>
           </span>
-          {n.thumb ? <img src={n.thumb} alt="" width={56} height={56} loading="lazy" decoding="async" className="size-14 shrink-0 rounded-sm bg-muted object-cover" /> : null}
+          {n.thumb ? (
+            <img
+              src={n.thumb}
+              alt=""
+              width={56}
+              height={56}
+              loading="lazy"
+              decoding="async"
+              className="size-14 shrink-0 rounded-sm bg-muted object-cover"
+            />
+          ) : null}
         </a>
       ))}
     </Section>

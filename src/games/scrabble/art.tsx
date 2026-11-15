@@ -3,9 +3,8 @@ import { TimerIcon } from "@phosphor-icons/react";
 import type { ModeKey } from "../../../convex/modes";
 import { LetterTile, PREMIUM_STYLE } from "./Tile";
 
-// The Scrabble card's art: SCRABBLE drops in across, then WORDS down through its R. About a second, once.
 const ACROSS = "SCRABBLE";
-const DOWN = "WORDS"; // the R is DOWN[2]
+const DOWN = "WORDS";
 const COL = 2;
 const ROW = 2;
 
@@ -32,7 +31,6 @@ export function ScrabbleBanner() {
   );
 }
 
-// A corner of the board with a word on it; the live mode gets a timer that ticks in once.
 const MINI = ["T..d.", ".D...", "..D..", "d..*.", "....."];
 export function ScrabbleModeArt({ mode }: { mode: ModeKey }) {
   const live = mode === "scrabble:live";
@@ -49,7 +47,12 @@ export function ScrabbleModeArt({ mode }: { mode: ModeKey }) {
       </span>
       <span className="absolute inset-x-0 top-[58%] flex justify-center gap-0.5">
         {[...word].map((l, i) => (
-          <motion.span key={i} initial={{ y: -10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ type: "spring", bounce: 0.4, duration: 0.4, delay: 0.15 + i * 0.07 }}>
+          <motion.span
+            key={i}
+            initial={{ y: -10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ type: "spring", bounce: 0.4, duration: 0.4, delay: 0.15 + i * 0.07 }}
+          >
             <LetterTile letter={l} size={22} />
           </motion.span>
         ))}

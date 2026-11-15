@@ -16,13 +16,11 @@ async function row(ctx: MutationCtx, userId: Id<"users">, mode: string) {
   return (await ctx.db.get(id))!;
 }
 
-// Two-player Elo. `score` is 1 for a win by `a`, 0 for a loss, 0.5 for a draw.
 export function elo(a: number, b: number, score: number) {
   const expected = 1 / (1 + 10 ** ((b - a) / 400));
   return Math.round(K * (score - expected));
 }
 
-// Places best first, ties sharing a place. Two-player results are a win/loss or a draw.
 export function placesOf(match: Doc<"matches">): Id<"users">[][] {
   const r = match.result!;
   if (r.standings) return r.standings;
@@ -31,8 +29,6 @@ export function placesOf(match: Doc<"matches">): Id<"users">[][] {
   return [r.winners, ids.filter((id) => !r.winners.includes(id))];
 }
 
-// Multiplayer Elo: every pair of players is a game between them (the better place wins, the same place
-// draws), each pair weighted K/(n-1) so a four-player game moves ratings about as much as a two-player one.
 export function multiElo(ratings: number[], place: number[]) {
   const n = ratings.length;
   return ratings.map((ra, i) => {
@@ -52,11 +48,13 @@ export async function recordResult(ctx: MutationCtx, match: Doc<"matches">) {
   const placeOf = (id: Id<"users">) => places.findIndex((g) => g.includes(id));
   const rows = await Promise.all(match.players.map((p) => row(ctx, p.userId, match.mode)));
   const place = match.players.map((p) => placeOf(p.userId));
-  const deltas = multiElo(rows.map((r) => r.rating), place);
+  const deltas = multiElo(
+    rows.map((r) => r.rating),
+    place,
+  );
   return Promise.all(
     match.players.map(async (p, i) => {
       const r = rows[i];
-      // A win is first place alone; sharing first is a draw.
       const outcome = place[i] === 0 ? (places[0].length === 1 ? "win" : "draw") : "loss";
       await ctx.db.patch(r._id, {
         rating: r.rating + deltas[i],
@@ -70,12 +68,18 @@ export async function recordResult(ctx: MutationCtx, match: Doc<"matches">) {
   );
 }
 
-// Everyone in the crew, ranked. Players who haven't played the mode sit at the bottom, unranked.
 export const leaderboard = query({
   args: { mode: v.string() },
   handler: async (ctx, { mode }) => {
     if ((await getAuthUserId(ctx)) === null) return [];
-    const ratings = new Map((await ctx.db.query("ratings").withIndex("by_mode", (q) => q.eq("mode", mode)).collect()).map((r) => [r.userId, r]));
+    const ratings = new Map(
+      (
+        await ctx.db
+          .query("ratings")
+          .withIndex("by_mode", (q) => q.eq("mode", mode))
+          .collect()
+      ).map((r) => [r.userId, r]),
+    );
     const users = await ctx.db.query("users").collect();
     return users
       .map((u) => {
@@ -93,13 +97,16 @@ export const leaderboard = query({
   },
 });
 
-// My rating and record in every mode I've played, for the mode cards and the stats on Home.
 export const mine = query({
   args: {},
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
     if (userId === null) return {};
     const rows = await ctx.db.query("ratings").collect();
-    return Object.fromEntries(rows.filter((r) => r.userId === userId).map((r) => [r.mode, { rating: r.rating, games: r.games, wins: r.wins, losses: r.losses, draws: r.draws }]));
+    return Object.fromEntries(
+      rows
+        .filter((r) => r.userId === userId)
+        .map((r) => [r.mode, { rating: r.rating, games: r.games, wins: r.wins, losses: r.losses, draws: r.draws }]),
+    );
   },
 });

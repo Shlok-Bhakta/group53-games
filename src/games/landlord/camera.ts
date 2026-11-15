@@ -1,54 +1,46 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useRef, useState, type RefObject } from "react";
 import { animate, useMotionValue, useReducedMotion } from "motion/react";
 import { SIDE } from "./geometry";
 
-// The camera over the board: where it's looking and how close, as motion values the board's transform reads
-// straight from (nothing re-renders as it moves). The game points it at whatever's happening; a finger drags
-// it, two pinch it, a double tap flips between the whole board and close up. Moving it by hand holds it there
-// until the game next has something to show (`manual`).
-
 const MAX_ZOOM = 1.8;
-// How close the game looks at what's happening: squares big enough to read their names.
 export const CLOSE = 1.05;
 const SPRING = { type: "spring", stiffness: 170, damping: 28, mass: 1 } as const;
+const DRAG_SLOP = 8;
+const DOUBLE_TAP_MS = 300;
+const DOUBLE_TAP_PX = 30;
+const MIN_OPEN = 120;
+const FIT_MARGIN = 0.96;
+const EDGE_ROOM = 0.4;
+
+export type CameraView = { w: number; h: number; top: number; bottom: number; left: number; right: number };
+export const UNMEASURED_VIEW: CameraView = { w: 390, h: 844, top: 110, bottom: 220, left: 0, right: 0 };
 
 export type Camera = ReturnType<typeof useCamera>;
 
-export function useCamera(viewport: RefObject<HTMLDivElement | null>, pads: { top: number; bottom: number }) {
+export function useCamera(viewport: RefObject<HTMLDivElement | null>, view: CameraView) {
   const x = useMotionValue(0);
   const y = useMotionValue(0);
   const k = useMotionValue(0.45);
   const reduce = useReducedMotion();
-  const [size, setSize] = useState({ w: 390, h: 844 });
   const manual = useRef(false);
   const [overview, setOverview] = useState(true);
 
-  useEffect(() => {
-    const el = viewport.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => setSize({ w: el.clientWidth, h: el.clientHeight }));
-    ro.observe(el);
-    setSize({ w: el.clientWidth, h: el.clientHeight });
-    return () => ro.disconnect();
-  }, [viewport]);
-
-  const open = Math.max(120, size.h - pads.top - pads.bottom);
-  const fit = Math.min(size.w / SIDE, open / SIDE) * 0.96;
+  const openW = Math.max(MIN_OPEN, view.w - view.left - view.right);
+  const openH = Math.max(MIN_OPEN, view.h - view.top - view.bottom);
+  const fit = Math.min(openW / SIDE, openH / SIDE) * FIT_MARGIN;
+  const isOverview = (kk: number) => kk <= fit * 1.02;
   const clampK = useCallback((v: number) => Math.min(MAX_ZOOM, Math.max(fit, v)), [fit]);
-  // Keeps the board on screen: centered when it's smaller than the open part, otherwise no more than a little
-  // way off any edge.
   const clampXY = useCallback(
     (nx: number, ny: number, kk: number) => {
       const span = SIDE * kk;
-      // Room past the board's edge, so a square on the edge can sit in the middle of the open part.
-      const m = Math.min(size.w, open) * 0.4;
-      const cx = (size.w - span) / 2;
-      const cy = pads.top + (open - span) / 2;
-      const ox = span < size.w ? cx : Math.min(m, Math.max(size.w - span - m, nx));
-      const oy = span < open ? cy : Math.min(pads.top + m, Math.max(pads.top + open - span - m, ny));
+      const room = Math.min(openW, openH) * EDGE_ROOM;
+      const cx = view.left + (openW - span) / 2;
+      const cy = view.top + (openH - span) / 2;
+      const ox = span < openW ? cx : Math.min(view.left + room, Math.max(view.left + openW - span - room, nx));
+      const oy = span < openH ? cy : Math.min(view.top + room, Math.max(view.top + openH - span - room, ny));
       return { x: ox, y: oy };
     },
-    [size.w, open, pads.top],
+    [openW, openH, view.left, view.top],
   );
 
   const go = useCallback(
@@ -67,15 +59,14 @@ export function useCamera(viewport: RefObject<HTMLDivElement | null>, pads: { to
     [clampXY, reduce, x, y, k],
   );
 
-  // Looks at a point of the board, in the middle of the open part of the screen.
   const focus = useCallback(
     (wx: number, wy: number, scale = CLOSE, opts: { instant?: boolean; force?: boolean } = {}) => {
       if (manual.current && !opts.force) return;
       const kk = clampK(scale);
       setOverview(kk <= fit * 1.02);
-      go(size.w / 2 - wx * kk, pads.top + open / 2 - wy * kk, kk, opts.instant);
+      go(view.left + openW / 2 - wx * kk, view.top + openH / 2 - wy * kk, kk, opts.instant);
     },
-    [clampK, fit, go, size.w, pads.top, open],
+    [clampK, fit, go, view.left, view.top, openW, openH],
   );
   const whole = useCallback(
     (instant = false) => {
@@ -84,15 +75,20 @@ export function useCamera(viewport: RefObject<HTMLDivElement | null>, pads: { to
     },
     [fit, go],
   );
-  // The game has something new to show: hand the camera back.
   const release = useCallback(() => {
     manual.current = false;
   }, []);
+  const hold = useCallback(() => {
+    manual.current = true;
+  }, []);
 
-  // Fingers.
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const moved = useRef(0);
   const lastTap = useRef({ t: 0, x: 0, y: 0 });
+  const origin = () => {
+    const rect = viewport.current?.getBoundingClientRect();
+    return { left: rect?.left ?? 0, top: rect?.top ?? 0 };
+  };
   const onPointerDown = (e: React.PointerEvent) => {
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.current.size === 1) moved.current = 0;
@@ -106,7 +102,7 @@ export function useCamera(viewport: RefObject<HTMLDivElement | null>, pads: { to
       const dx = next.x - prev.x;
       const dy = next.y - prev.y;
       moved.current += Math.abs(dx) + Math.abs(dy);
-      if (moved.current > 8) {
+      if (moved.current > DRAG_SLOP) {
         manual.current = true;
         const c = clampXY(x.get() + dx, y.get() + dy, k.get());
         x.stop();
@@ -121,9 +117,7 @@ export function useCamera(viewport: RefObject<HTMLDivElement | null>, pads: { to
       const d1 = Math.hypot(a.x - b.x, a.y - b.y);
       const mid0 = { x: (a0.x + b0.x) / 2, y: (a0.y + b0.y) / 2 };
       const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-      const rect = viewport.current?.getBoundingClientRect();
-      const ox = rect?.left ?? 0;
-      const oy = rect?.top ?? 0;
+      const { left: ox, top: oy } = origin();
       const k0 = k.get();
       const k1 = clampK(k0 * (d0 > 0 ? d1 / d0 : 1));
       const nx = mid.x - ox - (mid0.x - ox - x.get()) * (k1 / k0);
@@ -137,46 +131,43 @@ export function useCamera(viewport: RefObject<HTMLDivElement | null>, pads: { to
       k.set(k1);
       x.set(c.x);
       y.set(c.y);
-      setOverview(k1 <= fit * 1.02);
+      setOverview(isOverview(k1));
     }
     ps.set(e.pointerId, next);
   };
   const onPointerUp = (e: React.PointerEvent) => {
     const ps = pointers.current;
     ps.delete(e.pointerId);
-    if (ps.size > 0 || moved.current > 8) return;
-    // A double tap: the whole board, or close up where it landed.
+    if (ps.size > 0 || moved.current > DRAG_SLOP) return;
     const now = performance.now();
     const t = lastTap.current;
-    if (now - t.t < 300 && Math.hypot(e.clientX - t.x, e.clientY - t.y) < 30) {
-      lastTap.current = { t: 0, x: 0, y: 0 };
-      manual.current = true;
-      if (!overview) whole();
-      else {
-        const rect = viewport.current?.getBoundingClientRect();
-        const wx = (e.clientX - (rect?.left ?? 0) - x.get()) / k.get();
-        const wy = (e.clientY - (rect?.top ?? 0) - y.get()) / k.get();
-        focus(wx, wy, CLOSE, { force: true });
-      }
-    } else lastTap.current = { t: now, x: e.clientX, y: e.clientY };
+    const doubleTap = now - t.t < DOUBLE_TAP_MS && Math.hypot(e.clientX - t.x, e.clientY - t.y) < DOUBLE_TAP_PX;
+    if (!doubleTap) {
+      lastTap.current = { t: now, x: e.clientX, y: e.clientY };
+      return;
+    }
+    lastTap.current = { t: 0, x: 0, y: 0 };
+    manual.current = true;
+    if (!overview) return whole();
+    const { left, top } = origin();
+    focus((e.clientX - left - x.get()) / k.get(), (e.clientY - top - y.get()) / k.get(), CLOSE, { force: true });
   };
   const onWheel = (e: React.WheelEvent) => {
     manual.current = true;
     const kk = clampK(k.get() * (e.ctrlKey ? Math.exp(-e.deltaY / 200) : 1));
-    const rect = viewport.current?.getBoundingClientRect();
-    const px = e.clientX - (rect?.left ?? 0);
-    const py = e.clientY - (rect?.top ?? 0);
+    const { left, top } = origin();
+    const px = e.clientX - left;
+    const py = e.clientY - top;
     const nx = e.ctrlKey ? px - (px - x.get()) * (kk / k.get()) : x.get() - e.deltaX;
     const ny = e.ctrlKey ? py - (py - y.get()) * (kk / k.get()) : y.get() - e.deltaY;
     const c = clampXY(nx, ny, kk);
     k.set(kk);
     x.set(c.x);
     y.set(c.y);
-    setOverview(kk <= fit * 1.02);
+    setOverview(isOverview(kk));
   };
-  // A drag that ends over a square isn't a tap on it.
-  const onClickCapture = (e: React.MouseEvent) => {
-    if (moved.current > 8) {
+  const swallowTapAfterDrag = (e: React.MouseEvent) => {
+    if (moved.current > DRAG_SLOP) {
       e.stopPropagation();
       e.preventDefault();
     }
@@ -189,8 +180,8 @@ export function useCamera(viewport: RefObject<HTMLDivElement | null>, pads: { to
     focus,
     whole,
     release,
+    hold,
     overview,
-    manual,
-    bind: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp, onWheel, onClickCapture },
+    bind: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp, onWheel, onClickCapture: swallowTapAfterDrag },
   };
 }

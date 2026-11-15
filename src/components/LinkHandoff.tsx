@@ -13,8 +13,6 @@ import { errorText } from "@/lib/errors";
 import { listNames } from "@/lib/text";
 import { cn } from "@/lib/utils";
 
-// A game link opened in a browser (Discord's, or Safari), where nobody's signed in. Pick yourself and the
-// game is pushed to your phone; the notification opens the app right in it. See convex/links.ts.
 export function LinkHandoff({ path }: { path: string }) {
   const view = useQuery(api.links.preview, { path });
   const handoff = useMutation(api.links.handoff);
@@ -24,7 +22,6 @@ export function LinkHandoff({ path }: { path: string }) {
   if (view === undefined) return <div className="h-40" />;
   if (view === null) return null;
 
-  // The error shows in the card below rather than as a toast.
   const pick = (userId: Id<"users">) =>
     run(async () => {
       setError(null);
@@ -34,15 +31,21 @@ export function LinkHandoff({ path }: { path: string }) {
         setError(errorText(e));
       }
     });
-  const title = view.status === "waiting" ? `${view.host} wants ${view.title}` : `${view.game}: ${listNames(view.players.map((p) => p.name))}`;
-  // Android can hand a link to the installed app when the system lets it.
+  const title =
+    view.status === "waiting" ? `${view.host} wants ${view.title}` : `${view.game}: ${listNames(view.players.map((p) => p.name))}`;
   const intent = `intent://${location.host}${path}#Intent;scheme=https;action=android.intent.action.VIEW;end`;
 
   return (
     <section aria-label="Open this game" className="flex flex-col gap-5">
       <div>
         <h1 className="font-display text-title">{title}</h1>
-        <AvatarStack people={view.players.map((p) => ({ name: p.name, image: p.image ?? undefined }))} max={view.players.length} size={40} ring="background" className="mt-3 -space-x-2" />
+        <AvatarStack
+          people={view.players.map((p) => ({ name: p.name, image: p.image ?? undefined }))}
+          max={view.players.length}
+          size={40}
+          ring="background"
+          className="mt-3 -space-x-2"
+        />
       </div>
 
       <div>
@@ -50,16 +53,17 @@ export function LinkHandoff({ path }: { path: string }) {
         <ul className="grid grid-cols-4 gap-x-2 gap-y-3" aria-label="Crew">
           {view.crew.map((p) => (
             <li key={p._id}>
-              <button
-                type="button"
+              <Button
+                variant="bare"
+                size="tile"
                 disabled={busy}
                 onClick={() => void pick(p._id)}
                 aria-label={`I'm ${p.name}`}
-                className={cn("flex w-full touch-manipulation flex-col items-center gap-1.5 rounded-lg py-1.5 transition-transform duration-100 active:scale-[0.95]", sent?.to === p._id && "bg-primary/12")}
+                className={cn(sent?.to === p._id && "bg-primary/12")}
               >
                 <PlayerAvatar name={p.name} image={p.image ?? undefined} size={56} />
                 <span className="w-full truncate text-footnote font-semibold">{p.name}</span>
-              </button>
+              </Button>
             </li>
           ))}
         </ul>
@@ -73,9 +77,15 @@ export function LinkHandoff({ path }: { path: string }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             role="status"
+            data-slot="card"
             className="flex items-start gap-3 rounded-lg bg-card p-4 ring-2 ring-primary/50"
           >
-            <motion.span initial={{ rotate: -20 }} animate={{ rotate: [0, -18, 16, -10, 6, 0] }} transition={{ duration: 0.7 }} className="mt-0.5 shrink-0 text-primary">
+            <motion.span
+              initial={{ rotate: -20 }}
+              animate={{ rotate: [0, -18, 16, -10, 6, 0] }}
+              transition={{ duration: 0.7 }}
+              className="mt-0.5 shrink-0 text-primary"
+            >
               <BellRingingIcon size={22} weight="fill" />
             </motion.span>
             <span>

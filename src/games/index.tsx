@@ -24,9 +24,13 @@ import { PokerGame } from "./poker/PokerGame";
 import { pokerRules } from "./poker/rules";
 import { LandlordBanner, LandlordModeArt } from "./landlord/art";
 import { landlordRules } from "./landlord/rules";
+import { landlordSummary } from "./landlord/summary";
+import { chessSummary } from "./chess/summary";
+import { scrabbleSummary } from "./scrabble/summary";
+import { pokerSummary } from "./poker/summary";
+import { golfSummary } from "./golf/summary";
+import type { GameSummary } from "./summary";
 
-// Everything the shared screens need from a game: its card on Games, its mode art, rules, and the screen
-// for a game in progress. The lobby, results, rematches, mode pages and hub are shared (src/pages).
 export type GameUI = {
   key: GameKey;
   path: string;
@@ -35,37 +39,28 @@ export type GameUI = {
   banner: () => ReactNode;
   modeArt: (mode: ModeKey) => ReactNode;
   rules: (mode: ModeKey, settings: Settings) => string[];
-  // A game that's started or finished, below the nav bar.
-  Game: ComponentType<{ match: MatchView; meId: Id<"users"> | undefined }>;
-  // Games that draw their own top bar and take the whole screen: asked of any game that's started or finished
-  // (most say only while it's on; Landlord keeps its board up for the result too).
+  Game: ComponentType<GameScreenProps>;
+  summary: GameSummary;
   fullscreen?: (match: MatchView) => boolean;
-  // More on the game's page, under the modes (golf's practice holes).
   extra?: () => ReactNode;
-  // At the bottom of a mode page, with the settings for the next game: golf's holes for those settings.
-  // In a lobby too, where only the host can change them (`editable`).
   setup?: (p: { mode: ModeKey; settings: Settings; onChange: (next: Settings) => void; editable?: boolean }) => ReactNode;
 };
 
-// Golf's screen is big (the physics, the drawing, the sound), so it's only downloaded once a game's opened.
-const GolfScreen = lazy(() => import("./golf/GolfGame"));
-function GolfGame(props: { match: MatchView; meId: Id<"users"> | undefined }) {
-  return (
-    <Suspense fallback={<div className="h-[100dvh]" aria-busy="true" />}>
-      <GolfScreen {...props} />
-    </Suspense>
-  );
+type GameScreenProps = { match: MatchView; meId: Id<"users"> | undefined };
+
+function downloadedWhenOpened(load: () => Promise<{ default: ComponentType<GameScreenProps> }>) {
+  const Screen = lazy(load);
+  return function LazyGameScreen(props: GameScreenProps) {
+    return (
+      <Suspense fallback={<div className="h-[100dvh]" aria-busy="true" />}>
+        <Screen {...props} />
+      </Suspense>
+    );
+  };
 }
 
-// Landlord's board, camera and show only download once a game's opened, like golf's.
-const LandlordScreen = lazy(() => import("./landlord/LandlordGame"));
-function LandlordGame(props: { match: MatchView; meId: Id<"users"> | undefined }) {
-  return (
-    <Suspense fallback={<div className="h-[100dvh]" aria-busy="true" />}>
-      <LandlordScreen {...props} />
-    </Suspense>
-  );
-}
+const GolfGame = downloadedWhenOpened(() => import("./golf/GolfGame"));
+const LandlordGame = downloadedWhenOpened(() => import("./landlord/LandlordGame"));
 
 export const GAME_UI: Record<GameKey, GameUI> = {
   chess: {
@@ -77,6 +72,7 @@ export const GAME_UI: Record<GameKey, GameUI> = {
     modeArt: (mode) => <ChessModeArt mode={mode} />,
     rules: chessRules,
     Game: ChessGame,
+    summary: chessSummary,
   },
   scrabble: {
     key: "scrabble",
@@ -87,6 +83,7 @@ export const GAME_UI: Record<GameKey, GameUI> = {
     modeArt: (mode) => <ScrabbleModeArt mode={mode} />,
     rules: scrabbleRules,
     Game: ScrabbleGame,
+    summary: scrabbleSummary,
     fullscreen: (m) => m.status === "active",
   },
   poker: {
@@ -98,16 +95,19 @@ export const GAME_UI: Record<GameKey, GameUI> = {
     modeArt: (mode) => <PokerModeArt mode={mode} />,
     rules: pokerRules,
     Game: PokerGame,
+    summary: pokerSummary,
   },
   golf: {
     key: "golf",
     path: GAMES.golf.path,
     name: GAMES.golf.name,
-    blurb: "Up to 8 of you on handmade or generated courses. Grab items, knock each other into the water, keep what you hold for the next hole.",
+    blurb:
+      "Up to 8 of you on handmade or generated courses. Grab items, knock each other into the water, keep what you hold for the next hole.",
     banner: () => <GolfBanner />,
     modeArt: (mode) => <GolfModeArt mode={mode} />,
     rules: golfRules,
     Game: GolfGame,
+    summary: golfSummary,
     fullscreen: (m) => m.status === "active",
     extra: () => <GolfPractice />,
     setup: (p) => <GolfHoles {...p} />,
@@ -116,36 +116,33 @@ export const GAME_UI: Record<GameKey, GameUI> = {
     key: "landlord",
     path: GAMES.landlord.path,
     name: GAMES.landlord.name,
-    blurb: "Buy streets, build hotels, trade and bankrupt each other, 2 to 8 of you over a few days. Every official rule, the common house rules, and the speed die.",
+    blurb:
+      "Buy streets, build hotels, trade and bankrupt each other, 2 to 8 of you over a few days. Every official rule, the common house rules, and the speed die.",
     banner: () => <LandlordBanner />,
     modeArt: () => <LandlordModeArt />,
     rules: landlordRules,
     Game: LandlordGame,
+    summary: landlordSummary,
     fullscreen: (m) => m.status === "active" || m.status === "finished",
   },
 };
 
-// Cards on the Games tab: every game, then the ones still being built.
 export type GameCard = {
   path: string;
   name: string;
   blurb: string;
   banner: () => ReactNode;
   wip?: boolean;
-  // Called when the card is on screen and when Play is touched: start loading what Play opens.
   prefetch?: (convex: ConvexReactClient) => void;
 };
-// Stonks: the S&P 500's biggest companies, live, ranked by their share of the index. No lobby yet either;
-// Play opens the board (src/games/stonks/Stonks.tsx).
 const STONKS: GameCard = {
   path: "/stonks",
   name: "Stonks",
-  blurb: "$10,000 of fake money and everything on Yahoo Finance to lose it on: stocks anywhere, crypto, forex, futures. Beat the crew, live.",
+  blurb:
+    "$10,000 of fake money and everything on Yahoo Finance to lose it on: stocks anywhere, crypto, forex, futures. Beat the crew, live.",
   banner: () => <StonksBanner />,
   prefetch: prefetchStonks,
 };
-// Journey Across Mereddia: Chris's single-player RPG. It isn't in this bundle: Play opens a separate build in an
-// iframe (HostedGame.tsx), which downloads only then.
 const MEREDDIA: GameCard = {
   path: "/mereddia",
   name: "Journey Across Mereddia",

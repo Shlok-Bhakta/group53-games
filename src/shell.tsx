@@ -4,14 +4,10 @@ import { useQuery } from "convex/react";
 import { animate, motion, useIsPresent, useMotionValue, type MotionValue } from "motion/react";
 import { api } from "../convex/_generated/api";
 
-// Screens come in like a native navigation stack: tabs switch instantly, a screen pushed on top of a tab
-// slides in from the right, and Back (or a swipe from the left edge) slides it away again.
-
 export const TAB_ROUTES = ["/", "/games", "/crew", "/you"];
 const isTab = (path: string) => TAB_ROUTES.includes(path);
 const SLIDE = { type: "spring", bounce: 0, duration: 0.42 } as const;
 
-// 1 for a push, -1 for a pop, 0 for a tab switch (no animation).
 export function useNavDirection() {
   const { pathname } = useLocation();
   const navType = useNavigationType();
@@ -28,16 +24,26 @@ export function useNavDirection() {
 }
 
 const variants = {
-  enter: (d: number) => (d === 0 ? { x: 0, zIndex: 1 } : { x: d > 0 ? window.innerWidth : -window.innerWidth * 0.3, zIndex: d > 0 ? 2 : 0 }),
+  enter: (d: number) =>
+    d === 0 ? { x: 0, zIndex: 1 } : { x: d > 0 ? window.innerWidth : -window.innerWidth * 0.3, zIndex: d > 0 ? 2 : 0 },
   center: { x: 0, zIndex: 1, transition: SLIDE },
   exit: (d: number) =>
-    d === 0 ? { opacity: 0, transition: { duration: 0 } } : { x: d > 0 ? -window.innerWidth * 0.3 : window.innerWidth, zIndex: d > 0 ? 0 : 2, transition: SLIDE },
+    d === 0
+      ? { opacity: 0, transition: { duration: 0 } }
+      : { x: d > 0 ? -window.innerWidth * 0.3 : window.innerWidth, zIndex: d > 0 ? 0 : 2, transition: SLIDE },
 };
 
-// One screen in the stack. Pushed screens can be swiped back from the left edge. A screen on its way out
-// stays drawn while it slides, but takes no taps and leaves the accessibility tree at once, so screen
-// readers (and tests) only ever find one screen's buttons.
-export function Page({ children, direction, onBack, ref }: { children: ReactNode; direction: number; onBack: (() => void) | null; ref?: Ref<HTMLDivElement> }) {
+export function Page({
+  children,
+  direction,
+  onBack,
+  ref,
+}: {
+  children: ReactNode;
+  direction: number;
+  onBack: (() => void) | null;
+  ref?: Ref<HTMLDivElement>;
+}) {
   const x = useMotionValue(0);
   const present = useIsPresent();
   useEdgeSwipe(x, present ? onBack : null);
@@ -62,8 +68,6 @@ export function Page({ children, direction, onBack, ref }: { children: ReactNode
 
 const EDGE = 24;
 
-// Swipe right from the left edge to go back, tracking the finger 1:1. Past a third of the screen, or with a
-// quick flick, it commits; otherwise it springs back. Boards and sheets keep their own touches.
 function useEdgeSwipe(x: MotionValue<number>, onBack: (() => void) | null) {
   const back = useRef(onBack);
   back.current = onBack;
@@ -77,7 +81,8 @@ function useEdgeSwipe(x: MotionValue<number>, onBack: (() => void) | null) {
       const t = e.touches[0];
       start = null;
       if (e.touches.length !== 1 || t.clientX > EDGE) return;
-      if ((e.target as Element | null)?.closest?.("[role=grid], [data-board], [role=dialog], [role=alertdialog], [data-vaul-drawer]")) return;
+      if ((e.target as Element | null)?.closest?.("[role=grid], [data-board], [role=dialog], [role=alertdialog], [data-vaul-drawer]"))
+        return;
       start = { x: t.clientX, y: t.clientY };
       engaged = false;
       samples = [{ x: t.clientX, t: e.timeStamp }];
@@ -107,7 +112,7 @@ function useEdgeSwipe(x: MotionValue<number>, onBack: (() => void) | null) {
       start = null;
       const first = samples[0];
       const last = samples[samples.length - 1];
-      const velocity = last.t > first.t ? (last.x - first.x) / (last.t - first.t) : 0; // px per ms
+      const velocity = last.t > first.t ? (last.x - first.x) / (last.t - first.t) : 0;
       if (x.get() > window.innerWidth / 3 || velocity > 0.5) back.current?.();
       else animate(x, 0, SLIDE);
     };
@@ -124,8 +129,6 @@ function useEdgeSwipe(x: MotionValue<number>, onBack: (() => void) | null) {
   }, [enabled, x]);
 }
 
-// Each history entry keeps its scroll position: a pushed screen starts at the top, and going back returns
-// to where you were.
 export function useScrollMemory(direction: number) {
   const { key } = useLocation();
   const positions = useRef(new Map<string, number>());
@@ -146,8 +149,6 @@ export function useScrollMemory(direction: number) {
   }, [key, direction]);
 }
 
-// The number on the home screen icon: games waiting on my move plus challenges to answer. Pushes set it
-// while the app is closed (public/sw.js); this keeps it right while it's open.
 export function useAppBadge() {
   const attention = useQuery(api.matches.attention);
   useEffect(() => {
@@ -157,10 +158,6 @@ export function useAppBadge() {
   }, [attention]);
 }
 
-// iOS standalone apps can keep a stale layout viewport after a rotation, the keyboard or coming back from the
-// background, and position:fixed bottom:0 then lands above the real bottom edge (the tab bar floating mid-screen).
-// A hidden probe pinned to the bottom shows where "bottom" really is; any gap to the visible viewport's bottom
-// goes into --viewport-gap, which `pin-bottom` subtracts. A one-pixel scroll nudge first asks iOS to recompute.
 const SETTLE_MS = [0, 250, 750];
 
 function viewportGap(probe: HTMLElement) {
@@ -170,6 +167,7 @@ function viewportGap(probe: HTMLElement) {
   return Math.max(0, Math.round(seen - pinned));
 }
 
+// platform: iOS standalone apps can keep a stale layout viewport after a rotation, the keyboard or coming back from the background, and position:fixed bottom:0 then lands above the real bottom edge.
 export function useViewportGap() {
   useEffect(() => {
     const root = document.documentElement;

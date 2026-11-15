@@ -15,9 +15,6 @@ import { Ticker } from "./Ticker";
 import { VERB, whenFills, type Holders, type Portfolio } from "./Trade";
 import { playerPath, stockPath, warmStock } from "./warm";
 
-// What's held and what's waiting to fill: yours on the board, anyone's on their profile, and on a stock's page,
-// your position and who else is in it.
-
 export function PositionRow({ p, owner, swatch }: { p: Portfolio["positions"][number]; owner?: string; swatch?: string }) {
   const convex = useConvex();
   const ref = useWarmWhileSeen<HTMLDivElement>(p.symbol);
@@ -69,12 +66,25 @@ export function Waiting({ orders, now, readOnly }: { orders: Portfolio["waiting"
         <div key={o.id} className={`flex ${S.row} items-center gap-3 px-4`}>
           <Link to={stockPath(o.symbol)} className="min-w-0 flex-1 transition-transform duration-100 active:scale-[0.97]">
             <span className="block truncate text-callout font-semibold">
-              {VERB[o.side]} {o.dollars !== undefined ? `${price(o.dollars)} of ` : o.shares !== undefined ? `${shareCount(o.shares, o.symbol)} of ` : "all of "}
+              {VERB[o.side]}{" "}
+              {o.dollars !== undefined
+                ? `${price(o.dollars)} of `
+                : o.shares !== undefined
+                  ? `${shareCount(o.shares, o.symbol)} of `
+                  : "all of "}
               {display(o.symbol)}
             </span>
             <span className="block text-footnote text-muted-foreground">{whenFills(marketOf(o.quote, now))}</span>
           </Link>
-          {!readOnly && <AsyncButton variant="ghost" size="icon" aria-label={`Cancel ${VERB[o.side]} ${display(o.symbol)}`} icon={<XIcon weight="bold" />} onClick={() => cancel({ id: o.id as Id<"stockOrders"> })} />}
+          {!readOnly && (
+            <AsyncButton
+              variant="ghost"
+              size="icon"
+              aria-label={`Cancel ${VERB[o.side]} ${display(o.symbol)}`}
+              icon={<XIcon weight="bold" />}
+              onClick={() => cancel({ id: o.id as Id<"stockOrders"> })}
+            />
+          )}
         </div>
       ))}
     </Section>
@@ -111,7 +121,12 @@ export function WhoHolds({ holders }: { holders: Holders }) {
   return (
     <Section title="Crew in this stock">
       {others.map((h) => (
-        <Link key={h.userId} to={playerPath(h.userId)} aria-label={`${h.name}'s profile`} className={`flex ${S.crew} items-center gap-3 px-4 transition-transform duration-100 active:scale-[0.97]`}>
+        <Link
+          key={h.userId}
+          to={playerPath(h.userId)}
+          aria-label={`${h.name}'s profile`}
+          className={`flex ${S.crew} items-center gap-3 px-4 transition-transform duration-100 active:scale-[0.97]`}
+        >
           <PlayerAvatar name={h.name} image={h.image} size={32} />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-callout font-semibold">{h.name}</span>

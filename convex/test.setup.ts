@@ -2,7 +2,6 @@
 import { convexTest } from "convex-test";
 import schema from "./schema";
 
-// Every Convex module, loaded lazily the way the backend would.
 export const modules = import.meta.glob(["./**/*.ts", "./**/*.js", "!./**/*.test.ts", "!./test.setup.ts"]);
 
 export function setup() {

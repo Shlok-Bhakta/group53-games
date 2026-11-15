@@ -1,18 +1,16 @@
 import type { ReactNode } from "react";
 import { CaretRightIcon, type Icon } from "@phosphor-icons/react";
 import { ListRow } from "@/components/ListRow";
+import { TINT_GLYPH } from "./palette";
 
-// The icon tiles are colored like iOS Settings on purpose, the same in every theme, with a white glyph.
-export const TINT = {
-  red: "#ff453a",
-  green: "#30d158",
-  purple: "#bf5af2",
-  orange: "#ff9f0a",
-  gray: "#8e8e93",
-  cyan: "#64d2ff",
-} as const;
+export function SettingsIcon({ icon: TileIcon, tint }: { icon: Icon; tint: string }) {
+  return (
+    <span className="grid size-[30px] shrink-0 place-items-center rounded-sm" style={{ background: tint, color: TINT_GLYPH }}>
+      <TileIcon size={18} weight="fill" />
+    </span>
+  );
+}
 
-// An iOS settings row: tinted icon tile, label, then a control, a value with a chevron, or nothing.
 export function SettingsRow({
   icon: RowIcon,
   tint,
@@ -32,11 +30,7 @@ export function SettingsRow({
 }) {
   const row = {
     size: "sm" as const,
-    leading: (
-      <span className="grid size-[30px] shrink-0 place-items-center rounded-sm text-white" style={{ background: tint }}>
-        <RowIcon size={18} weight="fill" />
-      </span>
-    ),
+    leading: <SettingsIcon icon={RowIcon} tint={tint} />,
     title: htmlFor ? (
       <label htmlFor={htmlFor} className="block font-medium">
         {label}

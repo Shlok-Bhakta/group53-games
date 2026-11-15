@@ -5,8 +5,19 @@ import { Sheet } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { LetterTile } from "./Tile";
 
-// The bag: how many tiles are left, and which letters are still out there (in the bag or in other racks).
-export function BagSheet({ open, onClose, match, state, rack }: { open: boolean; onClose: () => void; match: MatchView; state: ScrabbleState; rack: Tile[] | undefined }) {
+export function BagSheet({
+  open,
+  onClose,
+  match,
+  state,
+  rack,
+}: {
+  open: boolean;
+  onClose: () => void;
+  match: MatchView;
+  state: ScrabbleState;
+  rack: Tile[] | undefined;
+}) {
   const all = bagLetters(settingsOf(match.mode, match.settings).bag);
   const unseen = new Map<string, number>();
   for (const l of all) unseen.set(l, (unseen.get(l) ?? 0) + 1);
@@ -24,7 +35,11 @@ export function BagSheet({ open, onClose, match, state, rack }: { open: boolean;
         {letters.map((l) => {
           const n = unseen.get(l)!;
           return (
-            <li key={l} className={cn("flex flex-col items-center gap-0.5", n === 0 && "opacity-30")} aria-label={`${l === "?" ? "Blank" : l}: ${n}`}>
+            <li
+              key={l}
+              className={cn("flex flex-col items-center gap-0.5", n === 0 && "opacity-30")}
+              aria-label={`${l === "?" ? "Blank" : l}: ${n}`}
+            >
               <LetterTile letter={l} size={40} />
               <span className="text-footnote font-semibold tabular-nums">×{n}</span>
             </li>

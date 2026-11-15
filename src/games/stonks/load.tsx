@@ -1,14 +1,12 @@
 import { use } from "react";
 import type { ConvexReactClient } from "convex/react";
 import { BoardSkeleton, PlayerSkeleton, StockSkeleton } from "./skeletons";
+import type * as StonksScreens from "./Stonks";
 import { warmBoard } from "./warm";
 
-// Stonks' code downloads on its own (it's charts nobody else needs), but never while you wait: the Games
-// card starts it, and the board, as soon as the card is on screen. React.lazy shows its fallback for a
-// frame even when the code's already here, so the routes read a tracked promise with `use`, which React
-// returns synchronously once it's settled.
+// platform: React.lazy shows its fallback for a frame even when the code's already here; `use` on a settled, tracked promise returns at once.
 
-type Mod = typeof import("./Stonks");
+type Mod = typeof StonksScreens;
 type Tracked = Promise<Mod> & { status?: "pending" | "fulfilled" | "rejected"; value?: Mod; reason?: unknown };
 let loading: Tracked | null = null;
 
@@ -20,7 +18,7 @@ function loadStonks(): Promise<Mod> {
       (m) => Object.assign(p, { status: "fulfilled", value: m }),
       (e) => {
         Object.assign(p, { status: "rejected", reason: e });
-        loading = null; // a failed download (offline) tries again next time
+        loading = null;
       },
     );
     loading = p;
@@ -28,7 +26,6 @@ function loadStonks(): Promise<Mod> {
   return loading;
 }
 
-/** Everything the board needs before it's opened: the code and the data. */
 export function prefetchStonks(convex: ConvexReactClient) {
   void loadStonks();
   warmBoard(convex);
