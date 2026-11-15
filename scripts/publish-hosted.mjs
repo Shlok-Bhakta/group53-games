@@ -1,6 +1,3 @@
-// Puts a built game into Convex file storage and makes it live (see convex/hosted.ts).
-//   npm run game:publish -- mereddia dist-mereddia
-// It talks to whatever .env.local points at, or CONVEX_SELF_HOSTED_URL and CONVEX_SELF_HOSTED_ADMIN_KEY if set.
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
@@ -29,15 +26,18 @@ const walk = (dir, under = "") =>
     e.isDirectory() ? walk(path.join(dir, e.name), `${under}${e.name}/`) : [`${under}${e.name}`],
   );
 
+function contentHash(dir, paths) {
+  const hash = createHash("sha256");
+  for (const p of paths) hash.update(p).update(readFileSync(path.join(dir, p)));
+  return hash.digest("hex").slice(0, 12);
+}
+
 export async function publish({ url, adminKey, game, dir, log = () => {} }) {
   if (!existsSync(path.join(dir, "index.html"))) throw new Error(`${dir} has no index.html`);
   const client = new ConvexHttpClient(url);
   client.setAdminAuth(adminKey);
   const paths = walk(dir).sort();
-  // The same files make the same build, so publishing twice uploads the files again but changes nothing.
-  const hash = createHash("sha256");
-  for (const p of paths) hash.update(p).update(readFileSync(path.join(dir, p)));
-  const build = hash.digest("hex").slice(0, 12);
+  const build = contentHash(dir, paths);
 
   let next = 0;
   let sent = 0;

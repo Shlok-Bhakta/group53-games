@@ -14,7 +14,6 @@ export function NotificationsGroup() {
       toast.error((err as Error).message);
     }
   };
-  // Only when there's something to do about it.
   const footer =
     push.state === "blocked"
       ? "Notifications are blocked for Group 53. Turn them on in your phone's settings, then reopen the app."

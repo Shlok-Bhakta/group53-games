@@ -1,12 +1,8 @@
-/* Group 53 Games service worker: push notifications only, no offline cache.
-   iOS (16.4+) drops a push subscription after about three "silent" pushes,
-   meaning push events that settle without showing a notification. Keep every
-   push event alive with waitUntil() until showNotification() resolves. */
-
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
 self.addEventListener("push", (event) => {
+  // platform: iOS (16.4+) drops a subscription after about three pushes that settle without showing a notification, so each stays alive until showNotification() resolves.
   event.waitUntil(
     (async () => {
       try {
@@ -25,7 +21,6 @@ self.addEventListener("push", (event) => {
           tag: data.tag,
           data: { url: data.url },
         });
-        // The red number on the home screen icon (iOS 16.4+ home screen apps, Chrome on desktop).
         if (typeof data.badge === "number" && self.navigator.setAppBadge) {
           await (data.badge > 0 ? self.navigator.setAppBadge(data.badge) : self.navigator.clearAppBadge()).catch(() => {});
         }
@@ -36,8 +31,7 @@ self.addEventListener("push", (event) => {
   );
 });
 
-// Where a tapped notification wants to go, kept in the Cache API so the app can pick it up even when the
-// direct hand-off below doesn't arrive (iOS sometimes opens the app at its start URL instead).
+// platform: iOS sometimes opens the app at its start URL instead of the notification's, so the target also waits in the Cache API for src/deepLinks.ts.
 const PENDING = "group53-pending";
 async function rememberClick(url) {
   try {
@@ -48,9 +42,7 @@ async function rememberClick(url) {
   }
 }
 
-// Tapping a notification takes you to its page. An open app gets a message and routes there itself
-// (WindowClient.navigate() is unreliable in iOS standalone apps and reloads the page elsewhere); with
-// nothing open, a new window opens at the URL.
+// platform: iOS standalone apps ignore WindowClient.navigate(), so an open app is sent a message and routes itself.
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const url = new URL(event.notification.data?.url || "/", self.location.origin).href;
@@ -64,7 +56,7 @@ self.addEventListener("notificationclick", (event) => {
         try {
           await client.focus();
         } catch {
-          // Some platforms only allow focusing in direct response to a click; the message still lands.
+          // platform: some browsers only allow focus() in direct response to a click; the message still lands.
         }
         return;
       }

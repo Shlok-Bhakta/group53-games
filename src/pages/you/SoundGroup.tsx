@@ -16,8 +16,6 @@ import { cn } from "@/lib/utils";
 import { PickSheet } from "./PickSheet";
 import { SettingsRow, TINT } from "./SettingsRow";
 
-// Music plays all over the app; effects play as you place and play tiles. The volume follows your finger,
-// and picking a pack plays a little game in it.
 export function SoundGroup() {
   const sound = useSoundSettings();
   const [sheet, setSheet] = useState<"music" | "sfx" | null>(null);
@@ -92,7 +90,6 @@ export function SoundGroup() {
   );
 }
 
-// A list to pick one from, each with a line about what it is. Tapping the chosen one again plays it again.
 function Choices({
   label,
   options,

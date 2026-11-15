@@ -4,12 +4,6 @@ import { GAMES, MODES, acceptPath, matchPath, type ModeKey } from "./modes";
 import { notifyMatch } from "./notify";
 import { person } from "./lib/people";
 
-// Game links shared in Discord open in a browser, not in the installed app: iOS can't open a home screen
-// web app from a link at all, and Android only sometimes can. A browser there isn't signed in either, so
-// the link page asks who you are and sends the game to your phone as a push. Tapping it opens the app
-// right in the game. Both of these work signed out on purpose; they only reveal what a link preview in
-// Discord already shows (who's playing, and the crew's names and pictures).
-
 const HANDOFF_EVERY_MS = 15_000;
 
 async function matchFromPath(ctx: QueryCtx, path: string) {
@@ -18,12 +12,10 @@ async function matchFromPath(ctx: QueryCtx, path: string) {
   const id = ctx.db.normalizeId("matches", m[2]);
   if (!id) return null;
   const match = await ctx.db.get(id);
-  // The link's game has to be the match's game.
   const mode = match ? MODES[match.mode as ModeKey] : undefined;
   return match && mode && GAMES[mode.game].path === `/${m[1]}` ? match : null;
 }
 
-// What the link is for, and the crew to pick yourself from.
 export const preview = query({
   args: { path: v.string() },
   handler: async (ctx, { path }) => {
@@ -47,7 +39,6 @@ export const preview = query({
   },
 });
 
-// "This is me": push the game to that player's phone.
 export const handoff = mutation({
   args: { path: v.string(), userId: v.id("users") },
   handler: async (ctx, { path, userId }): Promise<"sent" | "no-push" | "wait"> => {

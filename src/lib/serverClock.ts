@@ -2,11 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 
-// Largest correction applied per millisecond of real time once synced, so re-syncs never make pieces jump.
 const SLEW_PER_MS = 0.1;
 
-// Estimates server time = Date.now() + offset, using the fastest of a few round trips (NTP-style).
-// The returned object is stable, so it can be used inside animation loops.
 export function useServerClock() {
   const ping = useMutation(api.time.now);
   const [ready, setReady] = useState(false);
@@ -20,14 +17,11 @@ export function useServerClock() {
       let best: { rtt: number; offset: number } | null = null;
       for (let i = 0; i < 5 && !cancelled; i++) {
         const sent = Date.now();
-        try {
-          const server = await ping({});
-          const rtt = Date.now() - sent;
-          const sample = { rtt, offset: server - (sent + rtt / 2) };
-          if (!best || rtt < best.rtt) best = sample;
-        } catch {
-          // Try again next round.
-        }
+        const server = await ping({}).catch(() => null);
+        if (server === null) continue;
+        const rtt = Date.now() - sent;
+        const sample = { rtt, offset: server - (sent + rtt / 2) };
+        if (!best || rtt < best.rtt) best = sample;
       }
       if (cancelled || !best) return;
       latency.current = best.rtt / 2;

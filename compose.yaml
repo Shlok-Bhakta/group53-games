@@ -89,3 +89,28 @@ services:
         condition: service_healthy
       web:
         condition: service_started
+  # Deploys main by itself (deploy/README.md): every minute it fetches the public repo and, when main has moved,
+  # runs that commit's deploy/run.mjs. It never rebuilds itself; after a change to deploy/Dockerfile, deploy/loop.sh
+  # or this block, run `docker compose up -d --build deployer` by hand.
+  deployer:
+    build: ./deploy
+    restart: unless-stopped
+    # docker stop lets a deploy in progress finish first.
+    stop_grace_period: 15m
+    group_add:
+      - "${DOCKER_GID:-988}" # the group owning /var/run/docker.sock on kiwi
+    environment:
+      STACK_DIR: ${STACK_DIR:-/home/shlok/Services/group53}
+      CONVEX_URL: http://convex:3210
+      ADMIN_KEY_FILE: /run/secrets/admin_key
+      SITE_URL: https://group53.shlokbhakta.dev
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # The stack at the same path inside as outside, so the bind mounts and build contexts compose hands the
+      # daemon are real host paths.
+      - .:${STACK_DIR:-/home/shlok/Services/group53}
+      - ./secrets/admin_key:/run/secrets/admin_key:ro
+      - deployer:/work
+
+volumes:
+  deployer:

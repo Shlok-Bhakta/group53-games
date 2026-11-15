@@ -13,8 +13,6 @@ import { errorText } from "@/lib/errors";
 import { listNames } from "@/lib/text";
 import { cn } from "@/lib/utils";
 
-// A game link opened in a browser (Discord's, or Safari), where nobody's signed in. Pick yourself and the
-// game is pushed to your phone; the notification opens the app right in it. See convex/links.ts.
 export function LinkHandoff({ path }: { path: string }) {
   const view = useQuery(api.links.preview, { path });
   const handoff = useMutation(api.links.handoff);
@@ -24,7 +22,6 @@ export function LinkHandoff({ path }: { path: string }) {
   if (view === undefined) return <div className="h-40" />;
   if (view === null) return null;
 
-  // The error shows in the card below rather than as a toast.
   const pick = (userId: Id<"users">) =>
     run(async () => {
       setError(null);
@@ -36,7 +33,6 @@ export function LinkHandoff({ path }: { path: string }) {
     });
   const title =
     view.status === "waiting" ? `${view.host} wants ${view.title}` : `${view.game}: ${listNames(view.players.map((p) => p.name))}`;
-  // Android can hand a link to the installed app when the system lets it.
   const intent = `intent://${location.host}${path}#Intent;scheme=https;action=android.intent.action.VIEW;end`;
 
   return (

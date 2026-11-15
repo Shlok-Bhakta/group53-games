@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { api, internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
-import { REALTIME_COUNTDOWN_MS } from "./modes";
-import { TICK_MS } from "./chess/realtime";
-import { setup, signedIn } from "./test.setup";
-import type { FourState, RealtimeState } from "./chess";
-import { TIMEOUT_STRIKES } from "./matches";
-import { multiElo } from "./ratings";
+import { api, internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
+import { REALTIME_COUNTDOWN_MS } from "../modes";
+import { TICK_MS } from "./realtime";
+import { setup, signedIn } from "../test.setup";
+import type { FourState, RealtimeState } from "../chess";
+import { TIMEOUT_STRIKES } from "../matches";
+import { multiElo } from "../ratings";
 
 beforeEach(() => {
   vi.useFakeTimers();

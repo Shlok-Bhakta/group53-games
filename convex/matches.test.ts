@@ -27,7 +27,6 @@ async function twoPlayers(t: T) {
   return { a, b };
 }
 
-// Starts a classic game and returns who's white and black.
 async function classicGame(t: T) {
   const { a, b } = await twoPlayers(t);
   const id = await a.as.mutation(api.matches.queue, { mode: "chess:classic" });
@@ -103,7 +102,6 @@ describe("lobby", () => {
   test("the sweep cancels duplicate challenges, stale lobbies, and real-time games nobody opened", async () => {
     const t = setup();
     const { a, b } = await twoPlayers(t);
-    // Duplicates made before dedupe existed.
     const dupes = await t.run(async (ctx) =>
       Promise.all(
         [0, 1, 2].map(() =>
@@ -200,8 +198,7 @@ describe("rematches", () => {
     expect(m.players.find((p) => p.color === "w")!.userId).toBe(black.userId);
     expect((await match(t, id))!.rematch).toMatchObject({ status: "accepted", matchId: next });
     expect((await pushes(t)).length).toBe(before);
-    // Asking again just returns the game that already started.
-    expect(await white.as.mutation(api.matches.rematch, { id })).toBe(next);
+    expect(await white.as.mutation(api.matches.rematch, { id }), "asking again returns the game that already started").toBe(next);
   });
 
   test("no thanks, or the asker cancelling, declines it", async () => {
@@ -210,8 +207,7 @@ describe("rematches", () => {
     await white.as.mutation(api.matches.rematch, { id });
     await black.as.mutation(api.matches.answerRematch, { id });
     expect((await match(t, id))!.rematch?.status).toBe("declined");
-    // After a decline, asking again starts a fresh offer rather than a game.
-    expect(await black.as.mutation(api.matches.rematch, { id })).toBeNull();
+    expect(await black.as.mutation(api.matches.rematch, { id }), "after a decline, asking again is a fresh offer, not a game").toBeNull();
     await black.as.mutation(api.matches.answerRematch, { id });
     expect((await match(t, id))!.rematch?.status).toBe("declined");
   });
@@ -300,10 +296,10 @@ describe("classic chess", () => {
   test("promotion needs a piece and works", async () => {
     const t = setup();
     const { id, white } = await classicGame(t);
-    // Put a white pawn on b7 with b8 free.
+    const whitePawnOnB7 = "4k3/1P6/8/8/8/8/8/4K3 w - - 0 1";
     await t.run(async (ctx) => {
       const m = (await ctx.db.get(id))!;
-      await ctx.db.patch(id, { state: { ...(m.state as ClassicState), fen: "4k3/1P6/8/8/8/8/8/4K3 w - - 0 1" } });
+      await ctx.db.patch(id, { state: { ...(m.state as ClassicState), fen: whitePawnOnB7 } });
     });
     await white.as.mutation(api.chess.move, { id, from: "b7", to: "b8", promotion: "n" });
     expect(((await match(t, id))!.state as ClassicState).moves.at(-1)?.san).toBe("b8=N");
@@ -361,8 +357,7 @@ describe("classic chess", () => {
     const badges = (await scheduled(t))
       .filter((s) => s.name === "push:sendToUser" && (s.args[0] as { userId: Id<"users"> }).userId === black.userId)
       .map((s) => (s.args[0] as { badge?: number }).badge);
-    // Game on (nothing waiting yet), the challenge (1 invite), then white's move (1 invite + 1 move).
-    expect(badges).toEqual([0, 1, 2]);
+    expect(badges, "game on (nothing waiting), the challenge (1 invite), white's move (1 invite + 1 move)").toEqual([0, 1, 2]);
   });
 
   test("a game's recent matches include everyone's, newest first", async () => {
@@ -437,10 +432,10 @@ describe("real-time chess", () => {
     vi.advanceTimersByTime(REALTIME_COUNTDOWN_MS + 100 * TICK_MS);
     const now = g.serverTick();
     expect(await g.white.as.mutation(api.chess.rtMove, { id: g.id, pieceId: 12, toX: 4, toY: 3, clientTick: now - 5 })).toBe(now - 5);
-    // Too far in the past is pulled up to the edge of the window; the future is capped too.
-    expect(await g.black.as.mutation(api.chess.rtMove, { id: g.id, pieceId: 28, toX: 4, toY: 4, clientTick: now - 500 })).toBe(
-      now - MAX_LAG_TICKS,
-    );
+    expect(
+      await g.black.as.mutation(api.chess.rtMove, { id: g.id, pieceId: 28, toX: 4, toY: 4, clientTick: now - 500 }),
+      "too far back is pulled up to the edge of the window",
+    ).toBe(now - MAX_LAG_TICKS);
     expect(
       await g.black.as.mutation(api.chess.rtMove, { id: g.id, pieceId: 27, toX: 3, toY: 4, clientTick: now + 500 }),
     ).toBeLessThanOrEqual(now + 3);
@@ -492,7 +487,6 @@ describe("real-time chess", () => {
     const t = setup();
     const g = await started(t);
     vi.advanceTimersByTime(REALTIME_COUNTDOWN_MS + 1);
-    // e4, queen to h5, queen takes f7, queen takes the king on e8, with waits for travel and cooldown.
     const play = async (pieceId: number, toX: number, toY: number) => {
       await g.white.as.mutation(api.chess.rtMove, { id: g.id, pieceId, toX, toY, clientTick: g.serverTick() });
       vi.advanceTimersByTime(10_000);
@@ -514,13 +508,11 @@ describe("real-time chess", () => {
     const g = await started(t);
     vi.advanceTimersByTime(REALTIME_COUNTDOWN_MS + 2000);
     const ticks = async () => (await scheduled(t)).filter((s) => s.name === "chess:rtTick" && s.state.kind === "pending");
-    // Let the tick the scheduler already started finish, so only ours runs from here.
     await t.finishInProgressScheduledFunctions();
     const before = await ticks();
     await t.mutation(internal.chess.rtTick, { id: g.id });
     const after = await ticks();
-    // Running one tick arms exactly one more, half a second out.
-    expect(after).toHaveLength(before.length + 1);
+    expect(after, "one tick arms exactly one more").toHaveLength(before.length + 1);
     const armed = after.find((s) => !before.some((b) => b._id === s._id))!;
     expect(armed.args[0]).toEqual({ id: g.id });
     expect(Math.round((armed.scheduledTime - Date.now()) / 100)).toBe(5);
@@ -536,11 +528,11 @@ describe("who may change a lobby", () => {
     const id = await a.as.mutation(api.matches.challenge, { mode: "chess:classic", opponents: [b.userId] });
     const before = await match(t, id);
     await expect(c.as.mutation(api.matches.decline, { id })).rejects.toThrow("There's nothing to decline.");
-    // Nor can the challenger decline their own challenge.
-    await expect(a.as.mutation(api.matches.decline, { id })).rejects.toThrow("There's nothing to decline.");
+    await expect(a.as.mutation(api.matches.decline, { id }), "the challenger can't decline their own").rejects.toThrow(
+      "There's nothing to decline.",
+    );
     expect(await match(t, id)).toEqual(before);
     expect(before).toMatchObject({ status: "waiting", invited: [b.userId] });
-    // The one it was sent to still can.
     await b.as.mutation(api.matches.decline, { id });
     expect((await match(t, id))!.status).toBe("cancelled");
   });

@@ -9,9 +9,6 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/u
 import { shareLink } from "@/share";
 import { cn } from "@/lib/utils";
 
-// The menu every game screen has, sliding in from the right: whatever the game puts on top (Scrabble's scores
-// and words), then the game's settings, how to play, sharing, and a footer pinned to the bottom (resigning).
-
 export function MenuButton({ onClick, className }: { onClick: () => void; className?: string }) {
   return (
     <Button variant="ghost" size="icon" aria-label="Menu" onClick={onClick} className={className}>
@@ -41,7 +38,7 @@ export function GameMenu({
   return (
     <Drawer open={open} onOpenChange={onOpenChange} direction="right">
       <DrawerContent className="w-[86%] max-w-sm overflow-hidden" aria-describedby={undefined}>
-        <div className="flex h-full flex-col overflow-y-auto overscroll-contain px-4 pb-[calc(env(safe-area-inset-bottom)+20px)] pt-[calc(env(safe-area-inset-top)+34px)]">
+        <div className="flex h-full flex-col overflow-y-auto overscroll-contain px-4 pb-[calc(var(--safe-bottom)+20px)] pt-[calc(var(--safe-top)+34px)]">
           <DrawerHeader className="px-1 pb-3 text-left">
             <DrawerTitle className="font-display text-title">{title}</DrawerTitle>
           </DrawerHeader>
@@ -66,10 +63,8 @@ export function GameMenu({
   );
 }
 
-// Every setting this game is played with, the ones the host changed from the default in the primary color.
 function MatchSettings({ match }: { match: MatchView }) {
   const value = settingsOf(match.mode, match.settings);
-  // Only what applies: no seed for a course made by hand.
   const defs = ((MODES[match.mode as ModeKey]?.settings ?? []) as readonly Setting[]).filter((s) => settingApplies(s, value));
   if (defs.length === 0) return null;
   return (

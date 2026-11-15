@@ -45,9 +45,8 @@ export function CardEditor({ open, onOpenChange, player }: { open: boolean; onOp
       title="Edit card"
       hideTitle
       className="max-h-[94dvh]"
-      bodyClassName="block pb-[calc(env(safe-area-inset-bottom)+24px)]"
+      bodyClassName="block pb-[calc(var(--safe-bottom)+24px)]"
     >
-      {/* The preview stays pinned while you scroll the options. */}
       <div className="sticky top-0 z-10 -mx-4 mb-4 flex justify-center border-b border-border/60 bg-popover px-4 pb-4 pt-2 shadow-[0_10px_20px_-16px_rgb(0_0_0/0.5)]">
         <div className="w-[min(36vw,148px)]">
           <PlayerCard player={player} />
@@ -191,7 +190,6 @@ function Choice({
   );
 }
 
-// The native picker opens from a hidden color input behind a rainbow swatch.
 function CustomColor({ value, onChange, selected }: { value: string; onChange: (c: string) => void; selected: boolean }) {
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   return (
@@ -221,7 +219,7 @@ function CustomColor({ value, onChange, selected }: { value: string; onChange: (
   );
 }
 
-// A textarea rather than an input: iOS offers saved passwords on single-line text fields.
+// platform: a textarea, since iOS offers saved passwords on single-line text fields.
 function TaglineField({ value, onSave }: { value: string; onSave: (v: string) => void }) {
   const [draft, setDraft] = useState(value);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);

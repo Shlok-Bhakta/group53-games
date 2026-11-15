@@ -2,7 +2,6 @@ import type { Page } from "@playwright/test";
 import { anyApi } from "convex/server";
 import { admin, createPlayer, expect, getMatch, matchIdOf, onScreen, test, type Player } from "./fixtures";
 
-// Test players never get real pushes; the test backend keeps what they would have got (testPushes).
 type Sent = { title: string; body: string; url: string; tag?: string; badge: number };
 const pushesOf = (p: Player): Promise<Sent[]> => admin().query(anyApi.testing.pushesOf, { userId: p.userId });
 
@@ -23,7 +22,6 @@ test.describe("pushes", () => {
     await expect(a.getByRole("heading", { name: "Challenge sent" })).toBeVisible();
     const id = matchIdOf(a);
 
-    // The challenge reaches Chris with the link that takes the seat, tagged to the game, and counts on the icon.
     await expect
       .poll(() => pushesOf(chris))
       .toEqual([
@@ -39,7 +37,6 @@ test.describe("pushes", () => {
     const [white, black] = shlokWhite ? [a, b] : [b, a];
     const [whitePlayer, blackPlayer] = shlokWhite ? [shlok, chris] : [chris, shlok];
 
-    // Black steps away: white's screen stops saying they're here.
     await expect(white.getByText("Black, here now")).toBeVisible();
     await black.goto("/");
     await expect(white.getByText("Black, here now")).toHaveCount(0);
@@ -49,7 +46,6 @@ test.describe("pushes", () => {
       .poll(async () => (await pushesOf(blackPlayer)).slice(blackBefore))
       .toEqual([expect.objectContaining({ url: `/chess/${id}`, tag: `match:${id}`, badge: 1 })]);
 
-    // Black answers while white is still looking at the game: white sees it land live, and gets no push.
     const whiteBefore = (await pushesOf(whitePlayer)).length;
     await black.goto(`/chess/${id}`);
     await expect(black.getByText("White, here now")).toBeVisible();

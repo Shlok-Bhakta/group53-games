@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { api, internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
-import { REMINDER_MS } from "./modes";
-import { setup, signedIn } from "./test.setup";
-import type { ScrabbleState } from "./scrabble/engine";
+import { api, internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
+import { REMINDER_MS } from "../modes";
+import { setup, signedIn } from "../test.setup";
+import type { ScrabbleState } from "./engine";
 
 beforeEach(() => {
   vi.useFakeTimers();

@@ -162,44 +162,47 @@ Run both suites before shipping, and add tests with every feature.
 
 ## Shipping
 
-Work happens one agent at a time on `main`. When a feature is done: run both test suites, commit, push to `origin main`, then deploy. The user has said to do all of that without asking.
+Whatever lands on `main` deploys itself. The flow:
 
-CI (`.github/workflows/ci.yml`) runs on every PR and push to `main`: the typecheck, `npm test` (with Bun, so golf's cross-engine check runs), the build, the sidecar's `cargo test`, and the full e2e suite, with one retry on CI (a test that only passed on its retry shows as flaky). It never deploys.
+1. Work on a branch.
+2. `npm run verify` runs every check (format, lint, dead code, typecheck, unit tests, build, the sidecar's tests, e2e). The pre-push hook (`.githooks/pre-push`) won't push a commit that hasn't passed it; commit first, since a run with uncommitted changes doesn't count.
+3. Push and open a PR. CI (`.github/workflows/ci.yml`) runs the same checks through `npm run verify -- --only=...` in three jobs, `check`, `sidecar` and `e2e` (one retry on CI, so a test that only passed on its retry shows as flaky). CI never deploys.
+4. Once it's merged, the deployer on kiwi picks up the new `main` within a couple of minutes and deploys it (`deploy/README.md`).
 
-Collaborators (Chrisis147, AIsJump, Boiler31) run it with `dekit`, work on branches and open PRs. `main` is protected and `.github/CODEOWNERS` makes Shlok the only approval that counts; a new push drops it. Shlok's direct pushes still work because admins bypass the rule (`enforce_admins` off), so leave that off. Merging a PR doesn't deploy it: pull `main` and run `npm run deploy`.
+Collaborators (Chrisis147, AIsJump, Boiler31) run it with `dekit`, work on branches and open PRs. `main` is protected and `.github/CODEOWNERS` makes Shlok the only approval that counts; a new push drops it.
 
-### Before the first deploy
+### The deployer
 
-- The repo is at `~/Projects/group53-games` (T3 also sees it as `~/.t3/projects/group53-games`, a symlink). GitHub: `git@github.com:Shlok-Bhakta/group53-games.git`.
-- `.env.local` (gitignored, only on this machine) holds `CONVEX_SELF_HOSTED_URL`, `CONVEX_SELF_HOSTED_ADMIN_KEY` and `VITE_CONVEX_URL`, pointing the Convex CLI at kiwi over Tailscale (`http://100.88.30.127:38441`). If it's missing, the admin key is in `kiwi:~/Services/group53/secrets/admin_key`.
-- `ssh kiwi` must work without a prompt (an alias in `~/.ssh/config`: user `shlok` at `100.88.30.127`, so Tailscale has to be up). Check with `ssh -o BatchMode=yes kiwi true`.
+`deployer` in `compose.yaml` runs on kiwi with the stack. The repo is public and kiwi is only on Tailscale, so nothing pushes to kiwi: every minute it fetches `main` over https, and when `main` has moved past the last deployed commit it runs that commit's `deploy/run.mjs`, which does, in order:
 
-### Deploy
-
-```sh
-npm test && npm run test:e2e   # both must pass
-git add -A && git commit && git push origin main
-npm run deploy
-```
-
-`npm run deploy` (`scripts/deploy.sh`) refuses to run with uncommitted changes (`-- --dirty` overrides; don't use it for real releases). It then:
-
-1. pushes the Convex functions (`npx convex deploy -y`);
-2. rsyncs the repo to `kiwi:~/Services/group53/`, skipping `node_modules`, `dist`, `.git`, `secrets`, `.env*`, `.convex` and test output;
-3. rebuilds and restarts the `web`, `og` and `stonks` containers (`docker compose up -d --build web og stonks`);
+1. `npm ci`, then `npx convex deploy -y` against the local backend (`http://convex:3210`, admin key from `secrets/admin_key`);
+2. rsyncs the checkout into `~/Services/group53`, leaving `secrets/`, `.env*` and `deploy-status.json` alone;
+3. rebuilds and restarts `web`, `og` and `stonks` (`docker compose up -d --build web og stonks`);
 4. prunes the untagged images each rebuild leaves behind, plus build cache older than a week;
 5. checks `/`, `/version.json` and `/sw.js` on `https://group53.shlokbhakta.dev` answer 200;
-6. checks `/version.json` now names a different build than before the deploy, and fails if it doesn't. That new ID is what makes phones show "Updating" and reload.
+6. if the web image changed, checks `/version.json` names a new build, and fails if it doesn't. That new ID is what makes phones show "Updating" and reload (`src/version.tsx`). A commit that changes nothing the web image is built from keeps the old build, and phones don't reload.
 
-It's done when it prints `Build <old> -> <new>` and `Live: {"id":"..."}`, and the log shows `✔ Deployed Convex functions`. Phones pick up the new build on their own (`src/version.tsx`): an "Updating" overlay, a reload, then "You're up to date".
+```sh
+ssh kiwi 'cd Services/group53 && docker compose logs -f --tail 200 deployer'   # watch a deploy
+ssh kiwi 'cat Services/group53/deploy-status.json'                             # the last one: sha, state, step, error
+ssh kiwi 'cd Services/group53 && docker compose restart deployer'              # retry a failed commit
+```
+
+A commit that failed isn't retried on its own: the deployer waits for the next commit on `main`, or a restart tries the latest `main` again. `run.mjs` ships with `main`, but the deployer never rebuilds itself mid-deploy: when `deploy/Dockerfile`, `deploy/loop.sh` or its `compose.yaml` block change, the log says so and someone runs `docker compose up -d --build deployer` on kiwi once that deploy is ok. Installing it the first time and trying it with `DRY_RUN=1` are in `deploy/README.md`.
+
+### Your machine
+
+- The repo is at `~/Projects/group53-games` (T3 also sees it as `~/.t3/projects/group53-games`, a symlink). GitHub: `git@github.com:Shlok-Bhakta/group53-games.git`.
+- `.env.local` (gitignored, only on this machine) holds `CONVEX_SELF_HOSTED_URL`, `CONVEX_SELF_HOSTED_ADMIN_KEY` and `VITE_CONVEX_URL`, pointing the Convex CLI at kiwi over Tailscale (`http://100.88.30.127:38441`), for `npx convex logs` and `npx convex env`. If it's missing, the admin key is in `kiwi:~/Services/group53/secrets/admin_key`.
+- `ssh kiwi` must work without a prompt (an alias in `~/.ssh/config`: user `shlok` at `100.88.30.127`, so Tailscale has to be up). Check with `ssh -o BatchMode=yes kiwi true`.
 
 ### Order of changes
 
-Convex functions go live before the web app does. Additive backend changes (new functions, new optional args, new fields) are safe in one deploy. Removing or renaming a function, or making an arg required, crashes phones still running the old app: ship the frontend that stops using it first, then remove the function in a later deploy. Schema changes that drop or retype fields need a migration first.
+Convex functions go live before the web app does, in every deploy. Additive backend changes (new functions, new optional args, new fields) are safe in one deploy. Removing or renaming a function, or making an arg required, crashes phones still running the old app: ship the frontend that stops using it first, then remove the function in a later deploy. Schema changes that drop or retype fields need a migration first.
 
 ### On kiwi
 
-The stack is `~/Services/group53` (a copy, not a git checkout). `compose.yaml` runs six containers, about 440 MB of RAM together:
+The stack is `~/Services/group53` (a copy the deployer rsyncs into, not a git checkout). `.env` there holds `INSTANCE_SECRET`, `CONVEX_URL` and `CONVEX_SITE_URL`; `secrets/` the admin key and the tunnel's credentials. `compose.yaml` runs seven containers:
 
 - `convex`: the whole backend (database, functions, websockets, scheduler, real-time tick). SQLite on the SSD.
 - `web`: nginx serving the built app (`Dockerfile` builds with Node, then keeps only `dist/` and nginx, about 5 MB of RAM). `nginx.conf` also sends link-preview bots to `og`, falls back to `index.html` for deep links, caches `/assets/` for a year, and never caches `sw.js` or `version.json`.
@@ -207,12 +210,13 @@ The stack is `~/Services/group53` (a copy, not a git checkout). `compose.yaml` r
 - `stonks`: the stonks sidecar (Rust, about 8 MB of RAM, an empty image with one binary). It streams prices into Convex with the admin key (`secrets/admin_key`, like `og`). `docker compose logs stonks` shows which source is covering what.
 - `tunnel`: Cloudflare Tunnel `group53-games`, which puts the three public hostnames online without opening ports on kiwi.
 - `dashboard`: the Convex web dashboard on the tailnet. Nothing depends on it; the CLI does the same jobs.
+- `deployer`: deploys `main` (above, and `deploy/README.md`). It has the Docker socket, the stack directory mounted at the same path inside, the admin key, and a `deployer` volume for its checkout and npm cache. Its status is `deploy-status.json` in the stack directory.
 
-Deploys only rebuild `web`, `og` and `stonks`; the other three keep running.
+Deploys only rebuild `web`, `og` and `stonks`; the other four keep running.
 
 ```sh
 ssh kiwi 'cd Services/group53 && docker compose ps'                    # what's running
-ssh kiwi 'cd Services/group53 && docker compose logs --tail 100 web'   # or og, convex, tunnel
+ssh kiwi 'cd Services/group53 && docker compose logs --tail 100 web'   # or og, convex, tunnel, deployer
 ssh kiwi 'cd Services/group53 && docker compose restart og'            # restart one service
 ```
 
@@ -224,7 +228,7 @@ Set on the deployment, not in files: `npx convex env list`, `npx convex env set 
 
 ### Rolling back
 
-Revert the bad commit (`git revert <sha>`), push, and run `npm run deploy` again. It's a full redeploy of that tree, backend included, so the same ordering rules apply: if the bad commit removed a function the old app needs, reverting brings it back.
+Revert the bad commit on `main` (`git revert <sha>`); the deployer deploys the revert like any other commit. It's a full redeploy of that tree, backend included, so the same ordering rules apply: if the bad commit removed a function the old app needs, reverting brings it back.
 
 ### Link previews
 

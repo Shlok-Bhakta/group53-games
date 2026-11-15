@@ -13,26 +13,20 @@ import { GAMES } from "../convex/modes";
 import { LinkHandoff } from "@/components/LinkHandoff";
 import { inAppBrowser, platform, useInstallPrompt, useStandalone } from "./install";
 
-// Phones only get in from the installed app, because web push on iOS only works there.
+// platform: web push on iOS only works in the installed app.
 export function InstallGate({ children }: { children: ReactNode }) {
   const standalone = useStandalone();
   if (standalone || platform === "desktop" || import.meta.env.VITE_DEV_AUTH) return <>{children}</>;
-  // A game link: let people who already have the app send it there. Everyone else gets the install steps.
   const gameLink = Object.values(GAMES).some((g) => new RegExp(`^${g.path}/[a-z0-9]+$`).test(location.pathname))
     ? location.pathname + location.search
     : null;
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-7 px-5 pb-10 pt-[calc(env(safe-area-inset-top)+40px)]">
+    <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-7 px-5 pb-10 pt-[calc(var(--safe-top)+40px)]">
       <Tiles word="53" states={["green", "yellow"]} size="lg" flip label="Group 53" />
       {gameLink && <LinkHandoff path={gameLink} />}
-      <div>
-        <h1 className={gameLink ? "font-display text-heading" : "font-display text-title"}>
-          {gameLink ? "New here? Put Group 53 on your home screen" : "Put Group 53 on your home screen"}
-        </h1>
-        <p className="mt-3 text-callout text-muted-foreground">
-          The games run as an app so they can ping you when it's your turn or someone comes for you. It takes about ten seconds.
-        </p>
-      </div>
+      <h1 className={gameLink ? "font-display text-heading" : "font-display text-title"}>
+        {gameLink ? "New here? Put Group 53 on your home screen" : "Put Group 53 on your home screen"}
+      </h1>
       {inAppBrowser ? <OpenInBrowser /> : platform === "ios" ? <IosSteps /> : <AndroidSteps />}
     </div>
   );

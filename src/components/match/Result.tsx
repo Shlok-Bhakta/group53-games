@@ -9,8 +9,6 @@ import { SEAT_COLORS } from "@/games/seats";
 import { pointsOf, pointsUnit } from "@/games/summary";
 import { Rematch } from "./Rematch";
 
-// The result, spelled in tiles: WON in green, LOST with a crooked red hit tile, DRAW in yellow, and places
-// for four players.
 function resultTiles(match: MatchView, meId: Id<"users"> | undefined): { word: string; states: TileState[] } | null {
   const r = match.result!;
   if (!meId || !match.players.some((p) => p.userId === meId)) return null;
@@ -30,7 +28,6 @@ export function Result({ match, meId }: { match: MatchView; meId: Id<"users"> | 
   const r = match.result!;
   const iPlayed = match.players.some((p) => p.userId === meId);
   const four = match.players.length > 2;
-  // Games that keep score list everyone's final points, even with two players.
   const scored = match.players.some((p) => pointsOf(match, p.userId) !== null);
   const change = match.ratingChanges?.find((c) => c.userId === meId);
   const nameOf = (id: Id<"users">) => match.players.find((p) => p.userId === id)?.name ?? "?";
@@ -74,7 +71,6 @@ export function Result({ match, meId }: { match: MatchView; meId: Id<"users"> | 
   );
 }
 
-// The new rating counts up (or down) from the old one.
 function RatingChange({ before, after }: { before: number; after: number }) {
   const value = useMotionValue(before);
   const shown = useTransform(value, (v) => Math.round(v));

@@ -1,5 +1,3 @@
-// Seat colors shared by every game: four-player chess armies, Scrabble players' tiles. "dead" is an army
-// that's out.
 export const SEAT_COLORS: Record<string, string> = {
   red: "#e0503f",
   blue: "#3f7be0",
@@ -12,6 +10,5 @@ export const SEAT_COLORS: Record<string, string> = {
   dead: "#9aa0a6",
 };
 
-// A player's seat color, grey once they're out or if they haven't got a seat color.
 export const seatColor = (player: { color?: string } | undefined, out = false) =>
   SEAT_COLORS[out ? "dead" : (player?.color ?? "dead")] ?? SEAT_COLORS.dead;

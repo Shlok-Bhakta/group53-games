@@ -1,4 +1,4 @@
-import { BellRingingIcon, BellSlashIcon, SpinnerGapIcon } from "@phosphor-icons/react";
+import { BellRingingIcon, BellSlashIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { platform } from "@/install";
@@ -6,7 +6,6 @@ import type { useNotifications } from "@/notifications";
 
 type Push = ReturnType<typeof useNotifications>;
 
-// The big ask. Shown on Games until notifications are on; games stay locked behind it.
 export function NotificationBanner({ push }: { push: Push }) {
   if (push.state === "on" || push.state === "loading" || push.state === "unsupported") return null;
 
@@ -38,18 +37,14 @@ export function NotificationBanner({ push }: { push: Push }) {
         <span className="grid size-11 shrink-0 place-items-center rounded-sm bg-primary-foreground/15">
           <BellRingingIcon size={24} weight="fill" />
         </span>
-        <div>
-          <h2 className="font-display text-heading">Turn on notifications to play</h2>
-          <p className="mt-1 text-callout opacity-85">So you know when it's your turn or someone hits you.</p>
-        </div>
+        <h2 className="font-display text-heading">Turn on notifications to play</h2>
       </div>
       <Button
         size="xl"
         onClick={() => void turnOn()}
-        disabled={push.busy}
+        pending={push.busy}
         className="mt-4 w-full bg-primary-foreground text-primary hover:bg-primary-foreground/90"
       >
-        {push.busy ? <SpinnerGapIcon className="animate-spin" /> : null}
         Turn on notifications
       </Button>
     </section>

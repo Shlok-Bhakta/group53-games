@@ -1,5 +1,3 @@
-// `dekit start test/smoke`: is everything dekit started really working? Two tabs of one phone browser sign in
-// as two players without Discord and get past the gates, and the link previews and the sidecar answer.
 import { devices, chromium } from "@playwright/test";
 import { ConvexHttpClient } from "convex/browser";
 
@@ -23,7 +21,6 @@ try {
   const ada = await signIn("Ada");
   const grace = await signIn("Grace");
 
-  // Each tab has to still be its own player once the other has signed in.
   for (const [page, name] of [
     [ada, "Ada"],
     [grace, "Grace"],
@@ -47,7 +44,7 @@ try {
   if (!card.ok) throw new Error(`og couldn't render a card: ${card.status}`);
   pass("og renders link previews");
 
-  // Prices need Yahoo, which isn't ours to promise, so nothing fails over them.
+  // platform: prices need Yahoo, which isn't ours to promise, so a missing price only warns.
   const convex = new ConvexHttpClient(CONVEX);
   const end = Date.now() + 60_000;
   let quotes = 0;

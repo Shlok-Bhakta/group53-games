@@ -15,15 +15,12 @@ import { listNames, ordinal, reasonText } from "@/lib/text";
 import { ago } from "@/lib/time";
 import { ListRow } from "@/components/ListRow";
 
-// A mode's one name, the same everywhere: "Classic", "4-Player", "Real-time", "Real-time 4-Player". Lists that
-// can mix games put the game first: "Chess Classic", "Scrabble Live".
 const modeLabel = (mode: string) => MODES[mode as ModeKey]?.name ?? mode;
 export const fullModeLabel = (mode: string) => {
   const m = MODES[mode as ModeKey];
   return m ? `${GAMES[m.game].name} ${m.name}` : mode;
 };
 
-// A section heading. Headings carry sections; never small grey labels.
 export function SectionTitle({ children, action, className }: { children: ReactNode; action?: ReactNode; className?: string }) {
   return (
     <div className={cn("flex items-end justify-between gap-3 px-1 pb-2.5", className)}>
@@ -33,8 +30,6 @@ export function SectionTitle({ children, action, className }: { children: ReactN
   );
 }
 
-// A titled group of rows. The heading carries the section; the group is a single flat surface. `bare` leaves
-// out the group, for sections that lay out their own content; `footer` is a line of fine print under it.
 export function Section({
   title,
   children,
@@ -63,7 +58,6 @@ export function Group({ children, className }: { children: ReactNode; className?
   return <div className={cn("divide-y divide-border overflow-hidden rounded-lg bg-card", className)}>{children}</div>;
 }
 
-// Small status label at the end of a row.
 export function Chip({ tone = "primary", children }: { tone?: "primary" | "live" | "win" | "quiet"; children: ReactNode }) {
   return (
     <span
@@ -81,7 +75,6 @@ export function Chip({ tone = "primary", children }: { tone?: "primary" | "live"
   );
 }
 
-// The line under a game's names: its mode, the last move, and how long ago.
 function detail(match: MatchView) {
   const parts: string[] = [fullModeLabel(match.mode)];
   const seats = MODES[match.mode as ModeKey]?.players ?? 2;
@@ -95,7 +88,6 @@ function detail(match: MatchView) {
     if (last) parts.push(last);
     if (MODES[match.mode as ModeKey]?.kind === "async") parts.push(ago(Date.now() - match.lastActivityAt));
   }
-  // A finished game keeps its seed in the list, to play the same holes again.
   if (match.status === "finished") {
     const seed = seedSummary(match.mode, match.settings);
     if (seed) parts.push(seed.toLowerCase());
@@ -103,7 +95,6 @@ function detail(match: MatchView) {
   return parts.join(", ");
 }
 
-// One game in a list. Shows the other players (or everyone, for games you're watching), and a status.
 export function MatchRow({ match, meId, status, vs }: { match: MatchView; meId?: Id<"users">; status: ReactNode; vs?: boolean }) {
   const others = vs ? match.players : match.players.filter((p) => p.userId !== meId);
   const label = others.map((p) => p.name).join(vs && others.length === 2 ? " vs " : ", ");
@@ -152,7 +143,6 @@ export function ResultChip({ match, meId }: { match: MatchView; meId?: Id<"users
   );
 }
 
-// A challenge waiting on me, answerable in place.
 export function InviteCard({ match }: { match: MatchView }) {
   const join = useMutation(api.matches.join);
   const decline = useMutation(api.matches.decline);
@@ -199,7 +189,6 @@ export function InviteCard({ match }: { match: MatchView }) {
   );
 }
 
-// Rank as a letter tile: gold, green, then grey. No games yet reads as a dash.
 export function RankTile({ rank }: { rank: number | null }) {
   if (!rank) return <span className="w-[30px] shrink-0 text-center font-display text-body text-muted-foreground">–</span>;
   const tone = rank === 1 ? "tile-yellow" : rank === 2 ? "tile-green" : "tile-gray";

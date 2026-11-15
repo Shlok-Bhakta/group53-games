@@ -10,7 +10,6 @@ import { ago, useNow } from "@/lib/time";
 
 const TAP_THROTTLE_MS = 200;
 
-// Reports that this player has the app open, which screen they're on, and where they tap.
 export function usePresenceReporter({ shareTaps }: { shareTaps: boolean }) {
   const { pathname } = useLocation();
   const heartbeat = useMutation(api.presence.heartbeat);
@@ -49,8 +48,7 @@ export function usePresenceReporter({ shareTaps }: { shareTaps: boolean }) {
   }, [shareTaps, tap]);
 }
 
-// Live presence for everyone. Re-evaluates the online window on a timer, because queries only
-// re-run when data changes, not when time passes.
+// platform: Convex queries only re-run when data changes, not when time passes, so the online window is re-checked on a timer.
 export function usePresence() {
   const rows = useQuery(api.presence.list);
   const now = useNow(5_000);
@@ -64,7 +62,6 @@ export function usePresence() {
   }, [rows, now]);
 }
 
-// A steady green dot for someone with the app open. Offline shows nothing: red would read as an error.
 export function OnlineDot({ online }: { online: boolean }) {
   if (!online) return null;
   return <span className="online-dot block" role="img" aria-label="Online" />;
@@ -76,7 +73,6 @@ export function lastSeenText(online: boolean, lastSeen: number | undefined) {
   return `Last on ${ago(Date.now() - lastSeen)}`;
 }
 
-// Someone with this game open right now: `here` when they're on the same screen as me.
 export function useHere(userId: Id<"users"> | undefined) {
   const { pathname } = useLocation();
   const { isOnline, byUser } = usePresence();
@@ -84,7 +80,6 @@ export function useHere(userId: Id<"users"> | undefined) {
   return { online: isOnline(userId), here: isOnline(userId) && byUser.get(userId)?.path === pathname };
 }
 
-// Three dots breathing: someone's working on their move right now. One of the few things allowed to loop.
 export function ThinkingDots() {
   return (
     <span className="flex gap-1" aria-hidden="true">
@@ -102,7 +97,6 @@ export function ThinkingDots() {
 
 type Ripple = { key: string; x: number; y: number; userId: Id<"users"> };
 
-// Shows other players' taps on the screen you're both looking at, as a ripple with their avatar.
 export function TapLayer({ meId }: { meId: Id<"users"> | undefined }) {
   const { pathname } = useLocation();
   const { rows } = usePresence();
@@ -111,7 +105,6 @@ export function TapLayer({ meId }: { meId: Id<"users"> | undefined }) {
   const [ripples, setRipples] = useState<Ripple[]>([]);
 
   useEffect(() => {
-    // On first load, remember everyone's current tap so old taps don't replay.
     if (seen.current === null) {
       if (rows.length === 0) return;
       seen.current = new Map(rows.map((r) => [r.userId, r.tap?.seq ?? 0]));
@@ -187,7 +180,6 @@ export function TapLayer({ meId }: { meId: Id<"users"> | undefined }) {
   );
 }
 
-// Everyone else who has the app open right now.
 export function useOnlineOthers() {
   const me = useQuery(api.users.me);
   const crew = useQuery(api.profiles.crew);
@@ -195,7 +187,6 @@ export function useOnlineOthers() {
   return useMemo(() => (crew ?? []).filter((p) => p._id !== me?._id && isOnline(p._id)), [crew, me?._id, isOnline]);
 }
 
-// Players who are online and currently on a game's screens (their path starts with the game's path).
 export function usePlayingIn(gamePath: string) {
   const crew = useQuery(api.profiles.crew);
   const { isOnline, byUser } = usePresence();
@@ -211,7 +202,6 @@ export function usePlayingIn(gamePath: string) {
 
 type Arrival = { key: string; name: string; image?: string; frame: string; frameColor: string };
 
-// A Dynamic Island style pill that drops in when someone opens the app.
 export function ArrivalPills() {
   const others = useOnlineOthers();
   const { loaded } = usePresence();
@@ -221,7 +211,6 @@ export function ArrivalPills() {
   useEffect(() => {
     if (!loaded) return;
     const now = new Set(others.map((p) => p._id as string));
-    // The first pass only records who's already here, so opening the app doesn't announce everyone.
     if (seen.current === null) {
       seen.current = now;
       return;
@@ -243,7 +232,7 @@ export function ArrivalPills() {
 
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+36px)] z-50 flex flex-col items-center gap-2"
+      className="pointer-events-none fixed inset-x-0 top-[calc(var(--safe-top)+36px)] z-50 flex flex-col items-center gap-2"
       aria-live="polite"
     >
       <AnimatePresence>

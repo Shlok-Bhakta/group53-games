@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { CaretRightIcon, type Icon } from "@phosphor-icons/react";
 import { ListRow } from "@/components/ListRow";
 
-// The icon tiles are colored like iOS Settings on purpose, the same in every theme, with a white glyph.
 export const TINT = {
   red: "#ff453a",
   green: "#30d158",
@@ -12,7 +11,6 @@ export const TINT = {
   cyan: "#64d2ff",
 } as const;
 
-// An iOS settings row: tinted icon tile, label, then a control, a value with a chevron, or nothing.
 export function SettingsRow({
   icon: RowIcon,
   tint,

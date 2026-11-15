@@ -10,7 +10,7 @@ import "./style.css";
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
 if ("serviceWorker" in navigator) {
-  // updateViaCache "none" makes the browser check sw.js over the network on every load, so deploys land right away.
+  // platform: updateViaCache "none" makes the browser check sw.js over the network on every load, so deploys land right away.
   navigator.serviceWorker
     .register("/sw.js", { updateViaCache: "none" })
     .catch((err) => console.error("Service worker registration failed:", err));
@@ -19,7 +19,6 @@ if ("serviceWorker" in navigator) {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider>
-      {/* With dekit each tab is its own player, so one browser can play every seat. */}
       <ConvexAuthProvider client={convex} storage={import.meta.env.VITE_DEV_AUTH ? sessionStorage : undefined}>
         <BrowserRouter>
           <App />

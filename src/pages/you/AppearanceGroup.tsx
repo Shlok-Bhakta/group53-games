@@ -53,7 +53,6 @@ export function AppearanceGroup() {
               onClick={() => setPalette(p.id)}
               className="relative flex touch-manipulation flex-col gap-3 rounded-lg bg-background p-3 text-left text-foreground outline-none ring-1 ring-border focus-visible:ring-3 focus-visible:ring-ring/50"
             >
-              {/* 19px is the card's 16 plus the 3px it sits out, so the ring runs parallel to the corner. */}
               {palette === p.id && (
                 <motion.span
                   layoutId="theme-selected"

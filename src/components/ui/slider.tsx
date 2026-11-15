@@ -2,7 +2,6 @@ import type { ComponentProps } from "react";
 import { Slider as Primitive } from "radix-ui";
 import { cn } from "@/lib/utils";
 
-// One thumb on a track, 44px tall to grab.
 export function Slider({ className, label, ...props }: Omit<ComponentProps<typeof Primitive.Root>, "aria-label"> & { label: string }) {
   return (
     <Primitive.Root className={cn("relative flex h-11 touch-none select-none items-center", className)} aria-label={label} {...props}>

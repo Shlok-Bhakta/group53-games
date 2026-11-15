@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { api, internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
-import { setup, signedIn } from "./test.setup";
-import type { PokerState } from "./poker/engine";
+import { api, internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
+import { setup, signedIn } from "../test.setup";
+import type { PokerState } from "./engine";
 
 beforeEach(() => {
   vi.useFakeTimers();

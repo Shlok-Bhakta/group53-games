@@ -13,7 +13,6 @@ import { Sheet } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { lastSeenText, usePresence } from "@/presence";
 
-// The people: everyone's card, whoever's on first.
 export function Crew() {
   const me = useQuery(api.users.me);
   const crew = useQuery(api.profiles.crew);
@@ -22,7 +21,6 @@ export function Crew() {
   const [openId, setOpenId] = useState<Id<"users"> | null>(null);
   const show = (id: Id<"users">) => (id === me?._id ? navigate("/you") : setOpenId(id));
 
-  // Online first, then you, then join order.
   const sorted =
     crew &&
     [...crew].sort(

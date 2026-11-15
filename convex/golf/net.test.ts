@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { api, internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
-import { MAX_LAG, SLACK } from "./golf";
-import { compile } from "./golf/engine";
-import { courseOf } from "./golf/holes";
-import { SANDBOX } from "./golf/sandbox";
-import { SOLUTIONS } from "./golf/solutions";
-import { advance, cmdOrder, newWorld, pack, TPS, unpack, type Packed } from "./golf/world";
-import { setup, signedIn } from "./test.setup";
+import { api, internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
+import { MAX_LAG, SLACK } from "../golf";
+import { compile } from "./engine";
+import { courseOf } from "./holes";
+import { SANDBOX } from "./sandbox";
+import { SOLUTIONS } from "./solutions";
+import { advance, cmdOrder, newWorld, pack, TPS, unpack, type Packed } from "./world";
+import { setup, signedIn } from "../test.setup";
 
 beforeEach(() => {
   vi.useFakeTimers();

@@ -30,9 +30,8 @@ describe("game links opened outside the app", () => {
       ["Shlok", false],
       ["Chris", true],
     ]);
-    // A link with the wrong game in it, or no game at all, is nothing.
-    expect(await t.query(api.links.preview, { path: `/chess/${id}` })).toBeNull();
-    expect(await t.query(api.links.preview, { path: "/scrabble/nope" })).toBeNull();
+    expect(await t.query(api.links.preview, { path: `/chess/${id}` }), "the wrong game in the link").toBeNull();
+    expect(await t.query(api.links.preview, { path: "/scrabble/nope" }), "no game at all").toBeNull();
   });
 
   test("picking yourself pushes the game to your phone, with a link that takes the seat", async () => {
@@ -48,8 +47,7 @@ describe("game links opened outside the app", () => {
     expect(await pushes(t)).toEqual([
       expect.objectContaining({ userId: b.userId, title: "Join Shlok's game", url: `/scrabble/${id}?accept=1` }),
     ]);
-    // Tapping twice in a row doesn't spam them.
-    expect(await t.mutation(api.links.handoff, { path: `/scrabble/${id}`, userId: b.userId })).toBe("wait");
+    expect(await t.mutation(api.links.handoff, { path: `/scrabble/${id}`, userId: b.userId }), "a second tap right away").toBe("wait");
     vi.advanceTimersByTime(16_000);
     expect(await t.mutation(api.links.handoff, { path: `/scrabble/${id}`, userId: b.userId })).toBe("sent");
   });

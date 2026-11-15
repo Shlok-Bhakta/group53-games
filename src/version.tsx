@@ -7,14 +7,7 @@ import { Tiles } from "@/Tiles";
 
 declare const __BUILD_ID__: string;
 
-// Keeps every phone on the newest build, so clients and server functions always match. When a new build
-// is out (checked on launch, every minute, and whenever the app comes back to the foreground) the app
-// covers itself with "Updating", reloads, and says "You're up to date" once it's back. Nothing is lost:
-// games live on the server and Scrabble plans save within a fraction of a second. The one thing worth
-// waiting for is a real-time chess game in progress, which holds the update until it ends.
-
 const CHECK_EVERY_MS = 60_000;
-// How long the overlay shows before the reload, long enough to read and for pending saves to land.
 const SHOW_MS = 1100;
 const TARGET_KEY = "updating-to";
 
@@ -41,7 +34,6 @@ async function latestBuild(): Promise<string | null> {
 function update(latest: string) {
   pending = latest;
   if (holds > 0 || phase === "updating") return;
-  // Already reloaded for this build and still not on it (a stale cache somewhere): don't loop, offer it.
   if (sessionStorage.getItem(TARGET_KEY) === latest) {
     toast("A new version is ready", { id: "update", duration: Infinity, action: { label: "Update", onClick: () => location.reload() } });
     return;
@@ -57,7 +49,6 @@ async function check() {
   if (latest && latest !== __BUILD_ID__) update(latest);
 }
 
-// Hold updates while something can't take a reload (a real-time game in progress).
 export function useHoldUpdates(hold: boolean) {
   useEffect(() => {
     if (!hold) return;
@@ -72,7 +63,6 @@ export function useHoldUpdates(hold: boolean) {
 export function useVersionCheck() {
   const { pathname } = useLocation();
   useEffect(() => {
-    // Back from an update: say so.
     const target = sessionStorage.getItem(TARGET_KEY);
     if (target && target === __BUILD_ID__) {
       sessionStorage.removeItem(TARGET_KEY);
@@ -89,7 +79,6 @@ export function useVersionCheck() {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
-  // Moving between screens is a natural moment too.
   useEffect(() => void check(), [pathname]);
 }
 
@@ -139,7 +128,7 @@ export function UpdateOverlay() {
         <motion.div
           key="updated"
           role="status"
-          className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+104px)] z-[100] flex justify-center"
+          className="fixed inset-x-0 bottom-[calc(var(--safe-bottom)+104px)] z-[100] flex justify-center"
           initial={{ opacity: 0, y: 30, scale: 0.9 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 20, scale: 0.95 }}

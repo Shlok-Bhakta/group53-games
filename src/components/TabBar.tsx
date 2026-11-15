@@ -11,15 +11,13 @@ const TABS: { to: string; label: string; icon: Icon; end: boolean }[] = [
   { to: "/you", label: "You", icon: UserCircleIcon, end: false },
 ];
 
-// The bottom bar: four tabs with 50px targets, sitting on the home indicator inset. The active tab's pill
-// slides between them.
 export function TabBar() {
   const onlineCount = useOnlineOthers().length;
   return (
     <nav
       aria-label="Main"
       className="fixed inset-x-0 bottom-0 z-20 border-t border-border/60 bg-background/80 backdrop-blur-xl backdrop-saturate-150"
-      style={{ paddingBottom: "max(calc(env(safe-area-inset-bottom) - 10px), 6px)" }}
+      style={{ paddingBottom: "max(calc(var(--safe-bottom) - 10px), 6px)" }}
     >
       <ul className="mx-auto grid max-w-md grid-cols-4 px-2 pt-1.5">
         {TABS.map(({ to, label, icon: Icon, end }) => (
@@ -58,7 +56,6 @@ export function TabBar() {
   );
 }
 
-// How many other people have the app open. Pops in and bumps when the number changes.
 function OnlineBadge({ count }: { count: number }) {
   return (
     <AnimatePresence>
@@ -86,5 +83,4 @@ function OnlineBadge({ count }: { count: number }) {
   );
 }
 
-// How much room the tab bar takes at the bottom of a tab, for the page's bottom padding.
-export const TAB_BAR_SPACE = "calc(env(safe-area-inset-bottom) + 92px)";
+export const TAB_BAR_SPACE = "calc(var(--safe-bottom) + 92px)";

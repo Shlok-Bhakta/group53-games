@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { api, internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
-import { setup, signedIn } from "./test.setup";
-import { actor, type MonoState } from "./landlord/engine";
-import { botMove } from "./landlord/bot";
-import { REMIND_MS } from "./landlord";
+import { api, internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
+import { setup, signedIn } from "../test.setup";
+import { actor, type MonoState } from "./engine";
+import { botMove } from "./bot";
+import { REMIND_MS } from "../landlord";
 
 beforeEach(() => {
   vi.useFakeTimers();

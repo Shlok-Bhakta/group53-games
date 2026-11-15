@@ -5,7 +5,6 @@ import { PALETTES } from "./themes";
 
 const css = readFileSync(new URL("./style.css", import.meta.url), "utf8");
 
-// Pulls the custom properties out of the light or dark block for a theme.
 function tokens(id: string, mode: "light" | "dark") {
   const selector = mode === "light" ? `[data-palette="${id}"]` : `.dark[data-palette="${id}"]`;
   const start = css.indexOf(mode === "light" ? `${selector}${id === "felt" ? ", :root" : ""} {` : `:is(${selector}`);
@@ -50,7 +49,6 @@ describe.each(PALETTES.map((p) => p.id))("theme %s", (id) => {
       expect(REQUIRED.filter((k) => !t[k])).toEqual([]);
     });
 
-    // WCAG AA for text; tiles are big bold letters, so they only need large-text contrast.
     const checks: [string, string, string, number][] = [
       ["foreground on background", "foreground", "background", 4.5],
       ["foreground on card", "foreground", "card", 4.5],
@@ -61,12 +59,10 @@ describe.each(PALETTES.map((p) => p.id))("theme %s", (id) => {
       ["yellow tile letter", "tile-yellow-ink", "tile-yellow", 3],
       ["gray tile letter", "tile-gray-ink", "tile-gray", 3],
       ["red tile letter", "tile-hit-ink", "tile-hit", 3],
-      // Stonks' 2px chart lines are graphics, so 3:1 against the card they're drawn on.
       ["price up line on card", "up", "card", 3],
       ["price down line on card", "down", "card", 3],
     ];
 
-    // The poker felt is mixed from these tokens in style.css, so check what it comes out as.
     test("text on the poker felt is readable", () => {
       const felt = interpolate([t["card"], t["tile-green"]], "oklab")(0.44);
       const rail = interpolate([felt, mode === "dark" ? "black" : "white"], "rgb")(0.12);

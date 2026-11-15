@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { api, internal } from "./_generated/api";
-import { contribution, downsample, liveWeight, withMinute, type Point } from "./stonks/board";
-import { marketClock, nextOpen, sessionDay } from "./stonks/market";
-import { setup, signedIn } from "./test.setup";
+import { api, internal } from "../_generated/api";
+import { contribution, downsample, liveWeight, withMinute, type Point } from "./board";
+import { marketClock, nextOpen, sessionDay } from "./market";
+import { setup, signedIn } from "../test.setup";
 
 const ET = (s: string) => new Date(`${s}-04:00`).getTime(); // EDT (Oct 2026 is still daylight time until Nov 1)
 const EST = (s: string) => new Date(`${s}-05:00`).getTime();

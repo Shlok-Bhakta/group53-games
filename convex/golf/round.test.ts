@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { api, internal } from "./_generated/api";
-import type { Doc, Id } from "./_generated/dataModel";
-import type { Course } from "./golf/engine";
-import { bestShot } from "./golf/bot";
-import { courseOf, worldOf } from "./golf/holes";
-import type { GolfState } from "./golf/round";
-import { advance, applyCmd, newWorld, pack, TPS, unpack, type Packed } from "./golf/world";
-import { setup, signedIn } from "./test.setup";
+import { api, internal } from "../_generated/api";
+import type { Doc, Id } from "../_generated/dataModel";
+import type { Course } from "./engine";
+import { bestShot } from "./bot";
+import { courseOf, worldOf } from "./holes";
+import type { GolfState } from "./round";
+import { advance, applyCmd, newWorld, pack, TPS, unpack, type Packed } from "./world";
+import { setup, signedIn } from "../test.setup";
 
 // A round of golf as a game: the lobby, the holes being built, turns going to whoever's farthest away,
 // scores on the card, and the end.

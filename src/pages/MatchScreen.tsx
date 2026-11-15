@@ -11,7 +11,6 @@ import { GameMenu, MenuButton } from "@/components/GameMenu";
 import { Lobby } from "@/components/match";
 import type { GameUI } from "@/games";
 
-// Any game, at /<game>/<id>: a compact bar on top (back, the mode, and the game menu), then the lobby while it fills, or the game itself.
 export function MatchScreen({ game }: { game: GameUI }) {
   const { id } = useParams<{ id: string }>();
   const match = useQuery(api.matches.get, { id: id as Id<"matches"> });
@@ -35,7 +34,6 @@ export function MatchScreen({ game }: { game: GameUI }) {
       </div>
     );
   }
-  // A link with the wrong game in it still finds the game.
   if (gameOf(match.mode) !== game.key) return <Navigate to={matchPath(match)} replace />;
 
   const mode = MODES[match.mode as ModeKey];
@@ -48,7 +46,7 @@ export function MatchScreen({ game }: { game: GameUI }) {
     );
 
   return (
-    <div className="flex min-h-[calc(100svh-env(safe-area-inset-bottom)-16px)] flex-col">
+    <div className="flex min-h-[calc(100svh-var(--safe-bottom)-16px)] flex-col">
       <NavBar title={mode.name} back="/" action={<MenuButton onClick={() => setMenu(true)} />} />
       <GameMenu
         open={menu}
@@ -68,7 +66,6 @@ export function MatchScreen({ game }: { game: GameUI }) {
   );
 }
 
-// A bug in a game's screen shows a way out instead of blanking the whole app.
 class GameCrash extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
   static getDerivedStateFromError(error: Error) {

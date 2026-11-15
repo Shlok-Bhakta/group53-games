@@ -10,7 +10,6 @@ type Props = {
   className?: string;
 };
 
-// Trading-card style: the Discord avatar is the art, fading into the card so the text sits on it.
 export function PlayerCard({ player, online, size = "grid", className }: Props) {
   const hero = size === "hero";
   return (

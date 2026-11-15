@@ -8,7 +8,6 @@ import { ModePicker } from "@/components/ModePicker";
 import { MatchRow, ResultChip, Section } from "@/components/parts";
 import type { GameUI } from "@/games";
 
-// A game's page, opened from its card on Games: every mode with my Elo on it, then the crew's latest games.
 export function GameHub({ game }: { game: GameUI }) {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -17,7 +16,6 @@ export function GameHub({ game }: { game: GameUI }) {
   const recent = useQuery(api.matches.recent, { game: game.key });
   const me = useQuery(api.users.me);
 
-  // Old links pointed at /chess?mode=...
   const legacy = params.get("mode");
   useEffect(() => {
     if (legacy && isMode(legacy)) navigate(modePath(legacy), { replace: true });

@@ -1,8 +1,3 @@
-// Finds a way round every golf hole, to prove each can be sunk and see how hard it is. Run with bun:
-//   bun scripts/golf-solve.ts [hole id ...]
-// It plays through the real world (convex/golf/world.ts): a beam search over angle and power, scored by
-// the walking distance to the cup, then a sloppy player with shaky hands to see what a human might
-// shoot. Prints a line per hole, and writes the lines it found to convex/golf/solutions.ts for the test.
 import fs from "node:fs";
 import { closest, groundAt, HAZARDS, type Course } from "../convex/golf/engine";
 import { HOLES, worldOf } from "../convex/golf/holes";
@@ -13,9 +8,8 @@ import { pack, type Packed } from "../convex/golf/world";
 const ANGLES = 40;
 const POWERS = [0.1, 0.16, 0.24, 0.34, 0.46, 0.6, 0.78, 1];
 const BEAM = 5;
+const SAME_SPOT = 2;
 
-// Walking distance to the cup over a grid, round rails and water. A cell nothing connects to (an
-// island over a gap) falls back to the straight line, plus a toll.
 function distanceField(c: Course) {
   const w = worldOf(c);
   const S = 1;
@@ -77,11 +71,10 @@ function solve(c: Course, depth = 8) {
         }
       }
     next.sort((x, y) => x.score - y.score);
-    // Keep the best few, but not several from the same spot.
     const kept: Node[] = [];
     for (const n of next) {
       const b = n.packed.balls[0];
-      if (kept.some((o) => Math.hypot(o.packed.balls[0].x - b.x, o.packed.balls[0].y - b.y) < 2)) continue;
+      if (kept.some((o) => Math.hypot(o.packed.balls[0].x - b.x, o.packed.balls[0].y - b.y) < SAME_SPOT)) continue;
       kept.push(n);
       if (kept.length >= BEAM) break;
     }
@@ -90,7 +83,6 @@ function solve(c: Course, depth = 8) {
   return null;
 }
 
-// A human-ish player: picks the shot that looks best, then hits it with shaky hands.
 function sloppy(c: Course, seed: number, limit = 14) {
   const field = distanceField(c);
   const r = rng(seed);

@@ -4,10 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Drawer, DrawerClose, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { cn } from "@/lib/utils";
 
-// A sheet up from the bottom for one small focused thing (a player's card, an amount, a picker), never a game
-// menu. It dims the screen behind it, has a title (`hideTitle` keeps it for screen readers only), and pads its
-// body clear of the home indicator. `closable` adds an X, for sheets over a dock, where swiping down
-// shouldn't be the only way out.
 export function Sheet({
   open,
   onClose,
@@ -33,7 +29,7 @@ export function Sheet({
         <SheetHeader title={title} hideTitle={hideTitle} closable={closable} />
         <div
           className={cn(
-            "flex flex-col gap-4 overflow-y-auto overscroll-contain px-4 pb-[calc(env(safe-area-inset-bottom)+20px)]",
+            "flex flex-col gap-4 overflow-y-auto overscroll-contain px-4 pb-[calc(var(--safe-bottom)+20px)]",
             bodyClassName,
           )}
         >

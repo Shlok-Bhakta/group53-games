@@ -27,8 +27,6 @@ import { shareLink } from "@/share";
 import { errorText } from "@/lib/errors";
 import { Tiles } from "@/Tiles";
 
-// Waiting for players: who's in, the settings, then the actions at the bottom of the screen.
-// `setup`: what the game shows of its settings (golf's holes), under them.
 export function Lobby({
   match,
   meId,
@@ -59,7 +57,6 @@ export function Lobby({
   const needed = mode.players - match.players.length;
   const enough = match.players.length >= mode.minPlayers;
 
-  // Opening a challenge or lobby from a push (or an invite link) takes the seat straight away.
   const autoJoin = params.get("accept") === "1";
   const tried = useRef(false);
   useEffect(() => {
@@ -177,12 +174,10 @@ export function Lobby({
   );
 }
 
-// The game's settings in the lobby. The host can still change them, and everyone else watches them change.
 function LobbySettings({ match, editable, setup }: { match: MatchView; editable: boolean; setup?: GameUI["setup"] }) {
   const configure = useMutation(api.matches.configure);
   const mode = match.mode as ModeKey;
   const value = settingsOf(mode, match.settings);
-  // Only what changed, so two quick taps can't undo each other.
   const change = (next: Settings) =>
     void configure({
       id: match._id,
@@ -225,8 +220,6 @@ function LobbySettings({ match, editable, setup }: { match: MatchView; editable:
   );
 }
 
-// The seats of a bigger game: who's in, who's been asked, and what's still open. Games that start whenever
-// the host likes show one open seat, not all of them.
 function Seats({ match }: { match: MatchView }) {
   const mode = MODES[match.mode as ModeKey];
   const pending = match.invitedPeople.filter((p) => !p.joined);

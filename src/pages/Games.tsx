@@ -13,7 +13,6 @@ import { usePlayingIn } from "@/presence";
 import { shareLink } from "@/share";
 import { cn } from "@/lib/utils";
 
-// Every game, one card each, with its art playing in once when you scroll to it.
 export function Games() {
   const convex = useConvex();
   const push = useNotifications();
@@ -80,23 +79,18 @@ export function Games() {
   );
 }
 
-// Only people actually in this game, not everyone with the app open.
 function PlayingNow({ gamePath }: { gamePath: string }) {
   const playing = usePlayingIn(gamePath);
   if (playing.length === 0) return null;
   const label = playing.length === 1 ? `${playing[0].name} is playing` : `${playing.length} playing`;
   return (
     <span className="flex min-w-0 items-center gap-2 text-footnote font-medium text-muted-foreground">
-      {/* Just faces, no frames. */}
       <AvatarStack people={playing.map((p) => ({ name: p.name, image: p.image }))} size={24} />
       <span className="truncate">{label}</span>
     </span>
   );
 }
 
-// A card's art plays in when it mounts, so it waits, hidden but taking its space (nothing shifts), until most
-// of it is on screen, then mounts afresh and plays there. Once.
-// A card on screen is also when its game starts loading what Play opens (`onSeen`), so Play is instant.
 function PlayWhenSeen({ children, onSeen }: { children: ReactNode; onSeen?: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const seen = useInView(ref, { once: true, amount: 0.6 });
@@ -112,7 +106,6 @@ function PlayWhenSeen({ children, onSeen }: { children: ReactNode; onSeen?: () =
       aria-hidden={seen ? undefined : true}
       data-art={seen ? "played" : "waiting"}
     >
-      {/* Centred like the card centres its art: full-width art fills it, fixed-width art sits in the middle. */}
       <div key={seen ? "seen" : "waiting"} className="grid w-full place-items-center">
         {children}
       </div>

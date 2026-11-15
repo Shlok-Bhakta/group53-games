@@ -6,8 +6,6 @@ import { TOP_CLEAR } from "@/components/TopEdge";
 import { useTheme } from "@/theme";
 import { useSoundSettings, wantMusic } from "@/sound";
 
-// A game built apart from the app (convex/hosted.ts), in an iframe. Nothing of it downloads until this page opens.
-// Until the game says it's up, this page's own bar is there, so a slow or failed download can still go back.
 export function HostedGame({ game, title }: { game: string; title: string }) {
   const url = useQuery(api.hosted.current, { game });
   const goBack = useGoBack("/games");
@@ -15,9 +13,7 @@ export function HostedGame({ game, title }: { game: string; title: string }) {
   const { sfx, music } = useSoundSettings();
   const frame = useRef<HTMLIFrameElement>(null);
   const [ready, setReady] = useState(false);
-  // What the game needs to know about the phone's settings. They can't change while it's open.
   const [hash] = useState(() => new URLSearchParams({ dark: resolved === "dark" ? "1" : "0", palette, font, sfx, music }).toString());
-  // The URL it opened with stays, even if a new build is published while it's being played.
   const [src, setSrc] = useState<string | null>(null);
   useEffect(() => {
     if (url) setSrc((was) => was ?? `${url}#${hash}`);
@@ -33,7 +29,6 @@ export function HostedGame({ game, title }: { game: string; title: string }) {
     return () => window.removeEventListener("message", listen);
   }, [goBack]);
 
-  // The game brings its own music, so the app's steps aside.
   useEffect(() => {
     wantMusic(false);
     return () => wantMusic(true);
@@ -51,8 +46,8 @@ export function HostedGame({ game, title }: { game: string; title: string }) {
           className="absolute inset-x-0 w-full border-0"
           style={{
             top: TOP_CLEAR,
-            bottom: "env(safe-area-inset-bottom)",
-            height: `calc(100% - (${TOP_CLEAR}) - env(safe-area-inset-bottom))`,
+            bottom: "var(--safe-bottom)",
+            height: `calc(100% - (${TOP_CLEAR}) - var(--safe-bottom))`,
           }}
         />
       )}

@@ -13,8 +13,6 @@ import { listNames } from "@/lib/text";
 
 const REMATCH_TTL_MS = 2 * 60 * 1000;
 
-// Rematches happen right here: asking turns everyone else's button into Accept, the new game starts once
-// everyone's in and moves all the phones to it, and leaving the page declines.
 export function Rematch({ match, meId }: { match: MatchView; meId: Id<"users"> }) {
   const rematch = useMutation(api.matches.rematch);
   const answer = useMutation(api.matches.answerRematch);
@@ -29,12 +27,10 @@ export function Rematch({ match, meId }: { match: MatchView; meId: Id<"users"> }
   const { isOnline } = usePresence();
   const stillHere = others.filter((p) => isOnline(p.userId));
 
-  // Accepted: every phone moves to the new game.
   useEffect(() => {
     if (offer?.status === "accepted" && offer.matchId) navigate(matchPath({ _id: offer.matchId, mode: match.mode }), { replace: true });
   }, [offer?.status, offer?.matchId, navigate]);
 
-  // Leaving the page (or the app) while an offer is open declines it.
   const open = useRef(false);
   open.current = !!pending;
   useEffect(() => {

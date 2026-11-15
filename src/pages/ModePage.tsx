@@ -18,8 +18,6 @@ import type { GameUI } from "@/games";
 import { OnlineDot, usePresence } from "@/presence";
 import { cn } from "@/lib/utils";
 
-// One mode, as a full page: settings, find a game or challenge people right here, the rules, games in this
-// mode, and its leaderboard. Challenges sent to you wait on Home.
 export function ModePage({ game }: { game: GameUI }) {
   const { slug } = useParams<{ slug: string }>();
   const mode = modeBySlug(game.key, slug ?? "");
@@ -125,8 +123,6 @@ function ModeScreen({ game, mode }: { game: GameUI; mode: ModeKey }) {
   );
 }
 
-// Challenge people from the crew, right on the page. Two-player modes send on one tap; bigger games let you
-// pick several. In fixed-size games the seats you leave empty are open to the crew.
 function Challenge({ mode, meId, settings }: { mode: ModeKey; meId?: Id<"users">; settings: Settings }) {
   const crew = useQuery(api.profiles.crew);
   const challenge = useMutation(api.matches.challenge);

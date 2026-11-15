@@ -10,8 +10,7 @@ async function row(ctx: MutationCtx, userId: Id<"users">) {
     .unique();
 }
 
-// Skip writes that change nothing meaningful, so frequent heartbeats don't churn every subscriber.
-const REFRESH_MS = 5_000;
+const REWRITE_UNCHANGED_AFTER_MS = 5_000;
 
 export const heartbeat = mutation({
   args: { path: v.string(), online: v.boolean() },
@@ -20,13 +19,18 @@ export const heartbeat = mutation({
     if (userId === null) return;
     const existing = await row(ctx, userId);
     const fields = { online, path: path.slice(0, 100), lastSeen: Date.now() };
-    if (existing && existing.online === online && existing.path === fields.path && fields.lastSeen - existing.lastSeen < REFRESH_MS) return;
+    if (
+      existing &&
+      existing.online === online &&
+      existing.path === fields.path &&
+      fields.lastSeen - existing.lastSeen < REWRITE_UNCHANGED_AFTER_MS
+    )
+      return;
     if (existing) await ctx.db.patch(existing._id, fields);
     else await ctx.db.insert("presence", { userId, ...fields });
   },
 });
 
-// x is a fraction of the viewport width; y is page pixels from the top, so taps land on the same content.
 export const tap = mutation({
   args: { x: v.number(), y: v.number(), path: v.string() },
   handler: async (ctx, { x, y, path }) => {

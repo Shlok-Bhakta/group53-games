@@ -4,8 +4,6 @@ export default defineConfig({
   testDir: "e2e",
   fullyParallel: false,
   workers: 1,
-  // One retry on CI, where a full run sometimes hits a random failure (see AGENTS.md); Playwright still
-  // reports a test that passed on its retry as flaky. None locally, so a failure there is seen at once.
   retries: process.env.CI ? 1 : 0,
   timeout: 30_000,
   expect: { timeout: 8_000 },

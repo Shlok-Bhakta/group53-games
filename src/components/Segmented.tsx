@@ -3,7 +3,6 @@ import { RadioGroup } from "radix-ui";
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
 
-// A segmented control: equal segments, one selected, 44px tall. The selection slides between segments.
 export function Segmented<T extends string>({
   value,
   onChange,

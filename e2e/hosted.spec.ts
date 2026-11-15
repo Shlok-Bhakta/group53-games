@@ -1,13 +1,11 @@
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { createPlayer, expect, test } from "./fixtures";
+import { createPlayer, expect, holdsStill, test } from "./fixtures";
 import { publish } from "../scripts/publish-hosted.mjs";
 
 const backend = () => JSON.parse(readFileSync(path.resolve("e2e/.state/backend.json"), "utf8")) as { url: string; adminKey: string };
 
-// A little stand-in for a real build: it reads a gzipped file by a relative path, keeps something in its own
-// storage, shows what the app told it, and goes back through the app.
 function fixture(version: string) {
   const dir = mkdtempSync(path.join(tmpdir(), "hosted-"));
   mkdirSync(path.join(dir, "data"));
@@ -32,7 +30,6 @@ test("a hosted game: its card, the iframe, its files and its saves, and back aga
   test.setTimeout(120_000);
   const page = await phones.open({ player: await createPlayer("Shlok"), push: "on" });
 
-  // Nothing published yet: the page says so and can still go back.
   await page.goto("/mereddia");
   await expect(page.getByText("It isn't up yet.")).toBeVisible();
   await page.getByRole("button", { name: "Back" }).click();
@@ -43,7 +40,6 @@ test("a hosted game: its card, the iframe, its files and its saves, and back aga
   const first = await publish({ url, adminKey, game: "mereddia", dir: fixture("one") });
   expect(first.files).toBe(2);
 
-  // Opening the game page downloads nothing of it until Play.
   const asked: string[] = [];
   page.on("request", (r) => void (r.url().includes("/games/mereddia/") && asked.push(r.url())));
   await page.goto("/games");
@@ -55,24 +51,18 @@ test("a hosted game: its card, the iframe, its files and its saves, and back aga
 
   const game = page.frameLocator('iframe[title="Journey Across Mereddia"]');
   await expect(game.getByRole("heading", { name: "Hosted one" })).toBeVisible();
-  // A relative path, with a space, served gzipped.
   await expect(game.locator("#data")).toHaveText("from-storage");
   expect(asked.some((u) => u.includes("/data/big%20file.json"))).toBe(true);
-  // The phone's settings came through, and the app's bar made way.
   await expect(game.locator("#hash")).toContainText("palette=");
   await expect(game.locator("#hash")).toContainText("sfx=");
   await expect(page.getByRole("heading", { name: "Journey Across Mereddia" })).toHaveCount(0);
   await expect(game.locator("#visits")).toHaveText("visits 1");
-  // Its own origin, so it can't read the app's storage.
   expect(new URL(asked[0]).origin).not.toBe(new URL(page.url()).origin);
-  // The app's music stands aside while it plays.
   await expect.poll(() => page.evaluate(() => (window as unknown as { __music?: string }).__music)).toBe("off");
 
-  // Its saves survive a reload.
   await page.reload();
   await expect(game.locator("#visits")).toHaveText("visits 2");
 
-  // A new build goes live without touching the app, and the one before still answers.
   const second = await publish({ url, adminKey, game: "mereddia", dir: fixture("two") });
   expect(second.build).not.toBe(first.build);
   await expect(game.getByRole("heading", { name: "Hosted one" })).toBeVisible();
@@ -84,7 +74,6 @@ test("a hosted game: its card, the iframe, its files and its saves, and back aga
   await expect(page.locator('iframe[title="Journey Across Mereddia"]')).toHaveCount(0);
 });
 
-// The real game through the real page: MEREDDIA_DIST=<its dist-mereddia> npm run test:e2e -- e2e/hosted -g "real build".
 test("the real build plays in the iframe", async ({ phones }) => {
   test.skip(!process.env.MEREDDIA_DIST, "Set MEREDDIA_DIST to a built dist-mereddia");
   test.setTimeout(300_000);
@@ -116,23 +105,22 @@ test("the real build plays in the iframe", async ({ phones }) => {
   const game = page.frameLocator('iframe[title="Journey Across Mereddia"]');
   await expect(game.getByRole("button", { name: "Back" })).toBeVisible({ timeout: 60_000 });
   console.log(`interactive after ${Date.now() - tapped}ms, ${files} files`);
-  await page.waitForTimeout(5000);
+  const settledGame = () => holdsStill(page.frames().find((f) => f.url().includes("/games/mereddia/"))!);
+  await settledGame();
   await page.screenshot({ path: "e2e/.state/screens/mereddia-iframe-1.png" });
   const skip = game.getByRole("button", { name: /skip/i }).first();
   if (await skip.isVisible().catch(() => false)) await skip.click();
   for (let i = 0; i < 6; i++) {
     const next = game.getByRole("button", { name: /^(Next|Done|Continue)/ }).first();
     if (await next.isVisible().catch(() => false)) await next.click();
-    await page.waitForTimeout(700);
+    await settledGame();
   }
-  await page.waitForTimeout(4000);
   await page.screenshot({ path: "e2e/.state/screens/mereddia-iframe-2.png" });
   slow.sort((a, b) => a - b);
   console.log(
     `files ${files}, ${(bytes / 1e6).toFixed(1)} MB on the wire, request p50 ${slow[slow.length >> 1]}ms p95 ${slow[Math.floor(slow.length * 0.95)]}ms max ${slow.at(-1)}ms`,
   );
   console.log("errors", JSON.stringify(errors.slice(0, 8)));
-  // Saves survive: the game comes back to where it was.
   await page.reload();
   await expect(game.getByRole("button", { name: "Back" })).toBeVisible({ timeout: 60_000 });
   await game.getByRole("button", { name: "Back" }).click();

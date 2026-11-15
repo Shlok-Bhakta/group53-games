@@ -1,11 +1,17 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { authTables } from "@convex-dev/auth/server";
-import { newsItem, profileStats } from "./stonks/profile";
+import { chessTables } from "./chess/schema";
+import { golfTables } from "./golf/schema";
+import { landlordTables } from "./landlord/schema";
+import { stonksTables } from "./stonks/schema";
 
 export default defineSchema({
   ...authTables,
-  // Convex Auth rewrites name, image, and discordUsername from Discord on every sign-in.
+  ...chessTables,
+  ...golfTables,
+  ...landlordTables,
+  ...stonksTables,
   users: defineTable({
     name: v.optional(v.string()),
     image: v.optional(v.string()),
@@ -15,12 +21,10 @@ export default defineSchema({
     phoneVerificationTime: v.optional(v.number()),
     isAnonymous: v.optional(v.boolean()),
     discordUsername: v.optional(v.string()),
-    // Load-test and e2e players. They never receive pushes and never trigger pushes to real players.
     isTest: v.optional(v.boolean()),
   })
     .index("email", ["email"])
     .index("phone", ["phone"]),
-  // Cosmetics live apart from users so a Discord sync never clobbers them.
   profiles: defineTable({
     userId: v.id("users"),
     frame: v.string(),
@@ -30,8 +34,6 @@ export default defineSchema({
     badge: v.string(),
     tagline: v.string(),
   }).index("by_user", ["userId"]),
-  // One row per player: heartbeat for the online dot. Taps live in their own table so tapping and the
-  // heartbeat never write the same document.
   presence: defineTable({
     userId: v.id("users"),
     online: v.boolean(),
@@ -42,27 +44,19 @@ export default defineSchema({
   taps: defineTable({ userId: v.id("users"), x: v.number(), y: v.number(), path: v.string(), seq: v.number() }).index("by_user", [
     "userId",
   ]),
-  // One row per game of anything. `state` is mode-specific (see convex/chess.ts).
   matches: defineTable({
     mode: v.string(),
     status: v.union(v.literal("waiting"), v.literal("active"), v.literal("finished"), v.literal("cancelled")),
     createdBy: v.id("users"),
-    // Seats in join order. For chess, color is assigned when the game starts.
     players: v.array(v.object({ userId: v.id("users"), color: v.optional(v.string()) })),
-    // Challenges are invite-only; open lobbies leave this empty.
     invited: v.array(v.id("users")),
-    // A challenge that invited fewer players than it has seats: anyone can take the rest.
     openSeats: v.optional(v.boolean()),
-    // The host's choices from the mode's settings (convex/modes.ts), only the ones that differ from the
-    // defaults. Read them with settingsOf().
     settings: v.optional(v.record(v.string(), v.number())),
     state: v.any(),
-    // Async modes: whose move it is, and how many moves have been made (reminders check it hasn't changed).
     turn: v.optional(v.id("users")),
     moveCount: v.number(),
     drawOffer: v.optional(v.id("users")),
     result: v.optional(
-      // `standings` (four-player): places best first, ties sharing a place.
       v.object({
         winners: v.array(v.id("users")),
         draw: v.boolean(),
@@ -72,8 +66,6 @@ export default defineSchema({
     ),
     ratingChanges: v.optional(v.array(v.object({ userId: v.id("users"), before: v.number(), after: v.number() }))),
     rematchOf: v.optional(v.id("matches")),
-    // An in-place rematch offer on a finished game. Once every player is in (`yes`), a new game starts with
-    // colors moved one seat along.
     rematch: v.optional(
       v.object({
         by: v.id("users"),
@@ -90,111 +82,15 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_mode_status", ["mode", "status"])
     .index("by_creator_status", ["createdBy", "status"]),
-  // Real-time chess inputs, one row each. Moves only ever insert here, so two players moving at once
-  // never conflict.
-  rtCommands: defineTable({
-    matchId: v.id("matches"),
-    tick: v.number(),
-    color: v.string(),
-    pieceId: v.number(),
-    toX: v.number(),
-    toY: v.number(),
-    kind: v.optional(v.union(v.literal("move"), v.literal("cancel"), v.literal("resign"))),
-  }).index("by_match_tick", ["matchId", "tick"]),
-  // A settled board state for each real-time game, advanced by chess:rtTick, so replays start near now.
-  rtSnapshots: defineTable({ matchId: v.id("matches"), state: v.any() }).index("by_match", ["matchId"]),
-  // Golf's open world (convex/golf.ts): one row per world. `awake` while the server is settling it.
-  // A game's holes have one each too (`matchId`, `hole`, keyed "m:<match>:<hole>").
-  golfWorlds: defineTable({
-    key: v.string(),
-    startAt: v.number(),
-    awake: v.boolean(),
-    collide: v.boolean(),
-    matchId: v.optional(v.id("matches")),
-    hole: v.optional(v.number()),
-  })
-    .index("by_key", ["key"])
-    .index("by_match", ["matchId"]),
-  // A game's holes, built from its settings when it starts (convex/golf/build.ts), the first one first.
-  golfCourses: defineTable({ matchId: v.id("matches"), n: v.number(), course: v.any() }).index("by_match", ["matchId", "n"]),
-  // Generated holes, made ahead for the mode page's preview (`key` is the seed and what shapes the holes,
-  // convex/golf/build.ts genKey) and used again when a game starts on them. Cleared after a couple of days.
-  golfPreviews: defineTable({ key: v.string(), n: v.number(), course: v.any(), at: v.number() }).index("by_key", ["key", "n"]),
-  // A preview being made, so asking twice doesn't make it twice.
-  golfPreviewJobs: defineTable({ key: v.string(), total: v.number(), at: v.number() }).index("by_key", ["key"]),
-  // Everyone who's played in a world, for names and colors.
-  golfPlayers: defineTable({ worldId: v.id("golfWorlds"), userId: v.id("users"), joinedAt: v.number() }).index("by_world", ["worldId"]),
-  // Everything anyone does, one row each, stamped with the tick they did it on. Acting only ever inserts
-  // here, so players acting at once never conflict.
-  golfCommands: defineTable({
-    worldId: v.id("golfWorlds"),
-    tick: v.number(),
-    by: v.id("users"),
-    seq: v.number(),
-    kind: v.union(
-      v.literal("join"),
-      v.literal("leave"),
-      v.literal("shot"),
-      v.literal("use"),
-      v.literal("fire"),
-      v.literal("hop"),
-      v.literal("brake"),
-      v.literal("reset"),
-      v.literal("turn"),
-      v.literal("pickup"),
-    ),
-    a: v.optional(v.number()),
-    p: v.optional(v.number()),
-    i: v.optional(v.number()),
-    x: v.optional(v.number()),
-    y: v.optional(v.number()),
-    bag: v.optional(v.array(v.string())),
-  }).index("by_world_tick", ["worldId", "tick"]),
-  // The settled world (convex/golf/world.ts, packed), advanced by golf:tick, so phones replay from near now.
-  golfSnapshots: defineTable({ worldId: v.id("golfWorlds"), tick: v.number(), state: v.any() }).index("by_world", ["worldId"]),
-  // A game's hole as it started, with every ball on the tee: with its commands, the whole hole can be played back.
-  golfStarts: defineTable({ worldId: v.id("golfWorlds"), state: v.any() }).index("by_world", ["worldId"]),
-  // What a player's carrying to the next golf hole of their run on a course.
-  golfBags: defineTable({ course: v.string(), userId: v.id("users"), bag: v.array(v.string()), at: v.number() }).index("by_course_user", [
-    "course",
-    "userId",
-  ]),
-  // Each player's score on each golf hole, from the server's own run of the world, so it can't be faked.
-  golfScores: defineTable({
-    hole: v.string(),
-    userId: v.id("users"),
-    best: v.number(),
-    last: v.number(),
-    plays: v.number(),
-    at: v.number(),
-  }).index("by_hole_user", ["hole", "userId"]),
-  // What players mustn't see: a player's own hand (`userId` set; a Scrabble rack) or the game's (no
-  // `userId`; the tile bag). Only ever returned to its owner.
-  // Landlord's history: one row per move, with what it did (`events`, numbered from `seq`), who did it (a seat,
-  // or -1 for the game) and the public state after it, so a phone can play back everything since it last
-  // looked. Only ever inserted.
-  landlordLog: defineTable({
-    matchId: v.id("matches"),
-    seq: v.number(),
-    by: v.number(),
-    events: v.any(),
-    state: v.any(),
-    at: v.number(),
-  }).index("by_match", ["matchId", "seq"]),
   secrets: defineTable({ matchId: v.id("matches"), userId: v.optional(v.id("users")), data: v.any() }).index("by_match_user", [
     "matchId",
     "userId",
   ]),
-  // A player's plan for their next turn (tiles laid out on the board, rack order), saved as they go so it's
-  // there when they come back. Private to them; others only see that they're planning.
   drafts: defineTable({ matchId: v.id("matches"), userId: v.id("users"), data: v.any(), count: v.number(), at: v.number() }).index(
     "by_match_user",
     ["matchId", "userId"],
   ),
-  // Game links opened outside the app, sent on to the player's phone as a push (convex/links.ts). Kept
-  // to rate-limit them.
   handoffs: defineTable({ userId: v.id("users"), matchId: v.id("matches"), at: v.number() }).index("by_user", ["userId"]),
-  // Elo per mode.
   ratings: defineTable({
     userId: v.id("users"),
     mode: v.string(),
@@ -206,118 +102,6 @@ export default defineSchema({
   })
     .index("by_mode", ["mode"])
     .index("by_user_mode", ["userId", "mode"]),
-  // Stonks: live prices for the S&P 500's biggest companies. The stonks sidecar (stonks/, a Rust
-  // service on kiwi) is the only writer: it streams prices in and backfills history, through the
-  // internal mutations in convex/stonks.ts. One row per symbol.
-  stockQuotes: defineTable({
-    symbol: v.string(),
-    name: v.optional(v.string()),
-    price: v.number(),
-    // When the source says it traded, and when the sidecar heard about it (ms).
-    time: v.number(),
-    recv: v.number(),
-    source: v.string(),
-    // Yahoo's market hours for the trade: "pre", "regular", "post" or "extended".
-    session: v.optional(v.string()),
-    prevClose: v.optional(v.number()),
-    // The last regular-session price: today's close once the bell's gone, so after-hours moves show apart.
-    regularPrice: v.optional(v.number()),
-    dayHigh: v.optional(v.number()),
-    dayLow: v.optional(v.number()),
-    volume: v.optional(v.number()),
-    yearHigh: v.optional(v.number()),
-    yearLow: v.optional(v.number()),
-    // What it is and where it trades, for anything on Yahoo. Missing means a US stock in dollars.
-    currency: v.optional(v.string()),
-    type: v.optional(v.string()), // EQUITY, ETF, CRYPTOCURRENCY, CURRENCY, FUTURE, INDEX, MUTUALFUND
-    exchange: v.optional(v.string()),
-    state: v.optional(v.string()), // REGULAR, PRE, POST, CLOSED...
-    hint: v.optional(v.number()), // decimal places
-    periodOpen: v.optional(v.number()), // today's regular session, away from New York
-    periodClose: v.optional(v.number()),
-    // The minute being built from live trades (pre-market and after hours too); it joins the 1D series
-    // once the next one starts.
-    minute: v.optional(v.number()),
-    minuteClose: v.optional(v.number()),
-  }).index("by_symbol", ["symbol"]),
-  // Price history per symbol and range ("1D", "1W", "1M", "1Y", "5Y"), as [ms, price] points.
-  stockSeries: defineTable({ symbol: v.string(), range: v.string(), points: v.array(v.array(v.number())), at: v.number() })
-    .index("by_symbol_range", ["symbol", "range"])
-    .index("by_at", ["at"]),
-  // The day's chart ("1D"), one row per hour of [ms, price] points. Convex keeps every old version of a row for days, so
-  // a new minute rewrites an hour's worth of the day, never all of it.
-  stockDayHours: defineTable({ symbol: v.string(), hour: v.number(), points: v.array(v.array(v.number())), at: v.number() })
-    .index("by_symbol_hour", ["symbol", "hour"])
-    .index("by_at", ["at"]),
-  // The index's holdings (from SPY's daily file): weights as of a day's close, and each price that day,
-  // so live weights can follow the prices.
-  stockIndex: defineTable({
-    key: v.string(),
-    asOf: v.string(),
-    at: v.number(),
-    holdings: v.array(v.object({ symbol: v.string(), name: v.string(), weight: v.number(), base: v.optional(v.number()) })),
-    indexBase: v.optional(v.number()),
-  }).index("by_key", ["key"]),
-  // Each holding's profile (key stats, analysts, about) and its latest news, from Yahoo, refreshed by
-  // the sidecar every half hour while trading. One row per symbol; the index has news only.
-  stockProfiles: defineTable({
-    symbol: v.string(),
-    stats: v.optional(v.object(profileStats)),
-    news: v.optional(v.array(newsItem)),
-    at: v.number(),
-    statsAt: v.optional(v.number()),
-    newsAt: v.optional(v.number()),
-  }).index("by_symbol", ["symbol"]),
-  // Paper trading: everyone's cash (a row appears with their first order; until then it's $10,000), their
-  // positions, and their orders, which wait until a trade after them comes in (convex/stonks/trade.ts).
-  stockAccounts: defineTable({ userId: v.id("users"), cash: v.number() }).index("by_user", ["userId"]),
-  stockPositions: defineTable({ userId: v.id("users"), symbol: v.string(), shares: v.number(), avg: v.number() })
-    .index("by_user", ["userId"])
-    .index("by_symbol", ["symbol"]),
-  stockOrders: defineTable({
-    userId: v.id("users"),
-    symbol: v.string(),
-    side: v.union(v.literal("buy"), v.literal("sell"), v.literal("short"), v.literal("cover")),
-    dollars: v.optional(v.number()), // opening: how much to put in
-    shares: v.optional(v.number()), // closing: how many (none means all of it)
-    status: v.union(v.literal("waiting"), v.literal("filled"), v.literal("cancelled"), v.literal("refused")),
-    at: v.number(),
-    // Once filled:
-    filledAt: v.optional(v.number()),
-    price: v.optional(v.number()),
-    currency: v.optional(v.string()),
-    filledShares: v.optional(v.number()),
-    amount: v.optional(v.number()),
-    realized: v.optional(v.number()),
-    reason: v.optional(v.string()),
-  })
-    .index("by_symbol_status", ["symbol", "status"])
-    .index("by_user_status", ["userId", "status"])
-    .index("by_status_filled", ["status", "filledAt"]),
-  // Everything that can be traded: US listings from Nasdaq's daily files, plus whatever Yahoo's search has
-  // turned up. `search` is the ticker and name together.
-  stockSymbols: defineTable({
-    symbol: v.string(),
-    name: v.string(),
-    type: v.optional(v.string()),
-    exchange: v.optional(v.string()),
-    search: v.string(),
-  })
-    .index("by_symbol", ["symbol"])
-    .searchIndex("search_text", { searchField: "search" }),
-  // Searches sent to Yahoo, so each is asked once a week. The sidecar answers what's pending.
-  stockLookups: defineTable({ q: v.string(), done: v.boolean(), at: v.number(), symbols: v.optional(v.array(v.string())) })
-    .index("by_q", ["q"])
-    .index("by_done", ["done"]),
-  // Who's looking at what, so it streams only while someone is. "seen" streams its price; "open" also
-  // keeps its charts, stats and news fresh.
-  stockViews: defineTable({ symbol: v.string(), level: v.string(), until: v.number() }).index("by_symbol", ["symbol"]),
-  // Everyone's net worth over the game: one row per moment, for those who've traded (anyone missing is still
-  // on $10,000). Written every 15 minutes and on every fill, and thinned out as it ages (`thinWorth`).
-  stockWorth: defineTable({ t: v.number(), worths: v.array(v.object({ u: v.id("users"), w: v.number() })) }).index("by_t", ["t"]),
-  stockFeeds: defineTable({ source: v.string(), state: v.string(), detail: v.optional(v.string()), at: v.number() }).index("by_source", [
-    "source",
-  ]),
   pushSubscriptions: defineTable({
     userId: v.id("users"),
     endpoint: v.string(),
@@ -327,9 +111,6 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_endpoint", ["endpoint"]),
 
-  // Games built and hosted apart from the app (convex/hosted.ts): which build is live, and its files.
-  // What test players would have been pushed, kept only on the throwaway test backend (ALLOW_TEST_HELPERS)
-  // so e2e tests can check who hears what. Never written on kiwi.
   testPushes: defineTable({
     userId: v.id("users"),
     title: v.string(),

@@ -2,7 +2,6 @@ import type { CSSProperties } from "react";
 
 export type TileState = "blank" | "green" | "yellow" | "gray" | "hit" | "empty";
 
-// A word spelled in letter tiles. "hit" is the red tile that marks a PvP attack.
 export function Tiles({
   word,
   states,

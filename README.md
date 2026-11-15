@@ -34,7 +34,7 @@ In the console, select a task and press `s` to start it, `r` to restart it, and 
 
 The sign-in is mocked by two variables, both set for you: `VITE_DEV_AUTH=1` on `web` (`dekit.yaml`) swaps Discord for the picker, and `DEV_AUTH=1` on the local Convex backend (`scripts/dev.mjs`) lets those players in. It refuses on any backend that isn't on this machine (`convex/devAuth.ts`).
 
-Pushes, installing to a home screen and Discord sign-in need the real thing, so try those on a deployed build. Open a PR when your change is ready: only Shlok can approve one, and merging doesn't deploy it.
+Pushes, installing to a home screen and Discord sign-in need the real thing, so try those on a deployed build. Open a PR when your change is ready: only Shlok can approve one, and once it's merged it deploys itself.
 
 ## Tests
 
@@ -42,7 +42,7 @@ Pushes, installing to a home screen and Discord sign-in need the real thing, so 
 
 ## Kiwi deployment
 
-The stack lives in `~/Services/group53` on kiwi. `compose.yaml` runs Convex, its dashboard, the web app, the `og` link-preview service, and a Cloudflare Tunnel (`group53-games`). Convex stores SQLite and files at `/home/shlok/ssd-data/group53/convex-data` on the SSD (the 5TB USB disk is SMR and far too slow for it). `.env` there holds `INSTANCE_SECRET`, `CONVEX_URL`, and `CONVEX_SITE_URL`. `secrets/` holds the tunnel credentials and the admin key, both mode 600.
+The stack lives in `~/Services/group53` on kiwi. `compose.yaml` runs Convex, its dashboard, the web app, the `og` link-preview service, the stonks sidecar, a Cloudflare Tunnel (`group53-games`), and the deployer. Convex stores SQLite and files at `/home/shlok/ssd-data/group53/convex-data` on the SSD (the 5TB USB disk is SMR and far too slow for it). `.env` there holds `INSTANCE_SECRET`, `CONVEX_URL`, and `CONVEX_SITE_URL`. `secrets/` holds the tunnel credentials and the admin key, both mode 600.
 
 | Hostname | Target |
 | --- | --- |
@@ -52,7 +52,7 @@ The stack lives in `~/Services/group53` on kiwi. `compose.yaml` runs Convex, its
 
 On the tailnet, the web app is at port 38440, the API at 38441, HTTP actions at 38442, and the dashboard at 38443.
 
-To ship a change, commit it and run `npm run deploy`. It pushes the Convex functions, copies the repo to kiwi, rebuilds the `web` and `og` containers, cleans up the old images, and checks the site is up.
+Whatever lands on `main` deploys itself: the `deployer` container on kiwi fetches `main` every minute and, when it's moved, pushes the Convex functions, copies the commit into the stack, rebuilds the `web`, `og` and `stonks` containers, cleans up the old images, and checks the site is up. `docker compose logs deployer` on kiwi shows each deploy, and `deploy-status.json` in the stack the last one. See `deploy/README.md`.
 
 ## Discord sign-in
 

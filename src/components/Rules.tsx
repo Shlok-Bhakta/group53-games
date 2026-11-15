@@ -1,7 +1,6 @@
 import { BookOpenTextIcon } from "@phosphor-icons/react";
 import { Disclosure } from "@/components/ui/disclosure";
 
-// The rules for a mode, folded away once you've played it.
 export function Rules({ rules, defaultOpen, title = "How to play" }: { rules: string[]; defaultOpen: boolean; title?: string }) {
   return (
     <Disclosure icon={<BookOpenTextIcon size={20} weight="fill" />} title={title} defaultOpen={defaultOpen}>

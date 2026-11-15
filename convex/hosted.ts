@@ -2,12 +2,6 @@ import { v } from "convex/values";
 import { httpAction, internalMutation, internalQuery, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 
-// Games built apart from the app and served out of file storage, one file per request, at
-// /games/<game>/<build>/<path> on the site host. A folder of relative paths works as it is, and a file never
-// changes under its build, so phones keep it forever. Only someone with the admin key can publish
-// (scripts/publish-hosted.mjs).
-
-// Where the live build opens, or null if there isn't one.
 export const current = query({
   args: { game: v.string() },
   handler: async (ctx, { game }) => {
@@ -39,7 +33,6 @@ export const addFile = internalMutation({
   },
 });
 
-// Makes a fully uploaded build the live one. The one before stays, for phones with it already open.
 export const publish = internalMutation({
   args: { game: v.string(), build: v.string() },
   handler: async (ctx, { game, build }) => {

@@ -13,7 +13,6 @@ import { LargeTitle } from "@/components/AppHeader";
 import { NotificationBanner } from "@/components/NotificationBanner";
 import { useNotifications } from "@/notifications";
 
-// Home: what's going on with your games. Each section shows up only when it has something in it.
 export function Home() {
   const push = useNotifications();
   const locked = push.state !== "on" && push.state !== "unsupported";
@@ -99,7 +98,6 @@ export function Home() {
   );
 }
 
-// Old pushes and links pointed at /?new=<mode>; send them to that mode's page.
 function useLegacyNewGameLink() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -124,7 +122,6 @@ function AllClear() {
   );
 }
 
-// My rating in each mode I've played, as small stat cards.
 function Stats() {
   const ratings = useQuery(api.ratings.mine);
   const played = MODE_KEYS.filter((m) => (ratings?.[m]?.games ?? 0) > 0);

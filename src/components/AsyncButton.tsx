@@ -1,17 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
-import { SpinnerGapIcon } from "@phosphor-icons/react";
+import { useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
+import { Button, IconButton } from "@/components/ui/button";
 import { errorText } from "@/lib/errors";
 
-// Runs an async action at most once at a time. Extra taps while it's running are ignored, and errors
-// become a toast.
 export function usePending() {
   const [pending, setPending] = useState(false);
   const running = useRef(false);
   const mounted = useRef(true);
-  // Set on every mount, not just the first: StrictMode mounts twice in development, and a flag only ever
-  // cleared would leave `pending` stuck on after the first action.
   useEffect(() => {
     mounted.current = true;
     return () => void (mounted.current = false);
@@ -32,18 +27,17 @@ export function usePending() {
   return [pending, run] as const;
 }
 
-type Props = Omit<ComponentProps<typeof Button>, "onClick"> & {
-  onClick: () => Promise<unknown> | unknown;
-  icon?: ReactNode;
-};
+type Action = () => Promise<unknown> | unknown;
 
-// A button that shows a spinner and can't be pressed again until its action finishes.
-export function AsyncButton({ onClick, icon, children, disabled, ...rest }: Props) {
+export function AsyncButton({ onClick, ...rest }: Omit<ComponentProps<typeof Button>, "onClick" | "pending"> & { onClick: Action }) {
   const [pending, run] = usePending();
-  return (
-    <Button {...rest} disabled={disabled || pending} aria-busy={pending} onClick={() => void run(onClick)}>
-      {pending ? <SpinnerGapIcon className="animate-spin" weight="bold" /> : icon}
-      {children}
-    </Button>
-  );
+  return <Button {...rest} pending={pending} onClick={() => void run(onClick)} />;
+}
+
+export function AsyncIconButton({
+  onClick,
+  ...rest
+}: Omit<ComponentProps<typeof IconButton>, "onClick" | "pending"> & { onClick: Action }) {
+  const [pending, run] = usePending();
+  return <IconButton {...rest} pending={pending} onClick={() => void run(onClick)} />;
 }

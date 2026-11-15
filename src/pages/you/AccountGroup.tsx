@@ -9,7 +9,6 @@ export function AccountGroup() {
   return (
     <Section title="Account">
       <ConfirmButton
-        // The dialog's trigger hands the row its own onClick.
         trigger={
           <ListRow
             size="sm"

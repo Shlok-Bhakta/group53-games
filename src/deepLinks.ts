@@ -1,8 +1,6 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router";
 
-// Notification taps (public/sw.js) arrive two ways: a message to the open app, and a note in the Cache
-// API for when the app was opened fresh at the wrong page. Either way, route to the target once.
 const PENDING = "group53-pending";
 const KEY = "/__pending-navigation";
 const FRESH_MS = 2 * 60 * 1000;
@@ -36,7 +34,6 @@ export function useDeepLinks() {
     const onMessage = (e: MessageEvent) => {
       if (e.data?.type !== "navigate" || typeof e.data.url !== "string") return;
       go(e.data.url);
-      // Handled; don't route there again on the next foreground.
       void takePending();
     };
     const onVisible = () => document.visibilityState === "visible" && check();

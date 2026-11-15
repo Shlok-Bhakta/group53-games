@@ -1,4 +1,4 @@
-// Convex wraps server errors as "[CONVEX M(fn)] [Request ID: ...] Server Error ... Uncaught Error: <message>".
+// platform: Convex wraps server errors as "[CONVEX M(fn)] [Request ID: ...] Server Error ... Uncaught Error: <message>".
 export function errorText(err: unknown) {
   const raw = (err as Error)?.message ?? String(err);
   const uncaught = raw.match(/Uncaught Error: ([^\n]*)/);

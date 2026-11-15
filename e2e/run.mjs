@@ -1,4 +1,3 @@
-// npm run test:e2e: start a throwaway backend, build against it, run Playwright, then clean up.
 import { spawnSync } from "node:child_process";
 import { startBackend, stopBackend, stopRunning } from "./backend.mjs";
 
@@ -12,7 +11,6 @@ if (!process.env.GROUP53_E2E_LOCKED) {
   process.exit(queued.status ?? 1);
 }
 
-// Stopping a run mustn't leave the backend holding port 3211.
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
   process.on(signal, () => {
     stopRunning();

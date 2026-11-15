@@ -1,5 +1,3 @@
-// Renders link previews against a throwaway backend with a real game in progress.
-// node e2e/og-preview.mjs  ->  e2e/.state/og-*.png (chess, four-player, Scrabble and poker games, and cards)
 import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { ConvexHttpClient } from "convex/browser";
@@ -35,7 +33,6 @@ for (const [p, from, to] of [
   await p.client.mutation(anyApi.chess.move, { id, from, to });
 }
 
-// A four-player game a few moves in.
 const s4 = await player("samwise");
 const a4 = await player("alex_dev");
 const four = [a, c, s4, a4];
@@ -52,7 +49,6 @@ for (const [i, from, to] of [
   await four[i].client.mutation(anyApi.chess.fourMove, { id: fid, fromX: f.x, fromY: f.y, toX: t.x, toY: t.y });
 }
 
-// A three-player Scrabble game with two words down.
 const sid = await a.client.mutation(anyApi.matches.queue, { mode: "scrabble:classic" });
 await c.client.mutation(anyApi.matches.queue, { mode: "scrabble:classic" });
 await s4.client.mutation(anyApi.matches.queue, { mode: "scrabble:classic" });
@@ -84,7 +80,6 @@ for (const [seat, word, cells] of [
   await admin.mutation(anyApi.testing.playAs, { id: sid, userId, tiles: cells.map(([x, y], i) => ({ id: rack[i].id, x, y })) });
 }
 
-// A three-way Hold'em game on the flop.
 const pid = await a.client.mutation(anyApi.matches.queue, { mode: "poker:holdem" });
 await c.client.mutation(anyApi.matches.queue, { mode: "poker:holdem" });
 await s4.client.mutation(anyApi.matches.queue, { mode: "poker:holdem" });
@@ -98,14 +93,12 @@ for (let i = 0; i < 3; i++) {
   await p.client.mutation(anyApi.poker.move, { id: pid, hand: pm.state.hand, street: pm.state.street, kind: owe > 0 ? "call" : "check" });
 }
 
-// A three-way Landlord game a few dozen moves in, bots playing every seat.
 const lid = await a.client.mutation(anyApi.matches.queue, { mode: "landlord:classic" });
 await c.client.mutation(anyApi.matches.queue, { mode: "landlord:classic" });
 await s4.client.mutation(anyApi.matches.queue, { mode: "landlord:classic" });
 await a.client.mutation(anyApi.matches.startGame, { id: lid });
 await admin.mutation(anyApi.testing.landlordBots, { id: lid, steps: 120 });
 
-// Stonks: the index and a stock with a day of prices.
 const day = Date.parse("2026-10-30T08:00:00Z");
 const walk = (base, k) =>
   Array.from({ length: 16 * 60 }, (_, i) => [

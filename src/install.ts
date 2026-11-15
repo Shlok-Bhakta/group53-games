@@ -11,8 +11,7 @@ export const platform: Platform =
       ? "android"
       : "desktop";
 
-// In-app browsers (Discord, Instagram, and so on) can't add to the home screen.
-// On iOS they're WKWebViews without the "Safari/" token; on Android, WebViews say "; wv)".
+// platform: in-app browsers can't add to the home screen; iOS's are WKWebViews without "Safari/" in the UA, Android's say "; wv)".
 export const inAppBrowser = (platform === "ios" && !/Safari\//.test(ua)) || (platform === "android" && /; wv\)/.test(ua));
 
 function standaloneNow() {
@@ -36,7 +35,6 @@ export function useStandalone() {
 
 type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 
-// Chrome on Android fires beforeinstallprompt when the app is installable, which lets us offer a one-tap install.
 export function useInstallPrompt() {
   const [prompt, setPrompt] = useState<InstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(false);

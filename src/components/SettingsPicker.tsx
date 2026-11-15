@@ -16,12 +16,9 @@ import {
 } from "../../convex/modes";
 import { Segmented } from "@/components/Segmented";
 import { Disclosure } from "@/components/ui/disclosure";
-import { cn } from "@/lib/utils";
+import { IconButton } from "@/components/ui/button";
+import { Toggle } from "@/components/ui/toggle";
 
-// One control per setting, labelled above it: a segmented control for a few choices, a number with a dice for a
-// seed, and chips to tick for a pick-any (golf's items). Settings that don't apply to the rest (a seed for a
-// course made by hand) are left out.
-// `preview` goes straight after the seed (or after the first setting, when there's no seed to show).
 function SettingsFields({
   mode,
   value,
@@ -64,11 +61,13 @@ function SettingsFields({
   );
 }
 
-// A seed: blank (or 0) rolls a new one when the game's made; type one in to play the same holes again.
-// Changes go out when you're done typing, not on every key.
 function SeedField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
   const [text, setText] = useState(value ? String(value) : "");
-  useEffect(() => setText(value ? String(value) : ""), [value]);
+  const [shown, setShown] = useState(value);
+  if (shown !== value) {
+    setShown(value);
+    setText(value ? String(value) : "");
+  }
   const commit = () => {
     const n = Math.min(SEED_MAX, Math.max(0, Math.floor(Number(text.replace(/\D/g, "")) || 0)));
     if (n !== value) onChange(n);
@@ -87,22 +86,21 @@ function SeedField({ label, value, onChange }: { label: string; value: number; o
         onKeyDown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()}
         className="h-11 min-w-0 flex-1 rounded-md bg-muted px-3 font-display text-body tabular-nums outline-none placeholder:font-sans placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
       />
-      <button
-        type="button"
-        aria-label="New random seed"
+      <IconButton
+        label="New random seed"
+        variant="secondary"
+        size="icon-square"
         onClick={() => {
           setText("");
           onChange(0);
         }}
-        className="grid size-11 shrink-0 place-items-center rounded-md bg-muted transition-transform duration-100 active:scale-[0.94]"
       >
-        <DiceFiveIcon size={22} weight="fill" />
-      </button>
+        <DiceFiveIcon weight="fill" className="size-[22px]" />
+      </IconButton>
     </div>
   );
 }
 
-// Tick any of them; at least one stays on. "All" turns everything back on.
 function MaskField({ setting, value, onChange }: { setting: Setting; value: number; onChange: (v: number) => void }) {
   const all = 2 ** setting.options.length - 1;
   const toggle = (bit: number) => {
@@ -111,52 +109,28 @@ function MaskField({ setting, value, onChange }: { setting: Setting; value: numb
   };
   return (
     <div className="flex flex-wrap gap-1.5" role="group" aria-label={setting.label}>
-      <button
-        type="button"
-        aria-pressed={value === all}
-        onClick={() => onChange(all)}
-        className={cn(
-          "min-h-11 rounded-full px-3.5 text-footnote font-semibold transition-transform duration-100 active:scale-[0.96]",
-          value === all ? "bg-primary text-primary-foreground" : "bg-muted",
-        )}
-      >
+      <Toggle variant="solid" pressed={value === all} onPressedChange={() => onChange(all)}>
         All
-      </button>
+      </Toggle>
       {setting.options.map((o) => {
         const on = maskOn(value, o.value);
         return (
-          <button
-            key={o.value}
-            type="button"
-            aria-pressed={on}
-            onClick={() => toggle(o.value)}
-            className={cn(
-              "flex min-h-11 items-center gap-1 rounded-full px-3.5 text-footnote font-semibold transition-transform duration-100 active:scale-[0.96]",
-              on
-                ? "bg-primary/15 text-foreground ring-1 ring-primary/50"
-                : "bg-muted text-muted-foreground line-through decoration-muted-foreground/60",
-            )}
-          >
+          <Toggle key={o.value} pressed={on} onPressedChange={() => toggle(o.value)}>
             {on && <CheckIcon size={14} weight="bold" />}
             {o.label}
-          </button>
+          </Toggle>
         );
       })}
     </div>
   );
 }
 
-// Settings that are only for one game: a seed is rolled fresh every time unless you type one in, so it isn't
-// remembered.
 const remembered = (mode: ModeKey, s: Settings) => {
   const out = changedSettings(mode, s);
   for (const d of MODES[mode].settings as readonly Setting[]) if (d.kind === "seed") delete out[d.key];
   return out;
 };
 
-// The settings for the next game you start in a mode, folded away under a row that names what you've
-// changed. Remembered per mode on this phone. A link can bring its own (`?settings=`, "Play these holes"),
-// seed and all.
 export function useModeSettings(mode: ModeKey) {
   const storageKey = `settings:${mode}`;
   const [params] = useSearchParams();
@@ -175,8 +149,6 @@ export function useModeSettings(mode: ModeKey) {
   return [value, setValue] as const;
 }
 
-// `preview`: what the settings will make (golf's holes), right under the seed while they're open, and right
-// under the row while they're folded.
 export function SettingsSection({
   mode,
   value,

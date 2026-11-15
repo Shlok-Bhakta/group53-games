@@ -3,8 +3,6 @@ import { useNow } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { sfx } from "@/sound";
 
-// A turn timer as a chip: m:ss, quiet on someone else's turn, the primary color on yours, red for the last ten
-// seconds. The last five seconds of your own turn tick.
 export function Countdown({ deadline, mine }: { deadline: number; mine: boolean }) {
   const now = useNow(250);
   const left = Math.max(0, Math.ceil((deadline - now) / 1000));

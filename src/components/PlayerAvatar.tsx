@@ -2,20 +2,16 @@ import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 
 export type FrameStyle = { frame?: string; frameColor?: string; glow?: boolean };
-// Anything with a face: a seat at a game, a crew member, a profile.
 export type Face = FrameStyle & { name: string; image?: string };
 
 type Props = FrameStyle & {
-  // The person, whole: their name, picture and frame. Their glow and badge only show when asked for.
   player?: Face;
   name?: string;
   image?: string;
   badge?: string;
   size?: number;
-  // A steady green dot in the corner while they've got the app open. `dotRing` is what the avatar sits on.
   online?: boolean;
   dotRing?: "card" | "background";
-  // A ring in their seat's color, round whatever it sits in (golf's turn bar and scorecard).
   seat?: string;
   className?: string;
 };
@@ -74,7 +70,6 @@ export function PlayerAvatar({
   );
 }
 
-// A few faces overlapping, for "who's here" and games with several people in them. `ring` is what they sit on.
 export function AvatarStack({
   people,
   max = 3,

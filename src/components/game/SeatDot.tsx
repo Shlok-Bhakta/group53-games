@@ -1,6 +1,5 @@
 import { cn } from "@/lib/utils";
 
-// A player's seat color as a dot, next to their name in a list or a status line.
 export function SeatDot({ color, size = "sm", className }: { color: string | undefined; size?: "sm" | "md"; className?: string }) {
   return (
     <span
