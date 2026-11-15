@@ -80,7 +80,7 @@ let running = null;
 
 export async function startBackend({ build = true } = {}) {
   const apiPort = await freePort();
-  // platform: the backend checks session tokens by fetching its own site origin from inside its container, where the
+  // platform: the backend checks session tokens by fetching its own site origin from inside its container, where it always listens on 3211, so the host binds 3211 too and one URL works on both sides.
   const sitePort = 3211;
   await waitForPort(sitePort);
   const name = `group53-e2e-${randomBytes(3).toString("hex")}`;

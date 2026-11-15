@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { ConvexHttpClient } from "convex/browser";
 import { anyApi } from "convex/server";
-import { startBackend, stopBackend } from "./backend.mjs";
+import { startBackend, stopBackend, waitForUrl } from "./backend.mjs";
 
 const b = await startBackend();
 const admin = new ConvexHttpClient(b.url);
@@ -137,7 +137,7 @@ const og = spawn("node", ["og/server.mjs"], {
   },
   stdio: "inherit",
 });
-await new Promise((r) => setTimeout(r, 1500));
+await Promise.all([waitForUrl("http://127.0.0.1:8788/og/health"), waitForUrl("http://127.0.0.1:8789/")]);
 try {
   const html = await (await fetch(`http://127.0.0.1:8788/chess/${id}`)).text();
   console.log(

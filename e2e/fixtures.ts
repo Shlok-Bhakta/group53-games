@@ -278,7 +278,7 @@ export async function ready(page: Page) {
   await expect(page.locator("[aria-busy=true], [data-slot=skeleton]")).toHaveCount(0);
   await convexIdle(page);
   await holdsStill(page);
-  expectNoNestedCards(page.context());
+  expect([...(nestedCards.get(page.context()) ?? []), ...(await nestedCardsOn(page))], NESTED_CARDS).toEqual([]);
 }
 
 export async function readyForShot(page: Page) {
@@ -296,6 +296,15 @@ export async function readyForShot(page: Page) {
 }
 
 const nestedCards = new Map<BrowserContext, string[]>();
+const NESTED_CARDS = "a card sits inside another card (AGENTS.md: never put cards inside cards)";
+
+type NestingWindow = { __nestedCards: () => string[]; __nestedCard: (report: string) => Promise<void> };
+
+async function nestedCardsOn(page: Page) {
+  const reports = await page.evaluate(() => (window as unknown as Partial<NestingWindow>).__nestedCards?.() ?? []);
+  const path = new URL(page.url()).pathname;
+  return reports.map((r) => `${r} on ${path}`);
+}
 
 async function watchForNestedCards(context: BrowserContext) {
   if (nestedCards.has(context)) return;
@@ -311,24 +320,22 @@ async function watchForNestedCards(context: BrowserContext) {
       const label = el.getAttribute("aria-label") ?? (el.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 40);
       return `<${el.tagName.toLowerCase()} class="${String(el.getAttribute("class") ?? "").slice(0, 60)}"> "${label}"`;
     };
-    const reported = new Set<Element>();
-    const check = () => {
-      for (const inner of document.querySelectorAll(`${CARD} ${CARD}`)) {
+    const nested = () => [...document.querySelectorAll(`${CARD} ${CARD}`)];
+    const describe = (inner: Element) => `${named(inner.parentElement!.closest(CARD)!)} holds the card ${named(inner)}`;
+    const w = window as unknown as NestingWindow;
+    w.__nestedCards = () => nested().map(describe);
+    const reported = new WeakSet<Element>();
+    const addsElements = (records: MutationRecord[]) =>
+      records.some((r) => r.type === "attributes" || [...r.addedNodes].some((n) => n.nodeType === Node.ELEMENT_NODE));
+    new MutationObserver((records) => {
+      if (!addsElements(records)) return;
+      for (const inner of nested()) {
         if (reported.has(inner)) continue;
         reported.add(inner);
-        const outer = inner.parentElement!.closest(CARD)!;
-        const report = (window as unknown as { __nestedCard: (r: string) => Promise<void> }).__nestedCard;
-        report(`${named(outer)} holds the card ${named(inner)}`).catch(() => {});
+        w.__nestedCard(describe(inner)).catch(() => {});
       }
-    };
-    new MutationObserver(check).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-slot"] });
+    }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-slot"] });
   });
-}
-
-const NESTED_CARDS = "a card sits inside another card (AGENTS.md: never put cards inside cards)";
-
-function expectNoNestedCards(context: BrowserContext) {
-  expect(nestedCards.get(context) ?? [], NESTED_CARDS).toEqual([]);
 }
 
 export const onScreen = (page: Page) => page.locator("[data-screen]:not([inert])");
