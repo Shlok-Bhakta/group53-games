@@ -21,16 +21,19 @@ const jsxText = (value) => {
 };
 
 const shapeChildren = (children) => {
-  const merged = [];
+  const shaped = [];
   for (const child of children) {
     if (isEmptyJsxContainer(child)) continue;
-    const previous = merged.at(-1);
-    if (child?.type === "JSXText" && previous?.type === "JSXText") previous.value += child.value;
-    else merged.push(child?.type === "JSXText" ? { type: "JSXText", value: child.value } : child);
+    if (child?.type !== "JSXText") {
+      shaped.push(shape(child));
+      continue;
+    }
+    const text = jsxText(child.value);
+    const previous = shaped.at(-1);
+    if (previous?.type === "JSXText") previous.text += text;
+    else shaped.push({ type: "JSXText", text });
   }
-  return merged
-    .map((child) => (child?.type === "JSXText" ? { type: "JSXText", text: jsxText(child.value) } : shape(child)))
-    .filter((child) => !(child?.type === "JSXText" && child.text === ""));
+  return shaped.filter((child) => !(child?.type === "JSXText" && child.text === ""));
 };
 
 const shape = (node) => {
