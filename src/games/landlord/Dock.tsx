@@ -18,9 +18,6 @@ import { cn } from "@/lib/utils";
 import { useLandlordMove } from "./Deed";
 import type { Float } from "./show";
 
-// The dock: everyone's cash along the top, then whatever's yours to do (roll, buy, bid, pay up), with your
-// properties and trading always a tap away. It only offers a move once the show has caught up.
-
 export function Dock({
   match,
   meId,
@@ -66,13 +63,13 @@ export function Dock({
     </div>
   );
   return (
-    <div className="flex flex-col gap-2.5">
+    <div className="flex flex-col gap-2.5 phone-landscape:flex-1">
       <Players match={match} state={state} floats={floats} onPlayer={onPlayer} />
       {over ? (
         <Result match={match} meId={meId} />
       ) : (
         <>
-          <div className="min-h-[60px]">
+          <div className="min-h-[60px] phone-landscape:mt-auto">
             {catching ? (
               <Button size="xl" variant="secondary" className="h-[60px] w-full" onClick={onSkip}>
                 Skip to now
@@ -94,7 +91,6 @@ export function Dock({
   );
 }
 
-// Everyone, in turn order: face, cash (money changing hands floats off it), and who's up.
 function Players({
   match,
   state,
@@ -108,16 +104,17 @@ function Players({
 }) {
   const up = state.phase.k === "over" ? -1 : actor(state);
   return (
-    <div className="-mx-3 flex gap-1.5 overflow-x-auto px-3 pt-4" aria-label="Players">
+    <div className="-mx-3 flex gap-1.5 overflow-x-auto px-3 pt-4 phone-landscape:flex-wrap" aria-label="Players">
       {state.players.map((p, seat) => {
         const player = match.players[seat];
         return (
-          <button
+          <Button
             key={seat}
-            type="button"
+            variant="bare"
+            size="chip"
             onClick={() => onPlayer(seat)}
             className={cn(
-              "relative flex min-h-11 shrink-0 touch-manipulation items-center gap-1.5 rounded-full py-1 pl-1 pr-3 transition-colors",
+              "relative shrink-0 rounded-full py-1 pl-1 pr-3 transition-colors duration-150",
               seat === up ? "bg-primary/15" : "bg-muted/60",
               p.out && "opacity-45",
             )}
@@ -146,7 +143,7 @@ function Players({
                   </motion.span>
                 ))}
             </AnimatePresence>
-          </button>
+          </Button>
         );
       })}
     </div>
@@ -157,7 +154,6 @@ function Row({ children }: { children: ReactNode }) {
   return <div className="flex h-[60px] gap-2 [&>*]:h-full [&>*]:flex-1">{children}</div>;
 }
 
-// What's yours to do right now, if anything.
 function Actions({ match, state, seat, onHoldings }: { match: MatchView; state: MonoState; seat: number; onHoldings: () => void }) {
   const act = useLandlordMove(match._id);
   const [bidOpen, setBidOpen] = useState(false);

@@ -1,12 +1,7 @@
-// The two decks, sixteen cards each, with the classic US decks' effects (2008 and later) in our own words.
-// A deck is drawn from the top and each card goes back underneath, never reshuffled; a get-out-of-jail card
-// stays with whoever drew it until it's used, sold or they go bankrupt.
-
 export type Deck = "chance" | "chest";
 
 export type Effect =
   | { k: "advance"; to: number }
-  // To the next railroad or utility ahead, where rent is doubled (a railroad) or ten times a fresh roll (a utility).
   | { k: "nearest"; kind: "rail" | "util" }
   | { k: "back"; n: number }
   | { k: "collect"; amount: number }

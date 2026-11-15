@@ -1,15 +1,3 @@
-// The property-trading game's rules as plain functions on plain data, shared by the server and phones. No
-// Convex or browser imports. The official rules throughout, with the common house rules and the speed die as
-// settings (`Rules`).
-//
-// A game is `{ s, decks, events }`: `s` is everything public (matches.state), `decks` the order of the two
-// card decks (the game's secret), and `events` what the last move did, in order, for the phones to play back.
-// `act` takes one player's action and returns the new game, or throws a sentence saying why not.
-//
-// A turn is a queue of steps (`todo`: move, land, pay, roll again...) run until one needs someone to decide
-// something (`phase`): buy or auction, a bid, a choice of the speed die's bus, raising money for a debt.
-// Building, mortgaging and trading don't wait for a turn: any player can do them whenever, as the rules allow.
-
 import {
   BOARD,
   BUYABLE,
@@ -30,31 +18,19 @@ import { DECKS, FREE_CARD, type Deck } from "./cards";
 
 export type { Deck } from "./cards";
 
-// Money goes to and from players (seats), the bank, or the Free Parking jackpot (a house rule).
 export const BANK = -1;
 export const POT = -2;
 
 export type Rules = {
   cash: number;
-  // Turn down a property and it's auctioned (official), or it stays with the bank.
   auctions: boolean;
-  // House rule: taxes and fines go in a jackpot on the Free Parking, and whoever lands there takes it. 2 also
-  // puts $500 in at the start and every time it's taken.
   pot: 0 | 1 | 2;
-  // House rule: landing right on GO pays double.
   goDouble: boolean;
-  // Collect rent while you're in jail (official), or not.
   jailRent: boolean;
-  // House rule: nobody can buy until they've been round once.
   firstLap: boolean;
-  // The speed die (official, from your second lap).
   speed: boolean;
-  // The bank's 32 houses and 12 hotels (official), or as many as anyone wants.
   limited: boolean;
-  // The official short game: two properties each to start, hotels after three houses, over at the second
-  // bankruptcy and the richest wins.
   short: boolean;
-  // Over after this many rounds, the richest winning. 0: no limit.
   rounds: number;
 };
 
@@ -74,46 +50,35 @@ export const DEFAULT_RULES: Rules = {
 export type Player = {
   cash: number;
   pos: number;
-  // -1 when free; in jail, how many rolls for doubles have failed so far.
   jail: number;
-  // Get-out-of-jail cards held, by the deck they came from.
   free: Deck[];
-  // Been past GO at least once (the speed die and the first-lap house rule).
   lapped: boolean;
   out: boolean;
 };
 
-// `houses`: 0 to 4, and 5 for a hotel.
 export type Prop = { owner: number; houses: number; mortgaged: boolean };
 
 export type Side = { cash: number; props: number[]; free: Deck[] };
-// `lift`: of what the offer's maker gets, the mortgages they'll lift at once.
 export type Trade = { id: number; from: number; to: number; give: Side; get: Side; lift?: number[] };
 
 export type Phase =
   | { k: "roll" }
   | { k: "buy"; pos: number }
-  // `in`: who's still bidding, in turn order from whoever's turn it is. Dropping out is for good.
   | { k: "auction"; pos: number; high: number; leader: number; in: number[] }
   | { k: "debt"; from: number; to: number; amount: number; why: Why }
-  // The speed die's bus: move by either die or both.
   | { k: "bus"; dice: [number, number] }
-  // Triples on the speed die: go anywhere.
   | { k: "pick" }
   | { k: "idle" }
   | { k: "over" };
 
 type Step =
   | { k: "walk"; n: number }
-  // Whoever's turn it is deals with where they stand. `dice` is what a utility's rent is counted from; `mod`
-  // is a card's doubled station rent or ten-times utility.
   | { k: "land"; dice: number; mod?: "rail2" | "util10" }
   | { k: "pay"; from: number; to: number; amount: number; why: Why }
   | { k: "mrm" }
   | { k: "auction"; pos: number }
   | { k: "after" }
   | { k: "next" }
-  // Back to the roll the game was waiting on, after something came up in between (a bankruptcy's auctions).
   | { k: "resume" };
 
 export type Why =
@@ -134,8 +99,6 @@ export type Why =
   | "trade"
   | "bankrupt";
 
-// What happened, in order. Each carries what it changed outright (everyone's cash after a payment, the new
-// owner), so a phone can play them back from any earlier state without the rules.
 export type Ev =
   | { t: "turn"; seat: number; again?: boolean }
   | { t: "roll"; seat: number; dice: number[]; speed?: number; jail?: boolean; util?: boolean }
@@ -161,23 +124,19 @@ export type MonoState = {
   kind: "monopoly";
   rules: Rules;
   players: Player[];
-  // One per square: null where there's nothing to own.
   props: (Prop | null)[];
   current: number;
   phase: Phase;
   todo: Step[];
-  // Doubles rolled this turn, and whether they've earned another roll.
   doubles: number;
   again: boolean;
   dice: number[] | null;
   pot: number;
   bank: { houses: number; hotels: number };
   round: number;
-  // Seats in the order they went out.
   out: number[];
   trades: Trade[];
   tradeSeq: number;
-  // Events so far, over the whole game.
   seq: number;
 };
 
@@ -202,7 +161,6 @@ export type Action =
   | { k: "mortgage"; pos: number }
   | { k: "unmortgage"; pos: number }
   | { k: "offer"; to: number; give: Side; get: Side; lift?: number[] }
-  // `lift`: of what you get, the mortgages you lift at once (otherwise you pay 10% now and lift later).
   | { k: "accept"; id: number; lift?: number[] }
   | { k: "reject"; id: number }
   | { k: "withdraw"; id: number }
@@ -219,8 +177,6 @@ export function shuffled(n: number, rng: Rng): number[] {
   return a;
 }
 
-// --- Reading the state ---
-
 export const alive = (s: MonoState) => s.players.flatMap((p, i) => (p.out ? [] : [i]));
 export const hotelAt = (r: Rules) => (r.short ? 3 : 4);
 export const fineTo = (s: MonoState) => (s.rules.pot ? POT : BANK);
@@ -228,13 +184,11 @@ const owned = (s: MonoState, seat: number) => BUYABLE.filter((i) => s.props[i]!.
 export const ownsGroup = (s: MonoState, seat: number, pos: number) => groupOf(pos).every((i) => s.props[i]!.owner === seat);
 const buildingsIn = (s: MonoState, pos: number) => groupOf(pos).some((i) => s.props[i]!.houses > 0);
 
-// What a player can spend: a winning bid in a running auction is spoken for.
 export function spendable(s: MonoState, seat: number) {
   const ph = s.phase;
   return s.players[seat].cash - (ph.k === "auction" && ph.leader === seat ? ph.high : 0);
 }
 
-// The rent for landing on `pos`, rolling `dice` (utilities), with a card's `mod`.
 export function rentOf(s: MonoState, pos: number, dice: number, mod?: "rail2" | "util10"): number {
   const sq = BOARD[pos];
   const prop = s.props[pos]!;
@@ -245,8 +199,6 @@ export function rentOf(s: MonoState, pos: number, dice: number, mod?: "rail2" | 
   return dice * (mod === "util10" ? 10 : n >= 2 ? 10 : 4);
 }
 
-// What everything a player has is worth: cash, properties at their price (half if mortgaged) and buildings at
-// what they cost. The short game and the round limit place by it.
 export function worth(s: MonoState, seat: number): number {
   let w = s.players[seat].cash;
   for (const i of owned(s, seat)) {
@@ -257,8 +209,6 @@ export function worth(s: MonoState, seat: number): number {
   return w;
 }
 
-// Who the game is waiting on: whoever's turn it is, whoever owes money, or in an auction the next bidder
-// after the leader. -1 once it's over.
 export function actor(s: MonoState): number {
   const ph = s.phase;
   if (ph.k === "over") return -1;
@@ -272,7 +222,6 @@ export function actor(s: MonoState): number {
   return s.current;
 }
 
-// Why a player can't put a building on `pos` right now, or null if they can.
 export function cantBuild(s: MonoState, seat: number, pos: number): string | null {
   const sq = BOARD[pos];
   const prop = s.props[pos];
@@ -294,7 +243,6 @@ export function cantBuild(s: MonoState, seat: number, pos: number): string | nul
   return null;
 }
 
-// Why a player can't sell a building off `pos`, or null.
 export function cantSell(s: MonoState, seat: number, pos: number): string | null {
   const prop = s.props[pos];
   if (!prop || prop.owner !== seat) return "That isn't yours.";
@@ -321,7 +269,6 @@ export function cantUnmortgage(s: MonoState, seat: number, pos: number): string 
   return null;
 }
 
-// Everything a player could raise by selling every building and mortgaging everything.
 export function raisable(s: MonoState, seat: number): number {
   let r = 0;
   for (const i of owned(s, seat)) {
@@ -332,8 +279,6 @@ export function raisable(s: MonoState, seat: number): number {
   return r;
 }
 
-// Places, best first: those still in by what they're worth (ties together), then everyone who went out, the
-// last to go first.
 export function standings(s: MonoState): number[][] {
   const left = alive(s).sort((a, b) => worth(s, b) - worth(s, a));
   const groups: number[][] = [];
@@ -347,7 +292,6 @@ export function standings(s: MonoState): number[][] {
 
 const SHORT = "There isn't that much cash.";
 
-// Why a trade can't happen as offered, or null.
 export function cantTrade(s: MonoState, t: Pick<Trade, "from" | "to" | "give" | "get">): string | null {
   if (t.from === t.to) return "Trade with someone else.";
   for (const seat of [t.from, t.to]) if (!s.players[seat] || s.players[seat].out) return "They're out of the game.";
@@ -374,8 +318,6 @@ export function cantTrade(s: MonoState, t: Pick<Trade, "from" | "to" | "give" | 
   return null;
 }
 
-// Why the player an offer's to can't accept it now, or null: it has to still be possible, and both have to be
-// able to pay the 10% on any mortgaged property they get.
 export function cantAccept(s: MonoState, t: Trade, lift: number[] = []): string | null {
   const why = cantTrade(s, t);
   if (why) return why;
@@ -386,8 +328,6 @@ export function cantAccept(s: MonoState, t: Trade, lift: number[] = []): string 
   return null;
 }
 
-// What someone given these properties owes the bank: 10% on each mortgaged one, or for those in `lift`, the
-// mortgage plus 10% to lift it at once.
 export function feesOn(s: MonoState, props: number[], lift: number[]) {
   const mortgaged = props.filter((i) => s.props[i]!.mortgaged);
   const interest = interestOn(
@@ -398,17 +338,13 @@ export function feesOn(s: MonoState, props: number[], lift: number[]) {
   return { interest, total: interest + lifting };
 }
 
-// The 10% a player pays on each mortgaged property they're given.
 export const interestOn = (s: MonoState, props: number[]) =>
   props.filter((i) => s.props[i]!.mortgaged).reduce((a, i) => a + Math.ceil(mortgageOf(i) / 10), 0);
-
-// --- Setting up ---
 
 export function newGame(n: number, rules: Rules, rng: Rng = Math.random): Game {
   const s: MonoState = {
     kind: "monopoly",
     rules,
-    // The speed die comes with an extra $1,000 each (its official setup).
     players: Array.from({ length: n }, () => ({
       cash: rules.cash + (rules.speed ? 1000 : 0),
       pos: 0,
@@ -433,7 +369,6 @@ export function newGame(n: number, rules: Rules, rng: Rng = Math.random): Game {
     seq: 0,
   };
   const g: Game = { s, decks: { chance: shuffled(DECKS.chance.length, rng), chest: shuffled(DECKS.chest.length, rng) }, events: [] };
-  // The short game deals everyone two properties from the shuffled deeds, paid for at their price.
   if (rules.short) {
     const deeds = shuffled(BUYABLE.length, rng).map((i) => BUYABLE[i]);
     for (let seat = 0; seat < n; seat++) {
@@ -447,8 +382,6 @@ export function newGame(n: number, rules: Rules, rng: Rng = Math.random): Game {
   emit(g, { t: "turn", seat: 0 });
   return g;
 }
-
-// --- Taking actions ---
 
 const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x));
 
@@ -521,7 +454,6 @@ export function act(g0: Game, seat: number, a: Action, rng: Rng = Math.random): 
       const [d1, d2] = ph.dice;
       const n = a.choice === 0 ? d1 : a.choice === 1 ? d2 : d1 + d2;
       s.phase = { k: "idle" };
-      // A utility counts both white dice whichever you moved by (the bus is worth 0).
       s.todo = [{ k: "walk", n }, { k: "land", dice: d1 + d2 }, { k: "after" }];
       break;
     }
@@ -661,7 +593,6 @@ export function act(g0: Game, seat: number, a: Action, rng: Rng = Math.random): 
       break;
     }
   }
-  // Raising enough to cover a debt pays it straight away.
   const debt = s.phase;
   if (debt.k === "debt" && s.players[debt.from].cash >= debt.amount) {
     s.phase = { k: "idle" };
@@ -691,19 +622,15 @@ function swap(g: Game, from: number, to: number, side: Side) {
   }
 }
 
-// Offers that can't happen any more (a property changed hands, someone went out) are dropped.
 function prune(g: Game) {
   const s = g.s;
   for (const t of [...s.trades]) {
-    // Short of cash is only for now; they can raise it before it's accepted.
     const why = cantTrade(s, t);
     if (!why || why === SHORT) continue;
     s.trades = s.trades.filter((x) => x.id !== t.id);
     emit(g, { t: "untrade", trade: t, by: -1, why: "stale" });
   }
 }
-
-// --- The turn ---
 
 function emit(g: Game, e: Ev) {
   g.events.push(e);
@@ -715,7 +642,6 @@ function ownEv(g: Game, pos: number) {
   emit(g, { t: "own", pos, owner: prop.owner, mortgaged: prop.mortgaged, houses: prop.houses });
 }
 
-// Moves money now. Callers make sure the payer has it.
 function pay(g: Game, from: number, to: number, amount: number, why: Why, pos?: number) {
   const s = g.s;
   if (amount <= 0) return;
@@ -741,7 +667,6 @@ function roll(g: Game, rng: Rng) {
       emit(g, { t: "jail", seat, in: false, how: "doubles" });
       s.todo = [{ k: "walk", n: d1 + d2 }, { k: "land", dice: d1 + d2 }, { k: "after" }];
     } else if (++p.jail >= 3) {
-      // The third miss: pay the fine and move anyway.
       p.jail = -1;
       emit(g, { t: "jail", seat, in: false, how: "third" });
       s.todo = [
@@ -761,7 +686,6 @@ function roll(g: Game, rng: Rng) {
   const num = speed >= 1 && speed <= 3 ? speed : 0;
   s.phase = { k: "idle" };
   if (num && doubles && d1 === num) {
-    // Triples: anywhere on the board, and the turn ends there.
     s.again = false;
     s.phase = { k: "pick" };
     return;
@@ -793,7 +717,6 @@ function toJail(g: Game, seat: number, how?: "three") {
   }
 }
 
-// Forward to `to`, collecting a salary for passing or landing on GO.
 function advance(g: Game, seat: number, to: number, how: "walk" | "jump" = "walk") {
   const s = g.s;
   const p = s.players[seat];
@@ -826,7 +749,6 @@ function exec(g: Game, step: Step, rng: Rng) {
       if (!p.out) land(g, step, rng);
       return;
     case "mrm":
-      // Sent to jail on the way: the turn's over, the speed die with it.
       if (!p.out && p.jail < 0) mrMonopoly(g);
       return;
     case "pay": {
@@ -902,7 +824,7 @@ function land(g: Game, step: Extract<Step, { k: "land" }>, rng: Rng) {
       return;
     case "chance":
     case "chest":
-      draw(g, sq.kind, rng);
+      draw(g, sq.kind);
       return;
     case "street":
     case "rail":
@@ -926,7 +848,7 @@ function land(g: Game, step: Extract<Step, { k: "land" }>, rng: Rng) {
   }
 }
 
-function draw(g: Game, deck: Deck, rng: Rng) {
+function draw(g: Game, deck: Deck) {
   const s = g.s;
   const seat = s.current;
   const p = s.players[seat];
@@ -993,8 +915,6 @@ function draw(g: Game, deck: Deck, rng: Rng) {
   }
 }
 
-// The speed die's Mr. Monopoly: on to the next property nobody owns, or with none left, the next one where
-// you owe someone rent.
 function mrMonopoly(g: Game) {
   const s = g.s;
   const seat = s.current;
@@ -1011,7 +931,6 @@ function mrMonopoly(g: Game) {
   s.todo.unshift({ k: "land", dice: s.dice ? s.dice[0] + s.dice[1] : 0 });
 }
 
-// An auction ends when everyone but the top bid has dropped out, or everyone has without a bid.
 function settle(g: Game) {
   const s = g.s;
   const ph = s.phase;
@@ -1028,7 +947,6 @@ function settle(g: Game) {
   }
 }
 
-// Every building in a group back to the bank at half what it cost.
 function sellGroup(g: Game, seat: number, pos: number) {
   const s = g.s;
   const top = hotelAt(s.rules);
@@ -1046,8 +964,6 @@ function sellGroup(g: Game, seat: number, pos: number) {
   }
 }
 
-// Steps that have to happen now, whatever the game was waiting on: straight away mid-turn, before the next
-// roll between turns, or once the decision being waited on is made.
 function interject(s: MonoState, steps: Step[]) {
   if (!steps.length) return;
   if (s.phase.k === "idle") s.todo.unshift(...steps);
@@ -1060,8 +976,6 @@ function interject(s: MonoState, steps: Step[]) {
   }
 }
 
-// Out of the game, owing `to`. Buildings go back to the bank at half. A player creditor gets the rest (and pays
-// 10% on what's mortgaged); the bank auctions the properties off clear of mortgage.
 function bankrupt(g: Game, seat: number, to: number) {
   const s = g.s;
   const p = s.players[seat];

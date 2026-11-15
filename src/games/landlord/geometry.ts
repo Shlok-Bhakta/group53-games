@@ -1,6 +1,4 @@
-// Where each square sits on the board, in board pixels. Corners are C square; the nine squares along each side
-// are W wide and C deep. Square 0 (Start) is the bottom-right corner and play runs clockwise from there: along
-// the bottom to jail, up the left, along the top, down the right.
+import { JAIL } from "../../../convex/landlord/board";
 
 export const W = 76;
 export const C = 116;
@@ -25,13 +23,11 @@ export const centerOf = (pos: number) => {
   return { x: b.x + b.w / 2, y: b.y + b.h / 2 };
 };
 
-// Where a player's piece stands: on the square's outer edge, half off the board, so it never covers the name or
-// price, with others on the same square spread along that edge. In jail, inside the cell (toward the middle).
 export function spotOf(pos: number, index: number, count: number, jailed = false) {
   const b = boxOf(pos);
   const gap = 30;
   const off = (index - (count - 1) / 2) * gap;
-  if (pos === 10 && jailed) return { x: b.x + b.w * 0.66 + (index % 2) * 24 - 12, y: b.y + b.h * 0.34 + Math.floor(index / 2) * 24 - 12 };
+  if (pos === JAIL && jailed) return { x: b.x + b.w * 0.66 + (index % 2) * 24 - 12, y: b.y + b.h * 0.34 + Math.floor(index / 2) * 24 - 12 };
   switch (b.edge) {
     case "bottom":
       return { x: b.x + b.w / 2 + off * 0.75, y: b.y + b.h - 2 };
@@ -42,7 +38,6 @@ export function spotOf(pos: number, index: number, count: number, jailed = false
     case "right":
       return { x: b.x + b.w - 2, y: b.y + b.h / 2 + off * 0.75 };
     default: {
-      // A corner: along its two outer edges, out from the corner itself.
       const right = b.x > 0;
       const down = b.y > 0;
       const along = 26 + Math.floor(index / 2) * gap;

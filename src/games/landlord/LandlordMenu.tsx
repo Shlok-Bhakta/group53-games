@@ -13,8 +13,6 @@ import { seatColor } from "@/games/seats";
 import { cn } from "@/lib/utils";
 import { landlordRules } from "./rules";
 
-// The menu: everyone with their cash, what they're worth and what they own, what's happened while you've been
-// here, then what every game's menu has, and resigning at the very bottom.
 export function LandlordMenu({
   open,
   onOpenChange,
@@ -88,10 +86,9 @@ export function LandlordMenu({
   );
 }
 
-// What a player owns, as little swatches in board order.
 function Owned({ state, seat }: { state: MonoState; seat: number }) {
   const props = BUYABLE.filter((i) => state.props[i]!.owner === seat);
-  if (!props.length) return <div className="text-footnote text-muted-foreground">Nothing yet</div>;
+  if (!props.length) return null;
   return (
     <div className="flex flex-wrap gap-0.5 pt-1" aria-label={`${props.length} properties`}>
       {props.map((i) => {
@@ -99,7 +96,7 @@ function Owned({ state, seat }: { state: MonoState; seat: number }) {
         return (
           <span
             key={i}
-            className={cn("ll-swatch h-3 w-2 rounded-[2px]", state.props[i]!.mortgaged && "opacity-35")}
+            className={cn("ll-swatch h-3 w-2 rounded-xs", state.props[i]!.mortgaged && "opacity-35")}
             data-group={sq.kind === "street" ? sq.group : undefined}
             style={sq.kind === "street" ? undefined : { background: "var(--muted-foreground)" }}
           />
@@ -109,7 +106,6 @@ function Owned({ state, seat }: { state: MonoState; seat: number }) {
   );
 }
 
-// A player, tapped from the dock: what they've got, and a trade with them.
 export function PlayerSheet({
   seat,
   onClose,
@@ -150,14 +146,9 @@ export function PlayerSheet({
               const sq = BOARD[i];
               const prop = state.props[i]!;
               return (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => onDeed(i)}
-                  className="flex min-h-11 touch-manipulation items-center gap-2 rounded-md bg-muted/60 px-2 text-left"
-                >
+                <Button key={i} variant="bare" size="chip" onClick={() => onDeed(i)} className="gap-2 rounded-md bg-muted/60 px-2">
                   <span
-                    className="ll-swatch size-4 shrink-0 rounded-[3px]"
+                    className="ll-swatch size-4 shrink-0 rounded-xs"
                     data-group={sq.kind === "street" ? sq.group : undefined}
                     style={sq.kind === "street" ? undefined : { background: "var(--muted-foreground)" }}
                   />
@@ -165,7 +156,7 @@ export function PlayerSheet({
                   <span className="text-footnote text-muted-foreground">
                     {prop.mortgaged ? "M" : prop.houses === 5 ? "H" : prop.houses || ""}
                   </span>
-                </button>
+                </Button>
               );
             })}
           </div>

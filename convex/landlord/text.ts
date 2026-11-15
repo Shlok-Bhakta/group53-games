@@ -1,5 +1,3 @@
-// Events in words, for pushes and the game's feed. `name(seat)` says who a seat is ("You" for the reader).
-
 import { BOARD } from "./board";
 import { DECKS } from "./cards";
 import { BANK, POT, type Ev, type Side, type Trade } from "./engine";
@@ -15,10 +13,8 @@ export function sideText(side: Side): string {
   return parts.length ? parts.join(", ") : "nothing";
 }
 
-// "Chris's Illinois Avenue and $50 for your New York Avenue", read by whoever it's offered to.
 export const tradeText = (t: Trade, name: Name) => `${name(t.from)} offers ${sideText(t.give)} for ${sideText(t.get)}`;
 
-// A sentence for an event, or null for the ones that only move things along (a turn starting).
 export function say(e: Ev, name: Name): string | null {
   switch (e.t) {
     case "roll":

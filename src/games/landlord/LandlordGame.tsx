@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { CaretLeftIcon, CornersInIcon, CornersOutIcon, ListIcon } from "@phosphor-icons/react";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -14,41 +14,65 @@ import { seatColor } from "@/games/seats";
 import { sfx } from "@/sound";
 import { cn } from "@/lib/utils";
 import { Board } from "./Board";
-import { CLOSE, useCamera } from "./camera";
+import { CLOSE, UNMEASURED_VIEW, useCamera, type CameraView } from "./camera";
 import { DeedSheet, useLandlordMove } from "./Deed";
 import { Dock } from "./Dock";
 import { centerOf } from "./geometry";
 import { HoldingsSheet } from "./Holdings";
+import { usePhoneLandscape } from "./landscape";
 import { LandlordMenu, PlayerSheet } from "./LandlordMenu";
 import { Overlays } from "./Overlays";
 import { useShow } from "./show";
 import { TradeSheet, type TradeStart } from "./Trade";
 
-// A game of Landlord: the board fills the screen and the camera follows whatever's happening on it, with the
-// turn floating over the top and the dock (everyone's cash, then your move) over the bottom. What's on screen
-// is the show (show.ts): everything since you last looked plays out, then it's live.
+type MeasuredView = CameraView & { landscape: boolean };
+
+const DOCK_SURFACE = "bg-card/85 shadow-[0_-8px_24px_color-mix(in_srgb,var(--shade)_18%,transparent)] backdrop-blur-xl";
+const BAR_GAP = 8;
+
+function measureView(viewport: HTMLElement, bar: HTMLElement | null, dock: HTMLElement | null, landscape: boolean): MeasuredView | null {
+  const s = viewport.getBoundingClientRect();
+  const size = { w: viewport.clientWidth, h: viewport.clientHeight, landscape };
+  if (landscape) {
+    if (!bar) return null;
+    const side = bar.getBoundingClientRect();
+    return {
+      ...size,
+      top: Math.round(side.top - s.top),
+      bottom: Math.round(s.bottom - side.bottom),
+      left: 0,
+      right: Math.round(s.right - side.left + BAR_GAP),
+    };
+  }
+  if (!bar || !dock) return null;
+  const t = bar.getBoundingClientRect();
+  const d = dock.getBoundingClientRect();
+  return { ...size, top: Math.round(t.bottom - s.top + BAR_GAP), bottom: Math.round(s.bottom - d.top + BAR_GAP), left: 0, right: 0 };
+}
+
 export default function LandlordGame({ match, meId }: { match: MatchView; meId: Id<"users"> | undefined }) {
   const real = match.state as MonoState;
   const mySeat = match.players.findIndex((p) => p.userId === meId);
-  const stage = useRef<HTMLDivElement>(null);
+  const landscape = usePhoneLandscape();
+  const viewport = useRef<HTMLDivElement>(null);
   const top = useRef<HTMLDivElement>(null);
+  const side = useRef<HTMLDivElement>(null);
   const dock = useRef<HTMLDivElement>(null);
-  const [pads, setPads] = useState({ top: 110, bottom: 220 });
+  const [view, setView] = useState<MeasuredView | null>(null);
   useEffect(() => {
+    const vp = viewport.current;
+    if (!vp) return;
     const measure = () => {
-      const s = stage.current?.getBoundingClientRect();
-      const t = top.current?.getBoundingClientRect();
-      const d = dock.current?.getBoundingClientRect();
-      if (!s || !t || !d) return;
-      setPads({ top: Math.round(t.bottom - s.top + 8), bottom: Math.round(s.bottom - d.top + 8) });
+      const measured = measureView(vp, landscape ? side.current : top.current, dock.current, landscape);
+      if (measured) setView(measured);
     };
     measure();
     const ro = new ResizeObserver(measure);
-    if (dock.current) ro.observe(dock.current);
-    if (top.current) ro.observe(top.current);
+    for (const el of [vp, top.current, side.current, dock.current]) if (el) ro.observe(el);
     return () => ro.disconnect();
-  }, []);
-  const camera = useCamera(stage, pads);
+  }, [landscape]);
+  const cameraView = view ?? UNMEASURED_VIEW;
+  const camera = useCamera(viewport, cameraView);
   const nameOf = useCallback((seat: number) => match.players[seat]?.name ?? "Someone", [match.players]);
   const look = useCallback(
     (pos: number, fresh: boolean) => {
@@ -62,18 +86,21 @@ export default function LandlordGame({ match, meId }: { match: MatchView; meId: 
   const state = shown.state;
   const over = match.status === "finished" && !shown.busy;
 
-  // The first frame: straight to whoever's up, no glide in from nowhere.
-  const placed = useRef(false);
-  useEffect(() => {
-    if (placed.current || pads.bottom === 220) return;
-    placed.current = true;
+  const placedFor = useRef<boolean | null>(null);
+  const placeCamera = useEffectEvent((rotated: boolean) => {
+    if (rotated && over) return camera.whole(true);
     const c = centerOf(state.players[state.current]?.pos ?? 0);
     camera.focus(c.x, c.y, CLOSE, { instant: true, force: true });
-  }, [pads, camera, state]);
-  // Finished: the whole board, everyone's empire on it.
+  });
   useEffect(() => {
-    if (over) camera.whole();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!view || placedFor.current === view.landscape) return;
+    const rotated = placedFor.current !== null;
+    placedFor.current = view.landscape;
+    placeCamera(rotated);
+  }, [view]);
+  const showWholeBoard = useEffectEvent(() => camera.whole());
+  useEffect(() => {
+    if (over) showWholeBoard();
   }, [over]);
   const wasOver = useRef(match.status === "finished");
   useEffect(() => {
@@ -109,9 +136,76 @@ export default function LandlordGame({ match, meId }: { match: MatchView; meId: 
               : "Your turn"
         : `${nameOf(up)}${ph.k === "auction" ? " to bid" : ph.k === "debt" ? " is raising money" : ph.k === "buy" ? " is deciding" : "'s turn"}`;
 
+  const bar = (
+    <>
+      <FloatButton aria-label="Back" onClick={goBack}>
+        <CaretLeftIcon size={22} weight="bold" />
+      </FloatButton>
+      <FloatPill
+        onClick={() => setMenu(true)}
+        aria-label="Players"
+        className="flex-1 border-2 py-1 pl-1 pr-3 transition-colors duration-300"
+        style={{ borderColor: upPlayer ? seatColor(upPlayer) : "transparent" }}
+      >
+        {upPlayer && <PlayerAvatar player={upPlayer} size={34} className="shrink-0" />}
+        <motion.span
+          key={status}
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={cn("min-w-0 flex-1 truncate font-display text-callout leading-tight", up === mySeat && !shown.busy && "text-primary")}
+          aria-live="polite"
+        >
+          {status}
+        </motion.span>
+        {shown.catching && (
+          <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-caption font-semibold text-primary-foreground">
+            Catching up
+          </span>
+        )}
+      </FloatPill>
+      <FloatButton
+        aria-label={camera.overview ? "Zoom in" : "Whole board"}
+        onClick={() => {
+          if (camera.overview) return look(state.players[up >= 0 ? up : 0]?.pos ?? 0, true);
+          camera.hold();
+          camera.whole();
+        }}
+      >
+        {camera.overview ? <CornersInIcon size={22} weight="bold" /> : <CornersOutIcon size={22} weight="bold" />}
+      </FloatButton>
+      <FloatButton aria-label="Menu" onClick={() => setMenu(true)}>
+        <ListIcon size={22} weight="bold" />
+      </FloatButton>
+    </>
+  );
+  const dockBody = (
+    <Dock
+      match={match}
+      meId={meId}
+      state={state}
+      mySeat={mySeat}
+      busy={shown.busy}
+      catching={shown.catching}
+      floats={shown.floats}
+      onSkip={shown.skip}
+      onPlayer={(seat) => {
+        setPlayer(seat);
+        const p = state.players[seat];
+        if (p && !p.out) look(p.pos, true);
+      }}
+      onHoldings={() => setHoldings(true)}
+      onTrade={() => setTrade({})}
+      over={over}
+    />
+  );
+
   return (
     <FullscreenStage className="[background-image:radial-gradient(color-mix(in_oklch,var(--foreground)_8%,transparent)_1px,transparent_1px)] [background-size:16px_16px]">
-      <div ref={stage} className="absolute inset-0 touch-none overflow-hidden" {...camera.bind}>
+      <div
+        ref={viewport}
+        className="absolute inset-0 touch-none overflow-hidden phone-landscape:left-(--safe-left) phone-landscape:right-(--safe-right)"
+        {...camera.bind}
+      >
         <Board
           camera={camera}
           state={state}
@@ -120,78 +214,37 @@ export default function LandlordGame({ match, meId }: { match: MatchView; meId: 
           picking={picking}
           onSquare={(pos) => (picking ? setPick(pos) : setDeed(pos))}
         />
+        <Overlays shown={shown} view={cameraView} />
       </div>
-      <Overlays shown={shown} top={pads.top} bottom={pads.bottom} />
 
-      <FloatingTopBar ref={top}>
-        <FloatButton aria-label="Back" onClick={goBack}>
-          <CaretLeftIcon size={22} weight="bold" />
-        </FloatButton>
-        <FloatPill
-          onClick={() => setMenu(true)}
-          aria-label="Players"
-          className="flex-1 border-2 py-1 pl-1 pr-3 transition-colors duration-300"
-          style={{ borderColor: upPlayer ? seatColor(upPlayer) : "transparent" }}
+      {landscape ? (
+        <div
+          ref={side}
+          className="pointer-events-none absolute right-[max(12px,var(--safe-right))] top-[max(12px,var(--safe-top))] bottom-[max(12px,var(--safe-bottom))] z-20 flex w-[min(22rem,48vw)] flex-col gap-2"
         >
-          {upPlayer && <PlayerAvatar player={upPlayer} size={34} className="shrink-0" />}
-          <motion.span
-            key={status}
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={cn(
-              "min-w-0 flex-1 truncate font-display text-callout leading-tight",
-              up === mySeat && !shown.busy && "text-primary",
-            )}
-            aria-live="polite"
+          <div className="flex items-center gap-2">{bar}</div>
+          <div
+            ref={dock}
+            data-dock
+            data-busy={shown.busy ? "" : undefined}
+            className={cn("pointer-events-auto flex min-h-0 flex-1 flex-col overflow-y-auto rounded-3xl px-3 pb-3 pt-1", DOCK_SURFACE)}
           >
-            {status}
-          </motion.span>
-          {shown.catching && (
-            <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-caption font-semibold text-primary-foreground">
-              Catching up
-            </span>
-          )}
-        </FloatPill>
-        <FloatButton
-          aria-label={camera.overview ? "Zoom in" : "Whole board"}
-          onClick={() => {
-            if (camera.overview) return look(state.players[up >= 0 ? up : 0]?.pos ?? 0, true);
-            // The whole board stays up until the game next has something to show.
-            camera.manual.current = true;
-            camera.whole();
-          }}
-        >
-          {camera.overview ? <CornersInIcon size={22} weight="bold" /> : <CornersOutIcon size={22} weight="bold" />}
-        </FloatButton>
-        <FloatButton aria-label="Menu" onClick={() => setMenu(true)}>
-          <ListIcon size={22} weight="bold" />
-        </FloatButton>
-      </FloatingTopBar>
-
-      <div
-        ref={dock}
-        className="absolute inset-x-0 bottom-0 z-10 rounded-t-3xl bg-card/85 px-3 pb-[calc(env(safe-area-inset-bottom)+10px)] pt-1 shadow-[0_-8px_24px_rgb(0_0_0/0.18)] backdrop-blur-xl"
-        data-busy={shown.busy ? "" : undefined}
-      >
-        <Dock
-          match={match}
-          meId={meId}
-          state={state}
-          mySeat={mySeat}
-          busy={shown.busy}
-          catching={shown.catching}
-          floats={shown.floats}
-          onSkip={shown.skip}
-          onPlayer={(seat) => {
-            setPlayer(seat);
-            const p = state.players[seat];
-            if (p && !p.out) look(p.pos, true);
-          }}
-          onHoldings={() => setHoldings(true)}
-          onTrade={() => setTrade({})}
-          over={over}
-        />
-      </div>
+            {dockBody}
+          </div>
+        </div>
+      ) : (
+        <>
+          <FloatingTopBar ref={top}>{bar}</FloatingTopBar>
+          <div
+            ref={dock}
+            data-dock
+            data-busy={shown.busy ? "" : undefined}
+            className={cn("absolute inset-x-0 bottom-0 z-10 rounded-t-3xl px-3 pb-[calc(var(--safe-bottom)+10px)] pt-1", DOCK_SURFACE)}
+          >
+            {dockBody}
+          </div>
+        </>
+      )}
 
       <LandlordMenu open={menu} onOpenChange={setMenu} match={match} state={state} mySeat={mySeat} feed={shown.feed} />
       <DeedSheet

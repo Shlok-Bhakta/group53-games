@@ -23,12 +23,8 @@ import { Button } from "@/components/ui/button";
 import { seatColor } from "@/games/seats";
 import { cn } from "@/lib/utils";
 
-// A square's deed: what it costs, what it charges at each stage (the one it's at now lit up), who owns it.
-// On your own: build, sell, mortgage and lift the mortgage, each saying why not when it can't.
-
 export function useLandlordMove(id: MatchView["_id"]) {
   const move = useMutation(api.landlord.move);
-  // Resigning goes through the shared matches.resign.
   return (action: Exclude<Action, { k: "resign" }>) => move({ id, action });
 }
 
@@ -81,7 +77,6 @@ function DeedBody({
   if (!prop || !("price" in sq)) return <p className="text-callout text-muted-foreground">{about(sq)}</p>;
   const rows = rentRows(sq, state, pos);
   const top = hotelAt(state.rules);
-  // Only asked of your own: a spectator's seat (-1) is the bank's too.
   const why = mine
     ? {
         build: cantBuild(state, mySeat, pos),
@@ -175,7 +170,6 @@ function DeedBody({
   );
 }
 
-// Mortgaging asks first, from the deed or the properties list: it's easy to tap by mistake while building.
 export function ConfirmMortgage({ pos, trigger, onConfirm }: { pos: number; trigger: ReactNode; onConfirm: () => Promise<unknown> }) {
   return (
     <ConfirmButton

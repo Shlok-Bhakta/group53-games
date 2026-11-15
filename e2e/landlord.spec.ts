@@ -1,9 +1,7 @@
 import type { Page } from "@playwright/test";
 import { anyApi } from "convex/server";
-import { admin, createPlayer, expect, fillLobby, getMatch, openLobby, test, type Phones } from "./fixtures";
-
-// Landlord on two phones: the lobby with house rules, rolling and buying, the other phone watching it play out,
-// catching up after being away, and a trade.
+import { admin, createPlayer, expect, fillLobby, getMatch, holdsStill, openLobby, readyForShot, test, type Phones } from "./fixtures";
+import { SAFE_LANDSCAPE, SAFE_PORTRAIT, expectFitsScreen, rotate, simulateSafeAreas } from "./landscape";
 
 type Mono = {
   seq: number;
@@ -24,7 +22,6 @@ async function twoPhones(phones: Phones) {
   return { pa, pb, a, b };
 }
 
-// The show has caught up and the dock's offering moves.
 const settledOn = async (page: Page) => {
   try {
     await expect(page.locator("[data-busy]")).toHaveCount(0, { timeout: 90_000 });
@@ -51,10 +48,9 @@ const settledOn = async (page: Page) => {
   }
 };
 
-// Whatever the phone up has to do next, the obvious way: roll, buy, drop out of an auction, pay up.
 async function step(page: Page) {
   await settledOn(page);
-  const dock = page.locator(".rounded-t-3xl");
+  const dock = page.locator("[data-dock]");
   for (const name of [/^Roll/, /^Buy for/, /^Pay /, /^Drop out/, /^Auction it/, /^Move \d+$/]) {
     const b = dock.getByRole("button", { name }).first();
     if (await b.isVisible().catch(() => false)) {
@@ -86,6 +82,7 @@ test("Monopoly has a card on Games and a mode page with its house rules", async 
   await page.getByRole("button", { name: "Settings" }).click();
   for (const group of ["Starting cash", "Auctions", "Free Parking jackpot", "Speed die", "Game"])
     await expect(page.getByRole("radiogroup", { name: group })).toBeVisible();
+  if (SHOTS) await readyForShot(page);
   await shot(page, "mode");
 });
 
@@ -94,19 +91,17 @@ test("a game on two phones: roll, buy, and the other phone sees it happen", asyn
   const { id, up, other, pa, pb, a } = await startGame(phones, { "Starting cash": "$2,000" });
   await settledOn(up);
   await expect(up.getByRole("button", { name: "Roll" })).toBeVisible();
-  await expect(other.locator(".rounded-t-3xl")).toContainText("'s turn");
+  await expect(other.locator("[data-dock]")).toContainText("'s turn");
   await shot(up, "start");
   const before = await stateOf(id);
   expect(before.players.map((p) => p.cash)).toEqual([2000, 2000]);
   await up.getByRole("button", { name: "Roll" }).click();
-  // The piece leaves GO on both phones, and lands where the server has it.
   await expect.poll(async () => (await stateOf(id)).seq).toBeGreaterThan(before.seq);
   const s = await stateOf(id);
   const seat = before.current;
   for (const p of [up, other])
     await expect(p.locator(`[data-token="${seat}"]`)).toHaveAttribute("data-pos", String(s.players[seat].pos), { timeout: 15_000 });
   await shot(up, "rolled");
-  // Play on a few turns, whoever's up doing the obvious thing, and both phones agree on everyone's money.
   for (let i = 0; i < 6; i++) {
     const who = (await getMatch(id)).turn === a.userId ? pa : pb;
     const seq = (await stateOf(id)).seq;
@@ -118,10 +113,8 @@ test("a game on two phones: roll, buy, and the other phone sees it happen", asyn
     for (const [i, pl] of end.players.entries())
       await expect(p.locator(`[data-seat="${i}"]`)).toContainText(`$${pl.cash.toLocaleString("en-US")}`);
   }
-  // Tapping an owned square shows its deed.
   const owned = end.props.findIndex((x) => x && x.owner >= 0);
   if (owned >= 0) {
-    // The whole board, so the square's on screen whatever the camera was following.
     await up.getByRole("button", { name: "Whole board" }).click();
     await up.locator(`button[data-pos="${owned}"]`).click({ timeout: 10_000 });
     await expect(up.getByRole("list", { name: "Rent" })).toBeVisible();
@@ -132,16 +125,13 @@ test("a game on two phones: roll, buy, and the other phone sees it happen", asyn
 test("coming back plays what you missed, then it's live", async ({ phones }) => {
   test.setTimeout(120_000);
   const { id, a, b, pb } = await startGame(phones);
-  // Chris's phone looks, then leaves.
   await settledOn(pb);
   const url = pb.url();
   await pb.goto("/");
-  // Shlok's seat (bots standing in) plays until it's Chris's decision.
   for (let i = 0; i < 4; i++) {
     await admin().mutation(anyApi.testing.landlordBots, { id, human: b.userId, steps: 40 });
     const s = await stateOf(id);
     if ((await getMatch(id)).turn === b.userId && s.seq > 6) break;
-    // Chris's own turns, played for him on the server, so there's something of Shlok's to miss after.
     await admin().mutation(anyApi.testing.landlordBots, { id, human: a.userId, steps: 40 });
   }
   await pb.goto(url);
@@ -151,7 +141,6 @@ test("coming back plays what you missed, then it's live", async ({ phones }) => 
   await settledOn(pb);
   const s = await stateOf(id);
   for (const [i, p] of s.players.entries()) await expect(pb.locator(`[data-token="${i}"]`)).toHaveAttribute("data-pos", String(p.pos));
-  // Nothing new: straight to live.
   await pb.reload();
   await expect(pb.getByRole("button", { name: /^Mediterranean Avenue/ })).toBeVisible({ timeout: 20_000 });
   await expect(pb.getByText("Catching up")).toHaveCount(0);
@@ -191,22 +180,79 @@ test("mortgaging asks first, from the properties list and the deed", async ({ ph
   await pa.getByRole("button", { name: "Mortgage Mediterranean Avenue for $30" }).click();
   const ask = pa.getByRole("alertdialog", { name: "Mortgage Mediterranean Avenue?" });
   await expect(ask).toBeVisible();
-  // Backing out does nothing.
   await ask.getByRole("button", { name: "Keep it" }).click();
   await expect(ask).toHaveCount(0);
   expect((await stateOf(id)).props[1]?.mortgaged).toBe(false);
   await pa.getByRole("button", { name: "Mortgage Mediterranean Avenue for $30" }).click();
   await ask.getByRole("button", { name: "Mortgage +$30" }).click();
   await expect.poll(async () => (await stateOf(id)).props[1]?.mortgaged).toBe(true);
-  // The deed asks too.
   await pa.getByRole("button", { name: "Baltic Avenue", exact: false }).first().click();
   await pa.getByRole("button", { name: "Mortgage +$30" }).click();
   await pa.getByRole("alertdialog", { name: "Mortgage Baltic Avenue?" }).getByRole("button", { name: "Mortgage +$30" }).click();
   await expect.poll(async () => (await stateOf(id)).props[3]?.mortgaged).toBe(true);
 });
 
-// Review shots of a game well under way: owners, houses, a hotel, a mortgage, the whole board, the menu and
-// your properties. Only with SCREENS=1.
+test("on its side: the board beside a side column with the dock, all on screen", async ({ phones }) => {
+  test.setTimeout(120_000);
+  const { id, up, other } = await startGame(phones);
+  const m = await getMatch(id);
+  const upSeat = m.players.findIndex((p: { userId: string }) => p.userId === m.turn);
+  const props = (m.state as Mono).props.map((p, i) => (i === 1 || i === 3 ? { owner: upSeat, houses: 0, mortgaged: false } : p));
+  await admin().mutation(anyApi.testing.landlordPatch, { id, state: { props } });
+  await simulateSafeAreas(up, SAFE_LANDSCAPE);
+  await rotate(up, "landscape");
+  await settledOn(up);
+  const roll = up.getByRole("button", { name: "Roll" });
+  await expect(roll).toBeVisible();
+  await holdsStill(up);
+  await expectFitsScreen(up);
+  const dock = (await up.locator("[data-dock]").boundingBox())!;
+  const width = up.viewportSize()!.width;
+  const height = up.viewportSize()!.height;
+  expect(dock.x, "the dock is a column on the right").toBeGreaterThan(width / 2);
+  expect((await roll.boundingBox())!.x, "Roll is in the side column").toBeGreaterThanOrEqual(dock.x);
+  expect((await up.getByRole("button", { name: "Menu" }).boundingBox())!.x, "the bar sits over the dock").toBeGreaterThanOrEqual(dock.x);
+  const token = (await up.locator(`[data-token="${upSeat}"]`).boundingBox())!;
+  expect(token.x + token.width / 2, "the camera looks at whoever's up, left of the column").toBeLessThan(dock.x);
+  if (SHOTS) await up.screenshot({ path: "e2e/.state/screens/landlord-landscape.png" });
+
+  await up.getByRole("button", { name: "Properties" }).click();
+  await expect(up.getByRole("heading", { name: "Your properties" })).toBeVisible();
+  await holdsStill(up);
+  await expectFitsScreen(up);
+  await up.keyboard.press("Escape");
+  await expect(up.getByRole("heading", { name: "Your properties" })).toHaveCount(0);
+
+  await up.getByRole("button", { name: "Whole board" }).click();
+  await holdsStill(up);
+  const board = (await up.locator(".ll-board").boundingBox())!;
+  expect(board.x, "the whole board clears the notch").toBeGreaterThanOrEqual(SAFE_LANDSCAPE.left - 1);
+  expect(board.x + board.width, "the whole board fits left of the column").toBeLessThanOrEqual(dock.x + 1);
+  expect(board.y, "the whole board fits the height").toBeGreaterThanOrEqual(-1);
+  expect(board.y + board.height).toBeLessThanOrEqual(height - SAFE_LANDSCAPE.bottom + 1);
+  if (SHOTS) await up.screenshot({ path: "e2e/.state/screens/landlord-landscape-whole.png" });
+  await up.getByRole("button", { name: "Zoom in" }).click();
+  await holdsStill(up);
+
+  const before = await stateOf(id);
+  await roll.click();
+  await expect.poll(async () => (await stateOf(id)).seq).toBeGreaterThan(before.seq);
+  const s = await stateOf(id);
+  for (const p of [up, other])
+    await expect(p.locator(`[data-token="${before.current}"]`)).toHaveAttribute("data-pos", String(s.players[before.current].pos), {
+      timeout: 15_000,
+    });
+  await settledOn(up);
+  await holdsStill(up);
+  await expectFitsScreen(up);
+
+  await rotate(up, "portrait");
+  await holdsStill(up);
+  await expectFitsScreen(up, SAFE_PORTRAIT);
+  const portraitDock = (await up.locator("[data-dock]").boundingBox())!;
+  expect(portraitDock.y, "back upright, the dock is along the bottom").toBeGreaterThan(up.viewportSize()!.height / 2);
+});
+
 test("landlord-screens", async ({ phones }) => {
   test.skip(!SHOTS, "Screenshots only");
   test.setTimeout(120_000);
@@ -236,27 +282,28 @@ test("landlord-screens", async ({ phones }) => {
   await pa.reload();
   await settledOn(pa);
   await pa.locator('[data-token="0"]').waitFor();
-  await pa.waitForTimeout(800);
+  await readyForShot(pa);
   await shot(pa, "midgame");
   await pa.getByRole("button", { name: "Whole board" }).click();
-  await pa.waitForTimeout(900);
+  await readyForShot(pa);
   await shot(pa, "overview");
   await pa.getByRole("button", { name: "Properties" }).click();
-  await pa.waitForTimeout(500);
+  await expect(pa.getByRole("heading", { name: "Your properties" })).toBeVisible();
+  await readyForShot(pa);
   await shot(pa, "holdings");
   await pa.keyboard.press("Escape");
+  await expect(pa.getByRole("heading", { name: "Your properties" })).toHaveCount(0);
   await pa.getByRole("button", { name: "Menu" }).click();
-  await pa.waitForTimeout(500);
+  await expect(pa.getByRole("list", { name: "Standings" })).toBeVisible();
+  await readyForShot(pa);
   await shot(pa, "menu");
   await pa.emulateMedia({ colorScheme: "dark" });
   await pa.keyboard.press("Escape");
-  await pa.waitForTimeout(500);
+  await expect(pa.getByRole("list", { name: "Standings" })).toHaveCount(0);
+  await readyForShot(pa);
   await shot(pa, "overview-dark");
 });
 
-// A long game through the real screen: one phone against two bots on the server, the phone doing the obvious
-// thing when it's up (and a bot standing in when it's something harder, like raising money). The show never
-// sticks, the page never throws, and the phone always ends up where the server is. Only with SOAK=1.
 test("landlord-soak", async ({ phones }) => {
   test.skip(!process.env.SOAK, "Soak only");
   test.setTimeout(45 * 60_000);
@@ -270,7 +317,6 @@ test("landlord-soak", async ({ phones }) => {
     "classic",
     process.env.SOAK_SHORT ? { "Starting cash": "$1,000", Game: "Short game" } : { "Speed die": "On", "Free Parking jackpot": "Plus $500" },
   );
-  // The bots take their seats on the server, then the host starts it.
   for (const b of [b1, b2]) await admin().mutation(anyApi.testing.joinAs, { id, userId: b.userId });
   await page.getByRole("button", { name: "Start with 3" }).click();
   await expect(page.getByRole("button", { name: /^Mediterranean Avenue/ })).toBeVisible({ timeout: 20_000 });
@@ -289,11 +335,9 @@ test("landlord-soak", async ({ phones }) => {
   const s = await stateOf(id);
   for (const [i, p] of s.players.entries())
     if (!(p as { out?: boolean }).out) await expect(page.locator(`[data-token="${i}"]`)).toHaveAttribute("data-pos", String(p.pos));
-  // Then the bots finish it off on the server, and the phone plays it through to the result.
   for (let i = 0; i < 100 && (await getMatch(id)).status === "active"; i++)
     await admin().mutation(anyApi.testing.landlordBots, { id, steps: 200 });
   expect((await getMatch(id)).status).toBe("finished");
-  // That's a lot to watch: it offers Skip.
   await page.getByRole("button", { name: "Skip to now" }).click({ timeout: 30_000 });
   await expect(page.getByRole("region", { name: "Result" })).toBeVisible({ timeout: 60_000 });
   await expect(page.locator("[data-busy]")).toHaveCount(0);

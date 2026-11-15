@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useId, useState } from "react";
 import { CheckIcon } from "@phosphor-icons/react";
 import { BOARD, BUYABLE, groupOf, unmortgageOf } from "../../../convex/landlord/board";
 import { cantAccept, cantTrade, feesOn, type Deck, type MonoState, type Side, type Trade } from "../../../convex/landlord/engine";
@@ -7,18 +7,25 @@ import type { MatchView } from "../../../convex/matches";
 import { AsyncButton } from "@/components/AsyncButton";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { Group, SectionTitle } from "@/components/parts";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
 import { seatColor } from "@/games/seats";
 import { cn } from "@/lib/utils";
 import { useLandlordMove } from "./Deed";
 
-// Trading: offers waiting on you to answer (and yours waiting on them), then making one. Pick who with, tick
-// what goes each way and any cash, and send. Properties in a group with buildings can't be traded, as the
-// rules say; the receiver of a mortgaged one pays the bank 10%.
-
 const empty = (): Side => ({ cash: 0, props: [], free: [] });
 export type TradeStart = { with?: number; want?: number; counter?: Trade };
+type Draft = { partner: number; give: Side; get: Side };
+
+function draftFor(start: TradeStart, others: number[]): Draft {
+  if (start.counter) return { partner: start.counter.from, give: { ...start.counter.get }, get: { ...start.counter.give } };
+  return {
+    partner: start.with ?? others[0] ?? -1,
+    give: empty(),
+    get: start.want !== undefined ? { ...empty(), props: [start.want] } : empty(),
+  };
+}
 
 export function TradeSheet({
   open,
@@ -37,25 +44,17 @@ export function TradeSheet({
 }) {
   const act = useLandlordMove(match._id);
   const others = state.players.flatMap((p, i) => (i !== seat && !p.out ? [i] : []));
-  const [partner, setPartner] = useState<number>(others[0] ?? -1);
-  const [give, setGive] = useState<Side>(empty);
-  const [get, setGet] = useState<Side>(empty);
-  // Mortgaged properties you'd get that you'll lift at once.
+  const [draft, setDraft] = useState<Draft>(() => ({ partner: others[0] ?? -1, give: empty(), get: empty() }));
   const [lift, setLift] = useState<number[]>([]);
-  // Opened for something in particular: a street you asked about, or an offer you're countering.
-  useEffect(() => {
-    if (!open) return;
-    if (start.counter) {
-      setPartner(start.counter.from);
-      setGive({ ...start.counter.get });
-      setGet({ ...start.counter.give });
-    } else {
-      setPartner(start.with ?? others[0] ?? -1);
-      setGive(empty());
-      setGet(start.want !== undefined ? { ...empty(), props: [start.want] } : empty());
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, start]);
+  const [openedWith, setOpenedWith] = useState<TradeStart | null>(null);
+  if (open && openedWith !== start) {
+    setOpenedWith(start);
+    setDraft(draftFor(start, others));
+    setLift([]);
+  }
+  const { partner, give, get } = draft;
+  const setGive = (side: Side) => setDraft((d) => ({ ...d, give: side }));
+  const setGet = (side: Side) => setDraft((d) => ({ ...d, get: side }));
   const toMe = state.trades.filter((t) => t.to === seat);
   const fromMe = state.trades.filter((t) => t.from === seat);
   const offer = { from: seat, to: partner, give, get };
@@ -64,18 +63,7 @@ export function TradeSheet({
   return (
     <Sheet open={open} onClose={onClose} title="Trade" closable>
       {toMe.map((t) => (
-        <Offer
-          key={t.id}
-          t={t}
-          state={state}
-          match={match}
-          mine={false}
-          onCounter={() => {
-            setPartner(t.from);
-            setGive({ ...t.get });
-            setGet({ ...t.give });
-          }}
-        />
+        <Offer key={t.id} t={t} state={state} match={match} mine={false} onCounter={() => setDraft(draftFor({ counter: t }, others))} />
       ))}
       {fromMe.map((t) => (
         <Offer key={t.id} t={t} state={state} match={match} mine />
@@ -85,23 +73,21 @@ export function TradeSheet({
           <SectionTitle>New offer</SectionTitle>
           <div className="-mx-1 flex gap-2 overflow-x-auto p-1" role="radiogroup" aria-label="Trade with">
             {others.map((i) => (
-              <button
+              <Button
                 key={i}
-                type="button"
+                variant="bare"
+                size="chip"
                 role="radio"
                 aria-checked={partner === i}
-                onClick={() => {
-                  setPartner(i);
-                  setGet(empty());
-                }}
+                onClick={() => setDraft((d) => ({ ...d, partner: i, get: empty() }))}
                 className={cn(
-                  "flex min-h-11 shrink-0 touch-manipulation items-center gap-2 rounded-full py-1 pl-1 pr-3 transition-colors",
+                  "shrink-0 gap-2 rounded-full py-1 pl-1 pr-3 transition-colors duration-150",
                   partner === i ? "bg-primary text-primary-foreground" : "bg-muted",
                 )}
               >
                 <PlayerAvatar player={match.players[i]} size={32} seat={seatColor(match.players[i])} />
                 <span className="font-semibold">{name(i)}</span>
-              </button>
+              </Button>
             ))}
           </div>
           {partner >= 0 && (
@@ -115,8 +101,7 @@ export function TradeSheet({
                 disabled={!!why}
                 onClick={async () => {
                   await act({ k: "offer", to: partner, give, get, lift: lift.filter((p) => get.props.includes(p)) });
-                  setGive(empty());
-                  setGet(empty());
+                  setDraft((d) => ({ ...d, give: empty(), get: empty() }));
                   setLift([]);
                 }}
               >
@@ -133,7 +118,6 @@ export function TradeSheet({
   );
 }
 
-// An offer: what goes each way, and its answers.
 export function Offer({
   t,
   state,
@@ -191,8 +175,6 @@ export function Offer({
   );
 }
 
-// Mortgaged properties you'd be given: 10% to the bank now, or tick one to lift its mortgage there and then for
-// the mortgage plus that one 10% (lifting it later costs another 10%).
 function Lifts({ state, props, lift, onChange }: { state: MonoState; props: number[]; lift: number[]; onChange: (l: number[]) => void }) {
   const mortgaged = props.filter((i) => state.props[i]!.mortgaged);
   if (!mortgaged.length) return null;
@@ -202,12 +184,13 @@ function Lifts({ state, props, lift, onChange }: { state: MonoState; props: numb
       {mortgaged.map((i) => {
         const on = lift.includes(i);
         return (
-          <button
+          <Button
             key={i}
-            type="button"
+            variant="bare"
+            size="chip"
             aria-pressed={on}
             onClick={() => onChange(on ? lift.filter((x) => x !== i) : [...lift, i])}
-            className="flex min-h-11 touch-manipulation items-center gap-3 rounded-md bg-muted/60 px-3 text-left text-callout"
+            className="gap-3 rounded-md bg-muted/60 px-3 text-callout"
           >
             <span className="min-w-0 flex-1">
               Lift {BOARD[i].name}'s mortgage now ({money(unmortgageOf(i))})
@@ -215,7 +198,7 @@ function Lifts({ state, props, lift, onChange }: { state: MonoState; props: numb
             <span className={cn("grid size-6 place-items-center rounded-full", on ? "bg-primary text-primary-foreground" : "bg-card")}>
               {on && <CheckIcon weight="bold" size={14} />}
             </span>
-          </button>
+          </Button>
         );
       })}
       <p className="px-1 text-footnote text-muted-foreground">You'd pay the bank {money(fees.total)} for the mortgaged ones.</p>
@@ -223,7 +206,6 @@ function Lifts({ state, props, lift, onChange }: { state: MonoState; props: numb
   );
 }
 
-// One side of an offer being made: their tradable properties to tick, cash, and get-out-of-jail cards.
 function Stuff({
   title,
   state,
@@ -242,6 +224,7 @@ function Stuff({
   const built = (i: number) => groupOf(i).some((j) => state.props[j]!.houses > 0);
   const toggle = (i: number) =>
     onChange({ ...side, props: side.props.includes(i) ? side.props.filter((x) => x !== i) : [...side.props, i] });
+  const cashId = useId();
   const cards = (["chance", "chest"] as Deck[]).flatMap((d) => p.free.filter((x) => x === d));
   return (
     <section className="flex flex-col gap-2" aria-label={title}>
@@ -254,13 +237,14 @@ function Stuff({
           const sq = BOARD[i];
           const on = side.props.includes(i);
           return (
-            <button
+            <Button
               key={i}
-              type="button"
+              variant="bare"
+              size="chip"
               disabled={built(i)}
               aria-pressed={on}
               onClick={() => toggle(i)}
-              className="flex min-h-12 w-full touch-manipulation items-center gap-3 px-3 text-left disabled:opacity-50"
+              className="min-h-12 w-full gap-3 px-3"
             >
               <span
                 className="ll-swatch size-6 shrink-0 rounded-sm"
@@ -275,29 +259,31 @@ function Stuff({
               <span className={cn("grid size-6 place-items-center rounded-full", on ? "bg-primary text-primary-foreground" : "bg-muted")}>
                 {on && <CheckIcon weight="bold" size={14} />}
               </span>
-            </button>
+            </Button>
           );
         })}
         {cards.map((d, k) => {
           const on = side.free.filter((x) => x === d).length > cards.slice(0, k).filter((x) => x === d).length;
           return (
-            <button
+            <Button
               key={`${d}${k}`}
-              type="button"
+              variant="bare"
+              size="chip"
               aria-pressed={on}
               onClick={() => onChange({ ...side, free: on ? side.free.filter((_, j) => j !== side.free.indexOf(d)) : [...side.free, d] })}
-              className="flex min-h-12 w-full touch-manipulation items-center gap-3 px-3 text-left"
+              className="min-h-12 w-full gap-3 px-3"
             >
               <span className="min-w-0 flex-1">Get-out-of-jail card</span>
               <span className={cn("grid size-6 place-items-center rounded-full", on ? "bg-primary text-primary-foreground" : "bg-muted")}>
                 {on && <CheckIcon weight="bold" size={14} />}
               </span>
-            </button>
+            </Button>
           );
         })}
-        <label className="flex min-h-12 items-center gap-3 px-3">
+        <label htmlFor={cashId} className="flex min-h-12 items-center gap-3 px-3">
           <span className="flex-1">Cash</span>
           <Input
+            id={cashId}
             inputMode="numeric"
             className="h-10 w-32 text-right tabular-nums"
             value={side.cash ? String(side.cash) : ""}

@@ -53,8 +53,7 @@ describe("a game of Monopoly", () => {
       [2000, 0],
     ]);
     expect(m.turn).toBe(seats[0].userId);
-    // The decks' order isn't in the public state, only in the game's secret.
-    expect(JSON.stringify(s)).not.toContain("decks");
+    expect(JSON.stringify(s), "the decks' order is only in the game's secret").not.toContain("decks");
     const secret = await t.run((ctx) =>
       ctx.db
         .query("secrets")
@@ -74,7 +73,6 @@ describe("a game of Monopoly", () => {
     await clearPushes(t);
     await seats[0].as.mutation(api.landlord.move, { id, action: { k: "roll" } });
     let s = await stateOf(t, id);
-    // Play it out until the turn passes (a buy, doubles, a card...).
     for (let i = 0; i < 20 && s.current === 0; i++) {
       const who = actor(s);
       const a = botMove(s, who, Math.random)!;
@@ -99,9 +97,8 @@ describe("a game of Monopoly", () => {
     const now = await seats[1].as.query(api.landlord.log, { id, from: s.seq });
     expect(now!.moves).toEqual([]);
     expect(now!.start.state.seq).toBe(s.seq);
-    // Never looked: everything since my own last move, which for the roller is nothing.
     const mine = await seats[0].as.query(api.landlord.log, { id });
-    expect(mine!.moves).toEqual([]);
+    expect(mine!.moves, "never looked: everything since my own last move, nothing for the roller").toEqual([]);
   });
 
   test("whoever it's waiting on is nudged every few hours, until they move", async () => {
@@ -114,11 +111,10 @@ describe("a game of Monopoly", () => {
     expect(p).toEqual([expect.objectContaining({ userId: seats[0].userId, title: "Still your move" })]);
     await seats[0].as.mutation(api.landlord.move, { id, action: { k: "roll" } });
     await clearPushes(t);
-    // The old nudge fizzles: it was for a move that's been made.
     const stale = (await scheduled(t)).filter((s) => s.name === "landlord:remind" && s.state.kind === "pending");
     expect(stale.length).toBeGreaterThan(0);
     await t.run((ctx) => ctx.runMutation(internal.landlord.remind, { id, moveCount: 0 }));
-    expect(await pushes(t)).toEqual([]);
+    expect(await pushes(t), "a nudge for a move already made fizzles").toEqual([]);
   });
 
   test("an auction pings everyone in it, and a bid pings the rest", async () => {
@@ -203,7 +199,6 @@ describe("a game of Monopoly", () => {
     expect(m.status).toBe("finished");
     expect(m.result?.reason).toBe("richest");
     expect(m.result?.standings).toHaveLength(3);
-    // The log holds every event, in order, with no gaps.
     const rows = await t.run((ctx) =>
       ctx.db
         .query("landlordLog")
@@ -212,7 +207,7 @@ describe("a game of Monopoly", () => {
     );
     let seq = 0;
     for (const r of rows) {
-      expect(r.seq).toBe(seq);
+      expect(r.seq, "the log holds every event in order with no gaps").toBe(seq);
       seq += (r.events as unknown[]).length;
     }
     expect(seq).toBe((m.state as MonoState).seq);

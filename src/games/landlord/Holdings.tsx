@@ -9,8 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
 import { ConfirmMortgage, useLandlordMove } from "./Deed";
 
-// Everything you own, by group, with building and mortgaging one tap away: how you raise money for a debt,
-// and how you build up between turns.
 export function HoldingsSheet({
   open,
   onClose,
@@ -43,11 +41,10 @@ export function HoldingsSheet({
           </div>
           <div className="text-right">
             <div className="font-display text-heading tabular-nums">{money(raisable(state, seat))}</div>
-            <div className="text-footnote text-muted-foreground">More you could raise</div>
+            <div className="text-footnote text-muted-foreground">Could raise</div>
           </div>
         </div>
       )}
-      {groups.length === 0 && <p className="py-6 text-center text-callout text-muted-foreground">Nothing yet.</p>}
       {groups.map((g) => (
         <Group key={g[0]}>
           {g.map((pos) => {
@@ -62,11 +59,7 @@ export function HoldingsSheet({
                   : money(sq.kind === "street" || sq.kind === "rail" || sq.kind === "util" ? sq.price : 0);
             return (
               <div key={pos} className="flex min-h-16 items-center gap-2 px-3 py-2">
-                <button
-                  type="button"
-                  className="flex min-w-0 flex-1 touch-manipulation items-center gap-3 text-left"
-                  onClick={() => onDeed(pos)}
-                >
+                <Button variant="bare" size="chip" className="flex-1 gap-3" onClick={() => onDeed(pos)}>
                   <span
                     className="ll-swatch size-8 shrink-0 rounded-sm"
                     data-group={sq.kind === "street" ? sq.group : undefined}
@@ -76,11 +69,10 @@ export function HoldingsSheet({
                     <span className="block wrap-anywhere font-semibold">{sq.name}</span>
                     <span className="block truncate text-footnote text-muted-foreground">{status}</span>
                   </span>
-                </button>
+                </Button>
                 {sq.kind === "street" && !prop.mortgaged && (
                   <>
                     {stuck(state, seat, pos) ? (
-                      // The bank can't break the hotel into houses: the whole group's buildings go at once.
                       <AsyncButton variant="secondary" size="sm" disabled={busy} onClick={() => act({ k: "sellAll", pos })}>
                         Sell group
                       </AsyncButton>

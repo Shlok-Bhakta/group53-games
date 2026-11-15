@@ -25,14 +25,8 @@ import {
 } from "./landlord/engine";
 import { money, say, sideText, squareName } from "./landlord/text";
 
-// Landlord, the property-trading game, on the shared match framework. Async with no time limit: every move
-// pushes whoever the game's now waiting on, and they're pinged again every few hours until they act. The
-// public state is matches.state; the order of the card decks is the game's secret. Every move also goes in
-// `landlordLog` with what it did, so a phone can play back everything since it last looked.
-
 export type { MonoState } from "./landlord/engine";
 
-// How often the game nudges whoever it's waiting on, at first, and once they've been nudged a few times.
 export const REMIND_MS = 4 * 60 * 60 * 1000;
 const REMIND_LATER_MS = 12 * 60 * 60 * 1000;
 const EAGER_REMINDERS = 4;
@@ -58,7 +52,6 @@ async function load(ctx: MutationCtx, match: Doc<"matches">): Promise<Game> {
   return { s: match.state as MonoState, decks, events: [] };
 }
 
-// Saves a move: the decks, the log, then either the result or the turn and the pushes.
 async function commit(ctx: MutationCtx, match: Doc<"matches">, g: Game, by: Id<"users"> | null, first = false) {
   await writeSecret(ctx, match._id, undefined, g.decks);
   const seat = by ? seatOf(match, by) : -1;
@@ -96,8 +89,6 @@ async function commit(ctx: MutationCtx, match: Doc<"matches">, g: Game, by: Id<"
   await tell(ctx, after, g, by, fresh);
 }
 
-// What each player hears about a move, one push each, the most pressing: a decision that's now theirs, an
-// offer, an auction, a trade answered, rent coming in, someone going bankrupt.
 async function tell(ctx: MutationCtx, match: Doc<"matches">, g: Game, by: Id<"users"> | null, fresh: boolean) {
   const names = await Promise.all(match.players.map((p) => displayName(ctx, p.userId)));
   const s = g.s;
@@ -123,7 +114,6 @@ async function tell(ctx: MutationCtx, match: Doc<"matches">, g: Game, by: Id<"us
     if (e.t === "out")
       for (const seat of s.players.keys()) if (seat !== e.seat) put(seat, 5, `${names[e.seat]} went bankrupt`, say(e, nameFor(seat)) ?? "");
   }
-  // Whoever has to act now, if that's new: what happened since, and what's theirs to do.
   const up = actor(s);
   if (fresh) {
     const ph = s.phase;
@@ -149,8 +139,6 @@ async function tell(ctx: MutationCtx, match: Doc<"matches">, g: Game, by: Id<"us
 const auctionIn = (s: MonoState) => (s.phase.k === "auction" ? s.phase.in : []);
 const auctionName = (s: MonoState) => (s.phase.k === "auction" ? squareName(s.phase.pos) : "it");
 
-// --- Start and resign ---
-
 export const landlordHooks: GameHooks = {
   seats: (_mode, n) => SEAT_COLORS.slice(0, n),
   start: async (ctx, match) => {
@@ -164,13 +152,10 @@ export const landlordHooks: GameHooks = {
     const g = step(await load(ctx, match), seat, { k: "resign" });
     await commit(ctx, match, g, userId);
   },
-  // No time limit, so nothing ever runs out.
   timeout: async () => {},
   timeoutWarning: "",
 };
 
-// The nudge: whoever the game's waiting on (in an auction, everyone still bidding but the leader), again
-// later if they still haven't.
 export const remind = internalMutation({
   args: { id: v.id("matches"), moveCount: v.number(), strikes: v.optional(v.number()) },
   handler: async (ctx, { id, moveCount, strikes = 0 }) => {
@@ -195,8 +180,6 @@ export const remind = internalMutation({
     });
   },
 });
-
-// --- Moves ---
 
 const side = v.object({ cash: v.number(), props: v.array(v.number()), free: v.array(v.union(v.literal("chance"), v.literal("chest"))) });
 export const action = v.union(
@@ -241,11 +224,6 @@ export const move = mutation({
   handler: async (ctx, { id, action }) => await play(ctx, id, action as Action),
 });
 
-// --- What phones read ---
-
-// Everything that's happened since `from` (an event number): the state just before, and each move after it.
-// A phone opening the game asks from where it last looked, and plays the rest back. One that's never looked
-// (no `from`) gets everything since the player's own last move.
 export const log = query({
   args: { id: v.id("matches"), from: v.optional(v.number()) },
   handler: async (ctx, { id, from }) => {
@@ -261,7 +239,6 @@ export const log = query({
         if (seat >= 0 && r.by === seat) break;
       }
     } else {
-      // The last move that had finished by `from`, or with nothing that early, the opening.
       const earlier = await rows
         .withIndex("by_match", (q) => q.eq("matchId", id).lte("seq", from))
         .order("desc")

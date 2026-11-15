@@ -1,9 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { BusIcon, CrownSimpleIcon } from "@phosphor-icons/react";
+import type { CameraView } from "./camera";
 import type { Shown } from "./show";
-
-// What floats over the board for a moment, in the middle of the open part of the screen: the dice as they land,
-// and a card as it's drawn.
 
 const PIPS: Record<number, [number, number][]> = {
   1: [[1, 1]],
@@ -62,9 +60,12 @@ function Die({ n, i, speed }: { n: number; i: number; speed?: boolean }) {
   );
 }
 
-export function Overlays({ shown, top, bottom }: { shown: Shown; top: number; bottom: number }) {
+export function Overlays({ shown, view }: { shown: Shown; view: CameraView }) {
   return (
-    <div className="pointer-events-none absolute inset-x-0 z-10 px-6" style={{ top, bottom }}>
+    <div
+      className="pointer-events-none absolute z-10 px-6"
+      style={{ top: view.top, bottom: view.bottom, left: view.left, right: view.right }}
+    >
       <div className="absolute inset-x-0 top-3 flex justify-center">
         <AnimatePresence>
           {shown.dice && (

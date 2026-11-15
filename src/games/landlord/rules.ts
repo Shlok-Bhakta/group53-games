@@ -1,6 +1,5 @@
 import { settingsOf, type ModeKey, type Settings } from "../../../convex/modes";
 
-// How to play, as the settings have it.
 export function landlordRules(mode: ModeKey, raw: Settings): string[] {
   const s = settingsOf(mode, raw);
   const money = (n: number) => `$${n.toLocaleString("en-US")}`;
