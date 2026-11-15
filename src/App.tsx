@@ -23,7 +23,7 @@ import { SignIn } from "@/pages/SignIn";
 import { You } from "@/pages/You";
 import { ArrivalPills, TapLayer, usePresenceReporter } from "@/presence";
 import { Page, TAB_ROUTES, useAppBadge, useNavDirection, useScrollMemory } from "@/shell";
-import { UpdateOverlay, useVersionCheck } from "@/version";
+import { HoldUpdates, UpdateOverlay, useVersionCheck } from "@/version";
 import { wantMusic } from "@/sound";
 import { useDeepLinks } from "@/deepLinks";
 import { BoardSkeleton, PlayerRoute, PlayerSkeleton, StockRoute, StockSkeleton, StonksBoardRoute } from "./games/stonks/load";
@@ -104,8 +104,8 @@ function SignedIn() {
                 <Route path="/wordle" element={<Wordle />} />
                 {golfRoute("/mereddia", <HostedGame game="mereddia" title="Journey Across Mereddia" />)}
                 {golfRoute("/golf/practice", <GolfHub />)}
-                {golfRoute("/golf/world", <GolfOpenWorld />)}
-                {golfRoute("/golf/:course/:hole", <GolfHole />)}
+                {golfRoute("/golf/world", <><HoldUpdates /><GolfOpenWorld /></>)}
+                {golfRoute("/golf/:course/:hole", <><HoldUpdates /><GolfHole /></>)}
                 {/* Stonks' code loads before it's opened (src/games/stonks/load.tsx); the skeletons are its exact shape. */}
                 <Route path="/stonks" element={<NotificationsRequired><Suspense fallback={<BoardSkeleton />}><StonksBoardRoute /></Suspense></NotificationsRequired>} />
                 <Route path="/stonks/u/:id" element={<NotificationsRequired><Suspense fallback={<PlayerSkeleton />}><PlayerRoute /></Suspense></NotificationsRequired>} />

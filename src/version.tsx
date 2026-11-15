@@ -11,7 +11,8 @@ declare const __BUILD_ID__: string;
 // is out (checked on launch, every minute, and whenever the app comes back to the foreground) the app
 // covers itself with "Updating", reloads, and says "You're up to date" once it's back. Nothing is lost:
 // games live on the server and Scrabble plans save within a fraction of a second. The one thing worth
-// waiting for is a real-time chess game in progress, which holds the update until it ends.
+// waiting for is a game on screen: while one is open the update waits, and it lands as soon as the player
+// leaves the game or the app goes to the background, so nobody is pulled out of a game mid-move.
 
 const CHECK_EVERY_MS = 60_000;
 // How long the overlay shows before the reload, long enough to read and for pending saves to land.
@@ -40,7 +41,7 @@ async function latestBuild(): Promise<string | null> {
 
 function update(latest: string) {
   pending = latest;
-  if (holds > 0 || phase === "updating") return;
+  if ((holds > 0 && document.visibilityState === "visible") || phase === "updating") return;
   // Already reloaded for this build and still not on it (a stale cache somewhere): don't loop, offer it.
   if (sessionStorage.getItem(TARGET_KEY) === latest) {
     toast("A new version is ready", { id: "update", duration: Infinity, action: { label: "Update", onClick: () => location.reload() } });
@@ -57,7 +58,7 @@ async function check() {
   if (latest && latest !== __BUILD_ID__) update(latest);
 }
 
-// Hold updates while something can't take a reload (a real-time game in progress).
+// Hold updates while a game is on screen.
 export function useHoldUpdates(hold: boolean) {
   useEffect(() => {
     if (!hold) return;
@@ -67,6 +68,11 @@ export function useHoldUpdates(hold: boolean) {
       if (holds === 0 && pending) update(pending);
     };
   }, [hold]);
+}
+
+export function HoldUpdates() {
+  useHoldUpdates(true);
+  return null;
 }
 
 export function useVersionCheck() {
@@ -81,7 +87,10 @@ export function useVersionCheck() {
     }
     const first = setTimeout(() => void check(), 1500);
     const timer = setInterval(() => void check(), CHECK_EVERY_MS);
-    const onVisible = () => document.visibilityState === "visible" && void check();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void check();
+      else if (pending) update(pending);
+    };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       clearTimeout(first);
