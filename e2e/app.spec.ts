@@ -412,6 +412,30 @@ test.describe("signed in", () => {
     await expect(page.getByText("A new version is ready")).toBeVisible({ timeout: 8000 });
   });
 
+  test("a new deploy waits while a game is open, then lands once you leave it", async ({ phones }) => {
+    const me = await createPlayer("Shlok");
+    const chris = await createPlayer("Chris");
+    const id = await admin().action(anyApi.testing.startMatch, { mode: "chess:classic", a: me.userId, b: chris.userId });
+    const page = await phones.open({ player: me, push: "on" });
+    await page.goto(`/chess/${id}`);
+    await ready(page);
+    await expect(onScreen(page).getByRole("button", { name: "Resign" })).toBeVisible();
+    let checks = 0;
+    await page.route("**/version.json*", (route) => {
+      checks++;
+      return route.fulfill({ json: { id: "a-newer-build" } });
+    });
+    let loads = 0;
+    page.on("load", () => loads++);
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await expect.poll(() => checks, { timeout: 8000 }).toBeGreaterThan(0);
+    await expect(page.getByRole("status", { name: "Updating" })).toHaveCount(0);
+    expect(loads).toBe(0);
+    await onScreen(page).getByRole("button", { name: "Back" }).first().click();
+    await expect(page.getByRole("status", { name: "Updating" })).toBeVisible({ timeout: 8000 });
+    await expect.poll(() => loads, { timeout: 8000 }).toBe(1);
+  });
+
   for (const path of ["/", "/games", "/crew", "/you"]) {
     test(`no serious accessibility issues on ${path}`, async ({ phones }) => {
       const me = await createPlayer("Shlok");

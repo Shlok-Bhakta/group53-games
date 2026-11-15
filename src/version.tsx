@@ -89,7 +89,7 @@ export function useVersionCheck() {
     const timer = setInterval(() => void check(), CHECK_EVERY_MS);
     const onVisible = () => {
       if (document.visibilityState === "visible") void check();
-      else if (pending) update(pending);
+      else if (pending && holds > 0) update(pending);
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
