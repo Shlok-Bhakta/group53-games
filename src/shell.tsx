@@ -156,3 +156,62 @@ export function useAppBadge() {
     void (n > 0 ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
   }, [attention]);
 }
+
+// iOS standalone apps can keep a stale layout viewport after a rotation, the keyboard or coming back from the
+// background, and position:fixed bottom:0 then lands above the real bottom edge (the tab bar floating mid-screen).
+// A hidden probe pinned to the bottom shows where "bottom" really is; any gap to the visible viewport's bottom
+// goes into --viewport-gap, which `pin-bottom` subtracts. A one-pixel scroll nudge first asks iOS to recompute.
+const SETTLE_MS = [0, 250, 750];
+
+function viewportGap(probe: HTMLElement) {
+  const pinned = probe.getBoundingClientRect().top;
+  const vv = window.visualViewport;
+  const seen = vv ? vv.offsetTop + vv.height : window.innerHeight;
+  return Math.max(0, Math.round(seen - pinned));
+}
+
+export function useViewportGap() {
+  useEffect(() => {
+    const root = document.documentElement;
+    const probe = document.createElement("div");
+    probe.setAttribute("aria-hidden", "true");
+    probe.style.cssText = "position:fixed;bottom:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none";
+    document.body.append(probe);
+    let timers: ReturnType<typeof setTimeout>[] = [];
+    let nudged = false;
+    const apply = () => {
+      const gap = viewportGap(probe);
+      if (gap > 0 && !nudged) {
+        nudged = true;
+        const { scrollX, scrollY } = window;
+        window.scrollTo(scrollX, scrollY + 1);
+        window.scrollTo(scrollX, scrollY);
+        return apply();
+      }
+      root.style.setProperty("--viewport-gap", `${gap}px`);
+      root.dataset.viewportGap = String(gap);
+    };
+    const resync = () => {
+      nudged = false;
+      timers.forEach(clearTimeout);
+      timers = SETTLE_MS.map((ms) => setTimeout(() => requestAnimationFrame(apply), ms));
+    };
+    const visible = () => document.visibilityState === "visible" && resync();
+    const vv = window.visualViewport;
+    const onWindow = ["resize", "orientationchange", "pageshow", "focusout"] as const;
+    onWindow.forEach((e) => window.addEventListener(e, resync));
+    document.addEventListener("visibilitychange", visible);
+    vv?.addEventListener("resize", resync);
+    vv?.addEventListener("scroll", resync);
+    resync();
+    return () => {
+      timers.forEach(clearTimeout);
+      onWindow.forEach((e) => window.removeEventListener(e, resync));
+      document.removeEventListener("visibilitychange", visible);
+      vv?.removeEventListener("resize", resync);
+      vv?.removeEventListener("scroll", resync);
+      probe.remove();
+      root.style.removeProperty("--viewport-gap");
+    };
+  }, []);
+}

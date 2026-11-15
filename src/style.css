@@ -796,6 +796,12 @@
   --online: #30d158;
   --online-ink: #04210d;
   --discord: #5865f2;
+  --viewport-gap: 0px;
+}
+
+/* Pinned to the real bottom edge even when iOS keeps a stale layout viewport (useViewportGap). */
+@utility pin-bottom {
+  bottom: calc(0px - var(--viewport-gap));
 }
 
 @layer base {

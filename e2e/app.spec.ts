@@ -443,6 +443,36 @@ test.describe("signed in", () => {
     await expect.poll(() => loads, { timeout: 8000 }).toBe(1);
   });
 
+  test("when iOS keeps a stale layout viewport, the tab bar still sits on the real bottom edge", async ({ phones }) => {
+    const me = await createPlayer("Shlok");
+    const page = await phones.open({ player: me });
+    await page.goto("/");
+    await ready(page);
+    const nav = page.locator("nav[aria-label='Main']");
+    const gapToBottom = () =>
+      nav.evaluate((n) => {
+        const vv = window.visualViewport!;
+        return Math.round(vv.offsetTop + vv.height - n.getBoundingClientRect().bottom);
+      });
+    await expect.poll(gapToBottom).toBe(0);
+    const stale = 120;
+    await page.evaluate((extra) => {
+      const vv = window.visualViewport!;
+      const height = vv.height;
+      Object.defineProperty(vv, "height", { configurable: true, get: () => height + extra });
+      vv.dispatchEvent(new Event("resize"));
+    }, stale);
+    await expect(page.locator("html")).toHaveAttribute("data-viewport-gap", String(stale));
+    await expect.poll(gapToBottom).toBe(0);
+    await page.evaluate(() => {
+      const vv = window.visualViewport!;
+      delete (vv as unknown as Record<string, unknown>).height;
+      vv.dispatchEvent(new Event("resize"));
+    });
+    await expect(page.locator("html")).toHaveAttribute("data-viewport-gap", "0");
+    await expect.poll(gapToBottom).toBe(0);
+  });
+
   for (const path of ["/", "/games", "/crew", "/you"]) {
     test(`no serious accessibility issues on ${path}`, async ({ phones }) => {
       const me = await createPlayer("Shlok");

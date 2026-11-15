@@ -22,7 +22,7 @@ import { Home } from "@/pages/Home";
 import { SignIn } from "@/pages/SignIn";
 import { You } from "@/pages/You";
 import { ArrivalPills, TapLayer, usePresenceReporter } from "@/presence";
-import { Page, TAB_ROUTES, useAppBadge, useNavDirection, useScrollMemory } from "@/shell";
+import { Page, TAB_ROUTES, useAppBadge, useNavDirection, useScrollMemory, useViewportGap } from "@/shell";
 import { HoldUpdates, UpdateOverlay, useVersionCheck } from "@/version";
 import { wantMusic } from "@/sound";
 import { useDeepLinks } from "@/deepLinks";
@@ -83,6 +83,7 @@ function SignedIn() {
   useDeepLinks();
   useScrollMemory(direction);
   useAppBadge();
+  useViewportGap();
   // Music plays all over the app once you're signed in, not just in games.
   useEffect(() => {
     wantMusic(true);
