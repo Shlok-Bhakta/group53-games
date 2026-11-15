@@ -11,7 +11,7 @@ async function showCaughtUp(page: Page) {
 }
 
 for (const scheme of ["dark", "light"] as const) {
-  test(`poker screens ${scheme}`, async ({ browser }) => {
+  test(`poker screens ${scheme}`, async ({ phones }) => {
     test.setTimeout(240_000);
     const names = ["WashableBowl700", "chrisis14", "Boiler", "Wes", "Kai", "Sam", "Lee", "Dev"].slice(0, Number(process.env.PLAYERS ?? 6));
     const looks = [
@@ -27,7 +27,7 @@ for (const scheme of ["dark", "light"] as const) {
     const players = await Promise.all(names.map((n, i) => createPlayer(n, looks[i])));
     const ctxs = await Promise.all(
       players.map(() =>
-        browser.newContext({
+        phones.context({
           viewport: { width: 393, height: 852 },
           deviceScaleFactor: 3,
           isMobile: true,

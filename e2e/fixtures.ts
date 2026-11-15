@@ -223,7 +223,21 @@ export type OpenOptions = PhoneOptions & {
 
 export type Phones = {
   open(opts?: OpenOptions): Promise<Page>;
+  context(opts: BrowserContextOptions): Promise<BrowserContext>;
 };
+
+const OCC = /OptimisticConcurrencyControlFailure/;
+
+async function resetDatabase() {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      if ((await admin().mutation(anyApi.testing.reset, {})).done) return;
+    } catch (error) {
+      if (attempt < 5 && OCC.test(String(error))) continue;
+      throw error;
+    }
+  }
+}
 
 async function seedPush(player: Player) {
   const endpoint = `https://push.example.com/${randomBytes(6).toString("hex")}`;
@@ -398,7 +412,7 @@ export async function settled<T>(read: () => Promise<T>, window = 600): Promise<
 export const test = base.extend<{ phones: Phones }>({
   phones: [
     async ({ browser, context }, use) => {
-      while (!(await admin().mutation(anyApi.testing.reset, {})).done);
+      await resetDatabase();
       const owned: BrowserContext[] = [];
       let first = true;
       await use({
@@ -413,6 +427,11 @@ export const test = base.extend<{ phones: Phones }>({
           const page = await phone(ctx, { notifications: opts.push === "on" ? "granted" : undefined, ...opts, pushEndpoint: endpoint });
           if (opts.reducedMotion) await page.emulateMedia({ reducedMotion: "reduce" });
           return page;
+        },
+        async context(opts) {
+          const ctx = await browser.newContext(opts);
+          owned.push(ctx);
+          return ctx;
         },
       });
       const nested = [...nestedCards.values()].flat();

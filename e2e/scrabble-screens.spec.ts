@@ -5,13 +5,13 @@ import { admin, convexIdle, createPlayer, expect, phone, readyForShot, test } fr
 test.skip(!process.env.SCREENS, "Set SCREENS=1 to capture review screenshots");
 
 for (const scheme of ["dark", "light"] as const) {
-  test(`scrabble screens ${scheme}`, async ({ browser }) => {
+  test(`scrabble screens ${scheme}`, async ({ phones }) => {
     test.setTimeout(120_000);
     const names = ["WashableBowl700", "chrisis14", "Boiler", "Wes"];
     const players = await Promise.all(names.map((n) => createPlayer(n)));
     const ctxs = await Promise.all(
       players.map(() =>
-        browser.newContext({
+        phones.context({
           viewport: { width: 393, height: 852 },
           deviceScaleFactor: 3,
           isMobile: true,
