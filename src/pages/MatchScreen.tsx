@@ -20,7 +20,7 @@ export function MatchScreen({ game }: { game: GameUI }) {
   const navigate = useNavigate();
   const [menu, setMenu] = useState(false);
   const goBack = useGoBack("/");
-  useHoldUpdates(match?.status === "active");
+  useHoldUpdates(true);
 
   if (match === undefined) {
     return (

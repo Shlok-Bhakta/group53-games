@@ -52,7 +52,7 @@ The stack lives in `~/Services/group53` on kiwi. `compose.yaml` runs Convex, its
 
 On the tailnet, the web app is at port 38440, the API at 38441, HTTP actions at 38442, and the dashboard at 38443.
 
-Whatever lands on `main` deploys itself: the `deployer` container on kiwi fetches `main` every minute and, when it's moved, pushes the Convex functions, copies the commit into the stack, rebuilds the `web`, `og` and `stonks` containers, cleans up the old images, and checks the site is up. `docker compose logs deployer` on kiwi shows each deploy, and `deploy-status.json` in the stack the last one. See `deploy/README.md`.
+Whatever lands on `main` deploys itself through the deployer on kiwi (`deploy/README.md`).
 
 ## Discord sign-in
 

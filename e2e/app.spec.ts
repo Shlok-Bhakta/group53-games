@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { anyApi } from "convex/server";
 import { FRAME_COLOR } from "../convex/palette";
-import { admin, createPlayer, expect, onScreen, ready, test } from "./fixtures";
+import { admin, createPlayer, expect, getMatch, onScreen, ready, resign, test } from "./fixtures";
 
 const ANDROID_UA = "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36";
 
@@ -440,6 +440,13 @@ test.describe("signed in", () => {
     page.on("load", () => loads++);
     await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
     await expect.poll(() => checks, { timeout: 8000 }).toBeGreaterThan(0);
+    await expect(page.getByRole("status", { name: "Updating" })).toHaveCount(0);
+    expect(loads).toBe(0);
+    await resign(page);
+    await expect.poll(async () => (await getMatch(id)).status).toBe("finished");
+    const checksBefore = checks;
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await expect.poll(() => checks, { timeout: 8000 }).toBeGreaterThan(checksBefore);
     await expect(page.getByRole("status", { name: "Updating" })).toHaveCount(0);
     expect(loads).toBe(0);
     await onScreen(page).getByRole("button", { name: "Back" }).first().click();
