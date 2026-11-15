@@ -73,16 +73,26 @@ describe("a game of Monopoly", () => {
     await clearPushes(t);
     await seats[0].as.mutation(api.landlord.move, { id, action: { k: "roll" } });
     let s = await stateOf(t, id);
+    let passedBy = 0;
     for (let i = 0; i < 20 && s.current === 0; i++) {
       const who = actor(s);
       const a = botMove(s, who, Math.random)!;
       if (a.k === "resign") break;
       await seats[who].as.mutation(api.landlord.move, { id, action: a as never });
+      passedBy = who;
       s = await stateOf(t, id);
     }
     expect(s.current).toBe(1);
     expect((await get(t, id))!.turn).toBe(seats[1].userId);
-    expect((await pushes(t)).some((p) => p.userId === seats[1].userId && p.title === "Your turn")).toBe(true);
+    const toNext = (await pushes(t)).filter((p) => p.userId === seats[1].userId);
+    const expected = s.phase.k === "debt" ? "You owe" : s.phase.k === "auction" ? "Auction:" : "Your turn";
+    if (passedBy === 1)
+      expect(toNext.at(-1)?.title.startsWith(expected), "their own move passed the turn to them, so no turn push").not.toBe(true);
+    else
+      expect(
+        toNext.some((p) => p.title.startsWith(expected)),
+        `the next player hears "${expected}"`,
+      ).toBe(true);
   });
 
   test("the log plays back from where a phone last looked, or from my own last move", async () => {
