@@ -40,12 +40,15 @@ services:
     depends_on:
       convex:
         condition: service_healthy
+  # nginx serving the app from site/, which the deployer fills: each build in site/builds/<id>, every build's
+  # assets in site/assets, and site/current pointing at the live one, so a deploy swaps a symlink instead of
+  # replacing this container.
   web:
-    build:
-      context: .
-      args:
-        VITE_CONVEX_URL: ${CONVEX_URL:-http://100.88.30.127:38441}
+    image: nginx:1.27-alpine
     restart: unless-stopped
+    volumes:
+      - ./site/nginx:/etc/nginx/conf.d:ro
+      - ./site:/srv/site:ro
     ports:
       - "100.88.30.127:38440:80"
     depends_on:
@@ -101,9 +104,9 @@ services:
       - "${DOCKER_GID:-988}" # the group owning /var/run/docker.sock on kiwi
     environment:
       STACK_DIR: ${STACK_DIR:-/home/shlok/Services/group53}
-      CONVEX_URL: http://convex:3210
+      DEPLOY_CONVEX_INTERNAL: http://convex:3210
+      DEPLOY_SITE: https://group53.shlokbhakta.dev
       ADMIN_KEY_FILE: /run/secrets/admin_key
-      SITE_URL: https://group53.shlokbhakta.dev
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       # The stack at the same path inside as outside, so the bind mounts and build contexts compose hands the

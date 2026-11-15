@@ -1,3 +1,4 @@
+import { useHoldUpdates } from "@/version";
 import { Component, useState, type ReactNode } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { useQuery } from "convex/react";
@@ -17,6 +18,7 @@ export function MatchScreen({ game }: { game: GameUI }) {
   const me = useQuery(api.users.me);
   const navigate = useNavigate();
   const [menu, setMenu] = useState(false);
+  useHoldUpdates(match?.status === "active");
 
   if (match === undefined) {
     return (

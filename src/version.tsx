@@ -33,7 +33,7 @@ async function latestBuild(): Promise<string | null> {
 
 function update(latest: string) {
   pending = latest;
-  if (holds > 0 || phase === "updating") return;
+  if ((holds > 0 && document.visibilityState === "visible") || phase === "updating") return;
   if (sessionStorage.getItem(TARGET_KEY) === latest) {
     toast("A new version is ready", { id: "update", duration: Infinity, action: { label: "Update", onClick: () => location.reload() } });
     return;
@@ -60,6 +60,11 @@ export function useHoldUpdates(hold: boolean) {
   }, [hold]);
 }
 
+export function HoldUpdates() {
+  useHoldUpdates(true);
+  return null;
+}
+
 export function useVersionCheck() {
   const { pathname } = useLocation();
   useEffect(() => {
@@ -71,7 +76,10 @@ export function useVersionCheck() {
     }
     const first = setTimeout(() => void check(), 1500);
     const timer = setInterval(() => void check(), CHECK_EVERY_MS);
-    const onVisible = () => document.visibilityState === "visible" && void check();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void check();
+      else if (pending && holds > 0) update(pending);
+    };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       clearTimeout(first);
