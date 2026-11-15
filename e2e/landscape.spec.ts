@@ -107,4 +107,47 @@ test.describe("the tab bar stays on the bottom edge", () => {
     await expect(page.locator("html")).toHaveAttribute("data-viewport-gap", "0");
     await expect.poll(() => barGap(page)).toBe(0);
   });
+
+  test("the bar waits for the finger to lift and scrolling to stop, so it never fights a bounce", async ({ phones }) => {
+    const me = await createPlayer("Shlok");
+    const page = await phones.open({ player: me });
+    await page.goto("/");
+    await ready(page);
+    const html = page.locator("html");
+    const stale = 120;
+    const nudges = () => page.evaluate(() => (window as unknown as { nudges: number }).nudges);
+    await page.evaluate((extra) => {
+      const spy = window as unknown as { nudges: number; scrolling?: ReturnType<typeof setInterval> };
+      spy.nudges = 0;
+      const scrollTo = window.scrollTo.bind(window);
+      window.scrollTo = ((...args: Parameters<typeof window.scrollTo>) => {
+        spy.nudges++;
+        scrollTo(...args);
+      }) as typeof window.scrollTo;
+      const finger = new Touch({ identifier: 1, target: document.body, clientX: 200, clientY: 600 });
+      document.dispatchEvent(new TouchEvent("touchstart", { touches: [finger], changedTouches: [finger] }));
+      const vv = window.visualViewport!;
+      const height = vv.height;
+      Object.defineProperty(vv, "height", { configurable: true, get: () => height + extra });
+      vv.dispatchEvent(new Event("resize"));
+    }, stale);
+    await expect(html, "a finger is down").toHaveAttribute("data-viewport-settling", "");
+    expect(await nudges()).toBe(0);
+    await expect(html).toHaveAttribute("data-viewport-gap", "0");
+
+    await page.evaluate(() => {
+      const spy = window as unknown as { scrolling?: ReturnType<typeof setInterval> };
+      spy.scrolling = setInterval(() => window.dispatchEvent(new Event("scroll")), 50);
+      const finger = new Touch({ identifier: 1, target: document.body, clientX: 200, clientY: 300 });
+      document.dispatchEvent(new TouchEvent("touchend", { touches: [], changedTouches: [finger] }));
+    });
+    await expect(html, "still scrolling after the finger lifts").toHaveAttribute("data-viewport-settling", "");
+    expect(await nudges()).toBe(0);
+    await expect(html).toHaveAttribute("data-viewport-gap", "0");
+
+    await page.evaluate(() => clearInterval((window as unknown as { scrolling?: ReturnType<typeof setInterval> }).scrolling));
+    await expect(html).toHaveAttribute("data-viewport-gap", String(stale));
+    await expect(html).not.toHaveAttribute("data-viewport-settling");
+    await expect.poll(() => barGap(page), "the bar sits on the visual viewport's bottom").toBe(0);
+  });
 });

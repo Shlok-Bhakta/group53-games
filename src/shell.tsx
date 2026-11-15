@@ -159,6 +159,7 @@ export function useAppBadge() {
 }
 
 const SETTLE_MS = [0, 250, 750];
+const QUIET_MS = 200;
 
 function viewportGap(probe: HTMLElement) {
   const pinned = probe.getBoundingClientRect().top;
@@ -168,6 +169,7 @@ function viewportGap(probe: HTMLElement) {
 }
 
 // platform: iOS standalone apps can keep a stale layout viewport after a rotation, the keyboard or coming back from the background, and position:fixed bottom:0 then lands above the real bottom edge.
+// platform: while a finger drags or the page rubber-bands, iOS reports a moving viewport and a scrollTo cancels the bounce, so nothing is measured until the finger is up and scrolling has stopped.
 export function useViewportGap() {
   useEffect(() => {
     const root = document.documentElement;
@@ -176,10 +178,23 @@ export function useViewportGap() {
     probe.style.cssText = "position:fixed;bottom:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none";
     document.body.append(probe);
     let timers: ReturnType<typeof setTimeout>[] = [];
+    let retry: ReturnType<typeof setTimeout> | undefined;
     let nudged = false;
     let disposed = false;
+    let touches = 0;
+    let lastScroll = -Infinity;
+    const later = () => {
+      clearTimeout(retry);
+      retry = setTimeout(() => requestAnimationFrame(apply), QUIET_MS);
+    };
     const apply = () => {
       if (disposed) return;
+      if (touches > 0 || performance.now() - lastScroll < QUIET_MS) {
+        root.dataset.viewportSettling = "";
+        if (touches === 0) later();
+        return;
+      }
+      delete root.dataset.viewportSettling;
       const gap = viewportGap(probe);
       if (gap > 0 && !nudged) {
         nudged = true;
@@ -197,21 +212,33 @@ export function useViewportGap() {
       timers = SETTLE_MS.map((ms) => setTimeout(() => requestAnimationFrame(apply), ms));
     };
     const visible = () => document.visibilityState === "visible" && resync();
+    const onScroll = () => {
+      lastScroll = performance.now();
+    };
+    const onTouch = (e: TouchEvent) => {
+      touches = e.touches.length;
+      if (touches === 0 && root.dataset.viewportSettling !== undefined) later();
+    };
     const vv = window.visualViewport;
     const onWindow = ["resize", "orientationchange", "pageshow", "focusout"] as const;
+    const onTouches = ["touchstart", "touchend", "touchcancel"] as const;
     onWindow.forEach((e) => window.addEventListener(e, resync));
+    onTouches.forEach((e) => document.addEventListener(e, onTouch, { passive: true }));
+    window.addEventListener("scroll", onScroll, { passive: true });
     document.addEventListener("visibilitychange", visible);
     vv?.addEventListener("resize", resync);
-    vv?.addEventListener("scroll", resync);
     resync();
     return () => {
       disposed = true;
       timers.forEach(clearTimeout);
+      clearTimeout(retry);
       onWindow.forEach((e) => window.removeEventListener(e, resync));
+      onTouches.forEach((e) => document.removeEventListener(e, onTouch));
+      window.removeEventListener("scroll", onScroll);
       document.removeEventListener("visibilitychange", visible);
       vv?.removeEventListener("resize", resync);
-      vv?.removeEventListener("scroll", resync);
       probe.remove();
+      delete root.dataset.viewportSettling;
       root.style.removeProperty("--viewport-gap");
     };
   }, []);
