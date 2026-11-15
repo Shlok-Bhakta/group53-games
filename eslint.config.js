@@ -106,7 +106,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/**/*.tsx", "prototypes/**/*.tsx"],
+    files: ["src/**/*.tsx"],
     plugins: { "react-hooks": reactHooks, "jsx-a11y": jsxA11y },
     rules: {
       ...reactHooks.configs.recommended.rules,

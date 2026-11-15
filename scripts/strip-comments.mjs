@@ -15,8 +15,7 @@ const shape = (node) => {
   const out = {};
   for (const [key, value] of Object.entries(node)) {
     if (key === "range" || key === "loc" || key === "parent" || key === "comments" || key === "tokens") continue;
-    out[key] =
-      key === "value" || key === "raw" ? (node.type === "JSXText" ? String(value).trim().replace(/\s+/g, " ") : value) : shape(value);
+    out[key] = node.type === "JSXText" && (key === "value" || key === "raw") ? String(value).trim().replace(/\s+/g, " ") : shape(value);
   }
   return out;
 };

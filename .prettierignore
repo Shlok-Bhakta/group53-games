@@ -9,7 +9,6 @@ assets
 e2e/.state
 test-results
 playwright-report
-prototypes/*/dist
 package-lock.json
 og/package-lock.json
 .claude/worktrees

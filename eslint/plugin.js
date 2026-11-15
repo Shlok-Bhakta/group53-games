@@ -204,7 +204,7 @@ const noRawButton = {
   },
   create(context) {
     const file = rel(context.filename);
-    if (file.startsWith(UI_DIR) || file.startsWith("prototypes/")) return {};
+    if (file.startsWith(UI_DIR)) return {};
     return {
       JSXOpeningElement(node) {
         if (node.name.type === "JSXMemberExpression" && node.name.property.name === "button") {
@@ -480,8 +480,8 @@ const classText = (node) => {
     if (e.type === "Literal" && typeof e.value === "string") parts.push(e.value);
     else if (e.type === "TemplateLiteral") e.quasis.forEach((q) => parts.push(q.value.cooked ?? ""));
     else if (e.type === "CallExpression") e.arguments.forEach(walk);
-    else if (e.type === "LogicalExpression" || e.type === "BinaryExpression") (walk(e.left), walk(e.right));
-    else if (e.type === "ConditionalExpression") (walk(e.consequent), walk(e.alternate));
+    else if (e.type === "LogicalExpression" || e.type === "BinaryExpression") [e.left, e.right].forEach(walk);
+    else if (e.type === "ConditionalExpression") [e.consequent, e.alternate].forEach(walk);
   };
   walk(expr);
   return parts.join(" ");
