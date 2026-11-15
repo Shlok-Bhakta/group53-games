@@ -321,9 +321,13 @@ test("opening a turn-based game again plays back the shots you missed, then goes
   const [pa, pb] = await twoPhones(phones);
   const id = await openLobby(pa, "golf", "turns", { Course: "Bumper Plains", Holes: "3" });
   await fillLobby(pa, [pb]);
-  for (const p of [pa, pb]) await expect(p.getByText("Teeing up")).toHaveCount(0, { timeout: 30_000 });
+  for (const p of [pa, pb]) {
+    await expect(p.getByLabel(/hole 1 of 3/)).toBeVisible({ timeout: 30_000 });
+    await expect(p.getByText("Teeing up")).toHaveCount(0, { timeout: 15_000 });
+  }
   const m = await getMatch(id);
   const [mine, theirs] = (await meOn(pa)) === (m.turn as string) ? [pa, pb] : [pb, pa];
+  await expect(mine.getByLabel(/hole 1 of 3/)).toHaveAttribute("data-turn", "mine");
   const name = mine === pa ? "Shlok" : "Chris";
   await expect.poll(() => theirs.evaluate((k) => localStorage.getItem(k), `golf-seen:${id}`), { timeout: 15_000 }).not.toBeNull();
   const url = theirs.url();

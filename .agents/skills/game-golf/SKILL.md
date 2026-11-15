@@ -125,6 +125,7 @@ Every phone and the server run the same world and must agree to the last bit; a 
 - Don't put simulation, or writes another player also makes, into `golf:act`.
 - `GolfWorld`'s loop (`useGolfLoop`) runs once per mount (and again when the server clock becomes ready), reading its props through a latest ref captured at start; worlds are keyed by course id, so a new hole is a new mount.
 - `__golf` and `golf-seen:` are what e2e and catching up lean on; keep their shapes.
+- In e2e, "Teeing up" gone doesn't mean a game's hole is on: while the course builds, `Building` shows instead, `__golf` doesn't exist yet and `match.turn` is unset. Wait for the canvas (`getByLabel(/hole 1 of 3/)`) first, then for "Teeing up" to go.
 - Touching `plains.ts`/`battle.ts`/`coldstart.ts`/`shapes.ts`/`engine.ts` can move a hole by a bit: run `npx vitest run convex/golf` (solutions replay) and, if a line breaks, `bun scripts/golf-solve.ts`.
 - Touching `engine.ts`/`world.ts`/`dmath.ts` can change the pinned fingerprint: that's a physics change for every phone at once.
 - `npx knip` fails on unused exports: drawing helpers in `toy.ts` stay module-private unless something imports them.
