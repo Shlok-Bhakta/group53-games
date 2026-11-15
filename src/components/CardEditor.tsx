@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useMutation } from "convex/react";
 import { motion } from "motion/react";
 import { EyedropperIcon } from "@phosphor-icons/react";
@@ -11,6 +11,8 @@ import { Segmented } from "@/components/Segmented";
 import { Switch } from "@/components/ui/switch";
 import { Sheet } from "@/components/ui/sheet";
 import { Section } from "@/components/parts";
+import { Button } from "@/components/ui/button";
+import { RAINBOW } from "@/components/palette";
 import { cn } from "@/lib/utils";
 
 const FRAME_NAMES: Record<Frame, string> = {
@@ -45,14 +47,15 @@ export function CardEditor({ open, onOpenChange, player }: { open: boolean; onOp
       title="Edit card"
       hideTitle
       className="max-h-[94dvh]"
-      bodyClassName="block pb-[calc(var(--safe-bottom)+24px)]"
-    >
-      <div className="sticky top-0 z-10 -mx-4 mb-4 flex justify-center border-b border-border/60 bg-popover px-4 pb-4 pt-2 shadow-[0_10px_20px_-16px_rgb(0_0_0/0.5)]">
-        <div className="w-[min(36vw,148px)]">
-          <PlayerCard player={player} />
+      bodyClassName="block pt-4 pb-[calc(var(--safe-bottom)+24px)]"
+      pinned={
+        <div className="z-10 flex justify-center border-b border-border/60 bg-popover px-4 pb-4 pt-2 shadow-[0_10px_20px_-16px_color-mix(in_srgb,var(--shade)_50%,transparent)]">
+          <div className="w-[min(36vw,148px)]">
+            <PlayerCard player={player} />
+          </div>
         </div>
-      </div>
-
+      }
+    >
       <div className="flex flex-col gap-7">
         <TaglineField value={player.tagline} onSave={(tagline) => set({ tagline })} />
 
@@ -77,14 +80,13 @@ export function CardEditor({ open, onOpenChange, player }: { open: boolean; onOp
           <Section bare title="Frame color">
             <div className="flex flex-wrap gap-2.5">
               {FRAME_COLORS.map((c) => (
-                <motion.button
+                <Button
                   key={c}
-                  type="button"
-                  whileTap={{ scale: 0.88 }}
+                  variant="bare"
+                  size="swatch"
                   aria-label={`Color ${c}`}
                   aria-pressed={player.frameColor === c}
                   onClick={() => set({ frameColor: c })}
-                  className="relative size-11 touch-manipulation rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                   style={{ background: c }}
                 >
                   {player.frameColor.toLowerCase() === c && (
@@ -94,7 +96,7 @@ export function CardEditor({ open, onOpenChange, player }: { open: boolean; onOp
                       className="absolute -inset-[5px] rounded-full border-[3px] border-foreground"
                     />
                   )}
-                </motion.button>
+                </Button>
               ))}
               <CustomColor
                 value={player.frameColor}
@@ -105,7 +107,7 @@ export function CardEditor({ open, onOpenChange, player }: { open: boolean; onOp
           </Section>
         )}
 
-        <div className="flex min-h-[56px] items-center justify-between rounded-lg bg-card px-4">
+        <div data-slot="card" className="flex min-h-[56px] items-center justify-between rounded-lg bg-card px-4">
           <label htmlFor="glow" className="font-medium">
             Glow
           </label>
@@ -164,16 +166,13 @@ function Choice({
   children: ReactNode;
 }) {
   return (
-    <motion.button
-      type="button"
-      whileTap={{ scale: 0.92 }}
+    <Button
+      variant="card"
+      size="choice"
       aria-pressed={selected}
       aria-label={ariaLabel ?? label}
       onClick={onClick}
-      className={cn(
-        "relative flex touch-manipulation flex-col items-center justify-center gap-1.5 rounded-lg bg-card outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-        square ? "aspect-square" : "py-3",
-      )}
+      className={square ? "aspect-square" : "py-3"}
     >
       {selected && (
         <motion.span
@@ -186,14 +185,17 @@ function Choice({
       {label && (
         <span className={cn("relative text-caption font-semibold", selected ? "text-primary" : "text-muted-foreground")}>{label}</span>
       )}
-    </motion.button>
+    </Button>
   );
 }
 
 function CustomColor({ value, onChange, selected }: { value: string; onChange: (c: string) => void; selected: boolean }) {
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   return (
-    <label className="relative grid size-11 cursor-pointer touch-manipulation place-items-center rounded-full bg-[conic-gradient(#ff4d4d,#ffd24d,#4dff88,#4dd2ff,#9b4dff,#ff4dd2,#ff4d4d)]">
+    <label
+      className="relative grid size-11 cursor-pointer touch-manipulation place-items-center rounded-full"
+      style={{ background: RAINBOW }}
+    >
       <span className="grid size-7 place-items-center rounded-full bg-card">
         <EyedropperIcon size={16} weight="bold" />
       </span>
@@ -222,8 +224,12 @@ function CustomColor({ value, onChange, selected }: { value: string; onChange: (
 // platform: a textarea, since iOS offers saved passwords on single-line text fields.
 function TaglineField({ value, onSave }: { value: string; onSave: (v: string) => void }) {
   const [draft, setDraft] = useState(value);
+  const [saved, setSaved] = useState(value);
+  if (value !== saved) {
+    setSaved(value);
+    setDraft(value);
+  }
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => setDraft(value), [value]);
   const change = (v: string) => {
     const clean = v.replace(/\n/g, "");
     setDraft(clean);

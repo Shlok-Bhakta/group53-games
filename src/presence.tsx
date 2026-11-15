@@ -97,32 +97,46 @@ export function ThinkingDots() {
 
 type Ripple = { key: string; x: number; y: number; userId: Id<"users"> };
 
+const RIPPLES_SHOWN = 12;
+const RIPPLE_MS = 1600;
+
 export function TapLayer({ meId }: { meId: Id<"users"> | undefined }) {
   const { pathname } = useLocation();
   const { rows } = usePresence();
   const crew = useQuery(api.profiles.crew);
-  const seen = useRef<Map<string, number> | null>(null);
+  const [seen, setSeen] = useState<ReadonlyMap<string, number> | null>(null);
+  const [seenRows, setSeenRows] = useState<typeof rows | null>(null);
   const [ripples, setRipples] = useState<Ripple[]>([]);
+  if (rows !== seenRows) {
+    setSeenRows(rows);
+    if (seen === null) {
+      if (rows.length > 0) setSeen(new Map(rows.map((r) => [r.userId, r.tap?.seq ?? 0])));
+    } else {
+      const next = new Map(seen);
+      const fresh: Ripple[] = [];
+      for (const r of rows) {
+        if (!r.tap || r.userId === meId) continue;
+        if ((next.get(r.userId) ?? 0) >= r.tap.seq) continue;
+        next.set(r.userId, r.tap.seq);
+        if (r.tap.path !== pathname) continue;
+        fresh.push({ key: `${r.userId}:${r.tap.seq}`, x: r.tap.x, y: r.tap.y, userId: r.userId });
+      }
+      setSeen(next);
+      if (fresh.length > 0) setRipples((rs) => [...rs, ...fresh].slice(-RIPPLES_SHOWN));
+    }
+  }
 
+  const fading = useRef(new Set<string>());
   useEffect(() => {
-    if (seen.current === null) {
-      if (rows.length === 0) return;
-      seen.current = new Map(rows.map((r) => [r.userId, r.tap?.seq ?? 0]));
-      return;
+    for (const r of ripples) {
+      if (fading.current.has(r.key)) continue;
+      fading.current.add(r.key);
+      setTimeout(() => {
+        fading.current.delete(r.key);
+        setRipples((rs) => rs.filter((x) => x.key !== r.key));
+      }, RIPPLE_MS);
     }
-    const fresh: Ripple[] = [];
-    for (const r of rows) {
-      if (!r.tap || r.userId === meId) continue;
-      if ((seen.current.get(r.userId) ?? 0) >= r.tap.seq) continue;
-      seen.current.set(r.userId, r.tap.seq);
-      if (r.tap.path !== pathname) continue;
-      fresh.push({ key: `${r.userId}:${r.tap.seq}`, x: r.tap.x, y: r.tap.y, userId: r.userId });
-    }
-    if (fresh.length === 0) return;
-    setRipples((rs) => [...rs, ...fresh].slice(-12));
-    const keys = new Set(fresh.map((f) => f.key));
-    setTimeout(() => setRipples((rs) => rs.filter((r) => !keys.has(r.key))), 1600);
-  }, [rows, meId, pathname]);
+  }, [ripples]);
 
   const people = useMemo(() => new Map((crew ?? []).map((p) => [p._id, p])), [crew]);
 
@@ -138,20 +152,20 @@ export function TapLayer({ meId }: { meId: Id<"users"> | undefined }) {
             <motion.div
               key={r.key}
               data-tap={p.name}
-              className="absolute"
+              className="absolute -ml-[18px] -mt-[18px] size-9"
               style={{ left, top }}
               initial={{ opacity: 1 }}
               exit={{ opacity: 0, transition: { duration: 0.35 } }}
             >
               <motion.span
-                className="absolute -left-7 -top-7 size-14 rounded-full border-2"
+                className="absolute -left-2.5 -top-2.5 size-14 rounded-full border-2"
                 style={{ borderColor: p.frameColor }}
                 initial={{ scale: 0.2, opacity: 0.9 }}
                 animate={{ scale: 1.6, opacity: 0 }}
                 transition={{ duration: 0.9, ease: "easeOut" }}
               />
               <motion.span
-                className="absolute -left-[18px] -top-[18px] block"
+                className="absolute left-0 top-0 block"
                 initial={{ scale: 0, rotate: -20 }}
                 animate={{ scale: 1, rotate: 0 }}
                 transition={{ type: "spring", stiffness: 520, damping: 22 }}
@@ -165,7 +179,7 @@ export function TapLayer({ meId }: { meId: Id<"users"> | undefined }) {
                 />
               </motion.span>
               <motion.span
-                className="absolute left-5 top-3 whitespace-nowrap rounded-full bg-foreground px-2 py-0.5 text-caption font-semibold text-background shadow-md"
+                className="absolute left-[38px] top-[30px] whitespace-nowrap rounded-full bg-foreground px-2 py-0.5 text-caption font-semibold text-background shadow-md"
                 initial={{ opacity: 0, x: -4 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.08 }}
@@ -244,7 +258,7 @@ export function ArrivalPills() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -16, scale: 0.92, transition: { duration: 0.22 } }}
             transition={{ type: "spring", stiffness: 420, damping: 30 }}
-            className="flex items-center gap-2.5 rounded-full bg-foreground py-1.5 pl-1.5 pr-4 text-background shadow-xl shadow-black/25"
+            className="flex items-center gap-2.5 rounded-full bg-foreground py-1.5 pl-1.5 pr-4 text-background shadow-xl shadow-shade/25"
           >
             <PlayerAvatar name={a.name} image={a.image} frame={a.frame} frameColor={a.frameColor} size={28} />
             <span className="text-callout font-semibold">

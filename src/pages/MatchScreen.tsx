@@ -5,7 +5,8 @@ import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { MODES, gameOf, matchPath, settingsOf, type ModeKey } from "../../convex/modes";
-import { NavBar } from "@/components/AppHeader";
+import { NavBar, useGoBack } from "@/components/AppHeader";
+import { GameChrome } from "@/components/game/GameFrame";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { GameMenu, MenuButton } from "@/components/GameMenu";
@@ -18,6 +19,7 @@ export function MatchScreen({ game }: { game: GameUI }) {
   const me = useQuery(api.users.me);
   const navigate = useNavigate();
   const [menu, setMenu] = useState(false);
+  const goBack = useGoBack("/");
   useHoldUpdates(match?.status === "active");
 
   if (match === undefined) {
@@ -48,8 +50,13 @@ export function MatchScreen({ game }: { game: GameUI }) {
     );
 
   return (
-    <div className="flex min-h-[calc(100svh-var(--safe-bottom)-16px)] flex-col">
-      <NavBar title={mode.name} back="/" action={<MenuButton onClick={() => setMenu(true)} />} />
+    <div className="group/match flex min-h-[calc(100svh-var(--safe-bottom)-16px)] flex-col">
+      <NavBar
+        title={mode.name}
+        back="/"
+        action={<MenuButton onClick={() => setMenu(true)} />}
+        className="phone-landscape:group-has-[[data-game-frame]]/match:hidden"
+      />
       <GameMenu
         open={menu}
         onOpenChange={setMenu}
@@ -60,9 +67,11 @@ export function MatchScreen({ game }: { game: GameUI }) {
       {match.status === "waiting" || match.status === "cancelled" ? (
         <Lobby match={match} meId={me?._id} onLeave={() => navigate("/", { replace: true })} setup={game.setup} />
       ) : (
-        <GameCrash>
-          <Game match={match} meId={me?._id} />
-        </GameCrash>
+        <GameChrome title={mode.name} onBack={goBack} onMenu={() => setMenu(true)}>
+          <GameCrash>
+            <Game match={match} meId={me?._id} />
+          </GameCrash>
+        </GameChrome>
       )}
     </div>
   );

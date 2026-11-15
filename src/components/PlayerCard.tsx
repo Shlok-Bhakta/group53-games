@@ -37,7 +37,7 @@ export function PlayerCard({ player, online, size = "grid", className }: Props) 
         {player.badge && (
           <span
             className={cn(
-              "absolute z-10 grid place-items-center rounded-full bg-black/30 backdrop-blur-md",
+              "absolute z-10 grid place-items-center rounded-full bg-shade/30 backdrop-blur-md",
               hero ? "right-3.5 top-3.5 size-12 text-title" : "right-2.5 top-2.5 size-9 text-heading",
             )}
             aria-hidden="true"
@@ -45,7 +45,7 @@ export function PlayerCard({ player, online, size = "grid", className }: Props) 
             {player.badge}
           </span>
         )}
-        <div className={cn("pcard-body z-10", hero && "px-5 pb-5")}>
+        <div className="pcard-body z-10">
           <h3 className={cn("pcard-name font-display truncate leading-tight", hero ? "text-title" : "text-body")}>{player.name}</h3>
           {player.username && player.username !== player.name && (
             <p className={cn("truncate text-muted-foreground", hero ? "text-callout" : "text-footnote")}>@{player.username}</p>

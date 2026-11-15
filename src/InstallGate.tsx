@@ -102,7 +102,7 @@ function AndroidSteps() {
   const { canInstall, install, installed } = useInstallPrompt();
   if (installed) {
     return (
-      <div className="flex items-start gap-3 rounded-lg bg-card p-4 ring-2 ring-tile-green">
+      <div data-slot="card" className="flex items-start gap-3 rounded-lg bg-card p-4 ring-2 ring-tile-green">
         <Check size={20} weight="bold" className="mt-0.5 shrink-0 text-tile-green" />
         <p>
           Installed. Open <Key>Group 53</Key> from your home screen or app drawer.

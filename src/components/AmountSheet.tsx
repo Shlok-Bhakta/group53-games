@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { MinusIcon, PlusIcon } from "@phosphor-icons/react";
 import { AsyncButton } from "@/components/AsyncButton";
-import { Button } from "@/components/ui/button";
+import { Button, IconButton } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
 import { Slider } from "@/components/ui/slider";
 
@@ -53,13 +53,13 @@ export function AmountSheet({
     <Sheet open={open} onClose={onClose} title={title} closable>
       {step ? (
         <div className="flex items-center justify-between gap-3">
-          <Button variant="secondary" size="icon-lg" aria-label="Less" disabled={value <= min} onClick={() => onChange(snap(value - step))}>
+          <IconButton label="Less" variant="secondary" size="icon-lg" disabled={value <= min} onClick={() => onChange(snap(value - step))}>
             <MinusIcon weight="bold" />
-          </Button>
+          </IconButton>
           {amount}
-          <Button variant="secondary" size="icon-lg" aria-label="More" disabled={value >= max} onClick={() => onChange(snap(value + step))}>
+          <IconButton label="More" variant="secondary" size="icon-lg" disabled={value >= max} onClick={() => onChange(snap(value + step))}>
             <PlusIcon weight="bold" />
-          </Button>
+          </IconButton>
         </div>
       ) : (
         amount

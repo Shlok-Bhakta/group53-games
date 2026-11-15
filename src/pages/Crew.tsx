@@ -46,13 +46,9 @@ export function Crew() {
           <ul className="grid grid-cols-2 gap-3">
             {sorted.map((p) => (
               <motion.li key={p._id} layout transition={{ type: "spring", bounce: 0, duration: 0.4 }}>
-                <button
-                  type="button"
-                  className="block w-full touch-manipulation rounded-lg text-left outline-none transition-transform duration-100 ease-out focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.97]"
-                  onClick={() => show(p._id)}
-                >
+                <Button variant="bare" size="card" onClick={() => show(p._id)}>
                   <PlayerCard player={p} online={isOnline(p._id)} />
-                </button>
+                </Button>
               </motion.li>
             ))}
           </ul>

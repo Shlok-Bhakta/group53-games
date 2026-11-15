@@ -15,7 +15,7 @@ export function FullscreenStage({ className, ...props }: ComponentProps<"div">) 
   return (
     <div
       data-wide
-      className={cn("relative bleed-x -mb-[calc(var(--safe-bottom)+16px)] h-[100dvh] overflow-hidden bg-background", className)}
+      className={cn("relative bleed-x -mb-[calc(var(--safe-bottom)+16px)] h-screen-true overflow-hidden bg-background", className)}
       {...props}
     />
   );

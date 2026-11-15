@@ -1,7 +1,8 @@
 import { useCallback, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { CaretLeftIcon } from "@phosphor-icons/react";
-import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export function LargeTitle({ title, subtitle, action }: { title: string; subtitle?: ReactNode; action?: ReactNode }) {
   return (
@@ -29,18 +30,25 @@ export function NavBar({
   subtitle,
   back = "/",
   action,
+  className,
 }: {
   title: string;
   subtitle?: ReactNode;
   back?: string;
   action?: ReactNode;
+  className?: string;
 }) {
   const goBack = useGoBack(back);
   return (
-    <header className="-mx-2 mb-2 grid min-h-12 grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-2 pt-[calc(var(--safe-top)+34px)]">
-      <Button variant="ghost" size="icon" aria-label="Back" onClick={goBack}>
+    <header
+      className={cn(
+        "-mx-2 mb-2 grid min-h-12 grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-2 pt-[calc(var(--safe-top)+34px)]",
+        className,
+      )}
+    >
+      <IconButton label="Back" onClick={goBack}>
         <CaretLeftIcon size={24} weight="bold" />
-      </Button>
+      </IconButton>
       <div className="min-w-0 text-center">
         <h1 className="truncate font-display text-body">{title}</h1>
         {subtitle && <p className="truncate text-footnote text-muted-foreground">{subtitle}</p>}

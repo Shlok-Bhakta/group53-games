@@ -152,6 +152,7 @@ function StatCard({ to, label, value, delay, children }: { to: string; label: st
     >
       <Link
         to={to}
+        data-slot="card"
         className="flex min-h-[88px] flex-col justify-between rounded-lg bg-card p-3.5 transition-[transform,background-color] duration-100 ease-out active:scale-[0.97] active:bg-muted"
       >
         <span className="truncate text-footnote font-semibold text-muted-foreground">{label}</span>

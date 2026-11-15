@@ -98,7 +98,11 @@ function RatingChange({ before, after }: { before: number; after: number }) {
 
 function Standings({ match, standings, meId }: { match: MatchView; standings: Id<"users">[][]; meId: Id<"users"> | undefined }) {
   return (
-    <ol className="mt-4 w-full divide-y divide-border overflow-hidden rounded-lg bg-card text-left" aria-label="Final standings">
+    <ol
+      data-slot="card"
+      className="mt-4 w-full divide-y divide-border overflow-hidden rounded-lg bg-card text-left"
+      aria-label="Final standings"
+    >
       {standings.flatMap((group, place) =>
         group.map((id) => {
           const p = match.players.find((x) => x.userId === id)!;

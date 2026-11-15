@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { AsyncButton } from "@/components/AsyncButton";
 import { usePresence } from "@/presence";
 import { listNames } from "@/lib/text";
+import { useNow } from "@/lib/time";
 
 const REMATCH_TTL_MS = 2 * 60 * 1000;
 
@@ -18,7 +19,8 @@ export function Rematch({ match, meId }: { match: MatchView; meId: Id<"users"> }
   const answer = useMutation(api.matches.answerRematch);
   const navigate = useNavigate();
   const offer = match.rematch;
-  const pending = offer?.status === "pending" && Date.now() - offer.at < REMATCH_TTL_MS;
+  const now = useNow(5_000);
+  const pending = offer?.status === "pending" && now - offer.at < REMATCH_TTL_MS;
   const yes = pending ? (offer!.yes ?? [offer!.by]) : [];
   const iSaidYes = yes.includes(meId);
   const others = match.players.filter((p) => p.userId !== meId);
@@ -29,7 +31,7 @@ export function Rematch({ match, meId }: { match: MatchView; meId: Id<"users"> }
 
   useEffect(() => {
     if (offer?.status === "accepted" && offer.matchId) navigate(matchPath({ _id: offer.matchId, mode: match.mode }), { replace: true });
-  }, [offer?.status, offer?.matchId, navigate]);
+  }, [offer?.status, offer?.matchId, match.mode, navigate]);
 
   const open = useRef(false);
   open.current = !!pending;

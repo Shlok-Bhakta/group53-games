@@ -8,6 +8,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import type { MatchView } from "../../convex/matches";
 import { GAMES, MODES, flexibleSeats, matchPath, seedSummary, type ModeKey } from "../../convex/modes";
 import { AvatarStack, PlayerAvatar } from "@/components/PlayerAvatar";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { AsyncButton } from "@/components/AsyncButton";
 import { lastMove } from "@/games/summary";
@@ -55,23 +56,19 @@ export function Section({
 }
 
 export function Group({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("divide-y divide-border overflow-hidden rounded-lg bg-card", className)}>{children}</div>;
+  return (
+    <div data-slot="card" className={cn("divide-y divide-border overflow-hidden rounded-lg bg-card", className)}>
+      {children}
+    </div>
+  );
 }
 
 export function Chip({ tone = "primary", children }: { tone?: "primary" | "live" | "win" | "quiet"; children: ReactNode }) {
   return (
-    <span
-      className={cn(
-        "flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-footnote font-bold",
-        tone === "primary" && "bg-primary text-primary-foreground",
-        tone === "live" && "bg-[var(--tile-hit)] text-[var(--tile-hit-ink)]",
-        tone === "win" && "bg-[var(--tile-green)] text-[var(--tile-ink)]",
-        tone === "quiet" && "px-0 font-medium text-muted-foreground",
-      )}
-    >
+    <Badge variant={tone} className="flex">
       {tone === "live" && <span className="size-1.5 rounded-full bg-current" />}
       {children}
-    </span>
+    </Badge>
   );
 }
 
@@ -157,6 +154,7 @@ export function InviteCard({ match }: { match: MatchView }) {
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.97 }}
       transition={{ type: "spring", bounce: 0, duration: 0.3 }}
+      data-slot="card"
       className="flex flex-col gap-3 rounded-lg bg-card p-3.5 ring-2 ring-primary/60"
       aria-label={`Challenge from ${host.name}`}
     >
@@ -177,10 +175,7 @@ export function InviteCard({ match }: { match: MatchView }) {
         <AsyncButton
           size="lg"
           icon={<SwordIcon weight="bold" />}
-          onClick={async () => {
-            await join({ id: match._id });
-            navigate(matchPath(match));
-          }}
+          onClick={() => join({ id: match._id }).then(() => navigate(matchPath(match)))}
         >
           Accept
         </AsyncButton>
@@ -207,7 +202,11 @@ export function Leaderboard({ mode, meId, onPick }: { mode: ModeKey; meId?: Id<"
   const four = MODES[mode].players > 2;
   let rank = 0;
   return (
-    <ol className="divide-y divide-border overflow-hidden rounded-lg bg-card" aria-label={`${modeLabel(mode)} leaderboard`}>
+    <ol
+      data-slot="card"
+      className="divide-y divide-border overflow-hidden rounded-lg bg-card"
+      aria-label={`${modeLabel(mode)} leaderboard`}
+    >
       {rows.map((r) => {
         const p = people.get(r.userId);
         if (!p) return null;

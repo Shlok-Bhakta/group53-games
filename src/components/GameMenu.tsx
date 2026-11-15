@@ -4,16 +4,16 @@ import type { MatchView } from "../../convex/matches";
 import { MODES, GAMES, gameOf, matchPath, settingApplies, settingLabel, settingsOf, type ModeKey, type Setting } from "../../convex/modes";
 import { Group, SectionTitle } from "@/components/parts";
 import { Rules } from "@/components/Rules";
-import { Button } from "@/components/ui/button";
+import { Button, IconButton } from "@/components/ui/button";
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { shareLink } from "@/share";
 import { cn } from "@/lib/utils";
 
 export function MenuButton({ onClick, className }: { onClick: () => void; className?: string }) {
   return (
-    <Button variant="ghost" size="icon" aria-label="Menu" onClick={onClick} className={className}>
+    <IconButton label="Menu" onClick={onClick} className={className}>
       <ListIcon size={22} weight="bold" />
-    </Button>
+    </IconButton>
   );
 }
 
@@ -38,7 +38,7 @@ export function GameMenu({
   return (
     <Drawer open={open} onOpenChange={onOpenChange} direction="right">
       <DrawerContent className="w-[86%] max-w-sm overflow-hidden" aria-describedby={undefined}>
-        <div className="flex h-full flex-col overflow-y-auto overscroll-contain px-4 pb-[calc(var(--safe-bottom)+20px)] pt-[calc(var(--safe-top)+34px)]">
+        <div className="flex h-full flex-col overflow-y-auto overscroll-contain pl-4 pr-[max(1rem,var(--safe-right))] pb-[calc(var(--safe-bottom)+20px)] pt-[calc(var(--safe-top)+34px)]">
           <DrawerHeader className="px-1 pb-3 text-left">
             <DrawerTitle className="font-display text-title">{title}</DrawerTitle>
           </DrawerHeader>

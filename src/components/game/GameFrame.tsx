@@ -36,7 +36,9 @@ export function GameFrame({ children, dock, aside, tight }: { children: ReactNod
           {aside}
         </div>
       )}
-      <div className={cn(tight ? "pt-1.5" : "pt-4", "phone-landscape:col-start-2 phone-landscape:row-start-3 phone-landscape:pt-0")}>{dock}</div>
+      <div className={cn(tight ? "pt-1.5" : "pt-4", "phone-landscape:col-start-2 phone-landscape:row-start-3 phone-landscape:pt-0")}>
+        {dock}
+      </div>
     </div>
   );
 }

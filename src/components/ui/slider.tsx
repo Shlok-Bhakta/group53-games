@@ -9,7 +9,7 @@ export function Slider({ className, label, ...props }: Omit<ComponentProps<typeo
         <Primitive.Range className="absolute h-full bg-primary" />
       </Primitive.Track>
       <Primitive.Thumb
-        className="block size-7 rounded-full border-2 border-primary bg-background shadow outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="relative block size-7 rounded-full border-2 border-primary bg-background shadow outline-none after:absolute after:-inset-2 after:rounded-full focus-visible:ring-3 focus-visible:ring-ring/50"
         aria-label={label}
       />
     </Primitive.Root>

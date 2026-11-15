@@ -53,19 +53,17 @@ export function LinkHandoff({ path }: { path: string }) {
         <ul className="grid grid-cols-4 gap-x-2 gap-y-3" aria-label="Crew">
           {view.crew.map((p) => (
             <li key={p._id}>
-              <button
-                type="button"
+              <Button
+                variant="bare"
+                size="tile"
                 disabled={busy}
                 onClick={() => void pick(p._id)}
                 aria-label={`I'm ${p.name}`}
-                className={cn(
-                  "flex w-full touch-manipulation flex-col items-center gap-1.5 rounded-lg py-1.5 transition-transform duration-100 active:scale-[0.95]",
-                  sent?.to === p._id && "bg-primary/12",
-                )}
+                className={cn(sent?.to === p._id && "bg-primary/12")}
               >
                 <PlayerAvatar name={p.name} image={p.image ?? undefined} size={56} />
                 <span className="w-full truncate text-footnote font-semibold">{p.name}</span>
-              </button>
+              </Button>
             </li>
           ))}
         </ul>
@@ -79,6 +77,7 @@ export function LinkHandoff({ path }: { path: string }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             role="status"
+            data-slot="card"
             className="flex items-start gap-3 rounded-lg bg-card p-4 ring-2 ring-primary/50"
           >
             <motion.span

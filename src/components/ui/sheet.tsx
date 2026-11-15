@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { XIcon } from "@phosphor-icons/react";
-import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/button";
 import { Drawer, DrawerClose, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +12,7 @@ export function Sheet({
   closable,
   className,
   bodyClassName,
+  pinned,
   children,
 }: {
   open: boolean;
@@ -21,17 +22,19 @@ export function Sheet({
   closable?: boolean;
   className?: string;
   bodyClassName?: string;
+  pinned?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <Drawer open={open} onOpenChange={(o) => !o && onClose()}>
-      <DrawerContent className={cn("max-h-[92dvh]", className)} aria-describedby={undefined}>
+      <DrawerContent
+        className={cn("max-h-[92dvh] phone-landscape:mx-auto phone-landscape:max-w-lg", className)}
+        aria-describedby={undefined}
+      >
         <SheetHeader title={title} hideTitle={hideTitle} closable={closable} />
+        {pinned && <div className="shrink-0">{pinned}</div>}
         <div
-          className={cn(
-            "flex flex-col gap-4 overflow-y-auto overscroll-contain px-4 pb-[calc(var(--safe-bottom)+20px)]",
-            bodyClassName,
-          )}
+          className={cn("flex flex-col gap-4 overflow-y-auto overscroll-contain px-4 pb-[calc(var(--safe-bottom)+20px)]", bodyClassName)}
         >
           {children}
         </div>
@@ -47,14 +50,9 @@ export function SheetHeader({ title, hideTitle, closable }: { title: ReactNode; 
       <DrawerTitle className={cn(closable && "px-12")}>{title}</DrawerTitle>
       {closable && (
         <DrawerClose asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Close"
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
-          >
+          <IconButton label="Close" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground">
             <XIcon weight="bold" />
-          </Button>
+          </IconButton>
         </DrawerClose>
       )}
     </DrawerHeader>

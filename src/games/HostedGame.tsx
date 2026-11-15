@@ -15,9 +15,7 @@ export function HostedGame({ game, title }: { game: string; title: string }) {
   const [ready, setReady] = useState(false);
   const [hash] = useState(() => new URLSearchParams({ dark: resolved === "dark" ? "1" : "0", palette, font, sfx, music }).toString());
   const [src, setSrc] = useState<string | null>(null);
-  useEffect(() => {
-    if (url) setSrc((was) => was ?? `${url}#${hash}`);
-  }, [url, hash]);
+  if (url && src === null) setSrc(`${url}#${hash}`);
 
   useEffect(() => {
     const listen = (e: MessageEvent) => {
@@ -35,7 +33,7 @@ export function HostedGame({ game, title }: { game: string; title: string }) {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-30 bg-background">
+    <div className="fixed inset-x-0 top-0 pin-bottom z-30 bg-background">
       {src && (
         <iframe
           ref={frame}
@@ -43,16 +41,19 @@ export function HostedGame({ game, title }: { game: string; title: string }) {
           title={title}
           sandbox="allow-scripts allow-same-origin"
           allow="autoplay; fullscreen"
-          className="absolute inset-x-0 w-full border-0"
+          className="absolute border-0"
           style={{
             top: TOP_CLEAR,
             bottom: "var(--safe-bottom)",
+            left: "var(--safe-left)",
+            right: "var(--safe-right)",
+            width: "calc(100% - var(--safe-left) - var(--safe-right))",
             height: `calc(100% - (${TOP_CLEAR}) - var(--safe-bottom))`,
           }}
         />
       )}
       {!ready && (
-        <div className="absolute inset-0 bg-background px-4">
+        <div className="absolute inset-0 bg-background px-page">
           <NavBar title={title} back="/games" />
           {url === null && <p className="py-10 text-center text-callout text-muted-foreground">It isn't up yet.</p>}
           {src && (

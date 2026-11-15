@@ -1,14 +1,6 @@
-export const SEAT_COLORS: Record<string, string> = {
-  red: "#e0503f",
-  blue: "#3f7be0",
-  yellow: "#e8b928",
-  green: "#3faa5a",
-  purple: "#9b5de5",
-  orange: "#f08a24",
-  teal: "#1fb5a8",
-  pink: "#e8559a",
-  dead: "#9aa0a6",
-};
+import { SEAT_COLORS } from "./palette";
+
+export { SEAT_COLORS };
 
 export const seatColor = (player: { color?: string } | undefined, out = false) =>
   SEAT_COLORS[out ? "dead" : (player?.color ?? "dead")] ?? SEAT_COLORS.dead;

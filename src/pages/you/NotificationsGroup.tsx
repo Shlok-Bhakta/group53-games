@@ -3,7 +3,8 @@ import { toast } from "sonner";
 import { Section } from "@/components/parts";
 import { Switch } from "@/components/ui/switch";
 import { useNotifications } from "@/notifications";
-import { SettingsRow, TINT } from "./SettingsRow";
+import { SettingsRow } from "./SettingsRow";
+import { TINT } from "./palette";
 
 export function NotificationsGroup() {
   const push = useNotifications();

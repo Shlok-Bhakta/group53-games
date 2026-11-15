@@ -7,14 +7,15 @@ import {
   SpeakerSimpleHighIcon,
   SpeakerSimpleLowIcon,
 } from "@phosphor-icons/react";
-import { motion } from "motion/react";
+import { Button } from "@/components/ui/button";
 import { Section } from "@/components/parts";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { MUSIC_TRACKS, SFX_PACKS, setSound, sfx, useSoundSettings, type MusicTrack, type SfxPack } from "@/sound";
 import { cn } from "@/lib/utils";
 import { PickSheet } from "./PickSheet";
-import { SettingsRow, TINT } from "./SettingsRow";
+import { SettingsIcon, SettingsRow } from "./SettingsRow";
+import { TINT } from "./palette";
 
 export function SoundGroup() {
   const sound = useSoundSettings();
@@ -37,9 +38,7 @@ export function SoundGroup() {
       />
       {sound.music !== "off" && (
         <div className="flex min-h-[52px] items-center gap-3 px-4 py-1">
-          <span className="grid size-[30px] shrink-0 place-items-center rounded-sm text-white" style={{ background: TINT.purple }}>
-            <SpeakerSimpleLowIcon size={18} weight="fill" />
-          </span>
+          <SettingsIcon icon={SpeakerSimpleLowIcon} tint={TINT.purple} />
           <Slider
             label="Music volume"
             className="flex-1"
@@ -104,24 +103,21 @@ function Choices({
   return (
     <div className="flex flex-col gap-2" role="radiogroup" aria-label={label}>
       {options.map((o) => (
-        <motion.button
+        <Button
           key={o.value}
-          type="button"
+          variant="card"
+          size="option"
           role="radio"
           aria-checked={value === o.value}
-          whileTap={{ scale: 0.98 }}
           onClick={() => onPick(o.value)}
-          className={cn(
-            "flex min-h-16 touch-manipulation items-center justify-between gap-3 rounded-lg border-2 bg-card px-4 py-2.5 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-            value === o.value ? "border-primary" : "border-transparent",
-          )}
+          className={cn("min-h-16 border-2 px-4 py-2.5", value === o.value ? "border-primary" : "border-transparent")}
         >
           <span className="min-w-0">
             <span className="block font-semibold">{o.label}</span>
             <span className="block text-footnote text-muted-foreground">{o.about}</span>
           </span>
           {value === o.value && <CheckIcon size={22} weight="bold" className="shrink-0 text-primary" />}
-        </motion.button>
+        </Button>
       ))}
     </div>
   );

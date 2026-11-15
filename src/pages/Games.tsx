@@ -4,7 +4,7 @@ import { Link } from "react-router";
 import { motion, useInView } from "motion/react";
 import { HammerIcon, LockSimpleIcon, PlayIcon, ShareNetworkIcon } from "@phosphor-icons/react";
 import { games } from "@/games";
-import { Button } from "@/components/ui/button";
+import { Button, IconButton } from "@/components/ui/button";
 import { LargeTitle } from "@/components/AppHeader";
 import { NotificationBanner } from "@/components/NotificationBanner";
 import { AvatarStack } from "@/components/PlayerAvatar";
@@ -29,6 +29,7 @@ export function Games() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", bounce: 0, duration: 0.45, delay: i * 0.06 }}
+          data-slot="card"
           className="overflow-hidden rounded-lg bg-card"
         >
           <div className="relative grid place-items-center bg-muted/60 px-4 py-9 [background-image:radial-gradient(color-mix(in_oklch,var(--foreground)_9%,transparent)_1px,transparent_1px)] [background-size:14px_14px]">
@@ -62,15 +63,14 @@ export function Games() {
                   </Link>
                 </Button>
               )}
-              <Button
-                size="xl"
+              <IconButton
+                label={`Share ${g.name}`}
                 variant="secondary"
-                className="w-14 px-0"
-                aria-label={`Share ${g.name}`}
+                size="icon-xl"
                 onClick={() => void shareLink(g.path, `${g.name} on Group 53:`)}
               >
                 <ShareNetworkIcon weight="bold" />
-              </Button>
+              </IconButton>
             </div>
           </div>
         </motion.article>

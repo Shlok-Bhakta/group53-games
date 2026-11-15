@@ -1,5 +1,8 @@
 import type { CSSProperties } from "react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+
+const FALLBACK_DELAY_MS = 600;
 
 export type FrameStyle = { frame?: string; frameColor?: string; glow?: boolean };
 export type Face = FrameStyle & { name: string; image?: string };
@@ -37,15 +40,12 @@ export function PlayerAvatar({
       style={{ "--s": `${size}px`, "--frame-color": frameColor, "--seat": seat } as CSSProperties}
     >
       <span className="frame block" data-frame={frame} data-glow={glow}>
-        <span className="pa-face">
-          {image ? (
-            <img src={image} alt="" loading="lazy" referrerPolicy="no-referrer" draggable={false} />
-          ) : (
-            <span className="pa-initial" aria-hidden="true">
-              {name.slice(0, 1).toUpperCase()}
-            </span>
-          )}
-        </span>
+        <Avatar className="pa-face">
+          {image && <AvatarImage src={image} alt="" referrerPolicy="no-referrer" draggable={false} />}
+          <AvatarFallback className="pa-initial bg-transparent" delayMs={image ? FALLBACK_DELAY_MS : 0} aria-hidden="true">
+            {name.slice(0, 1).toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
       </span>
       {badge ? (
         <span className="pa-badge" aria-hidden="true">

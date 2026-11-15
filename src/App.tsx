@@ -22,7 +22,7 @@ import { Home } from "@/pages/Home";
 import { SignIn } from "@/pages/SignIn";
 import { You } from "@/pages/You";
 import { ArrivalPills, TapLayer, usePresenceReporter } from "@/presence";
-import { Page, TAB_ROUTES, useAppBadge, useNavDirection, useScrollMemory } from "@/shell";
+import { Page, TAB_ROUTES, useAppBadge, useNavDirection, useScrollMemory, useViewportGap } from "@/shell";
 import { HoldUpdates, UpdateOverlay, useVersionCheck } from "@/version";
 import { wantMusic } from "@/sound";
 import { useDeepLinks } from "@/deepLinks";
@@ -43,12 +43,13 @@ const golfRoute = (path: string, element: ReactNode) => (
 );
 
 export function App() {
+  useViewportGap();
   useVersionCheck();
   return (
     <MotionConfig reducedMotion="user">
       <InstallGate>
         <AuthLoading>
-          <div className="mx-auto flex max-w-md flex-col gap-4 px-4 pt-[calc(var(--safe-top)+44px)]">
+          <div className="mx-auto flex max-w-md flex-col gap-4 px-page pt-[calc(var(--safe-top)+44px)]">
             <Skeleton className="h-10 w-32" />
             <Skeleton className="h-48 w-full rounded-lg" />
           </div>
@@ -91,7 +92,7 @@ function SignedIn() {
 
   return (
     <>
-      <main className="relative mx-auto w-full max-w-md overflow-x-clip px-4">
+      <main className="relative mx-auto w-full max-w-md overflow-x-clip px-page phone-landscape:max-w-[calc(36rem+var(--gutter-left)+var(--gutter-right))] phone-landscape:has-[[data-wide]]:max-w-none">
         <AnimatePresence mode="popLayout" initial={false} custom={direction}>
           <Page key={location.pathname} direction={direction} onBack={inTabs ? null : goBack}>
             <div style={{ paddingBottom: inTabs ? TAB_BAR_SPACE : "calc(var(--safe-bottom) + 16px)" }}>

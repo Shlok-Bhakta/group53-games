@@ -56,7 +56,7 @@ export function ModePicker({ game, art, badge, rating }: Props) {
               {KINDS[kind].icon}
               {KINDS[kind].title}
             </h2>
-            <div className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 [scrollbar-width:none]">
+            <div className="bleed-x flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-page [scrollbar-width:none]">
               {modes.map((mode, i) => (
                 <motion.div
                   key={mode}
@@ -95,6 +95,7 @@ function ModeCard({
   return (
     <Link
       to={modePath(mode)}
+      data-slot="card"
       className="relative flex min-h-44 flex-col gap-2 overflow-hidden rounded-lg bg-card p-3.5 transition-[transform,background-color] duration-100 ease-out active:scale-[0.97] active:bg-muted"
       aria-label={titled ? m.name : `${KINDS[m.kind].title} ${seatLabel(mode)}`}
       data-mode={mode}

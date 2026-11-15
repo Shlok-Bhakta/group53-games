@@ -68,7 +68,7 @@ function ModeScreen({ game, mode }: { game: GameUI; mode: ModeKey }) {
             size="xl"
             className="w-full"
             icon={<MagnifyingGlassIcon weight="bold" />}
-            onClick={async () => navigate(matchPath({ _id: await queue({ mode, settings }), mode }))}
+            onClick={() => queue({ mode, settings }).then((id) => navigate(matchPath({ _id: id, mode })))}
           >
             {lobby.open.length ? "Join a game" : flexible ? "Open a game" : "Find a game"}
           </AsyncButton>

@@ -354,13 +354,15 @@ const noAsyncOnClick = {
     type: "problem",
     messages: {
       async:
-        "An async tap handler can run twice on a double tap and swallow its errors. Use `AsyncButton` or `usePending` from @/components/AsyncButton.",
+        "An async tap handler can run twice on a double tap and swallow its errors. Use `AsyncButton` (async handlers are fine there) or `usePending` from @/components/AsyncButton.",
     },
   },
   create(context) {
     return {
       JSXAttribute(node) {
         if (node.name.name !== "onClick" || node.value?.type !== "JSXExpressionContainer") return;
+        const owner = node.parent.name;
+        if (owner?.type === "JSXIdentifier" && /^Async[A-Z]/.test(owner.name)) return;
         const fn = node.value.expression;
         if ((fn.type === "ArrowFunctionExpression" || fn.type === "FunctionExpression") && fn.async)
           context.report({ node, messageId: "async" });

@@ -105,7 +105,7 @@ export function UpdateOverlay() {
           key="updating"
           role="status"
           aria-label="Updating"
-          className="fixed inset-0 z-[100] grid place-items-center bg-background/85 backdrop-blur-md"
+          className="fixed inset-x-0 top-0 pin-bottom z-[100] grid place-items-center bg-background/85 backdrop-blur-md"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

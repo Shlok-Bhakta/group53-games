@@ -929,6 +929,7 @@
     --safe-left: env(safe-area-inset-left);
     --gutter-left: 1rem;
     --gutter-right: 1rem;
+    --viewport-gap: 0px;
     @variant phone-landscape {
       --gutter-left: max(1rem, var(--safe-left));
       --gutter-right: max(1rem, var(--safe-right));
@@ -1018,6 +1019,12 @@
 @utility bleed-x {
   margin-left: calc(var(--gutter-left) * -1);
   margin-right: calc(var(--gutter-right) * -1);
+}
+@utility pin-bottom {
+  bottom: calc(0px - var(--viewport-gap));
+}
+@utility h-screen-true {
+  height: calc(100dvh + var(--viewport-gap));
 }
 @utility square-fit {
   aspect-ratio: 1 / 1;
