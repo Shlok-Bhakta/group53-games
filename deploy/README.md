@@ -5,16 +5,23 @@ Whatever lands on `main` deploys itself. The `deployer` service in `compose.yaml
 - `loop.sh` is the loop, baked into the image. Keep it small: changing it, `Dockerfile` or the `deployer` block in `compose.yaml` means rebuilding the deployer by hand (below).
 - `run.mjs` is the deploy itself. It's read from the commit being deployed, so it ships with `main` and needs no rebuild.
 
-A deploy, in this order (Convex functions go live before the web app; see "Order of changes" in AGENTS.md):
+A deploy never interrupts anyone. Convex, the tunnel and the dashboard are never touched (`--no-deps`, and checked after every deploy); nginx keeps running while the app is swapped under it; og and stonks restart only when their own code changed; and phones hold the update while a game is open (`useHoldUpdates` in `src/version.tsx`), applying it once they leave the game or the app is in the background.
 
-1. waits for Convex to answer at `http://convex:3210`;
-2. `npm ci` in its own checkout (on the `deployer` volume, with the npm cache);
-3. `npx convex deploy -y` against the local backend, with the admin key from `secrets/admin_key`;
-4. rsyncs the checkout into `~/Services/group53`, leaving `secrets/`, `.env*`, `deploy-status.json` and build output alone;
-5. `docker compose up -d --build web og stonks`;
-6. prunes the stack's untagged images and build cache older than a week;
-7. checks `/`, `/version.json` and `/sw.js` on `https://group53.shlokbhakta.dev` answer 200;
-8. if the web image changed, checks `/version.json` names a new build, which is what makes phones show "Updating". A commit that doesn't touch anything the web image is built from (only `stonks/`, `og/` or `e2e/`, say) keeps the same build, and phones don't reload.
+In this order (Convex functions go live before the web app; see "Order of changes" in AGENTS.md):
+
+1. reads the public Convex URL from the stack's `.env` (`CONVEX_URL`, which must be https) and notes the Convex, tunnel and dashboard containers;
+2. waits for Convex to answer at `http://convex:3210`;
+3. `npm ci` in its own checkout (on the `deployer` volume, with the npm cache);
+4. builds the app (`vite build`) against that URL with a new build ID, and stops here, deploying nothing, if the bundle talks to anything else;
+5. `npx convex deploy -y` against the local backend, with the admin key from `secrets/admin_key`;
+6. rsyncs the checkout into `~/Services/group53`, leaving `secrets/`, `.env*`, `site/` and `deploy-status.json` alone;
+7. publishes the build in place: it goes into `site/builds/<id>`, its assets are added to `site/assets` (where every recent build's assets stay, so a phone still on the previous build can load its chunks), nginx's config goes to `site/nginx` (a graceful `nginx -s reload` if it changed), and `site/current` is swapped to the new build with an atomic rename. The web container is plain nginx serving `site/`, so it's only recreated when its own setup in `compose.yaml` changes, which happened once, when this design arrived;
+8. checks `/`, `/version.json` and `/sw.js` answer 200, `/version.json` names the new build, and the live bundle talks to the public Convex URL. If anything's off, `site/current` goes straight back to the previous build and the deploy fails;
+9. `docker compose up -d --no-deps --build og stonks`, which only recreates what changed;
+10. checks Convex, the tunnel and the dashboard are still the same containers;
+11. prunes builds past the newest five, assets older than two weeks that no kept build uses, the stack's untagged images and build cache older than a week.
+
+Every `docker compose` it runs gets a clean environment (PATH and HOME only), so the stack's `.env` is the only thing compose's `${...}` substitutions read. The deployer's own settings are named `DEPLOY_*` so they can't collide with them: the first deploy leaked the deployer's `CONVEX_URL=http://convex:3210` into compose, which recreated Convex with that as its public origin and built the app against it.
 
 The deployer never rebuilds or restarts itself: compose would kill the process doing the work. When a deploy brings a new `deploy/Dockerfile`, `deploy/loop.sh` or `deployer` service, the log says so in yellow and `deploy-status.json` lists it under `deployerOutdated`. Rebuild it by hand once that deploy is ok.
 
@@ -33,7 +40,8 @@ A commit that failed isn't tried again on its own; the deployer waits for the ne
 
 - **Fix forward or revert:** push a fix or `git revert` the bad commit on `main`. The next commit deploys within a minute or two.
 - **Retry the same commit** (kiwi was busy, the network blipped, Convex was restarting): `ssh kiwi 'cd Services/group53 && docker compose restart deployer'`. A restart tries the latest `main` once more. A deploy in progress is allowed to finish before the container stops (`stop_grace_period`).
-- A failure after step 3 means the new Convex functions are live but the web app may still be the old one. That's the safe direction (see "Order of changes"), but don't leave it: fix it or revert.
+- A failure after step 5 means the new Convex functions are live but the web app may still be the old one. That's the safe direction (see "Order of changes"), but don't leave it: fix it or revert.
+- **Roll the site back by hand** to any build in `site/builds`: `ssh kiwi 'cd Services/group53/site && ln -sfn builds/<id> current.next && mv -T current.next current'`. It's instant and nginx keeps running.
 
 ## Installing it on kiwi (once)
 
