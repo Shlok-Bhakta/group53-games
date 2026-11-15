@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { startBackend, stopBackend, stopRunning } from "./backend.mjs";
+import { parseShard, writeShardList } from "./shards.mjs";
 
 const LOCK = "/tmp/group53-e2e.lock";
 if (!process.env.GROUP53_E2E_LOCKED) {
@@ -18,13 +19,35 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
   });
 }
 
+const args = process.argv.slice(2);
+const shardArg = args.find((a) => a.startsWith("--shard="));
+const rest = args.filter((a) => a !== shardArg);
+const shard = shardArg ? parseShard(shardArg.slice("--shard=".length)) : null;
+
+const started = Date.now();
+const listing = shard ? writeShardList(shard, rest) : Promise.resolve(null);
+listing.catch(() => {});
 const state = await startBackend();
+console.log(`Backend and app ready in ${Math.round((Date.now() - started) / 1000)}s.`);
+
 let code = 1;
 try {
-  const result = spawnSync("npx", ["playwright", "test", ...process.argv.slice(2)], {
-    stdio: "inherit",
-    env: { PLAYWRIGHT_BROWSERS_PATH: "0", ...process.env },
-  });
+  const list = await listing;
+  if (list) console.log(`Shard ${shard.index}/${shard.total}: ${list.tests} tests, about ${list.seconds}s by e2e/timings.json.`);
+  const result = spawnSync(
+    "npx",
+    [
+      "playwright",
+      "test",
+      "--add-reporter=./e2e/timings.mjs",
+      ...(list ? ["--test-list", list.file, "--pass-with-no-tests"] : []),
+      ...rest,
+    ],
+    {
+      stdio: "inherit",
+      env: { PLAYWRIGHT_BROWSERS_PATH: "0", ...process.env },
+    },
+  );
   code = result.status ?? 1;
 } finally {
   stopBackend(state.name);

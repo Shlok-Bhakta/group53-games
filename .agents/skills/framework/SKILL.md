@@ -107,7 +107,7 @@ Discord's provider needs `issuer: "https://discord.com"`; avatars get `?size=256
 
 ### e2e (`npm run test:e2e -- <files>`)
 
-Always through `e2e/run.mjs`: it queues on a machine-wide `flock` (ports 3211 and 4573 are shared), starts the backend (`e2e/backend.mjs`: Docker, the kiwi image by digest with the image ID as fallback, waits for 3211 to be free, deploys, sets env with `ALLOW_TEST_HELPERS=1`, builds the app into `e2e/.state/dist`), runs Playwright, and removes the container even on Ctrl-C. Never start a backend another way while a run might be going.
+Always through `e2e/run.mjs`: it queues on a machine-wide `flock` (ports 3211 and 4573 are shared), starts the backend (`e2e/backend.mjs`: Docker, the kiwi image by digest with the image ID as fallback, waits for 3211 to be free, deploys without a second typecheck, sets env in one call with `ALLOW_TEST_HELPERS=1`, and builds the app into `e2e/.state/dist` alongside, its output in `e2e/.state/build.log`), runs Playwright, and removes the container even on Ctrl-C. `--shard=i/n` runs one of n slices balanced by `e2e/timings.json`: `e2e/shards.mjs` lists the tests, packs the longest first into the lightest shard and hands Playwright a `--test-list`; a test with no recorded time counts as the median. The `e2e/timings.mjs` reporter writes every run's seconds to `e2e/.state/timings.json` (skipped tests as 0); `node e2e/shards.mjs save [files...]` merges them into `e2e/timings.json` and drops tests that are gone, and `node e2e/shards.mjs plan <n>` prints the split. Never start a backend another way while a run might be going.
 
 Fixtures (`e2e/fixtures.ts`), import `test` and `expect` from there:
 

@@ -1,8 +1,10 @@
-import { execFileSync, execSync, spawnSync } from "node:child_process";
+import { execFileSync, execSync, spawn, spawnSync } from "node:child_process";
 import { generateKeyPairSync, randomBytes } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
+import { ConvexHttpClient } from "convex/browser";
+import { makeFunctionReference } from "convex/server";
 import webpush from "web-push";
 
 const IMAGE_DIGEST = "ghcr.io/convex/convex-backend@sha256:01aaebb72d7e9a32c82d183b3a25ffe15278f4dc656ecf30b21777691929d1ab";
@@ -16,11 +18,13 @@ export function resolveImage() {
   return [IMAGE_DIGEST, IMAGE_ID].find(haveImage) ?? IMAGE_DIGEST;
 }
 const COMPILE_EACH_MODULE_ONCE = [
-  ["testing:reset", "{}"],
-  ["testing:createPlayer", '{"name":"warmup"}'],
+  ["mutation", "testing:reset", {}],
+  ["action", "testing:createPlayer", { name: "warmup" }],
 ];
 
 export const STATE_FILE = path.resolve("e2e/.state/backend.json");
+const ENV_FILE = path.resolve("e2e/.state/convex.env");
+const BUILD_LOG = path.resolve("e2e/.state/build.log");
 const ROOT = path.resolve(".");
 
 async function freePort() {
@@ -76,6 +80,32 @@ export function generateVars() {
   };
 }
 
+function inBackground(cmd, args, log, opts) {
+  const out = openSync(log, "w");
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { ...opts, stdio: ["ignore", out, out] });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      closeSync(out);
+      if (code === 0) return resolve();
+      process.stderr.write(readFileSync(log));
+      reject(new Error(`${cmd} ${args.join(" ")} exited with ${code}`));
+    });
+  });
+}
+
+function adminClient(url, adminKey) {
+  const client = new ConvexHttpClient(url, {
+    fetch: (input, init) => {
+      const headers = new Headers(init?.headers);
+      headers.set("connection", "close");
+      return fetch(input, { ...init, headers });
+    },
+  });
+  client.setAdminAuth(adminKey);
+  return (kind, name, args) => client[kind](makeFunctionReference(name), args);
+}
+
 let running = null;
 
 export async function startBackend({ build = true } = {}) {
@@ -87,6 +117,14 @@ export async function startBackend({ build = true } = {}) {
   const url = `http://127.0.0.1:${apiPort}`;
   const siteUrl = `http://127.0.0.1:${sitePort}`;
   running = name;
+  mkdirSync(path.dirname(STATE_FILE), { recursive: true });
+  const built = build
+    ? inBackground("npx", ["vite", "build", "--outDir", "e2e/.state/dist", "--emptyOutDir"], BUILD_LOG, {
+        cwd: ROOT,
+        env: { ...process.env, VITE_CONVEX_URL: url },
+      })
+    : Promise.resolve();
+  built.catch(() => {});
   execFileSync(
     "docker",
     [
@@ -122,21 +160,21 @@ export async function startBackend({ build = true } = {}) {
     const env = { ...process.env, CONVEX_SELF_HOSTED_URL: url, CONVEX_SELF_HOSTED_ADMIN_KEY: adminKey, CONVEX_DEPLOYMENT: "" };
     const vars = { ...generateVars(), SITE_URL: "http://127.0.0.1:4573", ALLOW_TEST_HELPERS: "1" };
     // platform: `convex env set` needs a deployment that's been deployed to.
-    execSync("npx convex deploy -y", { cwd: ROOT, env, stdio: "inherit" });
-    for (const [k, v] of Object.entries(vars))
-      execFileSync("npx", ["convex", "env", "set", "--", k, v], { cwd: ROOT, env, stdio: "ignore" });
-    if (build)
-      execSync("npx vite build --outDir e2e/.state/dist --emptyOutDir", {
-        cwd: ROOT,
-        env: { ...env, VITE_CONVEX_URL: url },
-        stdio: "inherit",
-      });
+    execSync("npx convex deploy -y --typecheck disable", { cwd: ROOT, env, stdio: "inherit" });
+    writeFileSync(
+      ENV_FILE,
+      Object.entries(vars)
+        .map(([k, v]) => `${k}='${v}'\n`)
+        .join(""),
+    );
+    execFileSync("npx", ["convex", "env", "set", "--from-file", ENV_FILE], { cwd: ROOT, env, stdio: "ignore" });
 
-    for (const [fn, args] of COMPILE_EACH_MODULE_ONCE) spawnSync("npx", ["convex", "run", fn, args], { cwd: ROOT, env, stdio: "ignore" });
-    execFileSync("npx", ["convex", "run", "testing:reset", "{}"], { cwd: ROOT, env, stdio: "ignore" });
+    const call = adminClient(url, adminKey);
+    for (const [kind, fn, args] of COMPILE_EACH_MODULE_ONCE) await call(kind, fn, args).catch(() => {});
+    while (!(await call("mutation", "testing:reset", {})).done);
+    await built;
 
     const state = { name, url, siteUrl, adminKey };
-    mkdirSync(path.dirname(STATE_FILE), { recursive: true });
     writeFileSync(STATE_FILE, JSON.stringify(state));
     return state;
   } catch (err) {
