@@ -168,6 +168,25 @@ test("a trade: offered on one phone, accepted on the other", async ({ phones }) 
   await expect.poll(async () => (await stateOf(id)).props[1]?.owner).toBe(1 - seatA);
 });
 
+test("with a long list to trade, the sheet scrolls and who you trade with stays whole", async ({ phones }) => {
+  test.setTimeout(120_000);
+  const { id, pa, a } = await startGame(phones);
+  const m = await getMatch(id);
+  const seatA = m.players.findIndex((p: { userId: string }) => p.userId === a.userId);
+  const owned = [1, 3, 6, 8, 9, 11, 12, 13, 14, 16, 18, 19];
+  const props = (m.state as Mono).props.map((p, i) => (owned.includes(i) ? { owner: seatA, houses: 0, mortgaged: i === 12 } : p));
+  await admin().mutation(anyApi.testing.landlordPatch, { id, state: { props } });
+  await settledOn(pa);
+  await pa.getByRole("button", { name: "Trade" }).click();
+  const picker = pa.getByRole("radiogroup", { name: "Trade with" });
+  const partner = picker.getByRole("radio").first();
+  await expect(partner).toBeVisible();
+  expect((await picker.boundingBox())!.height, "the row of players isn't squeezed shut").toBeGreaterThanOrEqual(
+    (await partner.boundingBox())!.height,
+  );
+  await expect(pa.getByRole("region", { name: "You give" }).getByRole("button", { name: /Electric Company/ })).toBeVisible();
+});
+
 test("mortgaging asks first, from the properties list and the deed", async ({ phones }) => {
   test.setTimeout(120_000);
   const { id, pa, a } = await startGame(phones);
