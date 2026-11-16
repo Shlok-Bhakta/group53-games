@@ -154,10 +154,14 @@ test("a hole: sink it, see the score on both phones, go on to the next, and it's
   await expect.poll(async () => (await balls(pa)).every((x) => x.mode === "aim")).toBe(true);
   await shoot(pa, -2.78, 0.84);
   const sheet = pa.getByRole("dialog", { name: "Hole finished" });
-  await expect(sheet).toBeVisible({ timeout: 15_000 });
-  await expect(sheet.getByRole("heading", { name: "Hole in one" })).toBeVisible();
-  await expect(sheet.getByText("Shlok")).toBeVisible({ timeout: 15_000 });
-  await expect(pb.getByText("Shlok sank one")).toBeVisible({ timeout: 15_000 });
+  await Promise.all([
+    (async () => {
+      await expect(sheet).toBeVisible({ timeout: 15_000 });
+      await expect(sheet.getByRole("heading", { name: "Hole in one" })).toBeVisible();
+      await expect(sheet.getByText("Shlok")).toBeVisible({ timeout: 15_000 });
+    })(),
+    expect(pb.getByText("Shlok sank one"), "the toast on the other phone, caught before it fades").toBeVisible({ timeout: 20_000 }),
+  ]);
 
   await sheet.getByRole("button", { name: "Next hole" }).click();
   await expect(pa).toHaveURL(/\/golf\/plains\/2$/);
