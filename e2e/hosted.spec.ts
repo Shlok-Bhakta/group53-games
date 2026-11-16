@@ -1,10 +1,8 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { createPlayer, expect, holdsStill, test } from "./fixtures";
+import { backend, createPlayer, expect, holdsStill, test } from "./fixtures";
 import { publish } from "../scripts/publish-hosted.mjs";
-
-const backend = () => JSON.parse(readFileSync(path.resolve("e2e/.state/backend.json"), "utf8")) as { url: string; adminKey: string };
 
 function fixture(version: string) {
   const dir = mkdtempSync(path.join(tmpdir(), "hosted-"));

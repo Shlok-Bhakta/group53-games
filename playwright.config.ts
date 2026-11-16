@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const app = process.env.E2E_APP_URL;
+
 export default defineConfig({
   testDir: "e2e",
   fullyParallel: false,
@@ -9,15 +11,17 @@ export default defineConfig({
   expect: { timeout: 8_000 },
   reporter: [["list"]],
   use: {
-    baseURL: "http://127.0.0.1:4573",
+    baseURL: app ?? "http://127.0.0.1:4573",
     ...devices["iPhone 15 Pro"],
     browserName: "chromium",
     trace: "retain-on-failure",
   },
-  webServer: {
-    command: "npx vite preview --outDir e2e/.state/dist --port 4573 --strictPort --host 127.0.0.1",
-    url: "http://127.0.0.1:4573",
-    reuseExistingServer: false,
-    timeout: 120_000,
-  },
+  webServer: app
+    ? undefined
+    : {
+        command: "npx vite preview --outDir e2e/.state/dist --port 4573 --strictPort --host 127.0.0.1",
+        url: "http://127.0.0.1:4573",
+        reuseExistingServer: false,
+        timeout: 120_000,
+      },
 });
