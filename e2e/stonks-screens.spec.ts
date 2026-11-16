@@ -1,9 +1,9 @@
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { ConvexHttpClient } from "convex/browser";
 import { anyApi } from "convex/server";
 import type { Page } from "@playwright/test";
-import { admin, createPlayer, expect, phone, readyForShot, test } from "./fixtures";
+import { admin, backend, createPlayer, expect, phone, readyForShot, test } from "./fixtures";
 
 const BIN = "stonks/target/release/stonks";
 test.skip(!process.env.SCREENS || !existsSync(BIN), "Set SCREENS=1 and build the sidecar to capture review screenshots");
@@ -15,7 +15,7 @@ const chartDrawn = (page: Page) =>
 
 test("stonks screens", async ({ browser }) => {
   test.setTimeout(480_000);
-  const { url, adminKey } = JSON.parse(readFileSync("e2e/.state/backend.json", "utf8"));
+  const { url, adminKey } = backend();
   const sidecar = spawn(BIN, [], {
     env: { ...process.env, CONVEX_URL: url, ADMIN_KEY: adminKey },
     stdio: ["ignore", "inherit", "inherit"],

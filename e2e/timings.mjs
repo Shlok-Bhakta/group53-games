@@ -18,8 +18,9 @@ export default class Timings {
   }
 
   onEnd() {
-    mkdirSync(path.dirname(LAST_TIMINGS), { recursive: true });
-    writeFileSync(LAST_TIMINGS, JSON.stringify(this.seconds, null, 2));
+    const file = process.env.E2E_TIMINGS ?? LAST_TIMINGS;
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, JSON.stringify(this.seconds, null, 2));
   }
 
   printsToStdio() {

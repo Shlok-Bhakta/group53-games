@@ -14,10 +14,10 @@ import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-const STATE_FILE = path.resolve("e2e/.state/backend.json");
+const STATE_FILE = path.resolve(process.env.E2E_STATE ?? "e2e/.state/backend.json");
 
 type State = { url: string; adminKey: string };
-const state = (): State => JSON.parse(readFileSync(STATE_FILE, "utf8"));
+export const backend = (): State => JSON.parse(readFileSync(STATE_FILE, "utf8"));
 
 // platform: the backend sometimes closed a pooled keep-alive socket just as a call went out on it ("fetch failed"), so every call gets its own connection.
 const closingFetch: typeof fetch = (input, init) => {
@@ -53,7 +53,7 @@ const byName = <K extends FunctionType, F extends Ref<K>>(fn: F) =>
 let cached: { url: string; admin: Admin } | null = null;
 
 export function admin(): Admin {
-  const { url, adminKey } = state();
+  const { url, adminKey } = backend();
   if (cached?.url === url) return cached.admin;
   const http = new ConvexHttpClient(url, { fetch: closingFetch });
   (http as unknown as { setAdminAuth: (k: string) => void }).setAdminAuth(adminKey);
@@ -87,7 +87,7 @@ export type PhoneOptions = {
 
 export async function phone(context: BrowserContext, opts: PhoneOptions = {}): Promise<Page> {
   await watchForNestedCards(context);
-  const { url } = state();
+  const { url } = backend();
   const ns = url.replace(/[^a-zA-Z0-9]/g, "");
   await context.addInitScript(
     ([installed, ns, token, refresh, notifications, endpoint]) => {

@@ -4,11 +4,10 @@ import path from "node:path";
 
 export const TIMINGS = path.resolve("e2e/timings.json");
 export const LAST_TIMINGS = path.resolve("e2e/.state/timings.json");
-const SHARD_LIST = path.resolve("e2e/.state/shard.txt");
 
 export const testKey = (file, titles) => [file, ...titles].join(" › ");
 
-const readJson = (file) => (existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {});
+export const readJson = (file) => (existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {});
 
 export function parseShard(arg) {
   const match = /^(\d+)\/(\d+)$/.exec(arg);
@@ -53,12 +52,14 @@ export function planShards(keys, seconds, total) {
   return shards;
 }
 
-export async function writeShardList({ index, total }, args) {
-  const shards = planShards(await listTests(args), readJson(TIMINGS), total);
-  const shard = shards[index - 1];
-  mkdirSync(path.dirname(SHARD_LIST), { recursive: true });
-  writeFileSync(SHARD_LIST, shard.keys.map((k) => `${k}\n`).join(""));
-  return { file: SHARD_LIST, tests: shard.keys.length, seconds: Math.round(shard.seconds) };
+export async function testsFor(shard, args) {
+  const keys = await listTests(args);
+  return shard ? planShards(keys, readJson(TIMINGS), shard.total)[shard.index - 1].keys : keys;
+}
+
+export function writeTestList(file, keys) {
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, keys.map((k) => `${k}\n`).join(""));
 }
 
 async function saveTimings(files) {

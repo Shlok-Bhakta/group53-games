@@ -1,8 +1,7 @@
 import { ConvexHttpClient } from "convex/browser";
 import { anyApi } from "convex/server";
-import { readFileSync } from "node:fs";
 import { FRAME_COLOR } from "../convex/palette";
-import { admin, createPlayer, expect, phone, readyForShot, test } from "./fixtures";
+import { admin, backend, createPlayer, expect, phone, readyForShot, test } from "./fixtures";
 
 test.skip(!process.env.SCREENS, "Set SCREENS=1 to capture review screenshots");
 
@@ -10,7 +9,7 @@ const STOCKS: Record<string, number> = { NVDA: 200, AAPL: 270, MSFT: 520, TSLA: 
 
 test("stonks crew screens", async ({ browser }) => {
   test.setTimeout(240_000);
-  const { url } = JSON.parse(readFileSync("e2e/.state/backend.json", "utf8"));
+  const { url } = backend();
   const a = admin();
   await a.mutation(anyApi.stonks.holdings, {
     asOf: "2026-10-29",
