@@ -34,7 +34,10 @@ export function Sheet({
         <SheetHeader title={title} hideTitle={hideTitle} closable={closable} />
         {pinned && <div className="shrink-0">{pinned}</div>}
         <div
-          className={cn("flex flex-col gap-4 overflow-y-auto overscroll-contain px-4 pb-[calc(var(--safe-bottom)+20px)]", bodyClassName)}
+          className={cn(
+            "flex flex-col gap-4 overflow-y-auto *:shrink-0 overscroll-contain px-4 pb-[calc(var(--safe-bottom)+20px)]",
+            bodyClassName,
+          )}
         >
           {children}
         </div>
