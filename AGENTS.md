@@ -161,7 +161,11 @@ A commit that failed isn't retried on its own: the deployer waits for the next c
 
 `version.json` carries the build ID and `src/version.tsx` checks it on launch, every minute, on coming back to the foreground and on navigation. A new build shows an "Updating" overlay, reloads, and says "You're up to date". A phone holds the update while a game screen is open (`useHoldUpdates`) and applies it once they leave or the app goes to the background. Every deploy is a new build ID (the time it was built), so phones reload after each one, even when the app itself didn't change.
 
-`public/sw.js` answers every page load from the last copy of `index.html` it saw (under a week old) and refreshes it in the background, so a reopened app paints its theme at once instead of white while the network answers. The first launch after a deploy opens the previous build, and the version check then moves it to the new one. That copy points at its own build's assets, which is why the deployer keeps assets for two weeks after a build stops being served.
+`public/sw.js` answers every page load from the last copy of `index.html` it saw (under a week old) and refreshes it in the background, so a reopened app paints its theme at once instead of white while the network answers. It saves its own clean copy (only `content-type`, plus `x-saved-at`, and only a whole page), and a new `sw.js` drops the old copy when it takes over. The first launch after a deploy opens the previous build, and the version check then moves it to the new one: before reloading, the app asks the worker to fetch the new page into its copy (`refresh-shell`), so the reload lands on the new build. That copy points at its own build's assets, which is why the deployer keeps assets for two weeks after a build stops being served.
+
+Nothing gets stuck on a blank screen: if the app's script never runs (`data-booted` unset at `load`, online), `index.html` drops the saved copy and loads once more; a chunk that fails to load (`vite:preloadError`) and a crash anywhere in the app (`CrashBoundary` around it) reload onto a fresh page once per build (`recover`), then show a Reload button.
+
+Deploys don't interrupt games: `convex deploy` keeps every websocket open (measured on 2026-11-17: 30 mutations during a push, none failed, the slowest 287ms), the site swaps by symlink, and scheduled jobs keep running. If a phone does lose its connection for 3s (kiwi or the tunnel down, bad signal), `src/connection.tsx` tints the app gray, blocks taps and counts the seconds until it's back.
 
 ### Order of changes
 

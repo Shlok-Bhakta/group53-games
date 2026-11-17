@@ -1,5 +1,5 @@
 import { useHoldUpdates } from "@/version";
-import { Component, useState, type ReactNode } from "react";
+import { useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
@@ -7,7 +7,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { MODES, gameOf, matchPath, settingsOf, type ModeKey } from "../../convex/modes";
 import { NavBar, useGoBack } from "@/components/AppHeader";
 import { GameChrome } from "@/components/game/GameFrame";
-import { Button } from "@/components/ui/button";
+import { CrashBoundary } from "@/components/CrashBoundary";
 import { Skeleton } from "@/components/ui/skeleton";
 import { GameMenu, MenuButton } from "@/components/GameMenu";
 import { Lobby } from "@/components/match";
@@ -44,9 +44,9 @@ export function MatchScreen({ game }: { game: GameUI }) {
   const Game = game.Game;
   if (match.status !== "waiting" && match.status !== "cancelled" && game.fullscreen?.(match))
     return (
-      <GameCrash>
+      <CrashBoundary title="This screen hit a bug">
         <Game match={match} meId={me?._id} />
-      </GameCrash>
+      </CrashBoundary>
     );
 
   return (
@@ -68,33 +68,11 @@ export function MatchScreen({ game }: { game: GameUI }) {
         <Lobby match={match} meId={me?._id} onLeave={() => navigate("/", { replace: true })} setup={game.setup} />
       ) : (
         <GameChrome title={mode.name} onBack={goBack} onMenu={() => setMenu(true)}>
-          <GameCrash>
+          <CrashBoundary title="This screen hit a bug">
             <Game match={match} meId={me?._id} />
-          </GameCrash>
+          </CrashBoundary>
         </GameChrome>
       )}
     </div>
   );
-}
-
-class GameCrash extends Component<{ children: ReactNode }, { error: Error | null }> {
-  state = { error: null as Error | null };
-  static getDerivedStateFromError(error: Error) {
-    return { error };
-  }
-  componentDidCatch(error: Error) {
-    console.error(error);
-  }
-  render() {
-    if (!this.state.error) return this.props.children;
-    return (
-      <section role="alert" className="flex flex-1 flex-col items-center justify-center gap-4 py-16 text-center">
-        <h2 className="font-display text-title">This screen hit a bug</h2>
-        <p className="max-w-[30ch] font-mono text-footnote text-muted-foreground">{this.state.error.message}</p>
-        <Button size="xl" onClick={() => location.reload()}>
-          Reload
-        </Button>
-      </section>
-    );
-  }
 }

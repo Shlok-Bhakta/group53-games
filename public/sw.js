@@ -1,5 +1,4 @@
 self.addEventListener("install", () => self.skipWaiting());
-self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
 self.addEventListener("push", (event) => {
   // platform: iOS (16.4+) drops a subscription after about three pushes that settle without showing a notification, so each stays alive until showNotification() resolves.
@@ -68,21 +67,51 @@ self.addEventListener("notificationclick", (event) => {
 // platform: iOS paints white until a reopened app's HTML arrives, so page loads answer from the last copy at once (its first script paints the saved theme) and refresh it for next time.
 const SHELL = "group53-shell";
 const SHELL_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+self.addEventListener("activate", (event) =>
+  event.waitUntil(
+    caches
+      .delete(SHELL)
+      .catch(() => {})
+      .then(() => self.clients.claim()),
+  ),
+);
+
+async function saveShell(response) {
+  const res = await response;
+  if (!res.ok || !res.headers.get("content-type")?.includes("text/html")) return res;
+  try {
+    const html = await res.clone().text();
+    if (html.includes("</html>")) {
+      const copy = new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "x-saved-at": String(Date.now()) } });
+      await (await caches.open(SHELL)).put("/", copy);
+    }
+  } catch (err) {
+    console.error("couldn't save the page for next launch:", err);
+  }
+  return res;
+}
+
+async function savedShell() {
+  try {
+    const saved = await (await caches.open(SHELL)).match("/");
+    return saved && Date.now() - Number(saved.headers.get("x-saved-at")) < SHELL_MAX_AGE_MS ? saved : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   const url = new URL(req.url);
   if (req.mode !== "navigate" || req.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/og/")) return;
-  event.respondWith(
-    (async () => {
-      const cache = await caches.open(SHELL);
-      const fresh = fetch(req).then(async (res) => {
-        if (res.ok && res.headers.get("content-type")?.includes("text/html")) await cache.put("/", res.clone());
-        return res;
-      });
-      event.waitUntil(fresh.catch(() => {}));
-      const saved = await cache.match("/");
-      const savedAt = Date.parse(saved?.headers.get("date") ?? "");
-      return saved && Date.now() - savedAt < SHELL_MAX_AGE_MS ? saved : fresh;
-    })(),
-  );
+  const fresh = saveShell(fetch(req));
+  event.waitUntil(fresh.catch(() => {}));
+  event.respondWith(savedShell().then((saved) => saved ?? fresh));
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type !== "refresh-shell") return;
+  const reply = (ok) => event.ports[0]?.postMessage({ ok });
+  event.waitUntil(saveShell(fetch("/", { cache: "no-store" })).then((res) => reply(res.ok), () => reply(false)));
 });

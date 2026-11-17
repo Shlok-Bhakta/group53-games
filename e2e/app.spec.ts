@@ -1,4 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
+import type { WebSocketRoute } from "@playwright/test";
 import { anyApi } from "convex/server";
 import { FRAME_COLOR } from "../convex/palette";
 import { admin, createPlayer, expect, getMatch, iPhone, onScreen, ready, resign, test } from "./fixtures";
@@ -85,6 +86,73 @@ test.describe("updates", () => {
     }));
     expect(early).toEqual({ dark: true, scheme: "dark" });
     await context.close();
+  });
+
+  test("an update reloads onto the new page, not the service worker's saved copy", async ({ browser, baseURL }) => {
+    const context = await browser.newContext({ ...iPhone, baseURL });
+    const page = await context.newPage();
+    await page.goto("/");
+    await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+    await page.reload();
+    await page.waitForFunction(async () => (await (await caches.open("group53-shell")).match("/")) !== undefined);
+    await page.evaluate(async () => {
+      const cache = await caches.open("group53-shell");
+      const html = (await (await cache.match("/"))!.text()).replace("<head>", '<head><meta name="e2e-stale">');
+      await cache.put(
+        "/",
+        new Response(html, { headers: { "content-type": "text/html", "x-saved-at": String(Date.now()), date: new Date().toUTCString() } }),
+      );
+    });
+    await context.route("**/version.json*", (r) => r.fulfill({ json: { id: "newer-build" } }));
+    const reloaded = page.waitForEvent("load");
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await reloaded;
+    await expect(page.locator('meta[name="e2e-stale"]')).toHaveCount(0);
+    await context.close();
+  });
+
+  test("a page whose app never starts drops the saved copy and loads again by itself", async ({ browser, baseURL }) => {
+    const context = await browser.newContext({ ...iPhone, baseURL });
+    const page = await context.newPage();
+    await page.goto("/");
+    await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+    await page.reload();
+    await page.waitForFunction(async () => (await (await caches.open("group53-shell")).match("/")) !== undefined);
+    await page.evaluate(async () => {
+      const cache = await caches.open("group53-shell");
+      const html = (await (await cache.match("/"))!.text()).replace(/src="\/assets\/[^"]+\.js"/, 'src="/assets/gone.js"');
+      await cache.put("/", new Response(html, { headers: { "content-type": "text/html", "x-saved-at": String(Date.now()) } }));
+    });
+    await page.reload();
+    const state = () =>
+      page
+        .evaluate(() => `${document.documentElement.dataset.booted ? "booted" : "blank"} ${sessionStorage.getItem("boot-retried") ?? ""}`)
+        .catch(() => "");
+    await expect.poll(state).toBe("booted 1");
+    await context.close();
+  });
+
+  test("a lost connection tints the app gray and counts the seconds until it's back", async ({ phones }) => {
+    const me = await createPlayer("Shlok");
+    const page = await phones.open({ player: me });
+    let down = false;
+    const live = new Set<WebSocketRoute>();
+    await page.routeWebSocket(/.*/, (ws) => {
+      if (down) return void ws.close();
+      ws.connectToServer();
+      live.add(ws);
+    });
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
+    await expect(page.getByRole("status", { name: "Reconnecting" })).toHaveCount(0);
+    down = true;
+    for (const ws of live) await ws.close();
+    live.clear();
+    const tint = page.getByRole("status", { name: "Reconnecting" });
+    await expect(tint).toBeVisible();
+    await expect(tint).toContainText(/Reconnecting\s*\d+s/);
+    down = false;
+    await expect(tint).toHaveCount(0, { timeout: 20_000 });
   });
 });
 
