@@ -10,6 +10,8 @@ declare const __BUILD_ID__: string;
 const CHECK_EVERY_MS = 60_000;
 const SHOW_MS = 1100;
 const TARGET_KEY = "updating-to";
+const RECOVERED_KEY = "recovered-on";
+const SHELL_WAIT_MS = 5000;
 
 type Phase = "idle" | "updating" | "updated";
 let phase: Phase = "idle";
@@ -31,23 +33,46 @@ async function latestBuild(): Promise<string | null> {
   }
 }
 
+function refreshShell(): Promise<void> {
+  const worker = navigator.serviceWorker?.controller;
+  if (!worker) return Promise.resolve();
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => resolve();
+    setTimeout(resolve, SHELL_WAIT_MS);
+    worker.postMessage({ type: "refresh-shell" }, [channel.port2]);
+  });
+}
+
+export async function reloadFresh() {
+  await refreshShell();
+  location.reload();
+}
+
+export function recover() {
+  if (sessionStorage.getItem(RECOVERED_KEY) === __BUILD_ID__) return false;
+  sessionStorage.setItem(RECOVERED_KEY, __BUILD_ID__);
+  void reloadFresh();
+  return true;
+}
+
 function update(latest: string) {
   pending = latest;
   if ((holds > 0 && document.visibilityState === "visible") || phase === "updating") return;
   if (sessionStorage.getItem(TARGET_KEY) === latest) {
-    toast("A new version is ready", { id: "update", duration: Infinity, action: { label: "Update", onClick: () => location.reload() } });
+    toast("A new version is ready", { id: "update", duration: Infinity, action: { label: "Update", onClick: () => void reloadFresh() } });
     return;
   }
   sessionStorage.setItem(TARGET_KEY, latest);
   set("updating");
-  setTimeout(() => {
+  void Promise.all([refreshShell(), new Promise((resolve) => setTimeout(resolve, SHOW_MS))]).then(() => {
     if (holds > 0 && document.visibilityState === "visible") {
       sessionStorage.removeItem(TARGET_KEY);
       set("idle");
       return;
     }
     location.reload();
-  }, SHOW_MS);
+  });
 }
 
 async function check() {

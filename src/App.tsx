@@ -23,7 +23,9 @@ import { SignIn } from "@/pages/SignIn";
 import { You } from "@/pages/You";
 import { ArrivalPills, TapLayer, usePresenceReporter } from "@/presence";
 import { Page, TAB_ROUTES, useAppBadge, useNavDirection, useScrollMemory, useViewportGap } from "@/shell";
-import { HoldUpdates, UpdateOverlay, useVersionCheck } from "@/version";
+import { HoldUpdates, recover, UpdateOverlay, useVersionCheck } from "@/version";
+import { CrashBoundary } from "@/components/CrashBoundary";
+import { ConnectionLost } from "@/connection";
 import { wantMusic } from "@/sound";
 import { useDeepLinks } from "@/deepLinks";
 import { BoardSkeleton, PlayerRoute, PlayerSkeleton, StockRoute, StockSkeleton, StonksBoardRoute } from "./games/stonks/load";
@@ -48,26 +50,29 @@ export function App() {
   return (
     <MotionConfig reducedMotion="user">
       <InstallGate>
-        <AuthLoading>
-          <div className="mx-auto flex max-w-md flex-col gap-4 px-page pt-[calc(var(--safe-top)+44px)]">
-            <Skeleton className="h-10 w-32" />
-            <Skeleton className="h-48 w-full rounded-lg" />
-          </div>
-        </AuthLoading>
-        <Unauthenticated>
-          <div className="mx-auto max-w-md px-5 pt-[var(--safe-top)]">
-            <SignIn />
-          </div>
-        </Unauthenticated>
-        <Authenticated>
-          <SignedIn />
-        </Authenticated>
+        <CrashBoundary title="Group 53 hit a bug" onCrash={recover} className="min-h-[100dvh] px-page">
+          <AuthLoading>
+            <div className="mx-auto flex max-w-md flex-col gap-4 px-page pt-[calc(var(--safe-top)+44px)]">
+              <Skeleton className="h-10 w-32" />
+              <Skeleton className="h-48 w-full rounded-lg" />
+            </div>
+          </AuthLoading>
+          <Unauthenticated>
+            <div className="mx-auto max-w-md px-5 pt-[var(--safe-top)]">
+              <SignIn />
+            </div>
+          </Unauthenticated>
+          <Authenticated>
+            <SignedIn />
+          </Authenticated>
+        </CrashBoundary>
         {/* platform: sonner uses mobileOffset on phones, not offset. */}
         <Toaster
           position="top-center"
           offset={{ top: "calc(var(--safe-top) + 44px)" }}
           mobileOffset={{ top: "calc(var(--safe-top) + 44px)" }}
         />
+        <ConnectionLost />
         <UpdateOverlay />
         <TopEdge />
       </InstallGate>

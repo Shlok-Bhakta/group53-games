@@ -18,6 +18,20 @@
         root.style.backgroundColor = bg;
         document.querySelector('meta[name="theme-color"]').setAttribute("content", bg);
       } catch (e) {}
+      // platform: a page whose app script never runs stays blank with no way out on a home screen app, so it drops the saved copy once and loads again.
+      addEventListener("load", function () {
+        if (document.documentElement.dataset.booted || !navigator.onLine) return;
+        try {
+          if (sessionStorage.getItem("boot-retried")) return;
+          sessionStorage.setItem("boot-retried", "1");
+        } catch (e) {
+          return;
+        }
+        var again = function () {
+          location.reload();
+        };
+        window.caches ? caches.delete("group53-shell").then(again, again) : again();
+      });
     </script>
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />

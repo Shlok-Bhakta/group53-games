@@ -6,6 +6,12 @@ import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { App } from "./App";
 import { ThemeProvider } from "./theme";
 import "./style.css";
+import { recover } from "./version";
+
+document.documentElement.dataset.booted = __BUILD_ID__;
+addEventListener("vite:preloadError", (event) => {
+  if (recover()) event.preventDefault();
+});
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
