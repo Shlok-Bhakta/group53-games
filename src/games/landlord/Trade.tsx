@@ -71,7 +71,7 @@ export function TradeSheet({
       {others.length > 0 && (
         <>
           <SectionTitle>New offer</SectionTitle>
-          <div className="-mx-1 flex shrink-0 gap-2 overflow-x-auto p-1" role="radiogroup" aria-label="Trade with">
+          <div className="-mx-1 flex gap-2 overflow-x-auto p-1" role="radiogroup" aria-label="Trade with">
             {others.map((i) => (
               <Button
                 key={i}

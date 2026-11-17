@@ -187,6 +187,28 @@ test("with a long list to trade, the sheet scrolls and who you trade with stays 
   await expect(pa.getByRole("region", { name: "You give" }).getByRole("button", { name: /Electric Company/ })).toBeVisible();
 });
 
+test("with a long list of properties, the rows stay whole and the sheet scrolls to the last one", async ({ phones }) => {
+  test.setTimeout(120_000);
+  const { id, pa, a } = await startGame(phones);
+  const m = await getMatch(id);
+  const seatA = m.players.findIndex((p: { userId: string }) => p.userId === a.userId);
+  const owned = [1, 3, 6, 8, 9, 11, 12, 13, 14, 16, 18, 19, 21, 23, 24, 26, 27, 29, 31, 32, 34, 37, 39];
+  const props = (m.state as Mono).props.map((p, i) => (owned.includes(i) ? { owner: seatA, houses: 0, mortgaged: i === 11 } : p));
+  await admin().mutation(anyApi.testing.landlordPatch, { id, state: { props } });
+  await settledOn(pa);
+  await pa.getByRole("button", { name: "Properties" }).click();
+  await expect(pa.getByRole("heading", { name: "Your properties" })).toBeVisible();
+  const cards = pa.locator('[data-slot="drawer-content"] [data-slot="card"]');
+  await expect(cards.first()).toBeVisible();
+  for (const card of await cards.all()) {
+    const fits = await card.evaluate((el) => el.scrollHeight <= el.clientHeight + 1);
+    expect(fits, "a group of properties isn't squeezed and clipped").toBe(true);
+  }
+  const last = pa.getByRole("button", { name: "Mortgage Boardwalk for $200" });
+  await last.scrollIntoViewIfNeeded();
+  await expect(last).toBeInViewport({ ratio: 1 });
+});
+
 test("mortgaging asks first, from the properties list and the deed", async ({ phones }) => {
   test.setTimeout(120_000);
   const { id, pa, a } = await startGame(phones);
