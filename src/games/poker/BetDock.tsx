@@ -1,15 +1,14 @@
 import { useState } from "react";
 import { ArrowFatUpIcon, CoinsIcon, HandTapIcon, XIcon } from "@phosphor-icons/react";
-import { potOf, raiseBounds, toCall, type PokerState } from "../../../convex/poker/engine";
+import { raiseBounds, toCall, type PokerState } from "../../../convex/poker/engine";
 import { AmountSheet } from "@/components/AmountSheet";
 import { AsyncButton } from "@/components/AsyncButton";
 import { ActionRail } from "@/components/game/GameFrame";
 import { Button } from "@/components/ui/button";
-import { chips, sum } from "./format";
+import { chips } from "./format";
+import { raiseSizes } from "./sizes";
 
 export type Move = { kind: "fold" | "check" | "call" | "raise" | "draw"; to?: number; discard?: number[] };
-
-const totalPot = (s: PokerState) => potOf(s) + sum(s.bets);
 
 export function BetDock({ state, seat, move }: { state: PokerState; seat: number; move: (m: Move) => Promise<void> }) {
   const owe = toCall(state, seat);
@@ -73,15 +72,8 @@ function RaiseSheet({
     if (opening !== null) setTo(opening);
   }
   const clamp = (v: number) => Math.max(bounds.min, Math.min(bounds.max, Math.round(v)));
-  const pot = totalPot(state);
-  const owe = toCall(state, seat);
   const bet = state.current === 0;
-  const sizes = [
-    { label: "Min", value: bounds.min },
-    { label: "½ pot", value: clamp(state.current + (pot + owe) / 2) },
-    { label: "Pot", value: clamp(state.current + pot + owe) },
-    { label: bounds.max >= state.bets[seat] + state.stacks[seat] ? "All in" : "Max", value: bounds.max },
-  ];
+  const sizes = raiseSizes(state, seat, bounds);
   const step = state.bb;
   const snap = (v: number) => (v >= bounds.max ? bounds.max : v <= bounds.min ? bounds.min : clamp(Math.round(v / step) * step));
   const allIn = to >= state.bets[seat] + state.stacks[seat];

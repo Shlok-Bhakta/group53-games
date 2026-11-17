@@ -167,6 +167,20 @@ describe("a hand of Hold'em", () => {
     expect(t.hidden.holes[0]).toHaveLength(4);
   });
 
+  test("half pot and 2× pot limits cap a raise at that share of the pot after calling", () => {
+    const half = deal(newGame("holdem", "hpl", 3, 1000), { sb: 10, bb: 20 }, deckOf(false));
+    expect(raiseBounds(half.state, 0)).toEqual({ min: 40, max: 45 });
+    expect(() => act(half, 0, { kind: "raise", to: 50 })).toThrow();
+    expect(act(half, 0, { kind: "raise", to: 45 }).state.current).toBe(45);
+    const double = deal(newGame("holdem", "2pl", 3, 1000), { sb: 10, bb: 20 }, deckOf(false));
+    expect(raiseBounds(double.state, 0)).toEqual({ min: 40, max: 120 });
+  });
+
+  test("a half pot limit never stops a raise short of the minimum", () => {
+    const t = deal(newGame("holdem", "hpl", 2, 1000), { sb: 10, bb: 20 }, deckOf(false));
+    expect(raiseBounds(t.state, t.state.turn)).toEqual({ min: 40, max: 40 });
+  });
+
   test("side pots: each all-in only wins what it matched", () => {
     const deck = stacked("As Ad Ks Kd 7c 2d 3h 8s 9c Jd 4h");
     let t = deal({ ...newGame("holdem", "nl", 3, 1000), stacks: [1000, 100, 300] }, { sb: 10, bb: 20 }, deck, noRandom);

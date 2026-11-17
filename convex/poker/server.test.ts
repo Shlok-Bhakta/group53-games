@@ -122,6 +122,19 @@ describe("starting", () => {
     expect((await seats[0].as.query(api.poker.cards, { id }))!.cards).toHaveLength(4);
   });
 
+  test("settings: every betting limit", async () => {
+    for (const [betting, limit] of [
+      [0, "nl"],
+      [1, "pl"],
+      [2, "hpl"],
+      [3, "2pl"],
+    ] as const) {
+      const t = setup();
+      const { id } = await game(t, 2, "poker:holdem", { betting });
+      expect(await stateOf(t, id)).toMatchObject({ limit });
+    }
+  });
+
   test("blinds start at 10/20 whatever the stacks", async () => {
     for (const stack of [500, 1000, 2000]) {
       const t = setup();
