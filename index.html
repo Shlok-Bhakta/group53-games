@@ -20,7 +20,8 @@
       } catch (e) {}
       // platform: a page whose app script never runs stays blank with no way out on a home screen app, so it drops the saved copy once and loads again.
       addEventListener("load", function () {
-        if (document.documentElement.dataset.booted || !navigator.onLine) return;
+        if (document.documentElement.dataset.booted || !navigator.onLine || !navigator.serviceWorker || !navigator.serviceWorker.controller)
+          return;
         try {
           if (sessionStorage.getItem("boot-retried")) return;
           sessionStorage.setItem("boot-retried", "1");
