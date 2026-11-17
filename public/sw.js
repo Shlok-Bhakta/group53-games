@@ -64,3 +64,25 @@ self.addEventListener("notificationclick", (event) => {
     })(),
   );
 });
+
+// platform: iOS paints white until a reopened app's HTML arrives, so page loads answer from the last copy at once (its first script paints the saved theme) and refresh it for next time.
+const SHELL = "group53-shell";
+const SHELL_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+  const url = new URL(req.url);
+  if (req.mode !== "navigate" || req.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/og/")) return;
+  event.respondWith(
+    (async () => {
+      const cache = await caches.open(SHELL);
+      const fresh = fetch(req).then(async (res) => {
+        if (res.ok && res.headers.get("content-type")?.includes("text/html")) await cache.put("/", res.clone());
+        return res;
+      });
+      event.waitUntil(fresh.catch(() => {}));
+      const saved = await cache.match("/");
+      const savedAt = Date.parse(saved?.headers.get("date") ?? "");
+      return saved && Date.now() - savedAt < SHELL_MAX_AGE_MS ? saved : fresh;
+    })(),
+  );
+});

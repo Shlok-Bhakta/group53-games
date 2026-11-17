@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { anyApi } from "convex/server";
 import { FRAME_COLOR } from "../convex/palette";
-import { admin, createPlayer, expect, getMatch, onScreen, ready, resign, test } from "./fixtures";
+import { admin, createPlayer, expect, getMatch, iPhone, onScreen, ready, resign, test } from "./fixtures";
 
 const ANDROID_UA = "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36";
 
@@ -68,6 +68,23 @@ test.describe("updates", () => {
     await page.reload();
     await expect(page.getByText("You're up to date")).toBeVisible();
     await expect(page.getByText("You're up to date")).toHaveCount(0, { timeout: 6000 });
+  });
+
+  test("a reopened app paints its saved dark theme from the service worker, before the network answers", async ({ browser, baseURL }) => {
+    const context = await browser.newContext({ ...iPhone, baseURL, colorScheme: "dark" });
+    const page = await context.newPage();
+    await page.goto("/");
+    await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+    await page.reload();
+    await page.waitForFunction(async () => (await (await caches.open("group53-shell")).match("/")) !== undefined);
+    await context.setOffline(true);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    const early = await page.evaluate(() => ({
+      dark: document.documentElement.classList.contains("dark"),
+      scheme: getComputedStyle(document.documentElement).colorScheme,
+    }));
+    expect(early).toEqual({ dark: true, scheme: "dark" });
+    await context.close();
   });
 });
 

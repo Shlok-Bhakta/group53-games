@@ -19,7 +19,7 @@ In this order (Convex functions go live before the web app; see "Order of change
 8. checks `/`, `/version.json` and `/sw.js` answer 200, `/version.json` names the new build, and the live bundle talks to the public Convex URL. If anything's off, `site/current` goes straight back to the previous build and the deploy fails;
 9. `docker compose up -d --no-deps --build og stonks`, which only recreates what changed;
 10. checks Convex, the tunnel and the dashboard are still the same containers;
-11. prunes builds past the newest five, assets older than two weeks that no kept build uses, the stack's untagged images and build cache older than a week.
+11. prunes builds past the newest five, assets no kept build uses that no build has served for two weeks, the stack's untagged images and build cache older than a week.
 
 Every `docker compose` it runs gets a clean environment (PATH and HOME only), so the stack's `.env` is the only thing compose's `${...}` substitutions read. The deployer's own settings are named `DEPLOY_*` so they can't collide with them: the first deploy leaked the deployer's `CONVEX_URL=http://convex:3210` into compose, which recreated Convex with that as its public origin and built the app against it.
 
