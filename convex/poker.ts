@@ -31,6 +31,7 @@ import {
   type Table,
 } from "./poker/engine";
 import { actionText, handInSentence, resultText } from "./poker/text";
+import { LIMIT_OF } from "./poker/modes";
 
 export type { PokerState } from "./poker/engine";
 
@@ -80,7 +81,7 @@ export const pokerHooks: GameHooks = {
   seats: (_mode, n) => SEAT_COLORS.slice(0, n),
   start: async (ctx, match) => {
     const s = settingsOf(match.mode, match.settings);
-    const state = newGame(VARIANT[match.mode], s.betting === 1 ? "pl" : "nl", match.players.length, s.stack);
+    const state = newGame(VARIANT[match.mode], LIMIT_OF[s.betting] ?? "nl", match.players.length, s.stack);
     const empty: Table = { state, hidden: { deck: [], muck: [], holes: [] } };
     await proceed(ctx, { ...match, state }, empty, empty, null);
   },

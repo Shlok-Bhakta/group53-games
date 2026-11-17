@@ -1,12 +1,19 @@
 import type { ModeKey, Settings } from "../../../convex/modes";
-import { blindsFor } from "../../../convex/poker/engine";
+import { blindsFor, type Limit } from "../../../convex/poker/engine";
+import { LIMIT_OF } from "../../../convex/poker/modes";
+
+const BETTING_RULE: Record<Limit, string> = {
+  nl: "No limit: you can bet everything you have at any time.",
+  "2pl": "2× pot limit: the most you can raise is twice the pot after you call.",
+  pl: "Pot limit: the most you can raise is the size of the pot after you call.",
+  hpl: "Half pot limit: the most you can raise is half the pot after you call.",
+};
 
 const days = (hours: number) => (hours === 24 ? "a day" : `${hours / 24} days`);
 
 export function pokerRules(mode: ModeKey, s: Settings): string[] {
   const stack = s.stack ?? 1000;
   const { sb } = blindsFor(1, 0);
-  const pot = s.betting === 1;
   const lines: string[] = [];
   if (mode === "poker:draw") {
     lines.push("2 to 6 players. Everyone gets five cards, face down, and there's no board.");
@@ -31,9 +38,7 @@ export function pokerRules(mode: ModeKey, s: Settings): string[] {
   lines.push(
     "Hands, best first: straight flush, four of a kind, full house, flush, straight, three of a kind, two pair, pair, high card.",
     `Everyone starts with ${stack.toLocaleString("en-US")} chips. Blinds start at ${sb}/${sb * 2}${s.blinds ? ` and multiply by ${s.blindsBy ?? 2} every ${s.blinds} hands` : ""}.`,
-    pot
-      ? "Pot limit: the most you can raise is the size of the pot after you call."
-      : "No limit: you can bet everything you have at any time.",
+    BETTING_RULE[LIMIT_OF[s.betting ?? 0] ?? "nl"],
     "Not your turn? Line up Check/Fold or Call and it plays itself the moment the action reaches you.",
     s.moveTime
       ? `We ping you when it's your move. Sit on it for ${days(s.moveTime)} and we check or fold for you.`

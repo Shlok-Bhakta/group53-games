@@ -1,7 +1,8 @@
 import { bestHand, shuffle, type Card, type Variant } from "./cards";
 
 export type { Card, Variant } from "./cards";
-export type Limit = "nl" | "pl";
+export type Limit = "nl" | "pl" | "hpl" | "2pl";
+export const POT_CAP: Record<Limit, number | null> = { nl: null, pl: 1, hpl: 0.5, "2pl": 2 };
 
 type Street = { kind: "bet" | "draw"; deal: number; name: string };
 const BOARD: Street[] = [
@@ -242,7 +243,8 @@ export function raiseBounds(s: PokerState, seat: number): { min: number; max: nu
   const acted = s.acted[seat];
   if (acted !== null && s.current - acted < s.minRaise) return null;
   let max = allIn;
-  if (s.limit === "pl") max = Math.min(max, s.current + sum(s.paid) + owe);
+  const cap = POT_CAP[s.limit];
+  if (cap !== null) max = Math.min(max, s.current + Math.floor(cap * (sum(s.paid) + owe)));
   const min = Math.min(s.current + s.minRaise, allIn);
   return { min, max: Math.max(min, max) };
 }

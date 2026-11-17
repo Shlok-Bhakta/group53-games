@@ -65,7 +65,10 @@ export function AmountSheet({
         amount
       )}
       <Slider label="Amount" min={min} max={max} step={1} value={[value]} onValueChange={([v]) => onChange(snap(v))} />
-      <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${presets.length}, minmax(0, 1fr))` }}>
+      <div
+        className="grid gap-2"
+        style={{ gridTemplateColumns: `repeat(${presets.length > 4 ? Math.ceil(presets.length / 2) : presets.length}, minmax(0, 1fr))` }}
+      >
         {presets.map((p) => (
           <Button key={p.label} variant={lit === p ? "default" : "secondary"} className="h-11 px-1" onClick={() => onChange(p.value)}>
             {p.label}

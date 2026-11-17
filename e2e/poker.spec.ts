@@ -330,7 +330,7 @@ test.describe("Poker", () => {
     await first.page.getByRole("button", { name: "Menu" }).click();
     const settings = first.page.getByRole("dialog").getByRole("region", { name: "Game settings" });
     await expect(settings).toContainText("Chips");
-    await expect(settings).toContainText("Pot limit");
+    await expect(settings).toContainText("BettingPot");
     if (process.env.SCREENS) {
       await readyForShot(first.page);
       await first.page.screenshot({ path: "e2e/.state/screens/dark-poker-menu.png" });

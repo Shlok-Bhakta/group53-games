@@ -1,4 +1,5 @@
 import { moveTime, type GameDef, type ModeDef, type Setting } from "../modeKit";
+import type { Limit } from "./engine";
 
 export const POKER_GAME = {
   name: "Poker",
@@ -6,7 +7,14 @@ export const POKER_GAME = {
   reasons: { hands: { label: "Last hand played", push: "the last hand" } },
 } as const satisfies GameDef;
 
-const BETTING = { noLimit: 0, potLimit: 1 } as const;
+const BETTING = { noLimit: 0, potLimit: 1, halfPot: 2, doublePot: 3 } as const;
+
+export const LIMIT_OF: Record<number, Limit> = {
+  [BETTING.noLimit]: "nl",
+  [BETTING.potLimit]: "pl",
+  [BETTING.halfPot]: "hpl",
+  [BETTING.doublePot]: "2pl",
+};
 
 const poker = (betting: number): Setting[] => [
   {
@@ -59,10 +67,12 @@ const poker = (betting: number): Setting[] => [
   {
     key: "betting",
     label: "Betting",
-    short: "{}",
+    short: "Betting: {}",
     options: [
       { value: BETTING.noLimit, label: "No limit" },
-      { value: BETTING.potLimit, label: "Pot limit" },
+      { value: BETTING.doublePot, label: "2× pot" },
+      { value: BETTING.potLimit, label: "Pot" },
+      { value: BETTING.halfPot, label: "½ pot" },
     ],
     default: betting,
   },
