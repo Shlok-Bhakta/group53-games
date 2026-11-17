@@ -68,15 +68,26 @@ self.addEventListener("notificationclick", (event) => {
 const SHELL = "group53-shell";
 const SHELL_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
-self.addEventListener("activate", (event) => event.waitUntil(caches.delete(SHELL).then(() => self.clients.claim())));
+self.addEventListener("activate", (event) =>
+  event.waitUntil(
+    caches
+      .delete(SHELL)
+      .catch(() => {})
+      .then(() => self.clients.claim()),
+  ),
+);
 
 async function saveShell(response) {
   const res = await response;
   if (!res.ok || !res.headers.get("content-type")?.includes("text/html")) return res;
-  const html = await res.clone().text();
-  if (html.includes("</html>")) {
-    const copy = new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "x-saved-at": String(Date.now()) } });
-    await (await caches.open(SHELL)).put("/", copy);
+  try {
+    const html = await res.clone().text();
+    if (html.includes("</html>")) {
+      const copy = new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "x-saved-at": String(Date.now()) } });
+      await (await caches.open(SHELL)).put("/", copy);
+    }
+  } catch (err) {
+    console.error("couldn't save the page for next launch:", err);
   }
   return res;
 }
