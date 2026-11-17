@@ -193,6 +193,16 @@ const outdatedDeployer = () => {
   return changed;
 };
 
+const markServedUntilNow = (id) => {
+  const dir = path.join(BUILDS, id, "assets");
+  if (!fs.existsSync(dir)) return;
+  const now = new Date();
+  for (const name of fs.readdirSync(dir)) {
+    const file = path.join(ASSETS, name);
+    if (fs.existsSync(file)) fs.utimesSync(file, now, now);
+  }
+};
+
 const pruneSite = () => {
   if (DRY || !fs.existsSync(BUILDS)) return;
   const live = currentBuild();
@@ -307,6 +317,7 @@ const deploy = async () => {
     compose(["exec", "-T", "web", "nginx", "-s", "reload"]);
   }
   pointCurrentAt(id);
+  if (previous && !DRY) markServedUntilNow(previous);
   console.log(`Serving build ${id} (was ${previous ?? "none"}); nginx kept running.`);
 
   step("Checking the site");

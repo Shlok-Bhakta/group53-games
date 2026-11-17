@@ -147,7 +147,7 @@ Collaborators (Chrisis147, AIsJump, Boiler31) run it with `dekit`, work on branc
 5. checks `/`, `/version.json` and `/sw.js` answer 200 on `https://group53.shlokbhakta.dev`, `/version.json` names the new build, and the live bundle talks to the public Convex URL; if not, `site/current` goes straight back and the deploy fails;
 6. rebuilds `og` and `stonks` where their code changed (`docker compose up -d --no-deps --build og stonks`);
 7. checks Convex, the tunnel and the dashboard are still the same containers (a deploy never touches them);
-8. prunes builds past the newest five, unused assets older than two weeks, the stack's untagged images and build cache older than a week.
+8. prunes builds past the newest five, assets no kept build uses that no build has served for two weeks, the stack's untagged images and build cache older than a week.
 
 ```sh
 ssh kiwi 'cd Services/group53 && docker compose logs -f --tail 200 deployer'   # watch a deploy
@@ -160,6 +160,8 @@ A commit that failed isn't retried on its own: the deployer waits for the next c
 ### Phones update themselves
 
 `version.json` carries the build ID and `src/version.tsx` checks it on launch, every minute, on coming back to the foreground and on navigation. A new build shows an "Updating" overlay, reloads, and says "You're up to date". A phone holds the update while a game screen is open (`useHoldUpdates`) and applies it once they leave or the app goes to the background. Every deploy is a new build ID (the time it was built), so phones reload after each one, even when the app itself didn't change.
+
+`public/sw.js` answers every page load from the last copy of `index.html` it saw (under a week old) and refreshes it in the background, so a reopened app paints its theme at once instead of white while the network answers. The first launch after a deploy opens the previous build, and the version check then moves it to the new one. That copy points at its own build's assets, which is why the deployer keeps assets for two weeks after a build stops being served.
 
 ### Order of changes
 
