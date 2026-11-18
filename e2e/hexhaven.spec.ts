@@ -51,7 +51,7 @@ test("Catan has a card on Games and a mode page with its settings", async ({ pho
   const page = await phones.open({ player: await createPlayer("Shlok"), push: "on" });
   await page.goto("/games");
   await expect(page.getByRole("heading", { name: "Catan" })).toBeVisible();
-  await page.goto("/hexhaven/mode/classic");
+  await page.goto("/Hexhaven/mode/classic");
   await expect(page).toHaveURL(/\/catan\/mode\/classic$/);
   await page.getByRole("button", { name: "Settings" }).click();
   for (const group of ["Points to win", "Hand limit on a 7", "Friendly robber", "Numbers"])

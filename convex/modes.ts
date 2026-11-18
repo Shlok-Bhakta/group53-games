@@ -121,12 +121,16 @@ const legacyGamePaths = new Map([
   ["/landlord", GAMES.landlord.path],
 ]);
 
-export function canonicalGamePath(pathname: string): string {
-  const [, slug] = pathname.split("/", 2);
-  const prefix = `/${slug}`;
-  const canonical = legacyGamePaths.get(prefix);
-  return canonical ? canonical + pathname.slice(prefix.length) : pathname;
-}
+const replaceGamePath = (pathname: string, paths: ReadonlyMap<string, string>) => {
+  const prefix = `/${pathname.split("/", 2)[1]}`;
+  const replacement = paths.get(prefix.toLowerCase());
+  return replacement ? replacement + pathname.slice(prefix.length) : pathname;
+};
+
+const pushGamePaths = new Map(Array.from(legacyGamePaths, ([legacy, canonical]) => [canonical, legacy] as const));
+
+export const canonicalGamePath = (pathname: string) => replaceGamePath(pathname, legacyGamePaths);
+export const pushGamePath = (pathname: string) => replaceGamePath(pathname, pushGamePaths);
 
 type MatchRef = { _id: string; mode: string };
 export const matchPath = (m: MatchRef) => `${GAMES[gameOf(m.mode)].path}/${m._id}`;
