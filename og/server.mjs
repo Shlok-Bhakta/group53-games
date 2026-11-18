@@ -11,6 +11,7 @@ import { scrabble } from "./games/scrabble.mjs";
 import { poker } from "./games/poker.mjs";
 import { golf } from "./games/golf.mjs";
 import { landlord } from "./games/landlord.mjs";
+import { hexhaven } from "./games/hexhaven.mjs";
 import { stonks } from "./games/stonks.mjs";
 import { wordle } from "./games/wordle.mjs";
 
@@ -21,8 +22,8 @@ const CARD_CACHE_MS = 5 * 60_000;
 const convex = new ConvexHttpClient(process.env.CONVEX_URL ?? "http://convex:3210");
 convex.setAdminAuth(readFileSync(process.env.ADMIN_KEY_FILE ?? "/run/secrets/admin_key", "utf8").trim());
 
-const MATCH_GAMES = { chess, scrabble, poker, golf, landlord };
-const PAGE_GAMES = [wordle, chess, scrabble, poker, golf, landlord, stonks];
+const MATCH_GAMES = { chess, scrabble, poker, golf, landlord, hexhaven };
+const PAGE_GAMES = [wordle, chess, scrabble, poker, golf, landlord, hexhaven, stonks];
 const LIVE_PAGES = [stonks];
 
 const gameOfMode = (mode) => MATCH_GAMES[mode.split(":")[0]] ?? chess;

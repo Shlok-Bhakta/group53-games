@@ -99,6 +99,12 @@ await s4.client.mutation(anyApi.matches.queue, { mode: "landlord:classic" });
 await a.client.mutation(anyApi.matches.startGame, { id: lid });
 await admin.mutation(anyApi.testing.landlordBots, { id: lid, steps: 120 });
 
+const hid = await a.client.mutation(anyApi.matches.queue, { mode: "hexhaven:classic" });
+await c.client.mutation(anyApi.matches.queue, { mode: "hexhaven:classic" });
+await s4.client.mutation(anyApi.matches.queue, { mode: "hexhaven:classic" });
+await a.client.mutation(anyApi.matches.startGame, { id: hid });
+for (let i = 0; i < 8; i++) await admin.mutation(anyApi.testing.hexhavenBots, { id: hid, steps: 20 });
+
 const day = Date.parse("2026-10-30T08:00:00Z");
 const walk = (base, k) =>
   Array.from({ length: 16 * 60 }, (_, i) => [
@@ -184,6 +190,19 @@ try {
   );
   const imgL = htmlL.match(/og\/match\/[a-z0-9]+\.png\?v=[a-z0-9]+/)[0];
   writeFileSync("e2e/.state/og-landlord-match.png", Buffer.from(await (await fetch(`http://127.0.0.1:8788/${imgL}`)).arrayBuffer()));
+  const htmlH = await (await fetch(`http://127.0.0.1:8788/hexhaven/${hid}`)).text();
+  console.log(
+    htmlH
+      .split("\n")
+      .filter((l) => /og:(title|description)"/.test(l))
+      .join("\n"),
+  );
+  const imgH = htmlH.match(/og\/match\/[a-z0-9]+\.png\?v=[a-z0-9]+/)[0];
+  writeFileSync("e2e/.state/og-hexhaven-match.png", Buffer.from(await (await fetch(`http://127.0.0.1:8788/${imgH}`)).arrayBuffer()));
+  writeFileSync(
+    "e2e/.state/og-hexhaven.png",
+    Buffer.from(await (await fetch("http://127.0.0.1:8788/og/image/hexhaven.png")).arrayBuffer()),
+  );
   writeFileSync(
     "e2e/.state/og-landlord.png",
     Buffer.from(await (await fetch("http://127.0.0.1:8788/og/image/landlord.png")).arrayBuffer()),

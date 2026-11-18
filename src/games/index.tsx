@@ -25,6 +25,9 @@ import { pokerRules } from "./poker/rules";
 import { LandlordBanner, LandlordModeArt } from "./landlord/art";
 import { landlordRules } from "./landlord/rules";
 import { landlordSummary } from "./landlord/summary";
+import { HexhavenBanner, HexhavenModeArt } from "./hexhaven/art";
+import { hexhavenRules } from "./hexhaven/rules";
+import { hexhavenSummary } from "./hexhaven/summary";
 import { chessSummary } from "./chess/summary";
 import { scrabbleSummary } from "./scrabble/summary";
 import { pokerSummary } from "./poker/summary";
@@ -61,6 +64,7 @@ function downloadedWhenOpened(load: () => Promise<{ default: ComponentType<GameS
 
 const GolfGame = downloadedWhenOpened(() => import("./golf/GolfGame"));
 const LandlordGame = downloadedWhenOpened(() => import("./landlord/LandlordGame"));
+const HexhavenGame = downloadedWhenOpened(() => import("./hexhaven/HexhavenGame"));
 
 export const GAME_UI: Record<GameKey, GameUI> = {
   chess: {
@@ -124,6 +128,18 @@ export const GAME_UI: Record<GameKey, GameUI> = {
     Game: LandlordGame,
     summary: landlordSummary,
     fullscreen: (m) => m.status === "active" || m.status === "finished",
+  },
+  hexhaven: {
+    key: "hexhaven",
+    path: GAMES.hexhaven.path,
+    name: GAMES.hexhaven.name,
+    blurb:
+      "Settle an island of hexes, 2 to 6 of you over a few days. Roll for resources, build roads and towns, trade, rob each other with the bandit.",
+    banner: () => <HexhavenBanner />,
+    modeArt: () => <HexhavenModeArt />,
+    rules: hexhavenRules,
+    Game: HexhavenGame,
+    summary: hexhavenSummary,
   },
 };
 

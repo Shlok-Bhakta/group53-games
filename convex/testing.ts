@@ -4,6 +4,9 @@ import { COLORS4 } from "./chess/four/board";
 import { initialFour } from "./chess/four/classic";
 import { playTiles } from "./scrabble";
 import { play as landlordPlay } from "./landlord";
+import { load as hexhavenLoad, play as hexhavenPlay } from "./hexhaven";
+import { botMove as hexhavenBot, nextBotSeat as hexhavenNext } from "./hexhaven/bot";
+import type { HexState } from "./hexhaven/engine";
 import { addPlayer } from "./matches";
 import { botMove, nextBotSeat } from "./landlord/bot";
 import type { MonoState } from "./landlord/engine";
@@ -268,6 +271,34 @@ export const landlordPatch = internalMutation({
     assertTestDeployment();
     const m = (await ctx.db.get(id))!;
     await ctx.db.patch(id, { state: { ...(m.state as MonoState), ...state } });
+  },
+});
+
+export const hexhavenBots = internalMutation({
+  args: { id: v.id("matches"), human: v.optional(v.id("users")), steps: v.optional(v.number()) },
+  handler: async (ctx, { id, human, steps = 400 }) => {
+    assertTestDeployment();
+    let made = 0;
+    for (; made < steps; made++) {
+      const m = (await ctx.db.get(id))!;
+      if (m.status !== "active") break;
+      const g = await hexhavenLoad(ctx, m);
+      const seat = hexhavenNext(g.s, (i) => m.players[i].userId === human);
+      if (seat === null) break;
+      const a = hexhavenBot(g, seat, Math.random);
+      if (!a) break;
+      await hexhavenPlay(ctx, id, a, m.players[seat].userId);
+    }
+    return made;
+  },
+});
+
+export const hexhavenPatch = internalMutation({
+  args: { id: v.id("matches"), state: v.any() },
+  handler: async (ctx, { id, state }) => {
+    assertTestDeployment();
+    const m = (await ctx.db.get(id))!;
+    await ctx.db.patch(id, { state: { ...(m.state as HexState), ...state } });
   },
 });
 

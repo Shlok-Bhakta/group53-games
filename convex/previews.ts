@@ -9,6 +9,7 @@ import { scrabblePreview } from "./scrabble/preview";
 import { pokerPreview } from "./poker/preview";
 import { golfPreview } from "./golf/preview";
 import { landlordPreview } from "./landlord/preview";
+import { hexhavenPreview } from "./hexhaven/preview";
 
 export const crew = internalQuery({
   args: {},
@@ -39,6 +40,7 @@ const BOARDS: Record<GameKey, PreviewBoard> = {
   poker: pokerPreview,
   golf: golfPreview,
   landlord: landlordPreview,
+  hexhaven: hexhavenPreview,
 };
 
 export const match = internalQuery({
