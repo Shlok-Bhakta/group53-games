@@ -362,6 +362,7 @@ function PlayerSheet({
     seat !== null &&
     seat !== mySeat &&
     mySeat >= 0 &&
+    !state.players[seat].out &&
     match.status === "active" &&
     state.phase.k === "main" &&
     (state.current === mySeat || state.current === seat);
