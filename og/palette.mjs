@@ -82,6 +82,19 @@ export const LANDLORD = {
   ink: "#1d1d1f",
 };
 
+export const HEXHAVEN = {
+  terrain: ["#3f7d4a", "#c46a3f", "#9ccc6a", "#e2bd4a", "#8d929b"],
+  desert: "#e3cf9c",
+  sea: "#3d7fa6",
+  sand: "#e8d9b0",
+  token: "#f8f1df",
+  tokenInk: "#2b2418",
+  hot: "#c8352b",
+  bandit: "#26232b",
+  pieceEdge: "#1d1b20",
+  unknownSeat: "#9aa0a6",
+};
+
 export const GOLF = {
   grass: { ice: "#86aec2", hills: "#5c9a4b" },
   mow: { ice: "#91b7c9", hills: "#67a455" },
