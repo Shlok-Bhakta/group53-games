@@ -116,6 +116,22 @@ export const REALTIME_LOBBY_MS = 10 * 60 * 1000;
 export const REALTIME_COUNTDOWN_MS = 3000;
 export const START_RATING = 1200;
 
+const legacyGamePaths = new Map([
+  ["/hexhaven", GAMES.hexhaven.path],
+  ["/landlord", GAMES.landlord.path],
+]);
+
+const replaceGamePath = (pathname: string, paths: ReadonlyMap<string, string>) => {
+  const prefix = `/${pathname.split("/", 2)[1]}`;
+  const replacement = paths.get(prefix.toLowerCase());
+  return replacement ? replacement + pathname.slice(prefix.length) : pathname;
+};
+
+const pushGamePaths = new Map(Array.from(legacyGamePaths, ([legacy, canonical]) => [canonical, legacy] as const));
+
+export const canonicalGamePath = (pathname: string) => replaceGamePath(pathname, legacyGamePaths);
+export const pushGamePath = (pathname: string) => replaceGamePath(pathname, pushGamePaths);
+
 type MatchRef = { _id: string; mode: string };
 export const matchPath = (m: MatchRef) => `${GAMES[gameOf(m.mode)].path}/${m._id}`;
 export const acceptPath = (m: MatchRef) => `${matchPath(m)}?accept=1`;

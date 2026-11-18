@@ -406,11 +406,11 @@ function PlayerSheet({
             )}
             {state.army === seat && (
               <span className="flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1.5">
-                <SwordIcon weight="fill" /> Biggest army
+                <SwordIcon weight="fill" /> Largest Army
               </span>
             )}
             <span className="flex items-center gap-1.5 rounded-full bg-muted/60 px-3 py-1.5">
-              <CastleTurretIcon weight="fill" /> {state.spots.filter((x) => x?.seat === seat && x.town).length} towns
+              <CastleTurretIcon weight="fill" /> {state.spots.filter((x) => x?.seat === seat && x.town).length} cities
             </span>
           </div>
           {canTrade && (

@@ -11,21 +11,21 @@ export function handText(h: readonly number[]) {
 
 export const CARD_NAMES: Record<Dev, string> = {
   knight: "Knight",
-  roads: "Two roads",
-  plenty: "Windfall",
-  corner: "Corner the market",
-  point: "Monument",
+  roads: "Road Building",
+  plenty: "Year of Plenty",
+  corner: "Monopoly",
+  point: "Victory Point",
 };
 
 export const CARD_TEXT: Record<Dev, string> = {
-  knight: "Move the bandit and steal a card. Three knights or more and the most of anyone is the biggest army: 2 points.",
+  knight: "Move the robber and steal a card. Three knights or more and the most of anyone is the largest army: 2 points.",
   roads: "Build two roads for free.",
   plenty: "Take any two resources from the bank.",
   corner: "Name a resource. Everyone hands you all of theirs.",
   point: "Worth a point. Kept secret until the end.",
 };
 
-const PIECE = { road: "a road", village: "a village", town: "a town" } as const;
+const PIECE = { road: "a road", village: "a settlement", town: "a city" } as const;
 
 type Name = (seat: number) => string;
 const cap = (s: string) => s.replace(/^./, (c) => c.toUpperCase());
@@ -49,14 +49,14 @@ export function say(e: Ev, name: Name): string | null {
     case "discard":
       return cap(`${who(e.seat)} gave back ${handText(e.res)}.`);
     case "bandit":
-      return cap(`${who(e.seat)} moved the bandit.`);
+      return cap(`${who(e.seat)} moved the robber.`);
     case "steal":
       return cap(`${who(e.seat)} stole ${resName(e.r)} from ${who(e.from)}.`);
     case "buy":
-      return cap(`${who(e.seat)} bought a card.`);
+      return cap(`${who(e.seat)} bought a development card.`);
     case "play":
-      if (e.card === "plenty") return cap(`${who(e.seat)} played Windfall for ${handText(e.got ?? [])}.`);
-      if (e.card === "corner") return cap(`${who(e.seat)} cornered the market in ${resName(e.r ?? 0)} and took ${e.took ?? 0}.`);
+      if (e.card === "plenty") return cap(`${who(e.seat)} played ${CARD_NAMES[e.card]} for ${handText(e.got ?? [])}.`);
+      if (e.card === "corner") return cap(`${who(e.seat)} played ${CARD_NAMES[e.card]} and took ${e.took ?? 0} ${resName(e.r ?? 0)}.`);
       return cap(`${who(e.seat)} played ${CARD_NAMES[e.card]}.`);
     case "bank":
       return cap(`${who(e.seat)} traded ${e.n} ${resName(e.give)} with the bank for 1 ${resName(e.get)}.`);
@@ -69,8 +69,8 @@ export function say(e: Ev, name: Name): string | null {
     case "untrade":
       return e.why === "reject" ? cap(`${who(e.by)} turned down ${who(e.offer.from)}'s trade.`) : null;
     case "award":
-      if (e.seat < 0) return `Nobody has the ${e.kind === "road" ? "longest road" : "biggest army"} now.`;
-      return cap(`${who(e.seat)} ${verb(e.seat, "have", "has")} the ${e.kind === "road" ? "longest road" : "biggest army"}.`);
+      if (e.seat < 0) return `Nobody has the ${e.kind === "road" ? "longest road" : "largest army"} now.`;
+      return cap(`${who(e.seat)} ${verb(e.seat, "have", "has")} the ${e.kind === "road" ? "longest road" : "largest army"}.`);
     case "turn":
       return null;
     case "out":

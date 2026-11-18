@@ -79,6 +79,7 @@ test("Monopoly has a card on Games and a mode page with its house rules", async 
   await page.goto("/games");
   await expect(page.getByRole("heading", { name: "Monopoly" })).toBeVisible();
   await page.goto("/landlord/mode/classic");
+  await expect(page).toHaveURL(/\/monopoly\/mode\/classic$/);
   await page.getByRole("button", { name: "Settings" }).click();
   for (const group of ["Starting cash", "Auctions", "Free Parking jackpot", "Speed die", "Game"])
     await expect(page.getByRole("radiogroup", { name: group })).toBeVisible();

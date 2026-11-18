@@ -4,7 +4,7 @@ export const DESERT = -1;
 export const ANY_PORT = -1;
 
 export const TERRAIN_NAMES = ["Forest", "Hills", "Pasture", "Fields", "Mountains"] as const;
-export const RESOURCE_NAMES = ["Timber", "Brick", "Wool", "Grain", "Ore"] as const;
+export const RESOURCE_NAMES = ["Lumber", "Brick", "Wool", "Grain", "Ore"] as const;
 
 export type Hand = number[];
 export const noHand = (): Hand => [0, 0, 0, 0, 0];

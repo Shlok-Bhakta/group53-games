@@ -139,7 +139,7 @@ describe("setup", () => {
   test("the setup road has to touch the village just placed", () => {
     const g = play(game(2), 0, { k: "village", at: 0 });
     const far = geometryOf("standard").edges.findIndex((e) => e.a !== 0 && e.b !== 0);
-    expect(() => play(g, 0, { k: "road", at: far })).toThrow("next to the village");
+    expect(() => play(g, 0, { k: "road", at: far })).toThrow("next to the settlement");
   });
 });
 
@@ -253,7 +253,7 @@ describe("building", () => {
     const v = g.s.spots.findIndex((x) => x?.seat === 0);
     const before = publicPoints(g.s, 0);
     const other = g.s.spots.findIndex((x) => x?.seat === 1);
-    expect(() => play(g, 0, { k: "town", at: other })).toThrow("your villages");
+    expect(() => play(g, 0, { k: "town", at: other })).toThrow("your own settlements");
     const after = play(g, 0, { k: "town", at: v });
     expect(after.s.spots[v]).toEqual({ seat: 0, town: true });
     expect(publicPoints(after.s, 0)).toBe(before + 1);

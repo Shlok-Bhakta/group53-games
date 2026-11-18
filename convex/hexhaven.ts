@@ -68,7 +68,7 @@ async function commit(ctx: MutationCtx, match: Doc<"matches">, before: Game | nu
   if (!before) {
     const name = await displayName(ctx, turn);
     await startPushes(ctx, match, (p) => ({
-      title: "Hexhaven is on",
+      title: "Catan is on",
       body: p.userId === turn ? "You place first." : `${name} places first.`,
     }));
     return;
@@ -81,9 +81,9 @@ function upNext(s: HexState): { title: string; body: string } {
   if (ph.k === "setup")
     return {
       title: "Your turn to settle",
-      body: ph.i >= s.players.length ? "Place your second village and road." : "Place your first village and road.",
+      body: ph.i >= s.players.length ? "Place your second settlement and road." : "Place your first settlement and road.",
     };
-  if (ph.k === "discard") return { title: "The bandit's here", body: "A 7 came up. Give back half your cards." };
+  if (ph.k === "discard") return { title: "The robber is here", body: "A 7 came up. Give back half your cards." };
   return { title: "Your turn", body: "Your roll." };
 }
 
@@ -107,10 +107,10 @@ async function tell(ctx: MutationCtx, match: Doc<"matches">, g: Game, by: Id<"us
       const to = o.to >= 0 ? [o.to] : s.players.map((_, i) => i).filter((i) => i !== o.from);
       for (const seat of to) put(seat, 1, `${names[o.from]} wants to trade`, `Their ${handText(o.give)} for your ${handText(o.get)}.`);
     }
-    if (e.t === "steal") put(e.from, 2, `${names[e.seat]} robbed you`, `Their bandit took your ${resName(e.r)}.`);
+    if (e.t === "steal") put(e.from, 2, `${names[e.seat]} robbed you`, `Their robber took your ${resName(e.r)}.`);
     if (e.t === "play" && e.card === "corner")
       for (const seat of s.players.keys())
-        if (seat !== e.seat) put(seat, 2, `${names[e.seat]} cornered ${resName(e.r ?? 0)}`, "They took every one you had.");
+        if (seat !== e.seat) put(seat, 2, `${names[e.seat]} played Monopoly on ${resName(e.r ?? 0)}`, "They took every one you had.");
     if (e.t === "traded")
       put(e.offer.from, 3, `${names[e.by]} took your trade`, `Your ${handText(e.offer.give)} for their ${handText(e.offer.get)}.`);
     if (e.t === "untrade" && e.why === "reject" && e.offer.to >= 0)
@@ -153,7 +153,7 @@ export const remind = internalMutation({
     const ph = s.phase;
     const body =
       ph.k === "setup"
-        ? "Everyone's waiting on you to place your village."
+        ? "Everyone's waiting on you to place your settlement."
         : ph.k === "discard"
           ? "A 7 came up. Give back half your cards."
           : ph.k === "roll"

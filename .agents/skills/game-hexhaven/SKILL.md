@@ -5,7 +5,7 @@ description: The Hexhaven package's feature map. Use for any Hexhaven work: its 
 
 # Hexhaven
 
-AGENTS.md is the overview and the `framework` skill covers matches, turns, secrets, pushes and the harness; the `ui` skill covers `GameFrame`, sheets and landscape. Hexhaven is our own settle-the-island game in the hex-island genre: the name, the art, the card names and the wording are ours. Code, paths and functions say `hexhaven`.
+AGENTS.md is the overview and the `framework` skill covers matches, turns, secrets, pushes and the harness; the `ui` skill covers `GameFrame`, sheets and landscape. Players see Catan at `/catan`. The game uses its own art. Stored mode and action keys and Convex function names still use the original identifiers. Old `/hexhaven` links redirect in the app.
 
 ## Mode and settings
 
@@ -39,7 +39,7 @@ One async mode, `hexhaven:classic` ("Classic", 2 to 6, `minPlayers` 2 so the hos
 
 ## Server
 
-- `start`: `newGame` with `rulesOf`, then `commit` writes the deck and every player's (empty) hand of cards, `passTurn` to `actor` with `remind` as the timer, and the "Hexhaven is on" pushes (`startPushes`).
+- `start`: `newGame` with `rulesOf`, then `commit` writes the deck and every player's (empty) hand of cards, `passTurn` to `actor` with `remind` as the timer, and the "Catan is on" pushes (`startPushes`).
 - `move` → `play`: `seated` (any time, the engine decides), `load` (state plus every secret), `act`, `commit`. `seen` is the `seq` the phone drew; for `buy`, `bank`, `offer`, `plenty` and `corner` (things a double tap would do twice) a different `seq` is refused.
 - `commit` only rewrites a secret that changed. Over: `finishBySeats(standings)` with `points`, `resign` or `last_player`.
 - `tell`: one push per player, the most pressing: 0 a 7 they must give cards back for, or a fresh decision now theirs ("Your turn to settle", "Your turn" with what just happened); 1 an offer to them; 2 robbed, or cornered; 3 their trade taken or turned down. Never the mover, never anyone out.

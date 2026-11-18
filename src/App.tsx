@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router";
 import { Authenticated, AuthLoading, Unauthenticated, useQuery } from "convex/react";
 import { AnimatePresence, MotionConfig } from "motion/react";
+import { canonicalGamePath } from "../convex/modes";
 import { api } from "../convex/_generated/api";
 import { Wordle } from "./games/wordle/Wordle";
 import { GAME_UI } from "./games";
@@ -197,6 +198,10 @@ function SignedIn() {
 }
 
 function NotFound() {
+  const { pathname, search, hash } = useLocation();
+  const canonical = canonicalGamePath(pathname);
+  if (canonical !== pathname) return <Navigate to={canonical + search + hash} replace />;
+
   return (
     <div>
       <NavBar title="Not found" />

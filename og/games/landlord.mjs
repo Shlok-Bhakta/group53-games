@@ -18,7 +18,7 @@ function squareColor(owner, colors) {
 
 export const landlord = {
   key: "landlord",
-  paths: ["/landlord"],
+  paths: ["/monopoly", "/landlord"],
   page: { title: "Monopoly", description: "Buy streets, build hotels, trade and bankrupt each other, 2 to 8 of you over a few days." },
   card: { word: "MONOPOLY", states: TITLE_STATES, tileSize: 104, blurb: "Buy streets, build hotels, bankrupt your friends." },
   modeTitles: { "landlord:classic": "Monopoly" },

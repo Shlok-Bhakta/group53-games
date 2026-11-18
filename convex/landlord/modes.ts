@@ -2,7 +2,7 @@ import type { GameDef, ModeDef, Setting } from "../modeKit";
 
 export const LANDLORD_GAME = {
   name: "Monopoly",
-  path: "/landlord",
+  path: "/monopoly",
   reasons: {
     richest: { label: "Richest at the end", push: "the richest at the end", won: "as the richest" },
     last_player: { label: "Last one standing", push: "everyone else went bankrupt", won: "as the last one standing" },

@@ -296,5 +296,5 @@ function labelOf(kind: PickKind, i: number, state: HexState) {
     const h = state.hexes[i];
     return h.r === DESERT ? "Desert" : `${TERRAIN_NAMES[h.r]} ${h.n}`;
   }
-  return kind === "road" ? `Road spot ${i}` : kind === "town" ? `Town on village ${i}` : `Village spot ${i}`;
+  return kind === "road" ? `Road spot ${i}` : kind === "town" ? `City on settlement ${i}` : `Settlement spot ${i}`;
 }

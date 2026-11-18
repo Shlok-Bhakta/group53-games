@@ -74,7 +74,7 @@ async function botsUntil(t: T, id: Id<"matches">, seats: Player[], done: (s: Hex
 
 const spotOf = (s: HexState, seat: number) => villageSpots(s, seat, true)[0];
 
-describe("a game of Hexhaven", () => {
+describe("a game of Catan", () => {
   test("starts in setup with the first player pushed, and the deck kept secret", async () => {
     const t = setup();
     const { id, seats } = await game(t, 3, { points: 12 });
@@ -87,7 +87,7 @@ describe("a game of Hexhaven", () => {
     expect(JSON.stringify(s), "the deck order never goes in the public state").not.toContain("plenty");
     const deck = (await loadGame(t, id)).deck;
     expect(deck).toHaveLength(25);
-    const p = (await pushes(t)).filter((x) => x.title === "Hexhaven is on");
+    const p = (await pushes(t)).filter((x) => x.title === "Catan is on");
     expect(p.find((x) => x.userId === seats[0].userId)?.body).toBe("You place first.");
     expect(p.find((x) => x.userId === seats[1].userId)?.body).toMatch(/places first/);
   });

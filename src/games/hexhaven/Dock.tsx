@@ -18,7 +18,7 @@ import { offersFor } from "./TradeSheet";
 export type Building = "road" | "village" | "town";
 
 const PIECE_ICON = { road: PathIcon, village: HouseLineIcon, town: CastleTurretIcon } as const;
-const PIECE_NAME = { road: "Road", village: "Village", town: "Town" } as const;
+const PIECE_NAME = { road: "Road", village: "Settlement", town: "City" } as const;
 
 function Badge({ n }: { n: number }) {
   if (!n) return null;
@@ -88,7 +88,7 @@ export function Dock({
   if (ph.k === "setup" && up === mySeat && pick) {
     main =
       chosen === null ? (
-        <DockNote>{pick.kind === "village" ? "Tap a spot for your village." : "Tap where its road goes."}</DockNote>
+        <DockNote>{pick.kind === "village" ? "Tap a spot for your settlement." : "Tap where its road goes."}</DockNote>
       ) : (
         confirm(pick.kind === "village" ? "Settle here" : "Build the road", () =>
           act({ k: pick.kind as "village" | "road", at: chosen }).then(onDone),
@@ -101,14 +101,14 @@ export function Dock({
       </Button>
     );
   } else if (ph.k === "bandit" && up === mySeat) {
-    if (chosen === null) main = <DockNote>Tap a hex to move the bandit.</DockNote>;
+    if (chosen === null) main = <DockNote>Tap a hex to move the robber.</DockNote>;
     else {
       const victims = victimsAt(state, mySeat, chosen);
       main = (
         <ActionRail className="gap-2">
           {victims.length === 0 ? (
             <AsyncButton size="dock" className="text-callout" onClick={() => act({ k: "bandit", hex: chosen, from: -1 }).then(onDone)}>
-              Move the bandit here
+              Move the robber here
             </AsyncButton>
           ) : (
             victims.map((v) => (
@@ -167,7 +167,15 @@ export function Dock({
           const Icon = PIECE_ICON[k];
           const why = cantBuild(state, mySeat, k);
           return (
-            <Button key={k} variant="card" size="dock" disabled={!!why} aria-description={why ?? undefined} onClick={() => setBuilding(k)}>
+            <Button
+              key={k}
+              variant="card"
+              size="dock"
+              className="px-1"
+              disabled={!!why}
+              aria-description={why ?? undefined}
+              onClick={() => setBuilding(k)}
+            >
               <Icon weight="bold" />
               {PIECE_NAME[k]}
             </Button>

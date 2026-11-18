@@ -41,7 +41,7 @@ function Tile({ r, n, x, y, delay }: { r: number; n: number; x: number; y: numbe
 
 export function HexhavenBanner() {
   return (
-    <div className="mx-auto flex h-[150px] w-full max-w-[320px] items-center justify-center" role="img" aria-label="Hexhaven">
+    <div className="mx-auto flex h-[150px] w-full max-w-[320px] items-center justify-center" role="img" aria-label="Catan">
       <svg viewBox="-3.1 -2.6 6.2 5.2" className="h-full">
         <rect x={-3.1} y={-2.6} width={6.2} height={5.2} rx={0.5} fill={PALETTE.sea} />
         {BANNER.map((t, i) => (

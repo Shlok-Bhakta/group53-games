@@ -2,7 +2,7 @@ import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { ONLINE_WINDOW_MS } from "./presenceConfig";
-import { matchPath } from "./modes";
+import { canonicalGamePath, matchPath, pushGamePath } from "./modes";
 
 export type Push = { title: string; body: string; url: string; tag?: string };
 
@@ -13,7 +13,12 @@ async function isLookingAt(ctx: MutationCtx, userId: Id<"users">, url: string) {
     .query("presence")
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .unique();
-  return !!presence && presence.online && Date.now() - presence.lastSeen < ONLINE_WINDOW_MS && presence.path === url;
+  return (
+    !!presence &&
+    presence.online &&
+    Date.now() - presence.lastSeen < ONLINE_WINDOW_MS &&
+    canonicalGamePath(presence.path) === canonicalGamePath(url)
+  );
 }
 
 export async function notify(ctx: MutationCtx, userId: Id<"users">, push: Push) {
@@ -21,8 +26,9 @@ export async function notify(ctx: MutationCtx, userId: Id<"users">, push: Push) 
   if (testPlayer && !onTestBackend()) return;
   if (await isLookingAt(ctx, userId, push.url)) return;
   const badge = await badgeCount(ctx, userId);
-  if (testPlayer) await ctx.db.insert("testPushes", { userId, title: push.title, body: push.body, url: push.url, tag: push.tag, badge });
-  else await ctx.scheduler.runAfter(0, internal.push.sendToUser, { userId, ...push, badge });
+  const url = pushGamePath(push.url);
+  if (testPlayer) await ctx.db.insert("testPushes", { userId, title: push.title, body: push.body, url, tag: push.tag, badge });
+  else await ctx.scheduler.runAfter(0, internal.push.sendToUser, { userId, ...push, url, badge });
 }
 
 export async function badgeCount(ctx: MutationCtx, userId: Id<"users">) {

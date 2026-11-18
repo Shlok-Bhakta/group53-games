@@ -47,13 +47,14 @@ async function pastSetup(id: string, human?: string) {
   await admin().mutation(anyApi.testing.hexhavenBots, { id, human, steps: 8 });
 }
 
-test("Hexhaven has a card on Games and a mode page with its settings", async ({ phones }) => {
+test("Catan has a card on Games and a mode page with its settings", async ({ phones }) => {
   const page = await phones.open({ player: await createPlayer("Shlok"), push: "on" });
   await page.goto("/games");
-  await expect(page.getByRole("heading", { name: "Hexhaven" })).toBeVisible();
-  await page.goto("/hexhaven/mode/classic");
+  await expect(page.getByRole("heading", { name: "Catan" })).toBeVisible();
+  await page.goto("/Hexhaven/mode/classic");
+  await expect(page).toHaveURL(/\/catan\/mode\/classic$/);
   await page.getByRole("button", { name: "Settings" }).click();
-  for (const group of ["Points to win", "Hand limit on a 7", "Friendly bandit", "Numbers"])
+  for (const group of ["Points to win", "Hand limit on a 7", "Friendly robber", "Numbers"])
     await expect(page.getByRole("radiogroup", { name: group })).toBeVisible();
   await shot(page, "mode");
 });
@@ -118,7 +119,7 @@ test("a trade: offered on one phone, accepted on the other", async ({ phones }) 
   await admin().mutation(anyApi.testing.hexhavenPatch, { id, state: { phase: { k: "main" }, current: seat, players } });
   await up.getByRole("button", { name: "Trade" }).click();
   const offer = up.getByRole("region", { name: "New offer" });
-  await offer.getByRole("button", { name: "More timber" }).first().click();
+  await offer.getByRole("button", { name: "More lumber" }).first().click();
   await offer.getByRole("group", { name: "You get" }).getByRole("button", { name: "More ore" }).click();
   await shot(up, "trade");
   await offer.getByRole("button", { name: "Offer to everyone" }).click();
@@ -145,13 +146,13 @@ test("a 7: the other phone gives back half, and the roller moves the bandit", as
     state: { phase: { k: "discard", owe }, current: seat, players, dice: [3, 4] },
   });
   await other.getByRole("button", { name: "Give back 4 cards" }).click();
-  for (const r of [0, 1, 2, 3]) await other.getByRole("button", { name: `More ${["timber", "brick", "wool", "grain"][r]}` }).click();
+  for (const r of [0, 1, 2, 3]) await other.getByRole("button", { name: `More ${["lumber", "brick", "wool", "grain"][r]}` }).click();
   await other.getByRole("button", { name: "Give back 4", exact: true }).click();
   await expect.poll(async () => (await stateOf(id)).phase.k).toBe("bandit");
   await up.locator('[data-pick="hex"]').first().click();
   const rob = up.getByRole("button", { name: /^Rob / });
   if (await rob.count()) await rob.first().click();
-  else await up.getByRole("button", { name: "Move the bandit here" }).click();
+  else await up.getByRole("button", { name: "Move the robber here" }).click();
   await expect.poll(async () => (await stateOf(id)).phase.k).toBe("main");
   const bandit = String(((await getMatch(id)).state as { bandit: number }).bandit);
   for (const p of [up, other]) await expect(p.locator("[data-pieces]")).toHaveAttribute("data-bandit-at", bandit);

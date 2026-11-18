@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { ConvexHttpClient } from "convex/browser";
@@ -181,7 +182,7 @@ try {
   );
   const imgP = htmlP.match(/og\/match\/[a-z0-9]+\.png\?v=[a-z0-9]+/)[0];
   writeFileSync("e2e/.state/og-poker-match.png", Buffer.from(await (await fetch(`http://127.0.0.1:8788/${imgP}`)).arrayBuffer()));
-  const htmlL = await (await fetch(`http://127.0.0.1:8788/landlord/${lid}`)).text();
+  const htmlL = await (await fetch(`http://127.0.0.1:8788/monopoly/${lid}`)).text();
   console.log(
     htmlL
       .split("\n")
@@ -189,8 +190,10 @@ try {
       .join("\n"),
   );
   const imgL = htmlL.match(/og\/match\/[a-z0-9]+\.png\?v=[a-z0-9]+/)[0];
+  const oldimgL = await (await fetch(`http://127.0.0.1:8788/landlord/${lid}`)).text();
+  assert.ok(oldimgL.includes(imgL));
   writeFileSync("e2e/.state/og-landlord-match.png", Buffer.from(await (await fetch(`http://127.0.0.1:8788/${imgL}`)).arrayBuffer()));
-  const htmlH = await (await fetch(`http://127.0.0.1:8788/hexhaven/${hid}`)).text();
+  const htmlH = await (await fetch(`http://127.0.0.1:8788/catan/${hid}`)).text();
   console.log(
     htmlH
       .split("\n")
@@ -198,6 +201,8 @@ try {
       .join("\n"),
   );
   const imgH = htmlH.match(/og\/match\/[a-z0-9]+\.png\?v=[a-z0-9]+/)[0];
+  const oldimgH = await (await fetch(`http://127.0.0.1:8788/hexhaven/${hid}`)).text();
+  assert.ok(oldimgH.includes(imgH));
   writeFileSync("e2e/.state/og-hexhaven-match.png", Buffer.from(await (await fetch(`http://127.0.0.1:8788/${imgH}`)).arrayBuffer()));
   writeFileSync(
     "e2e/.state/og-hexhaven.png",
