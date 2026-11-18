@@ -162,7 +162,7 @@ export function Dock({
     );
   } else if (ph.k === "main" && up === mySeat) {
     main = (
-      <ActionRail className="grid-cols-4 gap-2">
+      <ActionRail className="grid-cols-4 gap-2 phone-landscape:grid phone-landscape:grid-flow-row phone-landscape:grid-cols-2">
         {(["road", "village", "town"] as const).map((k) => {
           const Icon = PIECE_ICON[k];
           const why = cantBuild(state, mySeat, k);

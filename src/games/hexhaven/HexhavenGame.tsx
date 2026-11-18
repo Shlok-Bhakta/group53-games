@@ -89,6 +89,7 @@ export default function HexhavenGame({ match, meId }: { match: MatchView; meId: 
   const [chosen, setChosen] = useState<number | null>(null);
   const [sheet, setSheet] = useState<"trade" | "cards" | "log" | null>(null);
   const [player, setPlayer] = useState<number | null>(null);
+  const [tradeWith, setTradeWith] = useState<number | undefined>(undefined);
   const gained = useLive(state, mySeat);
   const active = match.status === "active";
   const pick = active ? pickFor(state, mySeat, building) : null;
@@ -134,7 +135,10 @@ export default function HexhavenGame({ match, meId }: { match: MatchView; meId: 
           building={building}
           setBuilding={setBuilding}
           onDone={() => setChosen(null)}
-          onTrade={() => setSheet("trade")}
+          onTrade={() => {
+            setTradeWith(undefined);
+            setSheet("trade");
+          }}
           onCards={() => setSheet("cards")}
         />
       }
@@ -146,7 +150,14 @@ export default function HexhavenGame({ match, meId }: { match: MatchView; meId: 
       </div>
       {playing && (
         <>
-          <TradeSheet open={sheet === "trade"} onClose={() => setSheet(null)} match={match} state={state} seat={mySeat} />
+          <TradeSheet
+            open={sheet === "trade"}
+            onClose={() => setSheet(null)}
+            match={match}
+            state={state}
+            seat={mySeat}
+            partner={tradeWith}
+          />
           <CardsSheet open={sheet === "cards"} onClose={() => setSheet(null)} match={match} state={state} seat={mySeat} held={held} />
         </>
       )}
@@ -159,6 +170,7 @@ export default function HexhavenGame({ match, meId }: { match: MatchView; meId: 
         mySeat={mySeat}
         held={held}
         onTrade={() => {
+          setTradeWith(player ?? undefined);
           setPlayer(null);
           setSheet("trade");
         }}

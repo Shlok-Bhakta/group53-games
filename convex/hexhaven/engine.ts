@@ -117,17 +117,27 @@ export const geo = (s: Pick<HexState, "layout">) => geometryOf(s.layout);
 export const layoutFor = (players: number): LayoutKey => (players > 4 ? "big" : "standard");
 export const supplyOf = (s: Pick<HexState, "layout">) => LAYOUTS[s.layout].supply;
 
+const isHot = (n: number) => n === 6 || n === 8;
+
 function placeNumbers(layout: LayoutKey, terrain: number[], balanced: boolean, rng: Rng) {
   const g = geometryOf(layout);
   const land = terrain.flatMap((t, i) => (t === DESERT ? [] : [i]));
-  let numbers: number[] = [];
-  for (let tries = 0; tries < PLACE_TRIES; tries++) {
-    numbers = Array(terrain.length).fill(0);
-    shuffled(LAYOUTS[layout].numbers, rng).forEach((n, k) => (numbers[land[k]] = n));
-    const hot = (i: number) => numbers[i] === 6 || numbers[i] === 8;
-    const clash = numbers.some((n, i) => g.hexNear[i].some((j) => (hot(i) && hot(j)) || (n !== 0 && numbers[j] === n)));
-    if (!balanced || !clash) break;
+  const bag = shuffled(LAYOUTS[layout].numbers, rng);
+  const numbers: number[] = Array(terrain.length).fill(0);
+  if (!balanced) {
+    bag.forEach((n, k) => (numbers[land[k]] = n));
+    return numbers;
   }
+  const hot = bag.filter(isHot);
+  let spots: number[] = [];
+  for (let tries = 0; tries <= PLACE_TRIES && spots.length < hot.length; tries++) {
+    spots = [];
+    for (const h of tries < PLACE_TRIES ? shuffled(land, rng) : land)
+      if (spots.length < hot.length && !g.hexNear[h].some((j) => spots.includes(j))) spots.push(h);
+  }
+  hot.forEach((n, k) => (numbers[spots[k]] = n));
+  const rest = land.filter((h) => !spots.includes(h));
+  bag.filter((n) => !isHot(n)).forEach((n, k) => (numbers[rest[k]] = n));
   return numbers;
 }
 
@@ -402,7 +412,7 @@ class Turn {
     }
     for (const [i, p] of s.players.entries()) {
       if (p.out || p.knights < ARMY_MIN) continue;
-      if (army < 0 ? s.players.every((o, j) => j === i || o.knights < p.knights) : p.knights > s.players[army].knights) army = i;
+      if (army < 0 ? s.players.every((o, j) => j === i || o.out || o.knights < p.knights) : p.knights > s.players[army].knights) army = i;
     }
     if (army !== armyHolder) {
       s.army = army;
@@ -664,6 +674,7 @@ export function act(game: Game, seat: number, a: Action, rng: Rng = Math.random)
     case "doneRoads": {
       if (ph.k !== "roads") throw new Error("You're not placing free roads.");
       s.phase = { k: ph.then };
+      s.seq++;
       return g;
     }
     case "roll": {

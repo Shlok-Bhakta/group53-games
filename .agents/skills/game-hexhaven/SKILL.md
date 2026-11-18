@@ -9,7 +9,7 @@ AGENTS.md is the overview and the `framework` skill covers matches, turns, secre
 
 ## Mode and settings
 
-One async mode, `hexhaven:classic` ("Classic", 2 to 6, `minPlayers` 2 so the host taps Start), in `convex/hexhaven/modes.ts`. Settings, turned into engine `Rules` by `rulesOf` in `convex/hexhaven.ts`: `points` Points to win (8, 10, 12, 15; default 10), `limit` Hand limit on a 7 (7 or 9 cards), `friendly` Friendly bandit (never steals from, or sits next to, anyone on 2 public points or fewer, unless every hex does), `balanced` Numbers (Balanced: no 6 or 8 side by side and no equal numbers side by side, retried up to 400 shuffles; Wild). Endings: `points` (reached the points), `last_player`, `resign` (one of two). No time limit: `timeout` does nothing; `remind` pushes whoever it's waiting on every 4 hours, then every 12 after 4 nudges. `src/games/hexhaven/rules.ts` is How to play written from the settings.
+One async mode, `hexhaven:classic` ("Classic", 2 to 6, `minPlayers` 2 so the host taps Start), in `convex/hexhaven/modes.ts`. Settings, turned into engine `Rules` by `rulesOf` in `convex/hexhaven.ts`: `points` Points to win (8, 10, 12, 15; default 10), `limit` Hand limit on a 7 (7 or 9 cards), `friendly` Friendly bandit (never steals from, or sits next to, anyone on 2 public points or fewer, unless every hex does), `balanced` Numbers (Balanced: the 6s and 8s go first on hexes none of which touch, then the rest anywhere; Wild: anywhere). Endings: `points` (reached the points), `last_player`, `resign` (one of two). No time limit: `timeout` does nothing; `remind` pushes whoever it's waiting on every 4 hours, then every 12 after 4 nudges. `src/games/hexhaven/rules.ts` is How to play written from the settings.
 
 ## File map
 

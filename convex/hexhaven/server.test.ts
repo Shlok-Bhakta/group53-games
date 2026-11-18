@@ -4,7 +4,7 @@ import type { Id } from "../_generated/dataModel";
 import { setup, signedIn } from "../test.setup";
 import { REMIND_MS } from "../hexhaven";
 import { geometryOf, noHand } from "./board";
-import { actor, villageSpots, type Dev, type Game, type Held, type HexState } from "./engine";
+import { actor, roadSpots, villageSpots, type Dev, type Game, type Held, type HexState } from "./engine";
 import { botMove, nextBotSeat } from "./bot";
 
 beforeEach(() => {
@@ -142,6 +142,22 @@ describe("a game of Hexhaven", () => {
     await expect(seats[up].as.mutation(api.hexhaven.move, { id, action: { k: "bank", give: 0, get: 4 }, seen: now.seq })).rejects.toThrow(
       "changed",
     );
+  });
+
+  test("a free-road tap seen before the free roads ended isn't charged as a paid road", async () => {
+    const t = setup();
+    const { id, seats } = await game(t, 2);
+    await botsUntil(t, id, seats, (s) => s.phase.k === "main");
+    const up = (await stateOf(t, id)).current;
+    await patchState(t, id, (x) => {
+      x.phase = { k: "roads", left: 2, then: "main" };
+      x.players[up].res = [1, 1, 0, 0, 0];
+    });
+    const s = await stateOf(t, id);
+    const at = roadSpots(s, up)[0];
+    await seats[up].as.mutation(api.hexhaven.move, { id, action: { k: "doneRoads" }, seen: s.seq });
+    await expect(seats[up].as.mutation(api.hexhaven.move, { id, action: { k: "road", at }, seen: s.seq })).rejects.toThrow("changed");
+    expect((await stateOf(t, id)).players[up].res).toEqual([1, 1, 0, 0, 0]);
   });
 
   test("a 7 pushes everyone who has to give cards back, and being robbed is pushed too", async () => {

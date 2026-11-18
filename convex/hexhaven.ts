@@ -13,6 +13,7 @@ import { passTurn, startPushes } from "./lib/turns";
 import {
   act as step,
   actor,
+  alive,
   newGame,
   standings,
   waitingOn,
@@ -28,7 +29,7 @@ import { handText, resName, say } from "./hexhaven/text";
 export const REMIND_MS = 4 * 60 * 60 * 1000;
 const REMIND_LATER_MS = 12 * 60 * 60 * 1000;
 const EAGER_REMINDERS = 4;
-const SEEN_CHECKED = new Set<Action["k"]>(["buy", "bank", "offer", "plenty", "corner"]);
+const SEEN_CHECKED = new Set<Action["k"]>(["buy", "bank", "offer", "plenty", "corner", "road"]);
 
 export function rulesOf(mode: string, raw: Doc<"matches">["settings"]): Rules {
   const s = settingsOf(mode, raw);
@@ -53,8 +54,7 @@ async function commit(ctx: MutationCtx, match: Doc<"matches">, before: Game | nu
     const moveCount = match.moveCount + 1;
     await ctx.db.patch(match._id, { state: g.s, moveCount, lastActivityAt: Date.now() });
     const ended = { ...match, state: g.s, moveCount };
-    const outs = g.events.some((e) => e.t === "out");
-    const reason = !outs ? "points" : match.players.length === 2 ? "resign" : "last_player";
+    const reason = alive(g.s).length > 1 ? "points" : match.players.length === 2 ? "resign" : "last_player";
     await finishBySeats(ctx, ended, standings(g), reason);
     return;
   }

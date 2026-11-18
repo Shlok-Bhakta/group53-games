@@ -159,7 +159,7 @@ test("a 7: the other phone gives back half, and the roller moves the bandit", as
 
 test("on its side: the board beside a side column with the dock, all on screen", async ({ phones }) => {
   test.setTimeout(120_000);
-  const { id, up } = await startGame(phones);
+  const { id, up, upPlayer } = await startGame(phones);
   await pastSetup(id);
   await simulateSafeAreas(up, SAFE_LANDSCAPE);
   await rotate(up, "landscape");
@@ -168,6 +168,13 @@ test("on its side: the board beside a side column with the dock, all on screen",
   await expectFitsScreen(up);
   const dock = (await up.locator("[data-dock]").boundingBox())!;
   expect(dock.x, "the dock is a column on the right").toBeGreaterThan(up.viewportSize()!.width / 2);
+  const m = await getMatch(id);
+  const seat = m.players.findIndex((p: { userId: string }) => p.userId === upPlayer.userId);
+  const players = (m.state as Hex).players.map((p, i) => (i === seat ? { ...p, res: [3, 3, 3, 3, 3] } : p));
+  await admin().mutation(anyApi.testing.hexhavenPatch, { id, state: { phase: { k: "main" }, current: seat, players } });
+  await expect(up.getByRole("button", { name: "End turn" })).toBeVisible();
+  await holdsStill(up);
+  await expectFitsScreen(up);
   await shot(up, "landscape");
   await rotate(up, "portrait");
   await holdsStill(up);

@@ -90,13 +90,19 @@ describe("the island", () => {
     expect(g.s.deckLeft).toBe(25);
   });
 
-  test("balanced numbers never put 6s and 8s side by side", () => {
-    for (let seed = 0; seed < 30; seed++) {
-      const g = newGame(3, DEFAULT_RULES, Math.random);
-      const geo = geometryOf("standard");
-      const hot = (i: number) => g.s.hexes[i].n === 6 || g.s.hexes[i].n === 8;
-      for (const [i] of g.s.hexes.entries()) if (hot(i)) expect(geo.hexNear[i].some(hot)).toBe(false);
-    }
+  test("balanced numbers never put 6s and 8s side by side, on either island", () => {
+    let seed = 1;
+    const rng = () => {
+      seed = (seed * 16807) % 2147483647;
+      return seed / 2147483647;
+    };
+    for (const n of [4, 6])
+      for (let k = 0; k < 300; k++) {
+        const g = newGame(n, DEFAULT_RULES, rng);
+        const geo = geometryOf(g.s.layout);
+        const hot = (i: number) => g.s.hexes[i].n === 6 || g.s.hexes[i].n === 8;
+        for (const [i] of g.s.hexes.entries()) if (hot(i)) expect(geo.hexNear[i].some(hot)).toBe(false);
+      }
   });
 });
 
@@ -397,6 +403,22 @@ describe("trading", () => {
 });
 
 describe("leaving", () => {
+  test("a resigned player's knights don't block the biggest army", () => {
+    let g = mainPhase(setupDone(3), 1);
+    g.s.players[0].knights = 5;
+    g.s.army = 0;
+    g.s.players[1].knights = 3;
+    g.s.players[2].knights = 3;
+    g = play(g, 0, { k: "resign" });
+    expect(g.s.army).toBe(-1);
+    g.s.players[1].knights = 3;
+    g.held[1] = [{ c: "knight", t: 0 }];
+    g.s.current = 1;
+    g.s.phase = { k: "main" };
+    g = play(g, 1, { k: "knight" });
+    expect(g.s.army).toBe(1);
+  });
+
   test("resigning skips your turns; the last one left wins", () => {
     let g = mainPhase(setupDone(3), 0);
     g = play(g, 0, { k: "resign" });

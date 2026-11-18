@@ -21,12 +21,14 @@ export function TradeSheet({
   match,
   state,
   seat,
+  partner,
 }: {
   open: boolean;
   onClose: () => void;
   match: MatchView;
   state: HexState;
   seat: number;
+  partner?: number;
 }) {
   const mine = state.current === seat;
   const toMe = offersFor(state, seat);
@@ -45,7 +47,7 @@ export function TradeSheet({
       ) : (
         <>
           {mine && <BankTrade match={match} state={state} seat={seat} />}
-          <NewOffer match={match} state={state} seat={seat} />
+          <NewOffer key={partner ?? -1} match={match} state={state} seat={seat} partner={partner} />
         </>
       )}
     </Sheet>
@@ -132,11 +134,11 @@ function BankTrade({ match, state, seat }: { match: MatchView; state: HexState; 
   );
 }
 
-function NewOffer({ match, state, seat }: { match: MatchView; state: HexState; seat: number }) {
+function NewOffer({ match, state, seat, partner: chosen }: { match: MatchView; state: HexState; seat: number; partner?: number }) {
   const act = useHexMove(match._id, state.seq);
   const mine = state.current === seat;
   const others = state.players.flatMap((p, i) => (i !== seat && !p.out ? [i] : []));
-  const [to, setTo] = useState(mine ? -1 : state.current);
+  const [to, setTo] = useState(mine ? (chosen ?? -1) : state.current);
   const [give, setGive] = useState(noHand);
   const [get, setGet] = useState(noHand);
   const partner = mine ? to : state.current;
