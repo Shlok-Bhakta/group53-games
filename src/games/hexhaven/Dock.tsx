@@ -212,7 +212,7 @@ export function Dock({
           <Badge n={offers} />
         </Button>
         <Button variant="secondary" className="relative h-11" onClick={onCards} disabled={held.length === 0}>
-          <ScrollIcon weight="bold" /> Dev cards
+          <ScrollIcon weight="bold" /> Cards
           <Badge n={playable.length ? held.length : 0} />
         </Button>
         {endTurn ? (
