@@ -27,7 +27,11 @@ const PAGE_GAMES = [wordle, chess, scrabble, poker, golf, landlord, hexhaven, st
 const LIVE_PAGES = [stonks];
 
 const gameOfMode = (mode) => MATCH_GAMES[mode.split(":")[0]] ?? chess;
-const MATCH_PATH = new RegExp(`^/(?:${Object.keys(MATCH_GAMES).join("|")})/([a-z0-9]+)$`);
+const MATCH_PATH = new RegExp(
+  `^(?:${Object.values(MATCH_GAMES)
+    .flatMap((g) => g.paths)
+    .join("|")})/([a-z0-9]+)$`,
+);
 
 const home = (crew, images) =>
   frame(

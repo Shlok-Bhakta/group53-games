@@ -1,6 +1,6 @@
 # Group 53 Games
 
-Small multiplayer games for one friend group from Discord, all in one app. Live: Chess (classic, four-player, and real-time versions of both), Scrabble (2 to 8 players, async or live with a turn timer), Poker (Hold'em, Omaha, Short Deck and 5-Card Draw, async), Golf (turn-based or live, on handmade or generated courses, plus practice holes and an open world), Monopoly (the classic property-trading game, async; `landlord` in the code), Hexhaven (settle a hex island: roll for resources, build, trade and rob, 2 to 6 players, async), Stonks (a stock-market game: $10,000 each to trade anything on Yahoo Finance, live) and Journey Across Mereddia (Chris's single-player RPG, hosted outside the bundle). PvP Wordle is next.
+Small multiplayer games for one friend group from Discord, all in one app. Live: Chess (classic, four-player, and real-time versions of both), Scrabble (2 to 8 players, async or live with a turn timer), Poker (Hold'em, Omaha, Short Deck and 5-Card Draw, async), Golf (turn-based or live, on handmade or generated courses, plus practice holes and an open world), Monopoly (the classic property-trading game, async; `landlord` in the code), Catan (settle an island: roll for resources, build, trade and rob, 2 to 6 players, async), Stonks (a stock-market game: $10,000 each to trade anything on Yahoo Finance, live) and Journey Across Mereddia (Chris's single-player RPG, hosted outside the bundle). PvP Wordle is next.
 
 ## Who this is for
 
@@ -50,8 +50,8 @@ The games:
 - `scrabble`: `scrabble:classic` (async), `scrabble:live`.
 - `poker`: `poker:holdem`, `poker:omaha`, `poker:short`, `poker:draw`.
 - `golf`: `golf:turns`, `golf:live`, plus practice holes and Driftwood Bay, the open world, outside matches.
-- `landlord`: `landlord:classic`, shown as Monopoly.
-- `hexhaven`: `hexhaven:classic`.
+- `landlord`: `landlord:classic`, shown as Monopoly at `/monopoly`.
+- `hexhaven`: `hexhaven:classic`, shown as Catan at `/catan`.
 - `stonks`: not in `GAMES`; one shared game with no lobby at `/stonks`, a plain `GameCard`.
 - `mereddia`: hosted (its build in Convex file storage, its source on the `mereddia-hosted` branch); `main` has its card and an iframe page.
 - `wordle`: a coming-soon card (`SOON`) and a page-only og card.
@@ -101,7 +101,7 @@ The skills live in `.agents/skills/` (`.claude/skills` points there). Each game'
 | `game-poker` | the poker engine, hand ranking, lined-up moves, the table and its show |
 | `game-golf` | rounds, the world and its netcode, determinism, items, the generator and solver, practice and the open world |
 | `game-landlord` | the Monopoly engine, the log and the show, the camera, trades, bots |
-| `game-hexhaven` | the Hexhaven engine and island geometry, setup, the bandit, cards, trades, hidden cards, bots |
+| `game-hexhaven` | the Catan engine and island geometry, setup, the bandit, cards, trades, hidden cards, bots |
 | `game-stonks` | the board, paper trading and the fill rule, storage costs, prewarming, the Rust sidecar |
 | `game-mereddia` | Mereddia and the hosted-game pattern, publishing a build |
 | `new-game` | adding a game, step by step. Manual only: Shlok runs `/new-game` |

@@ -9,7 +9,7 @@ import {
 } from "@phosphor-icons/react";
 import { Tiles } from "@/Tiles";
 import { Button } from "@/components/ui/button";
-import { GAMES } from "../convex/modes";
+import { canonicalGamePath, GAMES } from "../convex/modes";
 import { LinkHandoff } from "@/components/LinkHandoff";
 import { inAppBrowser, platform, useInstallPrompt, useStandalone } from "./install";
 
@@ -17,7 +17,7 @@ import { inAppBrowser, platform, useInstallPrompt, useStandalone } from "./insta
 export function InstallGate({ children }: { children: ReactNode }) {
   const standalone = useStandalone();
   if (standalone || platform === "desktop" || import.meta.env.VITE_DEV_AUTH) return <>{children}</>;
-  const gameLink = Object.values(GAMES).some((g) => new RegExp(`^${g.path}/[a-z0-9]+$`).test(location.pathname))
+  const gameLink = Object.values(GAMES).some((g) => new RegExp(`^${g.path}/[a-z0-9]+$`).test(canonicalGamePath(location.pathname)))
     ? location.pathname + location.search
     : null;
   return (

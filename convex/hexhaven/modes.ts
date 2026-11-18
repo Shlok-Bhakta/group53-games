@@ -1,8 +1,8 @@
 import type { GameDef, ModeDef, Setting } from "../modeKit";
 
 export const HEXHAVEN_GAME = {
-  name: "Hexhaven",
-  path: "/hexhaven",
+  name: "Catan",
+  path: "/catan",
   reasons: {
     points: { label: "First to the points", push: "first to the points", won: "by reaching the points first" },
   },
@@ -28,8 +28,8 @@ const HEXHAVEN: Setting[] = [
   },
   {
     key: "friendly",
-    label: "Friendly bandit",
-    short: "Friendly bandit {}",
+    label: "Friendly robber",
+    short: "Friendly robber {}",
     options: [
       { value: 0, label: "Off" },
       { value: 1, label: "On" },
@@ -52,14 +52,14 @@ export const HEXHAVEN_MODES = {
   "hexhaven:classic": {
     game: "hexhaven",
     name: "Classic",
-    title: "Hexhaven",
+    title: "Catan",
     kind: "async",
     players: 6,
     minPlayers: 2,
     board: "hexhaven",
     slug: "classic",
-    blurb: "Settle the island, build roads and towns, trade what you've got for what you need. Take your turn whenever.",
-    wants: "a game of Hexhaven",
+    blurb: "Settle the island, build roads and cities, trade what you've got for what you need. Take your turn whenever.",
+    wants: "a game of Catan",
     settings: HEXHAVEN,
   },
 } as const satisfies Record<`hexhaven:${string}`, ModeDef>;

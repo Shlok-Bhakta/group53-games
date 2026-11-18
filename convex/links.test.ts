@@ -34,6 +34,24 @@ describe("game links opened outside the app", () => {
     expect(await t.query(api.links.preview, { path: "/scrabble/nope" }), "no game at all").toBeNull();
   });
 
+  test.each([
+    ["hexhaven:classic", "hexhaven", "catan", "Catan"],
+    ["landlord:classic", "landlord", "monopoly", "Monopoly"],
+  ] as const)("old %s links preview the match and hand off to the new route", async (mode, oldSlug, slug, title) => {
+    const t = setup();
+    const host = await signedIn(t, "Shlok");
+    const guest = await signedIn(t, "Chris");
+    const id = await host.as.mutation(api.matches.queue, { mode });
+    await subscribe(t, guest.userId);
+    const oldPath = `/${oldSlug}/${id}?accept=1`;
+    const newPath = `/${slug}/${id}?accept=1`;
+    for (const path of [oldPath, newPath]) {
+      expect(await t.query(api.links.preview, { path })).toMatchObject({ game: title, title });
+    }
+    expect(await t.mutation(api.links.handoff, { path: oldPath, userId: guest.userId })).toBe("sent");
+    expect(await pushes(t)).toContainEqual(expect.objectContaining({ userId: guest.userId, url: newPath }));
+  });
+
   test("picking yourself pushes the game to your phone, with a link that takes the seat", async () => {
     const t = setup();
     const a = await signedIn(t, "Shlok");

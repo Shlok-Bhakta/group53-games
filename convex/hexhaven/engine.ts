@@ -235,7 +235,7 @@ export function cantVillage(s: HexState, seat: number, v: number, setup: boolean
   const g = geo(s);
   if (!g.verts[v]) return "That's not a spot on the island.";
   if (s.spots[v]) return "Someone's already built there.";
-  if (g.verts[v].near.some((w) => s.spots[w])) return "Too close to another village.";
+  if (g.verts[v].near.some((w) => s.spots[w])) return "Too close to another settlement.";
   if (!setup && !g.verts[v].edges.some((e) => s.roads[e] === seat)) return "Build next to one of your roads.";
   return null;
 }
@@ -245,8 +245,8 @@ export function cantRoad(s: HexState, seat: number, e: number, from?: number): s
   const edge = g.edges[e];
   if (!edge) return "That's not a spot on the island.";
   if (s.roads[e] >= 0) return "There's already a road there.";
-  if (from !== undefined) return edge.a === from || edge.b === from ? null : "Build it next to the village you just placed.";
-  return touchesOwn(s, seat, edge.a) || touchesOwn(s, seat, edge.b) ? null : "Roads have to join your roads or villages.";
+  if (from !== undefined) return edge.a === from || edge.b === from ? null : "Build it next to the settlement you just placed.";
+  return touchesOwn(s, seat, edge.a) || touchesOwn(s, seat, edge.b) ? null : "Roads have to join your roads or buildings.";
 }
 
 export const villageSpots = (s: HexState, seat: number, setup = false) =>
@@ -261,10 +261,10 @@ export function cantBuild(s: HexState, seat: number, kind: Piece): string | null
   if (!covers(p.res, COSTS[kind])) return "You don't have what it costs.";
   if (kind === "road" && roadsOf(s, seat) >= PIECES.road) return "You've built all 15 roads.";
   if (kind === "road" && !roadSpots(s, seat).length) return "Nowhere to build a road.";
-  if (kind === "village" && villagesOf(s, seat) >= PIECES.village) return "All 5 villages are out. Turn one into a town.";
-  if (kind === "village" && !villageSpots(s, seat).length) return "Nowhere to build a village. Build roads first.";
-  if (kind === "town" && townsOf(s, seat) >= PIECES.town) return "You've built all 4 towns.";
-  if (kind === "town" && !townSpots(s, seat).length) return "Towns go where your villages are.";
+  if (kind === "village" && villagesOf(s, seat) >= PIECES.village) return "All 5 settlements are out. Upgrade one to a city.";
+  if (kind === "village" && !villageSpots(s, seat).length) return "Nowhere to build a settlement. Build roads first.";
+  if (kind === "town" && townsOf(s, seat) >= PIECES.town) return "You've built all 4 cities.";
+  if (kind === "town" && !townSpots(s, seat).length) return "Cities replace your own settlements.";
   if (kind === "card" && s.deckLeft <= 0) return "The cards have run out.";
   return null;
 }
@@ -634,7 +634,7 @@ export function act(game: Game, seat: number, a: Action, rng: Rng = Math.random)
     }
     case "road": {
       if (ph.k === "setup") {
-        if (ph.at < 0) throw new Error("Place your village first.");
+        if (ph.at < 0) throw new Error("Place your settlement first.");
         need(cantRoad(s, seat, a.at, ph.at));
         s.roads[a.at] = seat;
         t.emit({ t: "build", seat, kind: "road", at: a.at });
@@ -664,7 +664,7 @@ export function act(game: Game, seat: number, a: Action, rng: Rng = Math.random)
     case "town": {
       need(cantBuild(s, seat, "town"));
       const spot = s.spots[a.at];
-      if (!spot || spot.seat !== seat || spot.town) throw new Error("Towns go where your villages are.");
+      if (!spot || spot.seat !== seat || spot.town) throw new Error("Cities replace your own settlements.");
       t.pay(seat, COSTS.town);
       spot.town = true;
       t.emit({ t: "build", seat, kind: "town", at: a.at });
@@ -693,8 +693,8 @@ export function act(game: Game, seat: number, a: Action, rng: Rng = Math.random)
       return g;
     }
     case "bandit": {
-      if (ph.k !== "bandit") throw new Error("The bandit isn't moving now.");
-      if (!banditHexes(s, seat).includes(a.hex)) throw new Error("Move the bandit somewhere else.");
+      if (ph.k !== "bandit") throw new Error("The robber isn't moving now.");
+      if (!banditHexes(s, seat).includes(a.hex)) throw new Error("Move the robber somewhere else.");
       const victims = victimsAt(s, seat, a.hex);
       if (victims.length && !victims.includes(a.from)) throw new Error("Pick someone to steal from.");
       s.bandit = a.hex;

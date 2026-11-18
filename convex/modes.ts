@@ -116,6 +116,18 @@ export const REALTIME_LOBBY_MS = 10 * 60 * 1000;
 export const REALTIME_COUNTDOWN_MS = 3000;
 export const START_RATING = 1200;
 
+const legacyGamePaths = new Map([
+  ["/hexhaven", GAMES.hexhaven.path],
+  ["/landlord", GAMES.landlord.path],
+]);
+
+export function canonicalGamePath(pathname: string): string {
+  const [, slug] = pathname.split("/", 2);
+  const prefix = `/${slug}`;
+  const canonical = legacyGamePaths.get(prefix);
+  return canonical ? canonical + pathname.slice(prefix.length) : pathname;
+}
+
 type MatchRef = { _id: string; mode: string };
 export const matchPath = (m: MatchRef) => `${GAMES[gameOf(m.mode)].path}/${m._id}`;
 export const acceptPath = (m: MatchRef) => `${matchPath(m)}?accept=1`;

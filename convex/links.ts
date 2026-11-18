@@ -1,13 +1,13 @@
 import { v } from "convex/values";
 import { mutation, query, type QueryCtx } from "./_generated/server";
-import { GAMES, MODES, acceptPath, matchPath, type ModeKey } from "./modes";
+import { GAMES, MODES, acceptPath, canonicalGamePath, matchPath, type ModeKey } from "./modes";
 import { notifyMatch } from "./notify";
 import { person } from "./lib/people";
 
 const HANDOFF_EVERY_MS = 15_000;
 
 async function matchFromPath(ctx: QueryCtx, path: string) {
-  const m = path.match(/^\/([a-z]+)\/([a-z0-9]+)(?:\?.*)?$/);
+  const m = canonicalGamePath(path).match(/^\/([a-z]+)\/([a-z0-9]+)(?:\?.*)?$/);
   if (!m || !Object.values(GAMES).some((g) => g.path === `/${m[1]}`)) return null;
   const id = ctx.db.normalizeId("matches", m[2]);
   if (!id) return null;

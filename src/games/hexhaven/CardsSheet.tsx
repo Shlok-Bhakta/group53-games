@@ -39,7 +39,7 @@ export function CardsSheet({
     return act(move).then(onClose);
   };
   return (
-    <Sheet open={open} onClose={onClose} title="Your cards" closable>
+    <Sheet open={open} onClose={onClose} title="Development cards" closable>
       {kinds.map((c) => {
         const count = held.filter((h) => h.c === c).length;
         const why = cantPlay(state, seat, held, c);
@@ -56,7 +56,7 @@ export function CardsSheet({
                 <ResPicker label="Second resource" value={b} onChange={setB} />
               </>
             )}
-            {c === "corner" && !why && <ResPicker label="Resource to corner" value={r} onChange={setR} />}
+            {c === "corner" && !why && <ResPicker label="Resource to take" value={r} onChange={setR} />}
             {c !== "point" && (
               <AsyncButton size="lg" className="w-full" disabled={!!why} onClick={() => play(c)}>
                 {c === "plenty"

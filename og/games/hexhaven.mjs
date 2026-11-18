@@ -2,7 +2,7 @@ import { BOARD_SHADOW, HEXHAVEN, SEAT_COLORS } from "../palette.mjs";
 import { h, img, svgDataUrl } from "../layout.mjs";
 import { moverName, scoreText, seatsSoFar } from "../match.mjs";
 
-const TITLE_STATES = ["green", "yellow", "green", "gray", "green", "yellow", "green", "hit"];
+const TITLE_STATES = ["green", "yellow", "green", "gray", "hit"];
 const PAD = 0.8;
 const VILLAGE = "M-.17 .13 V-.05 L0 -.21 L.17 -.05 V.13Z";
 const TOWN = "M-.26 .16 V-.05 L-.12 -.18 L.02 -.05 V-.09 H.26 V.16Z";
@@ -51,15 +51,15 @@ function svgOf(b, colors, px) {
 
 export const hexhaven = {
   key: "hexhaven",
-  paths: ["/hexhaven"],
+  paths: ["/catan", "/hexhaven"],
   page: {
-    title: "Hexhaven",
+    title: "Catan",
     description: "Settle an island of hexes, 2 to 6 of you over a few days. Roll, build, trade and rob each other.",
   },
-  card: { word: "HEXHAVEN", states: TITLE_STATES, tileSize: 104, blurb: "Settle the island. Build, trade, rob your friends." },
-  modeTitles: { "hexhaven:classic": "Hexhaven" },
+  card: { word: "CATAN", states: TITLE_STATES, tileSize: 104, blurb: "Settle the island. Build, trade, rob your friends." },
+  modeTitles: { "hexhaven:classic": "Catan" },
   text(m, { names, title }) {
-    if (m.status === "waiting") return { title: `${names[0]} wants a game of Hexhaven`, status: seatsSoFar(m) };
+    if (m.status === "waiting") return { title: `${names[0]} wants a game of Catan`, status: seatsSoFar(m) };
     if (m.status === "finished") return { title, status: `${m.result.winner ?? "Someone"} won ${m.result.how || ""}`.trim() + "." };
     const x = m.hexhaven;
     if (x?.setup) return { title, status: `Settling the island. ${moverName(m)} to place.` };

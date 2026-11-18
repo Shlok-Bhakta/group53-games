@@ -5,7 +5,7 @@ description: The Landlord (Monopoly) package's feature map. Use for any Landlord
 
 # Landlord
 
-AGENTS.md is the overview and the `framework` skill covers matches, turns, secrets, pushes and the harness; the `ui` skill covers `FullscreenStage`, `FloatingTopBar`, sheets and landscape. This is what you need on top of them to change Landlord. The game is shown as "Monopoly" everywhere a player reads it; the code, paths and functions say `landlord`.
+AGENTS.md is the overview and the `framework` skill covers matches, turns, secrets, pushes and the harness; the `ui` skill covers `FullscreenStage`, `FloatingTopBar`, sheets and landscape. This is what you need on top of them to change Landlord. The game is shown as "Monopoly" everywhere a player reads it; its public route is `/monopoly`. Convex function names and stored keys still use `landlord`. Old `/landlord` links redirect in the app.
 
 ## Mode and settings
 
