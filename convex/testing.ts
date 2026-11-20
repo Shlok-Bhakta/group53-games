@@ -8,6 +8,7 @@ import { load as hexhavenLoad, play as hexhavenPlay } from "./hexhaven";
 import { botMove as hexhavenBot, nextBotSeat as hexhavenNext } from "./hexhaven/bot";
 import type { HexState } from "./hexhaven/engine";
 import { addPlayer } from "./matches";
+import { postResult } from "./daily";
 import { botMove, nextBotSeat } from "./landlord/bot";
 import type { MonoState } from "./landlord/engine";
 import { SignJWT, importPKCS8 } from "jose";
@@ -246,6 +247,14 @@ export const joinAs = internalMutation({
   },
 });
 
+export const dailyAs = internalMutation({
+  args: { userId: v.id("users"), text: v.string(), day: v.string() },
+  handler: async (ctx, { userId, text, day }) => {
+    assertTestDeployment();
+    return await postResult(ctx, userId, text, day);
+  },
+});
+
 export const landlordBots = internalMutation({
   args: { id: v.id("matches"), human: v.optional(v.id("users")), steps: v.optional(v.number()) },
   handler: async (ctx, { id, human, steps = 200 }) => {
@@ -385,6 +394,7 @@ export const removeTestData = internalMutation({
       "stockAccounts",
       "stockPositions",
       "stockOrders",
+      "dailyResults",
     ] as const) {
       for (const doc of await ctx.db.query(table).collect()) if (testIds.has(doc.userId)) await ctx.db.delete(doc._id);
     }

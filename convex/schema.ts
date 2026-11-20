@@ -2,6 +2,7 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { authTables } from "@convex-dev/auth/server";
 import { chessTables } from "./chess/schema";
+import { dailyTables } from "./daily/schema";
 import { golfTables } from "./golf/schema";
 import { landlordTables } from "./landlord/schema";
 import { stonksTables } from "./stonks/schema";
@@ -9,6 +10,7 @@ import { stonksTables } from "./stonks/schema";
 export default defineSchema({
   ...authTables,
   ...chessTables,
+  ...dailyTables,
   ...golfTables,
   ...landlordTables,
   ...stonksTables,
