@@ -1,12 +1,19 @@
 import type { ReactNode } from "react";
 import { NavBar } from "@/components/AppHeader";
 import { NotificationBanner } from "@/components/NotificationBanner";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useNotifications } from "@/notifications";
 
 export function NotificationsRequired({ children }: { children: ReactNode }) {
   const push = useNotifications();
   if (push.state === "on" || push.state === "unsupported" || import.meta.env.VITE_DEV_AUTH) return <>{children}</>;
-  if (push.state === "loading") return null;
+  if (push.state === "loading")
+    return (
+      <div aria-busy="true">
+        <NavBar title="" />
+        <Skeleton className="mt-16 aspect-square w-full rounded-sm" />
+      </div>
+    );
   return (
     <div className="flex flex-col gap-4">
       <NavBar title="Almost there" />

@@ -154,6 +154,34 @@ test.describe("updates", () => {
     down = false;
     await expect(tint).toHaveCount(0, { timeout: 20_000 });
   });
+
+  test("a notification tap on a socket that went quiet in the background shows the screen's frame, never a blank page", async ({
+    phones,
+  }) => {
+    const [me, chris] = await Promise.all([createPlayer("Shlok"), createPlayer("Chris")]);
+    const page = await phones.open({ player: me, push: "on" });
+    let quiet = false;
+    const live = new Set<WebSocketRoute>();
+    await page.routeWebSocket(/.*/, (ws) => {
+      const server = ws.connectToServer();
+      ws.onMessage((m) => void (quiet || server.send(m)));
+      server.onMessage((m) => void (quiet || ws.send(m)));
+      live.add(ws);
+    });
+    const id = await admin().action(anyApi.testing.startMatch, { mode: "chess:classic", a: me.userId, b: chris.userId });
+    await page.goto("/crew");
+    await expect(onScreen(page).getByRole("heading", { name: "Crew", level: 1 })).toBeVisible();
+    quiet = true;
+    await page.evaluate(
+      (url) => navigator.serviceWorker.dispatchEvent(new MessageEvent("message", { data: { type: "navigate", url } })),
+      `${new URL(page.url()).origin}/chess/${id}`,
+    );
+    await expect(page).toHaveURL(new RegExp(`/chess/${id}$`));
+    await expect(onScreen(page).getByRole("button", { name: "Back" })).toBeVisible();
+    quiet = false;
+    for (const ws of live) await ws.close();
+    await expect(page.getByRole("grid", { name: "Classic chess board" })).toBeVisible({ timeout: 20_000 });
+  });
 });
 
 test.describe("signed in", () => {
