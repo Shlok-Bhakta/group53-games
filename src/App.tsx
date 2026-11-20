@@ -5,6 +5,7 @@ import { AnimatePresence, MotionConfig } from "motion/react";
 import { canonicalGamePath } from "../convex/modes";
 import { api } from "../convex/_generated/api";
 import { Wordle } from "./games/wordle/Wordle";
+import { Daily, DailyHistory } from "./games/daily/Daily";
 import { GAME_UI } from "./games";
 import { HostedGame } from "./games/HostedGame";
 import { InstallGate } from "./InstallGate";
@@ -109,6 +110,22 @@ function SignedIn() {
                 <Route path="/you" element={<You />} />
                 <Route path="/settings" element={<Navigate to="/you" replace />} />
                 <Route path="/wordle" element={<Wordle />} />
+                <Route
+                  path="/daily"
+                  element={
+                    <NotificationsRequired>
+                      <Daily />
+                    </NotificationsRequired>
+                  }
+                />
+                <Route
+                  path="/daily/:game"
+                  element={
+                    <NotificationsRequired>
+                      <DailyHistory />
+                    </NotificationsRequired>
+                  }
+                />
                 {golfRoute("/mereddia", <HostedGame game="mereddia" title="Journey Across Mereddia" />)}
                 {golfRoute("/golf/practice", <GolfHub />)}
                 {golfRoute(

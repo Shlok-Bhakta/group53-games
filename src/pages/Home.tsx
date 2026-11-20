@@ -7,6 +7,7 @@ import { api } from "../../convex/_generated/api";
 import { MODES, MODE_KEYS, modeBySlug, modePath } from "../../convex/modes";
 import { Chip, InviteCard, MatchRow, Section, TurnChip, fullModeLabel } from "@/components/parts";
 import { Tiles } from "@/Tiles";
+import { DailyStrip } from "@/games";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LargeTitle } from "@/components/AppHeader";
@@ -60,6 +61,7 @@ export function Home() {
             </Section>
           )}
           {nothing && <AllClear />}
+          <DailyStrip meId={meId} />
           <Stats />
           {waiting.length > 0 && (
             <Section title="Waiting">

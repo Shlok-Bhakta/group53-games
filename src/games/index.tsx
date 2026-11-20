@@ -16,6 +16,7 @@ import { GolfPractice } from "./golf/Practice";
 import { GolfHoles } from "./golf/HolesPreview";
 import { golfRules } from "./golf/rules";
 import { MereddiaBanner } from "./mereddia/card";
+import { DailyBanner } from "./daily/DailyBanner";
 import { StonksBanner } from "./stonks/StonksBanner";
 import { prefetchStonks } from "./stonks/load";
 import type { ConvexReactClient } from "convex/react";
@@ -165,6 +166,12 @@ const MEREDDIA: GameCard = {
   blurb: "Chris's RPG. Wake up as Mallakoth with a sword to find and slimes in the way. It saves on your phone.",
   banner: () => <MereddiaBanner />,
 };
+const DAILY: GameCard = {
+  path: "/daily",
+  name: "Dailies",
+  blurb: "Scrandle, Krillion, Connections and the rest. Paste what the game copied and see who beat who today.",
+  banner: () => <DailyBanner />,
+};
 const SOON: GameCard[] = [
   {
     path: "/wordle",
@@ -174,4 +181,5 @@ const SOON: GameCard[] = [
     wip: true,
   },
 ];
-export const games: GameCard[] = [...Object.values(GAME_UI), STONKS, MEREDDIA, ...SOON];
+export const games: GameCard[] = [...Object.values(GAME_UI), STONKS, DAILY, MEREDDIA, ...SOON];
+export { DailyStrip } from "./daily/DailyStrip";

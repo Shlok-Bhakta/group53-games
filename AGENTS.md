@@ -1,6 +1,6 @@
 # Group 53 Games
 
-Small multiplayer games for one friend group from Discord, all in one app. Live: Chess (classic, four-player, and real-time versions of both), Scrabble (2 to 8 players, async or live with a turn timer), Poker (Hold'em, Omaha, Short Deck and 5-Card Draw, async), Golf (turn-based or live, on handmade or generated courses, plus practice holes and an open world), Monopoly (the classic property-trading game, async; `landlord` in the code), Catan (settle an island: roll for resources, build, trade and rob, 2 to 6 players, async), Stonks (a stock-market game: $10,000 each to trade anything on Yahoo Finance, live) and Journey Across Mereddia (Chris's single-player RPG, hosted outside the bundle). PvP Wordle is next.
+Small multiplayer games for one friend group from Discord, all in one app. Live: Chess (classic, four-player, and real-time versions of both), Scrabble (2 to 8 players, async or live with a turn timer), Poker (Hold'em, Omaha, Short Deck and 5-Card Draw, async), Golf (turn-based or live, on handmade or generated courses, plus practice holes and an open world), Monopoly (the classic property-trading game, async; `landlord` in the code), Catan (settle an island: roll for resources, build, trade and rob, 2 to 6 players, async), Stonks (a stock-market game: $10,000 each to trade anything on Yahoo Finance, live), Dailies (paste your Scrandle, Krillion, Connections and other daily results and see who beat who) and Journey Across Mereddia (Chris's single-player RPG, hosted outside the bundle). PvP Wordle is next.
 
 ## Who this is for
 
@@ -53,6 +53,7 @@ The games:
 - `landlord`: `landlord:classic`, shown as Monopoly at `/monopoly`.
 - `hexhaven`: `hexhaven:classic`, shown as Catan at `/catan`.
 - `stonks`: not in `GAMES`; one shared game with no lobby at `/stonks`, a plain `GameCard`.
+- `daily`: not in `GAMES`; pasted daily-game results at `/daily` and `/daily/:game`, a plain `GameCard`, plus the Home strip (`DailyStrip`, re-exported from `src/games/index.tsx`). Never Wordle: the crew keeps that streak in Discord.
 - `mereddia`: hosted (its build in Convex file storage, its source on the `mereddia-hosted` branch); `main` has its card and an iframe page.
 - `wordle`: a coming-soon card (`SOON`) and a page-only og card.
 
@@ -103,6 +104,7 @@ The skills live in `.agents/skills/` (`.claude/skills` points there). Each game'
 | `game-landlord` | the Monopoly engine, the log and the show, the camera, trades, bots |
 | `game-hexhaven` | the Catan engine and island geometry, setup, the bandit, cards, trades, hidden cards, bots |
 | `game-stonks` | the board, paper trading and the fill rule, storage costs, prewarming, the Rust sidecar |
+| `game-daily` | the share-text parsers, posting and its checks, today's standings, crowns and streaks, the Home strip |
 | `game-mereddia` | Mereddia and the hosted-game pattern, publishing a build |
 | `new-game` | adding a game, step by step. Manual only: Shlok runs `/new-game` |
 
