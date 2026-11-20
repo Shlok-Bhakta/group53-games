@@ -89,10 +89,18 @@ const connections: DailyGame = {
     if (/^Archive /m.test(text)) return null;
     const m = text.match(/^Connections\s*\n\s*Puzzle #\s*([\d,]+)/m);
     if (!m) return null;
-    const rows = gridAfter(text, m.index!, CONNECTIONS_SQUARES).filter((r) => emojiOf(r, CONNECTIONS_SQUARES).length === 4);
+    const rows: string[] = [];
+    let groups = 0;
+    let mistakes = 0;
+    for (const row of gridAfter(text, m.index!, CONNECTIONS_SQUARES)) {
+      if (groups === 4 || mistakes === 4) break;
+      const squares = emojiOf(row, CONNECTIONS_SQUARES);
+      if (squares.length !== 4) break;
+      rows.push(row);
+      if (new Set(squares).size === 1) groups++;
+      else mistakes++;
+    }
     if (rows.length === 0) return null;
-    const groups = rows.filter((r) => new Set(emojiOf(r, CONNECTIONS_SQUARES)).size === 1).length;
-    const mistakes = rows.length - groups;
     const won = groups === 4;
     return {
       puzzle: num(m[1]),

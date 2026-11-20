@@ -158,7 +158,7 @@ export function DailyHistory() {
           title={r.puzzle === null ? dayLabel(r.day, day) : `${dayLabel(r.day, day)} · #${r.puzzle}`}
           bare
         >
-          <Standings label={`${game.name} ${dayLabel(r.day, day)}`} entries={r.entries} meId={meId} removable={r.day === day} />
+          <Standings label={`${game.name} ${dayLabel(r.day, day)}`} entries={r.entries} meId={meId} removable />
         </Section>
       ))}
       {history && history.days.length === 0 && (

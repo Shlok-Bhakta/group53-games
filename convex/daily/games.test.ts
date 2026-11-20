@@ -75,6 +75,7 @@ describe("share texts", () => {
   test("only the grid right under the header counts, and Contexto's date is read", () => {
     const perfect = "Connections\nPuzzle #1258\n🟪🟪🟪🟪\n🟦🟦🟦🟦\n🟨🟨🟨🟨\n🟩🟩🟩🟩";
     expect(parsed(`${perfect}\n\nnearly went 🟨🟨🟦🟨\n🟩🟩🟩🟩`)).toMatchObject({ display: "Perfect", solved: true });
+    expect(parsed(`${perfect}\n🟩🟩🟩🟩`)).toMatchObject({ display: "Perfect", solved: true });
     expect(parsed("I played contexto.me 11/19/2026 and got it in 19 guesses.")).toMatchObject({ date: "2026-11-19", display: "19" });
   });
 
