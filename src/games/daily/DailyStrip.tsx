@@ -49,7 +49,7 @@ export function DailyStrip({ meId }: { meId: Id<"users"> | undefined }) {
             const more = r.entries.length - SHOWN;
             return (
               <Link
-                key={r.game}
+                key={`${r.game}:${r.puzzle}`}
                 to={dailyPath(game.key)}
                 data-slot="card"
                 data-daily={game.key}

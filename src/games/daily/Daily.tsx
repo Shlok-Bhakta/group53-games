@@ -85,7 +85,7 @@ export function Daily() {
         if (!game) return null;
         return (
           <Section
-            key={r.game}
+            key={`${r.game}:${r.puzzle}`}
             title={roundTitle(game, r.puzzle)}
             bare
             action={
@@ -153,7 +153,11 @@ export function DailyHistory() {
         </Section>
       )}
       {history?.days.map((r) => (
-        <Section key={r.day} title={r.puzzle === null ? dayLabel(r.day, day) : `${dayLabel(r.day, day)} · #${r.puzzle}`} bare>
+        <Section
+          key={`${r.day}:${r.puzzle}`}
+          title={r.puzzle === null ? dayLabel(r.day, day) : `${dayLabel(r.day, day)} · #${r.puzzle}`}
+          bare
+        >
           <Standings label={`${game.name} ${dayLabel(r.day, day)}`} entries={r.entries} meId={meId} removable={r.day === day} />
         </Section>
       ))}

@@ -7,7 +7,7 @@ import { displayName } from "./lib/people";
 import { notify } from "./notify";
 import { dailyGame, dailyPath, parseShare, SHARE_MAX } from "./daily/games";
 import { addDays, isDay, lastDays, plausibleToday } from "./daily/days";
-import { board, ranked } from "./daily/standings";
+import { board, ranked, roundKey } from "./daily/standings";
 
 const HISTORY_DAYS = 30;
 const WEEK_DAYS = 7;
@@ -24,11 +24,11 @@ const entry = (r: Doc<"dailyResults">) => ({
 
 function rounds(rows: Doc<"dailyResults">[]) {
   const byKey = new Map<string, Doc<"dailyResults">[]>();
-  for (const r of rows) byKey.set(`${r.game}|${r.day}`, [...(byKey.get(`${r.game}|${r.day}`) ?? []), r]);
+  for (const r of rows) byKey.set(roundKey(r), [...(byKey.get(roundKey(r)) ?? []), r]);
   return [...byKey.values()].map((round) => ({
     game: round[0].game,
     day: round[0].day,
-    puzzle: round.find((r) => r.puzzle !== undefined)?.puzzle ?? null,
+    puzzle: round[0].puzzle ?? null,
     latest: Math.max(...round.map((r) => r.at)),
     entries: ranked(round.map(entry)),
   }));
@@ -40,23 +40,24 @@ const since = (ctx: QueryCtx, from: string, to: string) =>
     .withIndex("by_day", (q) => q.gte("day", from).lte("day", to))
     .collect();
 
-export async function postResult(ctx: MutationCtx, userId: Id<"users">, text: string, day: string) {
+export async function postResult(ctx: MutationCtx, userId: Id<"users">, text: string, today: string) {
   const share = text.trim();
   if (share.length > SHARE_MAX) throw new Error("That's too long to be a result.");
-  if (!plausibleToday(day, Date.now())) throw new Error("Your phone's date looks off.");
+  if (!plausibleToday(today, Date.now())) throw new Error("Your phone's date looks off.");
   const parsed = parseShare(share);
   if (!parsed) throw new Error("That isn't a result from a daily we know.");
   const game = dailyGame(parsed.game);
   const { date, ...result } = parsed;
-  if (date && date !== day && date !== addDays(day, -1) && date !== addDays(day, 1))
+  if (date && date !== today && date !== addDays(today, -1) && date !== addDays(today, 1))
     throw new Error(`That's ${game.name} for ${date}, not today's.`);
+  const day = date ?? today;
   const mine = await ctx.db
     .query("dailyResults")
     .withIndex("by_user_game", (q) => q.eq("userId", userId).eq("game", parsed.game))
     .collect();
   const same = mine.find((r) => r.day === day);
   if (same && same.text === share) return { id: same._id, game: parsed.game, display: same.display };
-  if (same) throw new Error(`You already posted today's ${game.name}.`);
+  if (same) throw new Error(day === today ? `You already posted today's ${game.name}.` : `You already posted ${game.name} for ${day}.`);
   if (parsed.puzzle !== undefined && mine.some((r) => r.puzzle === parsed.puzzle))
     throw new Error(`You already posted ${game.name} #${parsed.puzzle}.`);
   const at = Date.now();
@@ -66,7 +67,7 @@ export async function postResult(ctx: MutationCtx, userId: Id<"users">, text: st
       .query("dailyResults")
       .withIndex("by_day", (q) => q.eq("day", day))
       .collect()
-  ).filter((r) => r.game === parsed.game && r.userId !== userId && r.score < parsed.score);
+  ).filter((r) => roundKey(r) === roundKey({ ...parsed, day }) && r.userId !== userId && r.score < parsed.score);
   const name = await displayName(ctx, userId);
   for (const r of rivals)
     await notify(ctx, r.userId, {

@@ -23,11 +23,15 @@ export type DailyGame = {
 const VS = /️/g;
 const num = (s: string) => Number(s.replace(/[,.\s]/g, ""));
 const emojiOf = (s: string, set: RegExp) => [...s.matchAll(set)].map((m) => m[0]);
-const rowsMadeOf = (text: string, set: RegExp) =>
-  text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0 && l.replace(set, "").trim() === "");
+function gridAfter(text: string, header: number, set: RegExp) {
+  const rows: string[] = [];
+  for (const line of text.slice(header).split("\n").slice(1)) {
+    const row = line.replace(VS, "").trim();
+    if (row.length > 0 && row.replace(set, "") === "") rows.push(row);
+    else if (rows.length > 0) break;
+  }
+  return rows;
+}
 
 const seconds = (clock: string) => clock.split(":").reduce((t, p) => t * 60 + Number(p), 0);
 const clockText = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -85,7 +89,7 @@ const connections: DailyGame = {
     if (/^Archive /m.test(text)) return null;
     const m = text.match(/^Connections\s*\n\s*Puzzle #\s*([\d,]+)/m);
     if (!m) return null;
-    const rows = rowsMadeOf(text.slice(m.index), CONNECTIONS_SQUARES).filter((r) => emojiOf(r, CONNECTIONS_SQUARES).length === 4);
+    const rows = gridAfter(text, m.index!, CONNECTIONS_SQUARES).filter((r) => emojiOf(r, CONNECTIONS_SQUARES).length === 4);
     if (rows.length === 0) return null;
     const groups = rows.filter((r) => new Set(emojiOf(r, CONNECTIONS_SQUARES)).size === 1).length;
     const mistakes = rows.length - groups;
@@ -110,7 +114,7 @@ const strands: DailyGame = {
     if (/^Archive /m.test(text)) return null;
     const m = text.match(/^Strands #\s*([\d,]+)/m);
     if (!m) return null;
-    const marks = emojiOf(rowsMadeOf(text.slice(m.index), STRANDS_MARKS).join(""), STRANDS_MARKS);
+    const marks = emojiOf(gridAfter(text, m.index!, STRANDS_MARKS).join(""), STRANDS_MARKS);
     if (marks.length === 0) return null;
     const hints = marks.filter((x) => x === "💡").length;
     return {
@@ -212,14 +216,15 @@ const contexto: DailyGame = {
   blurb: "Find the secret word by meaning",
   read: (text) => {
     const m = text.match(
-      /I played contexto\.me (?:#(\d+)|[\d/]+) (and got it|but I gave up) in (\d+) guesses(?: and (\d+) (?:hints|tips))?/,
+      /I played contexto\.me (?:#(\d+)|(\d{2})\/(\d{2})\/(\d{4})) (and got it|but I gave up) in (\d+) guesses(?: and (\d+) (?:hints|tips))?/,
     );
     if (!m) return null;
-    const guesses = Number(m[3]);
-    const hints = Number(m[4] ?? 0);
-    const solved = m[2] === "and got it";
+    const guesses = Number(m[6]);
+    const hints = Number(m[7] ?? 0);
+    const solved = m[5] === "and got it";
     return {
       puzzle: m[1] ? Number(m[1]) : undefined,
+      date: m[4] ? iso(Number(m[4]), Number(m[2]), Number(m[3])) : undefined,
       score: solved ? 10_000 - guesses - hints : 0,
       display: solved ? (hints ? `${guesses}+${hints}💡` : String(guesses)) : "Gave up",
       solved,

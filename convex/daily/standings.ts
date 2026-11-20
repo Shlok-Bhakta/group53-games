@@ -7,11 +7,13 @@ export function ranked<T extends Scored>(rows: T[]): (T & { place: number })[] {
   return sorted.map((r) => ({ ...r, place: sorted.findIndex((s) => s.score === r.score) + 1 }));
 }
 
-type Posted = Scored & { userId: string; game: string; day: string };
+type Posted = Scored & { userId: string; game: string; day: string; puzzle?: number };
 
-export function crownsOf(rows: Posted[]) {
+export const roundKey = (r: { game: string; day: string; puzzle?: number }) => `${r.game}|${r.day}|${r.puzzle ?? ""}`;
+
+function crownsOf(rows: Posted[]) {
   const rounds = new Map<string, Posted[]>();
-  for (const r of rows) rounds.set(`${r.game}|${r.day}`, [...(rounds.get(`${r.game}|${r.day}`) ?? []), r]);
+  for (const r of rows) rounds.set(roundKey(r), [...(rounds.get(roundKey(r)) ?? []), r]);
   const crowns = new Map<string, number>();
   for (const round of rounds.values()) {
     if (round.length < 2) continue;

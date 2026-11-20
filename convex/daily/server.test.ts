@@ -68,6 +68,32 @@ describe("posting", () => {
     await expect(t.mutation(api.daily.post, { text: scrandle(7), day: DAY })).rejects.toThrow("Sign in");
   });
 
+  test("a dated share counts for its own day, so reposting it tomorrow is refused", async () => {
+    const t = setup();
+    const me = await signedIn(t);
+    await me.as.mutation(api.daily.post, { text: scrandle(7), day: DAY });
+    vi.setSystemTime(new Date("2026-11-21T06:00:00Z"));
+    await expect(me.as.mutation(api.daily.post, { text: scrandle(7), day: "2026-11-21" })).resolves.toMatchObject({ display: "7/10" });
+    expect(await me.as.query(api.daily.today, { day: "2026-11-21" })).toEqual([]);
+    await expect(me.as.mutation(api.daily.post, { text: scrandle(9), day: "2026-11-21" })).rejects.toThrow(
+      `already posted Scrandle for ${DAY}`,
+    );
+  });
+
+  test("different puzzle numbers on one day are separate rounds, and don't push each other", async () => {
+    const t = setup();
+    const shlok = await signedIn(t, "Shlok");
+    const chris = await signedIn(t, "Chris");
+    await chris.as.mutation(api.daily.post, { text: "nerdlegame 1766 5/6", day: DAY });
+    await shlok.as.mutation(api.daily.post, { text: "nerdlegame 1767 2/6", day: DAY });
+    expect(await pushes(t)).toEqual([]);
+    const rounds = await shlok.as.query(api.daily.today, { day: DAY });
+    expect(rounds.map((r) => [r.puzzle, r.entries.length]).sort()).toEqual([
+      [1766, 1],
+      [1767, 1],
+    ]);
+  });
+
   test("you can remove your own result and nobody else's", async () => {
     const t = setup();
     const me = await signedIn(t, "Shlok");
