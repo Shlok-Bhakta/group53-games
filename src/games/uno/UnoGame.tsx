@@ -438,9 +438,13 @@ function Dock({
               "Stack a draw card or take them"
             )
           ) : p?.kind === "roulette" ? (
-            "Pick a color to spin for"
+            "Name a color: you flip till you hit it"
           ) : state.drew ? (
-            "Play the card you drew?"
+            canPass(state, seat) ? (
+              "Play the card you drew, or keep it"
+            ) : (
+              "Play the card you drew"
+            )
           ) : (
             "Your move"
           )
@@ -475,6 +479,7 @@ function Dock({
       <>
         <Button size="xl" variant="destructive" className="w-full" pending={pending} onClick={() => void move({ kind: "take" })}>
           Take {p.amount}
+          {state.rules.mercy > 0 && cards.length + p.amount >= state.rules.mercy ? " and go out" : ""}
         </Button>
         {p.challenge && (
           <Button size="xl" variant="secondary" className="w-full" pending={pending} onClick={() => void move({ kind: "challenge" })}>

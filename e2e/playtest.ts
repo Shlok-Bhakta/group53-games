@@ -143,7 +143,9 @@ const server = http.createServer(async (req, res) => {
         g.status !== "active"
           ? s.page.getByRole("region", { name: "Result" })
           : g.turn === s.player.userId
-            ? s.page.getByText(/^(Your move|Pick cards to swap|Play the card you drew\?|Pick a color to spin for|\+\d+ on you)$/)
+            ? s.page.getByText(
+                /^(Your move|Pick cards to swap|Play the card you drew.*|Name a color: you flip till you hit it|Stack a draw card or take them|Take them or challenge)$/,
+              )
             : null;
       await ready?.waitFor({ timeout: 25_000 }).catch(() => {});
       return send(200, await screen(name));
