@@ -6,7 +6,17 @@ import { CaretRightIcon, CheckIcon, StorefrontIcon, XIcon } from "@phosphor-icon
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { MatchView } from "../../../convex/matches";
-import { ITEMS, LENGTH, cantGuess, keyColors, lastWord, waitingOn, type Buy, type WordleState } from "../../../convex/wordle/engine";
+import {
+  ITEMS,
+  LENGTH,
+  cantGuess,
+  cartCost,
+  keyColors,
+  lastWord,
+  waitingOn,
+  type Buy,
+  type WordleState,
+} from "../../../convex/wordle/engine";
 import { buyLine } from "../../../convex/wordle/text";
 import { GameFrame, DockNote } from "@/components/game/GameFrame";
 import { usePhoneLandscape } from "@/components/game/landscape";
@@ -22,6 +32,7 @@ import { ThinkingDots, useHere } from "@/presence";
 import { sfx } from "@/sound";
 import { Tiles, type TileState } from "@/Tiles";
 import { Board, FLIP_S, FLIP_STAGGER_S, type Row } from "./Board";
+import { Hand } from "./Hand";
 import { KEYBOARD_HEIGHT, Keyboard } from "./Keyboard";
 import { Coins, ItemIcon, MARK_STATE, MiniBoard } from "./parts";
 import { ShopSheet } from "./ShopSheet";
@@ -49,7 +60,8 @@ export default function WordleGame({ match, meId }: { match: MatchView; meId: Id
   const names = (i: number) => (i === seat ? "you" : (match.players[i]?.name ?? "someone"));
   useLive(match, state, seat);
 
-  const top = <TopLine state={state} seat={seat} onLog={() => setSheet("log")} />;
+  const spending = me?.picked || sheet === "shop" ? cartCost(view?.cart ?? []) : 0;
+  const top = <TopLine state={state} seat={seat} spending={spending} onLog={() => setSheet("log")} />;
   const players = <Players match={match} state={state} seat={seat} view={view} onPlayer={setPlayer} />;
   const play = usePlay(match, state, seat, view, () => setSheet("shop"));
   const dock = match.status === "finished" ? <Result match={match} meId={meId} /> : play.dock;
@@ -58,7 +70,7 @@ export default function WordleGame({ match, meId }: { match: MatchView; meId: Id
       {top}
       {players}
       {landscape ? dock : play.board}
-      {seat >= 0 && view?.round === state.round && (
+      {seat >= 0 && view?.round === state.round && view.left && (
         <ShopSheet
           key={`${state.round}:${sheet === "shop"}`}
           open={sheet === "shop" && shopping}
@@ -66,7 +78,10 @@ export default function WordleGame({ match, meId }: { match: MatchView; meId: Id
           match={match}
           state={state}
           seat={seat}
-          pick={view.pick}
+          saved={view.cart}
+          left={view.left}
+          lost={view.lost}
+          held={view.hand.length}
         />
       )}
       <LogSheet open={sheet === "log"} onClose={() => setSheet(null)} match={match} state={state} name={names} />
@@ -100,7 +115,23 @@ function useLive(match: MatchView, state: WordleState, seat: number) {
   }, [match.status, match.result, match.players, seat]);
 }
 
-const NO_VIEW: View = { round: -1, seat: -1, rows: [], hint: null, pick: null, jammed: "", others: [], typing: [] };
+const NO_VIEW: View = {
+  round: -1,
+  seat: -1,
+  rows: [],
+  hint: null,
+  hints: [],
+  clue: null,
+  clues: "",
+  hand: [],
+  pick: null,
+  cart: [],
+  lost: [],
+  left: null,
+  jammed: "",
+  others: [],
+  typing: [],
+};
 
 function usePlay(match: MatchView, state: WordleState, seat: number, loaded: View | null | undefined, onShop: () => void) {
   const view = loaded ?? NO_VIEW;
@@ -185,10 +216,13 @@ function usePlay(match: MatchView, state: WordleState, seat: number, loaded: Vie
   const dark = me?.effects.some((e) => e.item === "dark") && !state.over;
   const colors = dark
     ? null
-    : keyColors(
-        visible.map((r) => r.letters),
-        visible.map((r) => r.marks),
-      );
+    : {
+        ...Object.fromEntries([...view.clues].map((ch) => [ch, 1 as const])),
+        ...keyColors(
+          visible.map((r) => r.letters),
+          visible.map((r) => r.marks),
+        ),
+      };
   const fog = me?.effects.find((e) => e.item === "fog");
   const rows = me ? me.max : 6;
   const board = (
@@ -202,7 +236,7 @@ function usePlay(match: MatchView, state: WordleState, seat: number, loaded: Vie
         played={view.rows}
         typed={typed}
         typing={typing}
-        hint={view.hint}
+        hints={view.hints}
         shake={shake}
         won={!!me?.won}
         fogBy={fog ? (match.players[fog.by]?.name ?? null) : null}
@@ -218,6 +252,22 @@ function usePlay(match: MatchView, state: WordleState, seat: number, loaded: Vie
   else if (me.out) dock = <DockNote className={KEYBOARD_HEIGHT}>You&rsquo;re out of this one</DockNote>;
   else if (typing) dock = keyboard;
   else dock = <Done match={match} state={state} seat={seat} view={view} onShop={onShop} />;
+  if (dock && me && !me.out && state.rules.shop)
+    dock = (
+      <div className="flex w-full flex-col">
+        <Hand
+          match={match}
+          state={state}
+          seat={seat}
+          hand={view.hand}
+          clues={view.clues}
+          payday={me.effects.some((e) => e.item === "payday" && e.by === seat)}
+          playing={typing}
+          lastRow={typing && me.rows === me.max - 1}
+        />
+        {dock}
+      </div>
+    );
   return { board, dock };
 }
 
@@ -237,11 +287,15 @@ function Done({
   const me = state.players[seat];
   const waiting = waitingOn(state).filter((i) => i !== seat);
   const shopOpen = state.rules.shop && !lastWord(state);
-  const pick = view.pick;
+  const cart = view.cart;
+  const first = cart[0];
+  const pockets = me.effects.filter((e) => e.took);
   const pickText = !me.picked
-    ? "Shop"
-    : pick
-      ? `${ITEMS[pick.item].name}${ITEMS[pick.item].target ? ` at ${match.players[pick.target]?.name}` : ""}`
+    ? view.lost.length
+      ? "Shop again"
+      : "Shop"
+    : first
+      ? `${ITEMS[first.item].name}${ITEMS[first.item].target ? ` at ${match.players[first.target]?.name}` : ""}${cart.length > 1 ? ` + ${cart.length - 1} more` : ""}`
       : "Passing";
   return (
     <div
@@ -251,7 +305,12 @@ function Done({
       <div className="flex items-center justify-between gap-2 text-callout">
         <span className="flex items-center gap-1.5 font-semibold">
           {me.won ? <CheckIcon weight="bold" className="text-[var(--tile-green)]" /> : <XIcon weight="bold" className="text-destructive" />}
-          {me.won ? `Solved in ${me.rows}` : "Missed it"}
+          {`${me.won ? `Solved in ${me.rows}` : "Missed it"}`}
+          {pockets.length > 0 && (
+            <span className="font-normal text-muted-foreground">
+              {pockets.map((e) => `${match.players[e.by]?.name} took ${e.took}`).join(", ")}
+            </span>
+          )}
         </span>
         <motion.span
           initial={{ scale: 0.6, opacity: 0 }}
@@ -280,7 +339,9 @@ function Done({
           icon={<StorefrontIcon weight="fill" />}
         >
           <span className="min-w-0 truncate">{pickText}</span>
-          <Coins n={me.coins} className="ml-auto" />
+          <span className="ml-auto text-callout font-normal text-muted-foreground">
+            <Coins n={me.coins - cartCost(view.cart)} className="text-foreground" /> left
+          </span>
         </Button>
       ) : (
         <WaitingLine match={match} waiting={waiting} last />
@@ -298,7 +359,7 @@ function WaitingLine({ match, waiting, last }: { match: MatchView; waiting: numb
     <p
       className={cn("flex items-center justify-center gap-2 text-center text-footnote text-muted-foreground", last && "h-14 text-callout")}
     >
-      {last && "Last word. "}
+      {last && "Last word: most words, then fewest guesses. "}
       {text}
       {here && <ThinkingDots />}
     </p>
@@ -308,8 +369,8 @@ function WaitingLine({ match, waiting, last }: { match: MatchView; waiting: numb
 function Incoming({ match, state, seat }: { match: MatchView; state: WordleState; seat: number }) {
   const buys = state.history.at(-1)?.buys ?? [];
   const mine = buys.filter((b) => b.target === seat && b.seat !== seat && b.got);
-  const missed = buys.find((b) => b.seat === seat && !b.got);
-  const lines = [...mine, ...(missed ? [missed] : [])];
+  const missed = buys.filter((b) => b.seat === seat && !b.got);
+  const lines = [...mine, ...missed];
   const me = state.players[seat];
   const [shown, setShown] = useState(lines.length > 0 && me.rows === 0);
   const hits = mine.some((b) => !b.blocked);
@@ -358,7 +419,7 @@ function Incoming({ match, state, seat }: { match: MatchView; state: WordleState
 
 const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
 
-function TopLine({ state, seat, onLog }: { state: WordleState; seat: number; onLog: () => void }) {
+function TopLine({ state, seat, spending, onLog }: { state: WordleState; seat: number; spending: number; onLog: () => void }) {
   const me = seat >= 0 ? state.players[seat] : null;
   const word = state.over ? state.history.at(-1)?.word : null;
   return (
@@ -367,10 +428,19 @@ function TopLine({ state, seat, onLog }: { state: WordleState; seat: number; onL
         <span className="font-semibold text-foreground" data-round={state.round}>
           {word ? `It was ${word.toUpperCase()}` : `Word ${state.round + 1}`}
         </span>
-        <span>First to {state.rules.goal}</span>
+        <span>{state.rules.goal} words to win</span>
       </p>
       <div className="flex items-center gap-2">
-        {me && <Coins n={me.coins} className="text-callout" />}
+        {me && (
+          <span
+            className="flex items-center gap-1 text-callout"
+            data-coins={me.coins}
+            data-after-shop={spending ? me.coins - spending : undefined}
+          >
+            <Coins n={me.coins} />
+            {spending > 0 && <span className="text-footnote text-muted-foreground">{`→ ${me.coins - spending} after the shop`}</span>}
+          </span>
+        )}
         <Button variant="ghost" size="sm" className="-mr-2 gap-1 text-muted-foreground" onClick={onLog} disabled={!state.history.length}>
           Log <CaretRightIcon weight="bold" />
         </Button>
@@ -437,6 +507,7 @@ function Players({
                   .map((e, k) => (
                     <ItemIcon key={k} item={e.item} size={11} className="text-[var(--tile-hit)]" />
                   ))}
+                {(p.shields ?? 0) > 0 && <ItemIcon item="shield" size={11} className="text-[var(--tile-green)]" />}
               </span>
             </span>
           </Button>
@@ -562,6 +633,7 @@ function PlayerSheet({
                   <ItemIcon item={e.item} className={e.by === seat ? "text-[var(--tile-green)]" : "text-[var(--tile-hit)]"} />
                   {ITEMS[e.item].name}
                   {e.by !== seat && <span className="text-muted-foreground">from {match.players[e.by]?.name}</span>}
+                  {e.took !== undefined && <span className="ml-auto text-muted-foreground">{`took ${e.took}`}</span>}
                 </li>
               ))}
             </ul>

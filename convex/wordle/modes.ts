@@ -4,7 +4,11 @@ export const WORDLE_GAME = {
   name: "PvP Wordle",
   path: "/wordle",
   reasons: {
-    words: { label: "Solved the words first", push: "first to solve the words", won: "by solving the words first" },
+    words: {
+      label: "Most words, fewest guesses",
+      push: "most words in the fewest guesses",
+      won: "with the most words in the fewest guesses",
+    },
     rounds: { label: "Out of words", push: "out of words", won: "with the most words solved" },
   },
 } as const satisfies GameDef;

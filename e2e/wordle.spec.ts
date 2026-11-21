@@ -66,8 +66,6 @@ test("two phones: guesses land live, colors show once you're done, the shop's fo
   const { id, pages, seatOf } = await startGame(phones);
   const [pa, pb] = pages;
   const [sa, sb] = [seatOf(0), seatOf(1)];
-  const stock = ["fog", "pickpocket", "shield", "hint", "extra"].map((item) => ({ item, left: 1 }));
-  await admin().mutation(anyApi.testing.wordlePatch, { id, stock });
   const answer = await answerOf(id);
   const wrong = WRONG.filter((w) => w !== answer);
 
@@ -91,15 +89,38 @@ test("two phones: guesses land live, colors show once you're done, the shop's fo
   await expect(pb.locator(`[data-board-of="${sa}"] [data-marks]`)).toHaveAttribute("data-marks", /22222$/);
   await shot(pa, "done");
 
-  await pa.getByRole("button", { name: /^Shop/ }).click();
-  await pa.getByRole("radio", { name: /^Fog/ }).click();
-  await shot(pa, "shop");
-  await pa.getByRole("button", { name: /^Buy Fog/ }).click();
-  await expect.poll(async () => (await stateOf(id)).players[sa].picked).toBe(true);
-  await expect(pa.getByRole("button", { name: /^Fog at/ })).toBeVisible();
-
+  const coins = (n: number) => ({ coins: n, earned: 0, startCoins: n });
+  await admin().mutation(anyApi.testing.wordlePatch, {
+    id,
+    players: sa === 0 ? [coins(14), coins(40)] : [coins(40), coins(14)],
+    stock: [
+      { item: "fog", left: 1 },
+      { item: "clue", left: 2 },
+      { item: "shield", left: 1 },
+    ],
+  });
   await pb.getByRole("button", { name: /^Shop/ }).click();
-  await pb.getByRole("button", { name: "Pass and keep my coins" }).click();
+  await pb.getByRole("button", { name: /^Fog, / }).click();
+  await pb.getByRole("button", { name: /^Buy 1 for / }).click();
+  await expect.poll(async () => (await stateOf(id)).players[sb].picked).toBe(true);
+
+  await pa.getByRole("button", { name: /^Shop/ }).click();
+  await expect(pa.locator('[data-item="fog"]'), "a richer player's claim doesn't count against you").toHaveAttribute("data-left", "1");
+  await pa.getByRole("button", { name: /^Clue, / }).click();
+  await expect(pa.locator("[data-cart]")).toHaveAttribute("data-cart", "1");
+  await expect(pa.getByRole("button", { name: /^Fog, / }), "Clue and Fog cost more than 14").toBeDisabled();
+  await shot(pa, "shop");
+  await pa.getByRole("button", { name: "Remove Clue" }).click();
+  await pa.getByRole("button", { name: /^Fog, / }).click();
+  await pa.getByRole("button", { name: /^Buy 1 for / }).click();
+  await expect.poll(async () => (await stateOf(id)).players[sb].picked, "Chris goes back to the shop").toBe(false);
+
+  await expect(pb.getByRole("button", { name: /^Shop again/ })).toBeVisible();
+  await pb.getByRole("button", { name: /^Shop again/ }).click();
+  await expect(pb.locator("[data-lost]")).toBeVisible();
+  await expect(pb.locator('[data-item="fog"]')).toHaveAttribute("data-left", "0");
+  await shot(pb, "shop-again");
+  await pb.getByRole("button", { name: "Pass", exact: true }).click();
   await expect.poll(async () => (await stateOf(id)).round).toBe(1);
 
   await expect(pb.locator("[data-incoming]")).toBeVisible();
@@ -110,6 +131,13 @@ test("two phones: guesses land live, colors show once you're done, the shop's fo
   await guessOn(pb, id, sb, misses[1]);
   await expect(pb.locator("[data-fog]")).toHaveAttribute("data-fog", "1");
   await shot(pb, "fogged");
+
+  const coinsBefore = (await stateOf(id)).players[sb].coins;
+  await pb.getByRole("button", { name: "Cards" }).click();
+  await shot(pb, "cards");
+  await pb.getByRole("button", { name: /^Buy Hint now for / }).click();
+  await expect.poll(async () => (await stateOf(id)).players[sb].coins).toBeLessThan(coinsBefore);
+  await expect(pb.getByRole("gridcell", { name: /^Hint: [A-Z]$/ })).toBeVisible();
 
   await pa.getByRole("button", { name: "Log" }).click();
   await expect(pa.locator(`[data-log-word="${answer}"]`)).toBeVisible();

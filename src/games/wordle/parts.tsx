@@ -7,6 +7,9 @@ import {
   HourglassMediumIcon,
   LightbulbIcon,
   LockIcon,
+  MagnifyingGlassIcon,
+  MoneyWavyIcon,
+  ReceiptIcon,
   RowsPlusBottomIcon,
   ShieldIcon,
 } from "@phosphor-icons/react";
@@ -25,6 +28,9 @@ const ICONS: Record<ItemKey, typeof CoinsIcon> = {
   shield: ShieldIcon,
   hint: LightbulbIcon,
   extra: RowsPlusBottomIcon,
+  tax: ReceiptIcon,
+  clue: MagnifyingGlassIcon,
+  payday: MoneyWavyIcon,
 };
 
 export function ItemIcon({ item, size = 20, className }: { item: ItemKey; size?: number; className?: string }) {
