@@ -6,7 +6,7 @@ import { ArrowsClockwiseIcon, CaretRightIcon, CardsIcon, MegaphoneIcon, SirenIco
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { MatchView } from "../../../convex/matches";
-import { COLORS, COLOR_NAME, cardName, colorOf, faceOf, isWild, sortHand, type Card, type Color } from "../../../convex/uno/cards";
+import { COLORS, COLOR_NAME, cardName, colorOf, deckOf, faceOf, isWild, sortHand, type Card, type Color } from "../../../convex/uno/cards";
 import { canPass, cantDraw, cantPlay, inHand, isGone, isOutOfHand, next, type UnoState } from "../../../convex/uno/engine";
 import { entryText } from "../../../convex/uno/text";
 import { usePending } from "@/components/AsyncButton";
@@ -30,6 +30,8 @@ type Move = {
   seq?: number;
 };
 type Ask = { card: Card; need: "color" | "target"; seq: number };
+
+const drawable = (s: UnoState) => deckOf(s.rules.deck, s.rules.decks).length - s.counts.reduce((a, b) => a + b, 0) - 1;
 
 const leftAfter = (cards: Card[], card: Card) =>
   faceOf(card) === "DA" ? cards.filter((c) => isWild(c) || colorOf(c) !== colorOf(card)).length : cards.length - 1;
@@ -178,7 +180,7 @@ function useLive(match: MatchView, state: UnoState, seat: number) {
       toast(text[0].toUpperCase() + text.slice(1), { id: `uno-hit-${e.seq}` });
     }
     const rotated = state.log.find((e) => e.seq > was.seq && e.kind === "rotate" && e.seat !== seat);
-    if (rotated && seat >= 0)
+    if (rotated && seat >= 0 && !isOutOfHand(state, seat))
       toast(`${names(rotated.seat)} passed every hand along. You have ${state.counts[seat]} now.`, { id: `uno-rotate-${rotated.seq}` });
     if (state.turn === seat && was.turn !== seat && state.hand === was.hand) sfx("turn", { live: true });
   }, [state, seat, match.players]);
@@ -479,7 +481,7 @@ function Dock({
       <>
         <Button size="xl" variant="destructive" className="w-full" pending={pending} onClick={() => void move({ kind: "take" })}>
           Take {p.amount}
-          {state.rules.mercy > 0 && cards.length + p.amount >= state.rules.mercy ? " and go out" : ""}
+          {state.rules.mercy > 0 && cards.length + Math.min(p.amount, drawable(state)) >= state.rules.mercy ? " and go out" : ""}
         </Button>
         {p.challenge && (
           <Button size="xl" variant="secondary" className="w-full" pending={pending} onClick={() => void move({ kind: "challenge" })}>
