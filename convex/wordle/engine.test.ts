@@ -334,13 +334,13 @@ describe("the shop", () => {
     expect(() => card(t, 0, "hint")).toThrow(/don't have/);
   });
 
-  test("an emergency card costs half again and needs no stock", () => {
+  test("an emergency card costs a quarter more and needs no stock", () => {
     const t = table(2);
     t.s.stock = [];
     t.s.players[0].coins = 20;
     card(t, 0, "hint", true);
     expect(t.s.players[0].coins).toBe(20 - rushPrice("hint"));
-    expect(rushPrice("hint")).toBe(Math.ceil(ITEMS.hint.price * 1.5));
+    expect(rushPrice("hint")).toBe(Math.ceil(ITEMS.hint.price * 1.25));
     expect(() => card(t, 0, "hint", true)).toThrow(/Not enough/);
     expect(() => card(t, 0, "payday", true)).toThrow(/only comes from the shop/);
   });

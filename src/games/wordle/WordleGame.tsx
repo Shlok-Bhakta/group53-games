@@ -280,7 +280,7 @@ function Done({
   const shopOpen = state.rules.shop && !lastWord(state);
   const cart = view.cart;
   const first = cart[0];
-  const pocketed = me.effects.reduce((n, e) => n + (e.took ?? 0), 0);
+  const pockets = me.effects.filter((e) => e.took);
   const pickText = !me.picked
     ? view.lost.length
       ? "Shop again"
@@ -297,7 +297,9 @@ function Done({
         <span className="flex items-center gap-1.5 font-semibold">
           {me.won ? <CheckIcon weight="bold" className="text-[var(--tile-green)]" /> : <XIcon weight="bold" className="text-destructive" />}
           {me.won ? `Solved in ${me.rows}` : "Missed it"}
-          {pocketed > 0 && <span className="font-normal text-muted-foreground">{`, ${pocketed} pickpocketed`}</span>}
+          {pockets.map((e, k) => (
+            <span key={k} className="font-normal text-muted-foreground">{`, ${match.players[e.by]?.name} took ${e.took}`}</span>
+          ))}
         </span>
         <motion.span
           initial={{ scale: 0.6, opacity: 0 }}
@@ -619,6 +621,7 @@ function PlayerSheet({
                   <ItemIcon item={e.item} className={e.by === seat ? "text-[var(--tile-green)]" : "text-[var(--tile-hit)]"} />
                   {ITEMS[e.item].name}
                   {e.by !== seat && <span className="text-muted-foreground">from {match.players[e.by]?.name}</span>}
+                  {e.took !== undefined && <span className="ml-auto text-muted-foreground">{`took ${e.took}`}</span>}
                 </li>
               ))}
             </ul>

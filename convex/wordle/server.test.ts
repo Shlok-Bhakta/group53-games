@@ -201,7 +201,7 @@ describe("PvP Wordle on the server", () => {
     expect((await a.as.query(api.wordle.board, { id }))!.hand).toEqual([]);
     const before = (await stateOf(t, id)).players[1].coins;
     await b.as.mutation(api.wordle.play, { id, round: 1, item: "hint", rush: true });
-    expect((await stateOf(t, id)).players[1].coins).toBe(before - 18);
+    expect((await stateOf(t, id)).players[1].coins).toBe(before - 15);
     const view = (await b.as.query(api.wordle.board, { id }))!;
     expect(view.hints).toHaveLength(1);
     expect((await word(t, id))[view.hints[0].at]).toBe(view.hints[0].letter);

@@ -13,7 +13,7 @@ export const FOG_ROWS = 2;
 export const IN_STOCK_AT_LEAST = 6;
 export const MAX_CART = 6;
 export const MAX_HAND = 3;
-export const RUSH = 1.5;
+export const RUSH = 1.25;
 const JAMMABLE = "earotlisnc";
 
 export type ItemKey = "fog" | "fuse" | "jam" | "pickpocket" | "dark" | "tax" | "shield" | "clue" | "hint" | "extra" | "payday";
@@ -37,7 +37,7 @@ export const ITEMS: Record<ItemKey, ItemDef> = {
   },
   shield: { name: "Shield", price: 7, target: false, text: "Stays in your hand and blocks the next thing thrown at you." },
   payday: { name: "Payday", price: 8, target: false, play: true, text: "A card. Play it during a word to double what that word pays." },
-  extra: { name: "Extra row", price: 10, target: false, play: true, rush: true, text: "A card. Play it during a word for one more guess." },
+  extra: { name: "Extra row", price: 8, target: false, play: true, rush: true, text: "A card. Play it during a word for one more guess." },
   hint: {
     name: "Hint",
     price: 12,

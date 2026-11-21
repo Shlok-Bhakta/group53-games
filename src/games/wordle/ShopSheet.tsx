@@ -1,5 +1,6 @@
 import { Fragment, useState } from "react";
 import { useMutation } from "convex/react";
+import { toast } from "sonner";
 import { XIcon } from "@phosphor-icons/react";
 import { api } from "../../../convex/_generated/api";
 import type { MatchView } from "../../../convex/matches";
@@ -86,6 +87,10 @@ export function ShopSheet({
   const buy = (c: Cart) =>
     send({ id: match._id, round: state.round, cart: c }).then(() => {
       sfx(c.length ? "chips" : "recall");
+      if (c.length)
+        toast.success(`${listNames(c.map((x) => ITEMS[x.item].name))} in. ${me.coins - cartCost(c)} coins left once the shop closes.`, {
+          id: "wordle-shop",
+        });
       onClose();
     });
   const lostNames = [...new Set(lost)].map((k) => ITEMS[k].name);
@@ -98,7 +103,7 @@ export function ShopSheet({
           {cost > 0 && <span className="text-muted-foreground">of {me.coins}</span>}
         </span>
         <span className="text-footnote text-muted-foreground">
-          You shop {ordinal(place)} of {alive(state).length}, fewest coins first
+          You shop {ordinal(place)} of {alive(state).length} · by coins at the word&rsquo;s start
         </span>
       </div>
       {lostNames.length > 0 && !me.picked && (
@@ -139,7 +144,7 @@ export function ShopSheet({
           {me.picked && !saved.length ? "Passing" : "Pass"}
         </AsyncButton>
         <AsyncButton size="xl" className="flex-[2]" disabled={!cart.length || !!why} onClick={() => buy(cart)}>
-          {!cart.length ? "Pick something" : (why ?? `Buy ${cart.length} for ${cost}`)}
+          {!cart.length ? "Tap things to add them" : (why ?? `Buy ${cart.length} for ${cost}`)}
         </AsyncButton>
       </div>
     </div>
