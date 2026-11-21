@@ -58,7 +58,7 @@ export default function WordleGame({ match, meId }: { match: MatchView; meId: Id
       {top}
       {players}
       {landscape ? dock : play.board}
-      {seat >= 0 && view?.round === state.round && (
+      {seat >= 0 && view?.round === state.round && view.left && (
         <ShopSheet
           key={`${state.round}:${sheet === "shop"}`}
           open={sheet === "shop" && shopping}
@@ -66,7 +66,9 @@ export default function WordleGame({ match, meId }: { match: MatchView; meId: Id
           match={match}
           state={state}
           seat={seat}
-          pick={view.pick}
+          saved={view.cart}
+          left={view.left}
+          lost={view.lost}
         />
       )}
       <LogSheet open={sheet === "log"} onClose={() => setSheet(null)} match={match} state={state} name={names} />
@@ -100,7 +102,20 @@ function useLive(match: MatchView, state: WordleState, seat: number) {
   }, [match.status, match.result, match.players, seat]);
 }
 
-const NO_VIEW: View = { round: -1, seat: -1, rows: [], hint: null, pick: null, jammed: "", others: [], typing: [] };
+const NO_VIEW: View = {
+  round: -1,
+  seat: -1,
+  rows: [],
+  hint: null,
+  clue: null,
+  pick: null,
+  cart: [],
+  lost: [],
+  left: null,
+  jammed: "",
+  others: [],
+  typing: [],
+};
 
 function usePlay(match: MatchView, state: WordleState, seat: number, loaded: View | null | undefined, onShop: () => void) {
   const view = loaded ?? NO_VIEW;
@@ -185,10 +200,13 @@ function usePlay(match: MatchView, state: WordleState, seat: number, loaded: Vie
   const dark = me?.effects.some((e) => e.item === "dark") && !state.over;
   const colors = dark
     ? null
-    : keyColors(
-        visible.map((r) => r.letters),
-        visible.map((r) => r.marks),
-      );
+    : {
+        ...(view.clue ? { [view.clue]: 1 as const } : {}),
+        ...keyColors(
+          visible.map((r) => r.letters),
+          visible.map((r) => r.marks),
+        ),
+      };
   const fog = me?.effects.find((e) => e.item === "fog");
   const rows = me ? me.max : 6;
   const board = (
@@ -237,11 +255,14 @@ function Done({
   const me = state.players[seat];
   const waiting = waitingOn(state).filter((i) => i !== seat);
   const shopOpen = state.rules.shop && !lastWord(state);
-  const pick = view.pick;
+  const cart = view.cart;
+  const first = cart[0];
   const pickText = !me.picked
-    ? "Shop"
-    : pick
-      ? `${ITEMS[pick.item].name}${ITEMS[pick.item].target ? ` at ${match.players[pick.target]?.name}` : ""}`
+    ? view.lost.length
+      ? "Shop again"
+      : "Shop"
+    : first
+      ? `${ITEMS[first.item].name}${ITEMS[first.item].target ? ` at ${match.players[first.target]?.name}` : ""}${cart.length > 1 ? ` + ${cart.length - 1} more` : ""}`
       : "Passing";
   return (
     <div
@@ -308,8 +329,8 @@ function WaitingLine({ match, waiting, last }: { match: MatchView; waiting: numb
 function Incoming({ match, state, seat }: { match: MatchView; state: WordleState; seat: number }) {
   const buys = state.history.at(-1)?.buys ?? [];
   const mine = buys.filter((b) => b.target === seat && b.seat !== seat && b.got);
-  const missed = buys.find((b) => b.seat === seat && !b.got);
-  const lines = [...mine, ...(missed ? [missed] : [])];
+  const missed = buys.filter((b) => b.seat === seat && !b.got);
+  const lines = [...mine, ...missed];
   const me = state.players[seat];
   const [shown, setShown] = useState(lines.length > 0 && me.rows === 0);
   const hits = mine.some((b) => !b.blocked);

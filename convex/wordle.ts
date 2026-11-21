@@ -14,7 +14,9 @@ import { clearDraft, draftsOf, writeDraft } from "./lib/drafts";
 import { startPushes } from "./lib/turns";
 import { ANSWERS } from "./wordle/answers";
 import {
+  ITEMS,
   alive,
+  cartOf,
   choose,
   fogged,
   finishRound,
@@ -22,14 +24,17 @@ import {
   isItem,
   jammed,
   leave,
+  leftForSeat,
+  reconcile,
   newGame,
   pickWords,
   roundDone,
   standings,
   waitingOn,
+  type Bumped,
   type Buy,
+  type Cart,
   type Mine,
-  type Pick,
   type Rules,
   type WordleState,
 } from "./wordle/engine";
@@ -92,9 +97,22 @@ async function nudgeLast(ctx: MutationCtx, before: Doc<"matches">, after: Doc<"m
   });
 }
 
+const minesOf = (ctx: QueryCtx, match: Doc<"matches">, s: WordleState) =>
+  Promise.all(match.players.map((p) => mineOf(ctx, match, p.userId, s)));
+
+async function tellBumped(ctx: MutationCtx, match: Doc<"matches">, bumped: Bumped[]) {
+  for (const b of bumped) {
+    const names = [...new Set(b.lost)].map((k) => ITEMS[k].name);
+    await notifyMatch(ctx, match.players[b.seat].userId, match, {
+      title: "Shop again",
+      body: `Someone with fewer coins took ${names.join(" and ")} before you. Those coins are yours to spend again.`,
+    });
+  }
+}
+
 async function resolve(ctx: MutationCtx, match: Doc<"matches">, s: WordleState, force = false) {
   const { words } = await readSecret<Words>(ctx, match._id, undefined, { words: [] });
-  const mines = await Promise.all(match.players.map((p) => mineOf(ctx, match, p.userId, s)));
+  const mines = await minesOf(ctx, match, s);
   const r = finishRound(s, mines, words, Math.random, force);
   if (!r.s.over) r.s.deadline = deadlineFor(match);
   for (const [i, p] of match.players.entries()) {
@@ -135,6 +153,10 @@ export const wordleHooks: GameHooks = {
     const s0 = match.state as WordleState;
     if (seat < 0 || s0.players[seat].out) return;
     const s = leave(s0, seat);
+    const mines = await minesOf(ctx, match, s);
+    const bumped = reconcile(s, mines);
+    for (const b of bumped) await writeSecret(ctx, match._id, match.players[b.seat].userId, mines[b.seat]);
+    await tellBumped(ctx, match, bumped);
     if (alive(s).length < 2) await resolve(ctx, match, s, true);
     else if (roundDone(s)) await resolve(ctx, match, s);
     else await save(ctx, match, s);
@@ -160,13 +182,15 @@ export async function guessAs(ctx: MutationCtx, id: Id<"matches">, word: string,
   return { marks, done: s.players[seat].done, won: s.players[seat].won };
 }
 
-export async function pickAs(ctx: MutationCtx, id: Id<"matches">, round: number, pick: Pick, as?: Id<"users">) {
-  const { userId, match, seat } = await seated(ctx, id, { game: "wordle", as });
+export async function pickAs(ctx: MutationCtx, id: Id<"matches">, round: number, cart: Cart, as?: Id<"users">) {
+  const { match, seat } = await seated(ctx, id, { game: "wordle", as });
   const s0 = match.state as WordleState;
   if (s0.round !== round) throw new Error("That shop has closed.");
   if (s0.deadline && Date.now() >= s0.deadline) throw new Error(TIME_UP);
-  const { s, mine } = choose(s0, await mineOf(ctx, match, userId, s0), seat, pick);
-  await writeSecret(ctx, id, userId, mine);
+  const before = await minesOf(ctx, match, s0);
+  const { s, mines, bumped } = choose(s0, before, seat, cart);
+  for (const i of new Set([seat, ...bumped.map((b) => b.seat)])) await writeSecret(ctx, id, match.players[i].userId, mines[i]);
+  await tellBumped(ctx, match, bumped);
   if (roundDone(s)) await resolve(ctx, match, s);
   else await nudgeLast(ctx, match, await save(ctx, match, s), s);
 }
@@ -180,7 +204,19 @@ export const pick = mutation({
   args: { id: v.id("matches"), round: v.number(), item: v.union(v.string(), v.null()), target: v.optional(v.number()) },
   handler: async (ctx, { id, round, item, target }) => {
     if (item !== null && !isItem(item)) throw new Error("That's not in the shop.");
-    await pickAs(ctx, id, round, item === null ? null : { item, target: target ?? -1 });
+    await pickAs(ctx, id, round, item === null ? [] : [{ item, target: target ?? -1 }]);
+  },
+});
+
+export const shop = mutation({
+  args: { id: v.id("matches"), round: v.number(), cart: v.array(v.object({ item: v.string(), target: v.number() })) },
+  handler: async (ctx, { id, round, cart }) => {
+    const items: Cart = [];
+    for (const x of cart) {
+      if (!isItem(x.item)) throw new Error("That's not in the shop.");
+      items.push({ item: x.item, target: x.target });
+    }
+    await pickAs(ctx, id, round, items);
   },
 });
 
@@ -215,14 +251,14 @@ export const board = query({
     if (!s) return null;
     const seat = seatOf(match, userId);
     const me = seat >= 0 ? s.players[seat] : null;
-    const mine = seat >= 0 ? await mineOf(ctx, match, userId, s) : blankMine(s.round);
+    const mines = await minesOf(ctx, match, s);
+    const mine = seat >= 0 ? mines[seat] : blankMine(s.round);
     const rows: Row[] = mine.guesses.map((g, i) => (me && !s.over && fogged(me, i) ? { fog: true } : { letters: g, marks: mine.marks[i] }));
     const seeOthers = s.over || !!me?.done;
     const others: (string[] | null)[] = await Promise.all(
       match.players.map(async (p, i) => {
         if (i === seat || !seeOthers) return null;
-        const m = await readSecret<Mine | null>(ctx, id, p.userId, null);
-        return m && m.round === s.round ? m.marks : [];
+        return mines[i].marks;
       }),
     );
     const typingNow = (await draftsOf(ctx, id))
@@ -235,7 +271,11 @@ export const board = query({
       seat,
       rows,
       hint: mine.hint ?? null,
+      clue: mine.clue ?? null,
       pick: mine.pick,
+      cart: cartOf(mine),
+      lost: mine.lost ?? [],
+      left: seat >= 0 ? leftForSeat(s, mines, seat) : null,
       jammed: me ? jammed(me) : "",
       others,
       typing: typingNow,

@@ -4,28 +4,32 @@ export const LENGTH = 5;
 export const ROWS = 6;
 export const MIN_ROWS = 3;
 export const MAX_ROWS = 8;
-export const START_COINS = 4;
-export const BASE_PAY = 2;
+export const START_COINS = 5;
+export const BASE_PAY = 1;
 export const SOLVE_PAY = 3;
-export const STEAL = 3;
+export const STEAL = 10;
 export const JAM_TURNS = 2;
-export const FOG_ROWS = 3;
-export const SHOP_SIZE = 5;
+export const FOG_ROWS = 2;
+export const IN_STOCK_AT_LEAST = 6;
+export const MAX_CART = 6;
 const JAMMABLE = "earotlisnc";
 
-export type ItemKey = "fog" | "fuse" | "jam" | "pickpocket" | "dark" | "shield" | "hint" | "extra";
+export type ItemKey = "fog" | "fuse" | "jam" | "pickpocket" | "dark" | "tax" | "shield" | "clue" | "hint" | "extra" | "payday";
 
-export type ItemDef = { name: string; price: number; target: boolean; text: string };
+export type ItemDef = { name: string; price: number; target: boolean; rare?: boolean; text: string };
 
 export const ITEMS: Record<ItemKey, ItemDef> = {
-  fog: { name: "Fog", price: 4, target: true, text: "Their top three rows fog over once they've guessed past them." },
-  fuse: { name: "Short fuse", price: 5, target: true, text: "One guess fewer on their next word." },
-  jam: { name: "Jam", price: 3, target: true, text: "Two common letters lock on their keyboard for their first two guesses." },
-  pickpocket: { name: "Pickpocket", price: 2, target: true, text: `Take ${STEAL} of their coins.` },
-  dark: { name: "Blackout", price: 3, target: true, text: "Their keyboard shows no colors on their next word." },
-  shield: { name: "Shield", price: 3, target: false, text: "Blocks the first thing thrown at you in this shop." },
-  hint: { name: "Hint", price: 4, target: false, text: "Start your next word with one letter already green." },
-  extra: { name: "Extra row", price: 4, target: false, text: "One more guess on your next word." },
+  dark: { name: "Blackout", price: 6, target: true, text: "Their keyboard shows no colors on their next word." },
+  pickpocket: { name: "Pickpocket", price: 6, target: true, text: `Take up to ${STEAL} of the coins they have left after this shop.` },
+  jam: { name: "Jam", price: 8, target: true, text: "Two common letters lock on their keyboard for their first two guesses." },
+  tax: { name: "Tax", price: 9, target: true, text: "They earn half as much from their next word." },
+  fog: { name: "Fog", price: 13, target: true, text: "Their top two rows fog over once they've guessed past them." },
+  fuse: { name: "Short fuse", price: 14, target: true, rare: true, text: "One guess fewer on their next word." },
+  clue: { name: "Clue", price: 5, target: false, text: "One letter of your next word lights up yellow on your keyboard." },
+  shield: { name: "Shield", price: 7, target: false, text: "Blocks one thing thrown at you in this shop." },
+  payday: { name: "Payday", price: 8, target: false, text: "Double what you earn from your next word." },
+  extra: { name: "Extra row", price: 10, target: false, text: "One more guess on your next word." },
+  hint: { name: "Hint", price: 12, target: false, rare: true, text: "Start your next word with one letter already green." },
 };
 export const ITEM_KEYS = Object.keys(ITEMS) as ItemKey[];
 export const isItem = (k: string): k is ItemKey => k in ITEMS;
@@ -69,7 +73,20 @@ export type WordleState = {
 
 export type Pick = { item: ItemKey; target: number } | null;
 
-export type Mine = { round: number; guesses: string[]; marks: string[]; pick: Pick; hint?: { at: number; letter: string } };
+export type Cart = { item: ItemKey; target: number }[];
+
+export type Mine = {
+  round: number;
+  guesses: string[];
+  marks: string[];
+  pick: Pick;
+  cart?: Cart;
+  lost?: ItemKey[];
+  hint?: { at: number; letter: string };
+  clue?: string;
+};
+
+export const cartOf = (mine: Mine): Cart => mine.cart ?? (mine.pick ? [mine.pick] : []);
 
 export type Rng = () => number;
 
@@ -103,18 +120,16 @@ export const alive = (s: WordleState) => s.players.flatMap((p, i) => (p.out ? []
 
 export const roundsFor = (goal: number) => goal + 3;
 
-function pickStock(n: number, rng: Rng): Stock[] {
-  const keys = [...ITEM_KEYS];
-  for (let i = keys.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [keys[i], keys[j]] = [keys[j], keys[i]];
-  }
-  const left = Math.max(1, Math.ceil(n / 4));
-  return keys
-    .slice(0, SHOP_SIZE)
-    .sort((a, b) => ITEM_KEYS.indexOf(a) - ITEM_KEYS.indexOf(b))
-    .map((item) => ({ item, left }));
+export const stockCap = (item: ItemKey, n: number) => Math.max(1, Math.ceil(n / (ITEMS[item].rare ? 3 : 2)));
+
+export function pickStock(n: number, rng: Rng): Stock[] {
+  const stock = ITEM_KEYS.map((item) => ({ item, left: Math.floor(rng() * (stockCap(item, n) + 1)) }));
+  const empty = stock.filter((x) => x.left === 0);
+  while (stock.length - empty.length < IN_STOCK_AT_LEAST && empty.length) empty.splice(Math.floor(rng() * empty.length), 1)[0].left = 1;
+  return stock;
 }
+
+export const leftOf = (s: WordleState, item: ItemKey) => s.stock.find((x) => x.item === item)?.left ?? 0;
 
 export function pickWords(answers: string, count: number, rng: Rng): string[] {
   const total = answers.length / LENGTH;
@@ -178,10 +193,17 @@ function greensFound(marks: string[]) {
   return n;
 }
 
-function pay(p: Player, mine: Mine) {
-  const greens = greensFound(mine.marks);
+export function payFor(p: Player, marks: string[]) {
   const solve = p.won ? SOLVE_PAY + (p.max - p.rows) : 0;
-  p.earned = BASE_PAY + greens + solve;
+  let earned = BASE_PAY + greensFound(marks) + solve;
+  const count = (k: ItemKey) => p.effects.filter((e) => e.item === k).length;
+  for (let i = 0; i < count("payday"); i++) earned *= 2;
+  for (let i = 0; i < count("tax"); i++) earned = Math.floor(earned / 2);
+  return earned;
+}
+
+function pay(p: Player, mine: Mine) {
+  p.earned = payFor(p, mine.marks);
   p.coins += p.earned;
   p.guesses += p.won ? p.rows : ROWS + 1;
   if (p.won) p.solved++;
@@ -211,31 +233,81 @@ export function lastWord(s: WordleState) {
   return s.round + 1 >= s.rounds || s.players.some((p) => !p.out && p.done && p.solved >= s.rules.goal);
 }
 
-export function cantPick(s: WordleState, seat: number, pick: Pick): string | null {
+export const cartCost = (cart: Cart) => cart.reduce((n, x) => n + ITEMS[x.item].price, 0);
+
+export type LeftFor = (item: ItemKey) => number;
+
+export function cantPick(s: WordleState, seat: number, cart: Cart, leftFor: LeftFor = (k) => leftOf(s, k)): string | null {
   const p = s.players[seat];
   if (s.over) return "This game is over.";
   if (!p || p.out) return "You're out of this game.";
   if (!s.rules.shop) return "The shop is off in this game.";
   if (!p.done) return "Finish your word first.";
   if (lastWord(s)) return "No shop after the last word.";
-  if (!pick) return null;
-  const def = ITEMS[pick.item];
-  if (!s.stock.some((x) => x.item === pick.item)) return "That's not in the shop this round.";
-  if (p.coins < def.price) return "Not enough coins.";
-  if (def.target) {
-    const t = s.players[pick.target];
-    if (pick.target === seat || !t || t.out) return "Pick someone else to throw it at.";
+  if (cart.length > MAX_CART) return `${MAX_CART} things at most.`;
+  for (const x of cart) {
+    if (!isItem(x.item)) return "That's not in the shop.";
+    const wanted = cart.filter((y) => y.item === x.item).length;
+    const left = leftFor(x.item);
+    if (!left) return `${ITEMS[x.item].name} is sold out for you this round.`;
+    if (wanted > left) return `Only ${left} ${ITEMS[x.item].name} in the shop.`;
+    if (ITEMS[x.item].target) {
+      const t = s.players[x.target];
+      if (x.target === seat || !t || t.out) return "Pick someone else to throw it at.";
+    }
   }
+  if (cartCost(cart) > p.coins) return "Not enough coins.";
   return null;
 }
 
-export function choose(s0: WordleState, mine0: Mine, seat: number, pick: Pick) {
-  const why = cantPick(s0, seat, pick);
+export function claimedAhead(s: WordleState, mines: Mine[], seat: number) {
+  const claimed = new Map<ItemKey, number>();
+  for (const i of buyOrder(s)) {
+    if (i === seat) break;
+    for (const x of cartOf(mines[i])) claimed.set(x.item, (claimed.get(x.item) ?? 0) + 1);
+  }
+  return claimed;
+}
+
+export function leftForSeat(s: WordleState, mines: Mine[], seat: number): Record<ItemKey, number> {
+  const claimed = claimedAhead(s, mines, seat);
+  return Object.fromEntries(ITEM_KEYS.map((k) => [k, Math.max(0, leftOf(s, k) - (claimed.get(k) ?? 0))])) as Record<ItemKey, number>;
+}
+
+export type Bumped = { seat: number; lost: ItemKey[] };
+
+export function reconcile(s: WordleState, mines: Mine[]): Bumped[] {
+  const claimed = new Map<ItemKey, number>();
+  const bumped: Bumped[] = [];
+  for (const seat of buyOrder(s)) {
+    const kept: Cart = [];
+    const lost: ItemKey[] = [];
+    for (const x of cartOf(mines[seat])) {
+      const n = claimed.get(x.item) ?? 0;
+      const target = s.players[x.target];
+      if (isItem(x.item) && n < leftOf(s, x.item) && target && !target.out) {
+        claimed.set(x.item, n + 1);
+        kept.push(x);
+      } else lost.push(x.item);
+    }
+    if (!lost.length) continue;
+    mines[seat] = { ...mines[seat], cart: kept, pick: kept[0] ?? null, lost: [...(mines[seat].lost ?? []), ...lost] };
+    s.players[seat].picked = false;
+    bumped.push({ seat, lost });
+  }
+  return bumped;
+}
+
+export function choose(s0: WordleState, mines0: Mine[], seat: number, cart0: Cart) {
+  const why = cantPick(s0, seat, cart0, (k) => leftForSeat(s0, mines0, seat)[k]);
   if (why) throw new Error(why);
   const s = structuredClone(s0);
-  const mine = { ...mine0, pick: pick && { item: pick.item, target: ITEMS[pick.item].target ? pick.target : seat } };
+  const mines = structuredClone(mines0);
+  const cart = cart0.map((x) => ({ item: x.item, target: ITEMS[x.item].target ? x.target : seat }));
+  mines[seat] = { ...mines[seat], cart, pick: cart[0] ?? null, lost: undefined };
   s.players[seat].picked = true;
-  return { s, mine };
+  const bumped = reconcile(s, mines);
+  return { s, mines, bumped };
 }
 
 export const waitingOn = (s: WordleState) =>
@@ -243,11 +315,14 @@ export const waitingOn = (s: WordleState) =>
 
 export const roundDone = (s: WordleState) => !s.over && waitingOn(s).length === 0;
 
+export const coinsGoingIn = (p: Player) => p.coins - p.earned;
+const solvedGoingIn = (p: Player) => p.solved - (p.done && p.won ? 1 : 0);
+
 export const buyOrder = (s: WordleState) =>
   alive(s).sort((a, b) => {
     const x = s.players[a];
     const y = s.players[b];
-    return x.coins - y.coins || x.solved - y.solved || a - b;
+    return coinsGoingIn(x) - coinsGoingIn(y) || solvedGoingIn(x) - solvedGoingIn(y) || a - b;
   });
 
 function rankKey(p: Player) {
@@ -295,22 +370,25 @@ export function finishRound(s0: WordleState, mine0: Mine[], words: string[], rng
   if (!ending && s.rules.shop) {
     const left = new Map(s.stock.map((x) => [x.item, x.left]));
     for (const seat of buyOrder(s)) {
-      const pick = mines[seat].pick;
-      if (!pick) continue;
-      const def = ITEMS[pick.item];
-      const target = def.target ? pick.target : seat;
-      const ok = (left.get(pick.item) ?? 0) > 0 && s.players[seat].coins >= def.price && !s.players[target]?.out;
-      if (ok) {
-        left.set(pick.item, (left.get(pick.item) ?? 0) - 1);
-        s.players[seat].coins -= def.price;
+      for (const x of cartOf(mines[seat])) {
+        if (!isItem(x.item)) continue;
+        const def = ITEMS[x.item];
+        const target = def.target ? x.target : seat;
+        const ok = (left.get(x.item) ?? 0) > 0 && s.players[seat].coins >= def.price && !!s.players[target] && !s.players[target].out;
+        if (ok) {
+          left.set(x.item, (left.get(x.item) ?? 0) - 1);
+          s.players[seat].coins -= def.price;
+        }
+        buys.push({ seat, item: x.item, target, got: ok });
       }
-      buys.push({ seat, item: pick.item, target, got: ok });
     }
-    const shielded = new Set(buys.filter((b) => b.got && b.item === "shield").map((b) => b.seat));
+    const shields = new Map<number, number>();
+    for (const b of buys) if (b.got && b.item === "shield") shields.set(b.seat, (shields.get(b.seat) ?? 0) + 1);
     for (const b of buys) {
       if (!b.got || b.item === "shield") continue;
-      if (ITEMS[b.item].target && shielded.has(b.target)) {
-        shielded.delete(b.target);
+      const shield = shields.get(b.target) ?? 0;
+      if (ITEMS[b.item].target && shield > 0) {
+        shields.set(b.target, shield - 1);
         b.blocked = true;
         continue;
       }
@@ -352,6 +430,10 @@ export function finishRound(s0: WordleState, mine0: Mine[], words: string[], rng
     if (count("hint") && nextWord) {
       const at = Math.floor(rng() * LENGTH);
       nextMine[i].hint = { at, letter: nextWord[at] };
+    }
+    if (count("clue") && nextWord) {
+      const pool = [...new Set(nextWord)].filter((ch) => ch !== nextMine[i].hint?.letter);
+      if (pool.length) nextMine[i].clue = pool[Math.floor(rng() * pool.length)];
     }
     if (p.out) p.done = p.picked = true;
   });
