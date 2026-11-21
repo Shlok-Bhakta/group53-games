@@ -135,23 +135,21 @@ export const wordleHooks: GameHooks = {
     const s0 = match.state as WordleState;
     if (seat < 0 || s0.players[seat].out) return;
     const s = leave(s0, seat);
-    if (alive(s).length < 2) {
-      s.over = true;
-      s.deadline = null;
-      await save(ctx, match, s);
-      return;
-    }
-    if (roundDone(s)) await resolve(ctx, match, s);
+    if (alive(s).length < 2) await resolve(ctx, match, s, true);
+    else if (roundDone(s)) await resolve(ctx, match, s);
     else await save(ctx, match, s);
   },
   timeout: async () => {},
   timeoutWarning: "",
 };
 
-export async function guessAs(ctx: MutationCtx, id: Id<"matches">, word: string, row: number, as?: Id<"users">) {
+const TIME_UP = "Time's up on this word.";
+
+export async function guessAs(ctx: MutationCtx, id: Id<"matches">, word: string, round: number, row: number, as?: Id<"users">) {
   const { userId, match, seat } = await seated(ctx, id, { game: "wordle", as });
   const s0 = match.state as WordleState;
-  if (s0.players[seat].rows !== row) throw new Error("That changed while you were looking. Try again.");
+  if (s0.round !== round || s0.players[seat].rows !== row) throw new Error("That changed while you were looking. Try again.");
+  if (s0.deadline && Date.now() >= s0.deadline) throw new Error(TIME_UP);
   const { words } = await readSecret<Words>(ctx, id, undefined, { words: [] });
   const { s, mine } = step(s0, await mineOf(ctx, match, userId, s0), seat, word, words[s0.round]);
   await writeSecret(ctx, id, userId, mine);
@@ -166,6 +164,7 @@ export async function pickAs(ctx: MutationCtx, id: Id<"matches">, round: number,
   const { userId, match, seat } = await seated(ctx, id, { game: "wordle", as });
   const s0 = match.state as WordleState;
   if (s0.round !== round) throw new Error("That shop has closed.");
+  if (s0.deadline && Date.now() >= s0.deadline) throw new Error(TIME_UP);
   const { s, mine } = choose(s0, await mineOf(ctx, match, userId, s0), seat, pick);
   await writeSecret(ctx, id, userId, mine);
   if (roundDone(s)) await resolve(ctx, match, s);
@@ -173,8 +172,8 @@ export async function pickAs(ctx: MutationCtx, id: Id<"matches">, round: number,
 }
 
 export const guess = mutation({
-  args: { id: v.id("matches"), word: v.string(), row: v.number() },
-  handler: async (ctx, { id, word, row }) => await guessAs(ctx, id, word, row),
+  args: { id: v.id("matches"), word: v.string(), round: v.number(), row: v.number() },
+  handler: async (ctx, { id, word, round, row }) => await guessAs(ctx, id, word, round, row),
 });
 
 export const pick = mutation({

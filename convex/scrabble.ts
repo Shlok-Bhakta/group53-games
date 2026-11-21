@@ -260,7 +260,7 @@ export const pass = mutation({
 
 export const rack = query({
   args: { id: v.id("matches") },
-  handler: async (ctx, { id }) => (await mySecret<Hand>(ctx, id))?.rack ?? null,
+  handler: async (ctx, { id }) => (await mySecret<Hand>(ctx, id, "scrabble"))?.rack ?? null,
 });
 
 export const check = query({

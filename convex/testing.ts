@@ -333,7 +333,7 @@ export const wordleGuessAs = internalMutation({
     const m = (await ctx.db.get(id))!;
     const s = m.state as WordleState;
     const seat = m.players.findIndex((p) => p.userId === userId);
-    return await wordleGuess(ctx, id, word, s.players[seat].rows, userId);
+    return await wordleGuess(ctx, id, word, s.round, s.players[seat].rows, userId);
   },
 });
 
@@ -348,12 +348,13 @@ export const wordlePickAs = internalMutation({
 });
 
 export const wordlePatch = internalMutation({
-  args: { id: v.id("matches"), players: v.any() },
-  handler: async (ctx, { id, players }) => {
+  args: { id: v.id("matches"), players: v.optional(v.any()), stock: v.optional(v.any()) },
+  handler: async (ctx, { id, players, stock }) => {
     assertTestDeployment();
     const m = (await ctx.db.get(id))!;
     const s = m.state as WordleState;
-    await ctx.db.patch(id, { state: { ...s, players: s.players.map((p, i) => ({ ...p, ...(players[i] ?? {}) })) } });
+    const merged = s.players.map((p, i) => ({ ...p, ...(players?.[i] ?? {}) }));
+    await ctx.db.patch(id, { state: { ...s, players: merged, stock: stock ?? s.stock } });
   },
 });
 

@@ -44,7 +44,7 @@ async function game(t: T, n = 2, settings?: Record<string, number>) {
 async function solve(t: T, id: Id<"matches">, p: Player) {
   const s = await stateOf(t, id);
   const seat = (await get(t, id))!.players.findIndex((x) => x.userId === p.userId);
-  return await p.as.mutation(api.wordle.guess, { id, word: await word(t, id), row: s.players[seat].rows });
+  return await p.as.mutation(api.wordle.guess, { id, word: await word(t, id), round: s.round, row: s.players[seat].rows });
 }
 
 async function miss(t: T, id: Id<"matches">, p: Player) {
@@ -54,7 +54,7 @@ async function miss(t: T, id: Id<"matches">, p: Player) {
     const s = await stateOf(t, id);
     const seat = (await get(t, id))!.players.findIndex((x) => x.userId === p.userId);
     if (s.players[seat].done) return;
-    await p.as.mutation(api.wordle.guess, { id, word: wrong[r], row: s.players[seat].rows });
+    await p.as.mutation(api.wordle.guess, { id, word: wrong[r], round: s.round, row: s.players[seat].rows });
   }
 }
 
@@ -72,7 +72,8 @@ describe("PvP Wordle on the server", () => {
     expect(s.round).toBe(0);
     expect(s.deadline! - Date.now(), "a day per word by default").toBeGreaterThan(24 * 3600_000 - 1000);
     const answer = await word(t, id);
-    expect(JSON.stringify(m.state)).not.toContain(answer);
+    expect(JSON.stringify(m.state)).not.toMatch(new RegExp(`"${answer}"(?!:)`));
+    expect(s.history).toEqual([]);
     const titles = (await pushes(t)).map((p) => p.title);
     expect(titles.filter((x) => x === "PvP Wordle is on")).toHaveLength(3);
     for (const p of players) expect((await p.as.query(api.matches.attention, {})).myTurn).toBe(1);
@@ -82,10 +83,13 @@ describe("PvP Wordle on the server", () => {
     const t = setup();
     const { id, seats } = await game(t, 2);
     const [a, b] = seats;
-    const r = await a.as.mutation(api.wordle.guess, { id, word: "pious", row: 0 });
+    const r = await a.as.mutation(api.wordle.guess, { id, word: "pious", round: 0, row: 0 });
     expect(r.marks).toMatch(/^[012]{5}$/);
-    await expect(a.as.mutation(api.wordle.guess, { id, word: "ghost", row: 0 })).rejects.toThrow(/changed/);
-    await expect(a.as.mutation(api.wordle.guess, { id, word: "zzzzz", row: 1 })).rejects.toThrow(/word list/);
+    await expect(a.as.mutation(api.wordle.guess, { id, word: "ghost", round: 0, row: 0 })).rejects.toThrow(/changed/);
+    await expect(a.as.mutation(api.wordle.guess, { id, word: "zzzzz", round: 0, row: 1 })).rejects.toThrow(/word list/);
+    await expect(a.as.mutation(api.wordle.guess, { id, word: "ghost", round: 1, row: 1 }), "a guess for another word").rejects.toThrow(
+      /changed/,
+    );
     const mine = await a.as.query(api.wordle.board, { id });
     expect(mine!.rows).toEqual([{ letters: "pious", marks: r.marks }]);
     const theirs = await b.as.query(api.wordle.board, { id });
@@ -100,7 +104,7 @@ describe("PvP Wordle on the server", () => {
     const [a, b] = seats;
     await a.as.mutation(api.wordle.typing, { id, letters: 3 });
     expect((await b.as.query(api.wordle.board, { id }))!.typing).toEqual([{ seat: 0, letters: 3 }]);
-    await a.as.mutation(api.wordle.guess, { id, word: "pious", row: 0 });
+    await a.as.mutation(api.wordle.guess, { id, word: "pious", round: 0, row: 0 });
     expect((await b.as.query(api.wordle.board, { id }))!.typing, "a guess clears it").toEqual([]);
     await solve(t, id, b);
     const view = (await b.as.query(api.wordle.board, { id }))!;
@@ -163,6 +167,16 @@ describe("PvP Wordle on the server", () => {
     expect(s.history[0].boards[1].won).toBe(false);
   });
 
+  test("once the deadline has passed, a guess in the gap before the close is refused", async () => {
+    const t = setup();
+    const { id, seats } = await game(t, 2, { wordTime: 12 });
+    await t.run(async (ctx) => {
+      const m = (await ctx.db.get(id))!;
+      await ctx.db.patch(id, { state: { ...(m.state as WordleState), deadline: Date.now() - 1 } });
+    });
+    await expect(seats[0].as.mutation(api.wordle.guess, { id, word: "pious", round: 0, row: 0 })).rejects.toThrow(/Time's up/);
+  });
+
   test("reminders go to whoever the word is waiting on", async () => {
     const t = setup();
     const { id, seats } = await game(t, 2, { wordTime: 0 });
@@ -181,6 +195,10 @@ describe("PvP Wordle on the server", () => {
     const two = await game(t, 2);
     await two.seats[1].as.mutation(api.matches.resign, { id: two.id });
     expect((await get(t, two.id))!.result).toMatchObject({ reason: "resign", winners: [two.seats[0].userId] });
+    expect(
+      (await stateOf(t, two.id)).history.map((h) => h.word),
+      "the open word is closed and shown",
+    ).toEqual([await word(t, two.id)]);
 
     const t3 = setup();
     const three = await game(t3, 3);
@@ -216,7 +234,7 @@ describe("PvP Wordle on the server", () => {
   test("the link preview shows only finished words", async () => {
     const t = setup();
     const { id, seats } = await game(t, 2);
-    await seats[0].as.mutation(api.wordle.guess, { id, word: "pious", row: 0 });
+    await seats[0].as.mutation(api.wordle.guess, { id, word: "pious", round: 0, row: 0 });
     const p = (await t.query(internal.previews.match, { id }))! as unknown as { wordle: { last: unknown; rows: number[] } };
     expect(p.wordle.last).toBeNull();
     expect(p.wordle.rows).toEqual([1, 0]);

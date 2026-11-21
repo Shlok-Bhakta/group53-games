@@ -6,11 +6,11 @@ import { CaretRightIcon, CheckIcon, StorefrontIcon, XIcon } from "@phosphor-icon
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { MatchView } from "../../../convex/matches";
-import { ITEMS, LENGTH, alive, cantGuess, keyColors, lastWord, waitingOn, type Buy, type WordleState } from "../../../convex/wordle/engine";
+import { ITEMS, LENGTH, cantGuess, keyColors, lastWord, waitingOn, type Buy, type WordleState } from "../../../convex/wordle/engine";
 import { buyLine } from "../../../convex/wordle/text";
 import { GameFrame, DockNote } from "@/components/game/GameFrame";
 import { usePhoneLandscape } from "@/components/game/landscape";
-import { Result } from "@/components/match";
+import { ResignButton, Result } from "@/components/match";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
@@ -38,6 +38,13 @@ export default function WordleGame({ match, meId }: { match: MatchView; meId: Id
   const seat = match.players.findIndex((p) => p.userId === meId);
   const landscape = usePhoneLandscape();
   const [sheet, setSheet] = useState<"shop" | "log" | null>(null);
+  const [sheetRound, setSheetRound] = useState(state.round);
+  if (sheetRound !== state.round) {
+    setSheetRound(state.round);
+    if (sheet === "shop") setSheet(null);
+  }
+  const me = seat >= 0 ? state.players[seat] : null;
+  const shopping = !!me?.done && !me.out && state.rules.shop && !lastWord(state) && match.status === "active";
   const [player, setPlayer] = useState<number | null>(null);
   const names = (i: number) => (i === seat ? "you" : (match.players[i]?.name ?? "someone"));
   useLive(match, state, seat);
@@ -54,7 +61,7 @@ export default function WordleGame({ match, meId }: { match: MatchView; meId: Id
       {seat >= 0 && view?.round === state.round && (
         <ShopSheet
           key={`${state.round}:${sheet === "shop"}`}
-          open={sheet === "shop"}
+          open={sheet === "shop" && shopping}
           onClose={() => setSheet(null)}
           match={match}
           state={state}
@@ -148,7 +155,7 @@ function usePlay(match: MatchView, state: WordleState, seat: number, loaded: Vie
     const why = cantGuess(state, seat, typed);
     if (why) return refuse(why === "Five letters." && typed.length < LENGTH ? "Not enough letters." : why);
     setSending(true);
-    send({ id: match._id, word: typed, row: me.rows })
+    send({ id: match._id, word: typed, round: state.round, row: me.rows })
       .then((r) => {
         for (let i = 0; i < LENGTH; i++)
           setTimeout(() => sfx("flip", { count: Number(r.marks[i]) * 2 + 1 }), (i * FLIP_STAGGER_S + FLIP_S / 2) * 1000);
@@ -559,10 +566,13 @@ function PlayerSheet({
               ))}
             </ul>
           )}
-          {alive(state).length > 0 && !p.done && !state.over && (
+          {!p.done && !state.over && (
             <p className="text-callout text-muted-foreground">
               {p.rows} of {p.max} guesses used
             </p>
+          )}
+          {seat === me && match.status === "active" && !p.out && (
+            <ResignButton match={match} detail="You'll drop to last and the words go on without you." className="w-full" size="lg" />
           )}
         </>
       )}

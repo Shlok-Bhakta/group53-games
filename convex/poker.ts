@@ -259,7 +259,7 @@ export const plan = mutation({
 
 export const cards = query({
   args: { id: v.id("matches") },
-  handler: async (ctx, { id }) => await mySecret<Hand>(ctx, id),
+  handler: async (ctx, { id }) => await mySecret<Hand>(ctx, id, "poker"),
 });
 
 export const myPlan = query({

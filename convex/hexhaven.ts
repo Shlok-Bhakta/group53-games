@@ -198,5 +198,5 @@ export const move = mutation({
 
 export const cards = query({
   args: { id: v.id("matches") },
-  handler: async (ctx, { id }) => await mySecret<Held[]>(ctx, id),
+  handler: async (ctx, { id }) => await mySecret<Held[]>(ctx, id, "hexhaven"),
 });

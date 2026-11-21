@@ -19,8 +19,9 @@ export async function writeSecret<T>(ctx: MutationCtx, matchId: Id<"matches">, u
   else await ctx.db.insert("secrets", { matchId, userId, data });
 }
 
-export async function mySecret<T>(ctx: QueryCtx, matchId: Id<"matches">): Promise<T | null> {
+export async function mySecret<T>(ctx: QueryCtx, matchId: Id<"matches">, game: string): Promise<T | null> {
   const userId = await getAuthUserId(ctx);
   if (userId === null) return null;
+  if (!(await ctx.db.get(matchId))?.mode.startsWith(`${game}:`)) return null;
   return await readSecret<T | null>(ctx, matchId, userId, null);
 }

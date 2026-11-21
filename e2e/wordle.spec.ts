@@ -66,6 +66,8 @@ test("two phones: guesses land live, colors show once you're done, the shop's fo
   const { id, pages, seatOf } = await startGame(phones);
   const [pa, pb] = pages;
   const [sa, sb] = [seatOf(0), seatOf(1)];
+  const stock = ["fog", "pickpocket", "shield", "hint", "extra"].map((item) => ({ item, left: 1 }));
+  await admin().mutation(anyApi.testing.wordlePatch, { id, stock });
   const answer = await answerOf(id);
   const wrong = WRONG.filter((w) => w !== answer);
 

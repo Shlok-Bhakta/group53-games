@@ -60,7 +60,6 @@ export type WordleState = {
   rules: Rules;
   round: number;
   rounds: number;
-  seq: number;
   over: boolean;
   deadline: number | null;
   players: Player[];
@@ -131,7 +130,6 @@ export function newGame(n: number, rules: Rules, rng: Rng): { s: WordleState; mi
     rules,
     round: 0,
     rounds: roundsFor(rules.goal),
-    seq: 0,
     over: false,
     deadline: null,
     players: Array.from({ length: n }, () => ({
@@ -206,7 +204,6 @@ export function guess(s0: WordleState, mine0: Mine, seat: number, word: string, 
     pay(p, mine);
     if (!s.rules.shop || lastWord(s)) p.picked = true;
   }
-  s.seq++;
   return { s, mine };
 }
 
@@ -238,7 +235,6 @@ export function choose(s0: WordleState, mine0: Mine, seat: number, pick: Pick) {
   const s = structuredClone(s0);
   const mine = { ...mine0, pick: pick && { item: pick.item, target: ITEMS[pick.item].target ? pick.target : seat } };
   s.players[seat].picked = true;
-  s.seq++;
   return { s, mine };
 }
 
@@ -335,7 +331,6 @@ export function finishRound(s0: WordleState, mine0: Mine[], words: string[], rng
     boards: s.players.map((_, i) => ({ guesses: mines[i].guesses, marks: mines[i].marks, won: s.players[i].won })),
     buys,
   });
-  s.seq++;
   if (ending || s.players.some((p) => !p.out && p.solved >= s.rules.goal)) {
     s.over = true;
     s.deadline = null;
@@ -379,7 +374,6 @@ export function leave(s0: WordleState, seat: number) {
   p.out = true;
   p.done = true;
   p.picked = true;
-  s.seq++;
   return s;
 }
 
