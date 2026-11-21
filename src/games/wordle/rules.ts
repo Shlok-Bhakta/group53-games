@@ -1,5 +1,5 @@
 import { settingsOf, type ModeKey, type Settings } from "../../../convex/modes";
-import { BASE_PAY, ITEMS, ITEM_KEYS, ROWS, SOLVE_PAY, START_COINS, roundsFor } from "../../../convex/wordle/engine";
+import { BASE_PAY, ITEMS, ITEM_KEYS, MAX_CART, MAX_HAND, ROWS, SOLVE_PAY, START_COINS, roundsFor } from "../../../convex/wordle/engine";
 
 export function wordleRules(mode: ModeKey, raw: Settings): string[] {
   const s = settingsOf(mode, raw);
@@ -13,8 +13,10 @@ export function wordleRules(mode: ModeKey, raw: Settings): string[] {
     `You start with ${START_COINS} coins. Each word pays ${BASE_PAY}, plus 1 for every letter you turned green, plus ${SOLVE_PAY} and 1 for every guess you had left if you solved it.`,
     ...(s.shop
       ? [
-          "Done with your word? Buy one thing from the shop, or pass. Everyone picks without seeing the others' picks.",
-          "When the shop closes, whoever has the fewest coins buys first. Anything that sells out before your turn costs you nothing.",
+          `Done with your word? Fill a cart with up to ${MAX_CART} things from the shop, or pass. Each word the shop gets a random stock, and some things sell out before anyone shops.`,
+          "Whoever had the fewest coins going into the word shops first. What's left for you already leaves out what they've claimed, and if one of them takes the last of something in your cart, you get those coins back and shop again. The shop never says who claimed what, and nobody's told what hit them until the next word starts.",
+          `Things you throw land on that player's next word. Things for you are cards: they go in your hand (${MAX_HAND} at most, kept from word to word) and you play them during a word, whenever you need them. Stuck mid-word with no card? Hint, Clue and Extra row can be bought on the spot for a quarter more.`,
+          "Coins come off when the shop closes: until then, the coins shown next to your cart are what you'll have left.",
           ...ITEM_KEYS.map((k) => `${ITEMS[k].name} (${ITEMS[k].price}): ${ITEMS[k].text}`),
         ]
       : []),

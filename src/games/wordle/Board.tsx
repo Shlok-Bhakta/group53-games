@@ -38,7 +38,7 @@ export function Board({
   played,
   typed,
   typing,
-  hint,
+  hints,
   shake,
   won,
   fogBy,
@@ -49,7 +49,7 @@ export function Board({
   played: Row[];
   typed: string;
   typing: boolean;
-  hint: { at: number; letter: string } | null;
+  hints: { at: number; letter: string }[];
   shake: number;
   won: boolean;
   fogBy: string | null;
@@ -97,7 +97,8 @@ export function Board({
                     />
                   );
                 if (row) return <span key={i} role="gridcell" aria-label="Fogged" className="tile tile-empty" />;
-                if (current) return <Typed key={i} letter={typed[i]} hint={hint?.at === i && !typed[i] ? hint.letter : null} />;
+                if (current)
+                  return <Typed key={i} letter={typed[i]} hint={typed[i] ? null : (hints.find((h) => h.at === i)?.letter ?? null)} />;
                 return <span key={i} role="gridcell" aria-label="Empty" className="tile tile-empty" />;
               })}
             </motion.div>

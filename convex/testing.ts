@@ -338,12 +338,19 @@ export const wordleGuessAs = internalMutation({
 });
 
 export const wordlePickAs = internalMutation({
-  args: { id: v.id("matches"), userId: v.id("users"), item: v.union(v.string(), v.null()), target: v.optional(v.number()) },
-  handler: async (ctx, { id, userId, item, target }) => {
+  args: {
+    id: v.id("matches"),
+    userId: v.id("users"),
+    item: v.union(v.string(), v.null()),
+    target: v.optional(v.number()),
+    more: v.optional(v.array(v.object({ item: v.string(), target: v.number() }))),
+  },
+  handler: async (ctx, { id, userId, item, target, more = [] }) => {
     assertTestDeployment();
     const m = (await ctx.db.get(id))!;
-    const pick = item && isItem(item) ? { item, target: target ?? -1 } : null;
-    await wordlePick(ctx, id, (m.state as WordleState).round, pick, userId);
+    const wanted = [...(item ? [{ item, target: target ?? -1 }] : []), ...more];
+    const cart = wanted.flatMap((x) => (isItem(x.item) ? [{ item: x.item, target: x.target }] : []));
+    await wordlePick(ctx, id, (m.state as WordleState).round, cart, userId);
   },
 });
 
