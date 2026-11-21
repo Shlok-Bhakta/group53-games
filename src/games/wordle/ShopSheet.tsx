@@ -102,8 +102,16 @@ export function ShopSheet({
           <Coins n={me.coins - cost} className="text-heading" />
           {cost > 0 && <span className="text-muted-foreground">of {me.coins}</span>}
         </span>
-        <span className="text-footnote text-muted-foreground">
-          You shop {ordinal(place)} of {alive(state).length} · by coins at the word&rsquo;s start
+        <span
+          className="flex items-center gap-1.5 text-footnote text-muted-foreground"
+          aria-label={`You shop ${ordinal(place)} of ${alive(state).length}`}
+        >
+          Order
+          {buyOrder(state).map((i) => (
+            <span key={i} className={cn("rounded-full", i === seat && "ring-2 ring-primary")}>
+              <PlayerAvatar player={match.players[i]} size={22} seat={seatColor(match.players[i])} />
+            </span>
+          ))}
         </span>
       </div>
       {lostNames.length > 0 && !me.picked && (
@@ -223,7 +231,17 @@ export function ShopSheet({
                           onClick={() => add(k, t)}
                           className="items-center rounded-lg bg-muted/50"
                         >
-                          <PlayerAvatar player={p} size={40} seat={seatColor(p)} />
+                          <span className="relative">
+                            <PlayerAvatar player={p} size={40} seat={seatColor(p)} />
+                            {(state.players[t].shields ?? 0) > 0 && (
+                              <span
+                                className="absolute -bottom-1 -right-1 grid size-5 place-items-center rounded-full bg-[var(--tile-green)] text-[var(--tile-ink)]"
+                                aria-label="Has a shield"
+                              >
+                                <ItemIcon item="shield" size={12} />
+                              </span>
+                            )}
+                          </span>
                           <span className="max-w-full truncate px-1 text-footnote">{p.name}</span>
                           <Coins n={state.players[t].coins} className="text-caption text-muted-foreground" />
                         </Button>

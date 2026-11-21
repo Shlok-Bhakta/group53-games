@@ -396,6 +396,18 @@ describe("the shop", () => {
     const buys = close(t);
     expect(buys[0].blocked).toBe(true);
     expect(t.mine[0].hand).toEqual([]);
+    expect(t.s.players[0].shields, "everyone can see who's still shielded").toBe(0);
+  });
+
+  test("a bought shield shows on your chip once the shop closes", () => {
+    const t = round1(2);
+    t.s.stock = everyItem.map((item) => ({ item, left: 3 }));
+    coinsIn(t, [100, 100]);
+    buy(t, 0, "shield");
+    expect(t.s.players[0].shields).toBeUndefined();
+    buy(t, 1, null);
+    close(t);
+    expect(t.s.players[0].shields).toBe(1);
   });
 
   test("a shield blocks the first thing thrown, not the second", () => {

@@ -21,6 +21,7 @@ export function Hand({
   hand,
   clues,
   playing,
+  lastRow,
 }: {
   match: MatchView;
   state: WordleState;
@@ -28,6 +29,7 @@ export function Hand({
   hand: ItemKey[];
   clues: string;
   playing: boolean;
+  lastRow: boolean;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -39,9 +41,13 @@ export function Hand({
           size="chip"
           onClick={() => setOpen(true)}
           aria-label={`${ITEMS[k].name} card`}
-          className="rounded-full bg-[var(--tile-green)]/15 py-1 pl-2 pr-3 text-footnote font-semibold"
+          data-nudge={lastRow && k === "extra" ? "" : undefined}
+          className={cn(
+            "rounded-full bg-[var(--tile-green)]/15 py-1 pl-2 pr-3 text-footnote font-semibold",
+            lastRow && k === "extra" && "bg-[var(--tile-green)] text-[var(--tile-ink)] ring-2 ring-[var(--tile-green)]/40",
+          )}
         >
-          <ItemIcon item={k} size={16} className="text-[var(--tile-green)]" />
+          <ItemIcon item={k} size={16} className={lastRow && k === "extra" ? undefined : "text-[var(--tile-green)]"} />
           {ITEMS[k].name}
         </Button>
       ))}

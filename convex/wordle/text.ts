@@ -9,13 +9,15 @@ const VERB: Record<string, string> = {
   tax: "taxed",
 };
 
+const whose = (name: string) => (name === "you" ? "your" : `${name}'s`);
+
 export function buyLine(b: Buy, name: (seat: number) => string): string {
   const who = name(b.seat);
   const item = ITEMS[b.item];
   if (!b.got) return `${who} wanted ${item.name}, but it sold out first`;
   if (!item.target) return `${who} bought ${item.name}`;
   const them = name(b.target);
-  if (b.blocked) return `${who}'s ${item.name} bounced off ${them === "you" ? "your" : `${them}'s`} shield`;
+  if (b.blocked) return `${whose(who)} ${item.name} bounced off ${whose(them)} shield`;
   if (b.took !== undefined) return `${who} took ${b.took} coin${b.took === 1 ? "" : "s"} from ${them}`;
   return `${who} ${VERB[b.item]} ${them}`;
 }

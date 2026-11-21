@@ -67,6 +67,7 @@ export type Player = {
   effects: Effect[];
   out?: boolean;
   startCoins?: number;
+  shields?: number;
 };
 
 export type Stock = { item: ItemKey; left: number };
@@ -532,6 +533,7 @@ export function finishRound(s0: WordleState, mine0: Mine[], words: string[], rng
     p.effects = fx;
     p.max = Math.max(MIN_ROWS, ROWS - count("fuse"));
     p.startCoins = p.coins;
+    p.shields = hands[i].filter((k) => k === "shield").length;
     if (p.out) p.done = p.picked = true;
   });
   s.stock = s.rules.shop ? pickStock(alive(s).length, rng) : [];

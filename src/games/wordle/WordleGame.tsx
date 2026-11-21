@@ -255,7 +255,15 @@ function usePlay(match: MatchView, state: WordleState, seat: number, loaded: Vie
   if (dock && me && !me.out && state.rules.shop)
     dock = (
       <div className="flex w-full flex-col">
-        <Hand match={match} state={state} seat={seat} hand={view.hand} clues={view.clues} playing={typing} />
+        <Hand
+          match={match}
+          state={state}
+          seat={seat}
+          hand={view.hand}
+          clues={view.clues}
+          playing={typing}
+          lastRow={typing && me.rows === me.max - 1}
+        />
         {dock}
       </div>
     );
@@ -496,6 +504,7 @@ function Players({
                   .map((e, k) => (
                     <ItemIcon key={k} item={e.item} size={11} className="text-[var(--tile-hit)]" />
                   ))}
+                {(p.shields ?? 0) > 0 && <ItemIcon item="shield" size={11} className="text-[var(--tile-green)]" />}
               </span>
             </span>
           </Button>
