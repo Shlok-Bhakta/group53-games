@@ -31,6 +31,9 @@ import { hexhavenSummary } from "./hexhaven/summary";
 import { WordleBanner, WordleModeArt } from "./wordle/art";
 import { wordleRules } from "./wordle/rules";
 import { wordleSummary } from "./wordle/summary";
+import { UnoBanner, UnoModeArt } from "./uno/art";
+import { unoRulesText } from "./uno/rules";
+import { unoSummary } from "./uno/summary";
 import { chessSummary } from "./chess/summary";
 import { scrabbleSummary } from "./scrabble/summary";
 import { pokerSummary } from "./poker/summary";
@@ -69,6 +72,7 @@ const GolfGame = downloadedWhenOpened(() => import("./golf/GolfGame"));
 const LandlordGame = downloadedWhenOpened(() => import("./landlord/LandlordGame"));
 const HexhavenGame = downloadedWhenOpened(() => import("./hexhaven/HexhavenGame"));
 const WordleGame = downloadedWhenOpened(() => import("./wordle/WordleGame"));
+const UnoGame = downloadedWhenOpened(() => import("./uno/UnoGame"));
 
 export const GAME_UI: Record<GameKey, GameUI> = {
   chess: {
@@ -155,6 +159,18 @@ export const GAME_UI: Record<GameKey, GameUI> = {
     rules: wordleRules,
     Game: WordleGame,
     summary: wordleSummary,
+  },
+  uno: {
+    key: "uno",
+    path: GAMES.uno.path,
+    name: GAMES.uno.name,
+    blurb:
+      "Classic or No Mercy, 2 to 8 of you, at your own pace. Stacking, 7-0, jump-ins, challenges, double decks: every house rule is a setting.",
+    banner: () => <UnoBanner />,
+    modeArt: (mode) => <UnoModeArt mode={mode} />,
+    rules: unoRulesText,
+    Game: UnoGame,
+    summary: unoSummary,
   },
 };
 

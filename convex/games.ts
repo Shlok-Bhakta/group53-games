@@ -8,6 +8,7 @@ import { golfHooks } from "./golf";
 import { landlordHooks } from "./landlord";
 import { hexhavenHooks } from "./hexhaven";
 import { wordleHooks } from "./wordle";
+import { unoHooks } from "./uno";
 
 export type GameHooks = {
   seats: (mode: ModeKey, playerCount: number) => readonly string[];
@@ -27,6 +28,7 @@ export const hooksFor = (mode: string): GameHooks => {
     landlord: landlordHooks,
     hexhaven: hexhavenHooks,
     wordle: wordleHooks,
+    uno: unoHooks,
   };
   return lookedUpAtCallTime[gameOf(mode)];
 };

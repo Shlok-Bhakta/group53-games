@@ -1,6 +1,6 @@
 # Group 53 Games
 
-Small multiplayer games for one friend group from Discord, all in one app. Live: Chess (classic, four-player, and real-time versions of both), Scrabble (2 to 8 players, async or live with a turn timer), Poker (Hold'em, Omaha, Short Deck and 5-Card Draw, async), Golf (turn-based or live, on handmade or generated courses, plus practice holes and an open world), Monopoly (the classic property-trading game, async; `landlord` in the code), Catan (settle an island: roll for resources, build, trade and rob, 2 to 6 players, async), Stonks (a stock-market game: $10,000 each to trade anything on Yahoo Finance, live), Dailies (paste your Scrandle, Krillion, Connections and other daily results and see who beat who), PvP Wordle (the same word for 2 to 8, async, with a shop of sabotage between words) and Journey Across Mereddia (Chris's single-player RPG, hosted outside the bundle).
+Small multiplayer games for one friend group from Discord, all in one app. Live: Chess (classic, four-player, and real-time versions of both), Scrabble (2 to 8 players, async or live with a turn timer), Poker (Hold'em, Omaha, Short Deck and 5-Card Draw, async), Golf (turn-based or live, on handmade or generated courses, plus practice holes and an open world), Monopoly (the classic property-trading game, async; `landlord` in the code), Catan (settle an island: roll for resources, build, trade and rob, 2 to 6 players, async), Stonks (a stock-market game: $10,000 each to trade anything on Yahoo Finance, live), Dailies (paste your Scrandle, Krillion, Connections and other daily results and see who beat who), PvP Wordle (the same word for 2 to 8, async, with a shop of sabotage between words), Uno (Classic and No Mercy, 2 to 8, async, with every house rule as a setting) and Journey Across Mereddia (Chris's single-player RPG, hosted outside the bundle).
 
 ## Who this is for
 
@@ -56,6 +56,7 @@ The games:
 - `daily`: not in `GAMES`; pasted daily-game results at `/daily` and `/daily/:game`, a plain `GameCard`, plus the Home strip (`DailyStrip`, re-exported from `src/games/index.tsx`). Never Wordle: the crew keeps that streak in Discord.
 - `mereddia`: hosted (its build in Convex file storage, its source on the `mereddia-hosted` branch); `main` has its card and an iframe page.
 - `wordle`: `wordle:classic`, shown as PvP Wordle at `/wordle`.
+- `uno`: `uno:classic`, `uno:nomercy`.
 
 Routes come from `GAME_UI`: `/<game>` (the game's page), `/<game>/mode/:slug` (a mode's page), `/<game>/:id` (a match: the shared lobby, then the game's screen). Paths always come from `matchPath`, `acceptPath` and `modePath`; never hard-code one.
 
@@ -105,6 +106,7 @@ The skills live in `.agents/skills/` (`.claude/skills` points there). Each game'
 | `game-hexhaven` | the Catan engine and island geometry, setup, the bandit, cards, trades, hidden cards, bots |
 | `game-stonks` | the board, paper trading and the fill rule, storage costs, prewarming, the Rust sidecar |
 | `game-wordle` | PvP Wordle's engine, word lists, the shop and its items, rounds and `waitingOn`, the board and keyboard |
+| `game-uno` | the Uno engine and its house rules, the No Mercy deck, stacking, challenges, 7-0, jump-ins, UNO calls and catches, hidden hands, the table and hand |
 | `game-daily` | the share-text parsers, posting and its checks, today's standings, crowns and streaks, the Home strip |
 | `game-mereddia` | Mereddia and the hosted-game pattern, publishing a build |
 | `new-game` | adding a game, step by step. Manual only: Shlok runs `/new-game` |

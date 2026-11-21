@@ -1,0 +1,57 @@
+---
+name: game-uno
+description: The Uno package's feature map. Use for any Uno work: its two async modes (Classic and No Mercy) and their house-rule settings, the decks, the rules engine (matching, drawing, draw-until, forced play, stacking, Wild Draw 4 challenges and the hidden bluff, 7-0 swaps, jump-ins, UNO calls and catches, Skip Everyone, Discard All, Color Roulette, the mercy rule, power finishes, hands and points), hidden hands and the shoe in secrets, pushes and timeouts, the table, hand and sheets, the link preview, the test helpers and the tests.
+---
+
+# Uno
+
+AGENTS.md is the overview and the `framework` skill covers matches, secrets, pushes and the harness; the `ui` skill covers `GameFrame`, sheets and landscape. Two async modes, `uno:classic` and `uno:nomercy` (2 to 8, `minPlayers` 2 so the host taps Start). Turn based through `onTurn`/`passTurn` like poker, plus three things anyone can do off turn: catch a forgotten UNO, call your own UNO late, and jump in.
+
+## Settings
+
+All in `convex/uno/modes.ts`; `unoRules(mode, settingsOf(...))` turns them into the engine's `Rules` (the server and `src/games/uno/rules.ts` both use it).
+
+- Classic: `hand` Starting hand (5, 7, 10), `decks` (one or a double deck), `stack` Stacking draws (off, same card, same or bigger), `drawUntil` (draw one, or draw till you can play), `sevenZero`, `jumpIn`, `challenge` (Wild Draw 4 challenges, on by default), `unoCall` (on), `forcePlay`, `powerFinish` (on: you may go out on an action or wild), `mercy` (off, 20, 25, 30), `goal` Play to (one hand, 250, 500), `moveTime`.
+- No Mercy: the 168-card deck, and fixed: stacking same or bigger, draw till you can play, no challenges, no forced play. Settings: `hand`, `decks`, `sevenZero` (on), `jumpIn`, `unoCall`, `powerFinish`, `mercy` (25), `goal` (one hand, 500, 1000), `moveTime`.
+- Endings: `out` (went out in a one-hand game), `points` (reached the goal), `mercy` (the last one left in a one-hand game after the mercy rule), `resign` / `last_player`.
+
+## File map
+
+- `convex/uno.ts`: `move` (`{ id, seq, kind, card?, color?, target?, uno? }`: `seq` is the state's action counter the phone saw, refused when stale, except for `catch` and `uno`), `hand` (my secret: `{ cards, hand, drawn }`), `unoHooks`, and `load` / `moveAs` / `IDLE_OUT` for tests. Never rename these.
+- `convex/uno/cards.ts`: cards are strings, colour letter then face (`r7`, `bD2`, `gSA`, `wW4`, `wWC`): faces `0`-`9`, `S` skip, `R` reverse, `D2`, `D4` (No Mercy's coloured Draw 4), `SA` Skip Everyone, `DA` Discard All, wilds `W`, `W4`, `WR4`, `W6`, `W10`, `WC` Color Roulette. `deckOf(kind, decks)` (108 or 168 a deck), `shuffle`, `pointsOf`, `cardName`, `sortHand`.
+- `convex/uno/engine.ts`: pure rules over a `Table` (`state` public, `hidden` = `deck`, `discard`, `hands`, `drawn`, `bluff`). `newGame`, `act(t, seat, action, rng, auto?)`, `leave`, `autoAction`/`autoTurn` (timeouts), `cantPlay`, `cantDraw`, `canPass`, `playable`, `stackable`, `next`, `inHand`, `alive`, `isGone`, `isOutOfHand`, `standings`.
+- `convex/uno/text.ts`: `entryText` (log lines and push titles), `askText` (the push body for whoever is up).
+- `convex/uno/preview.ts`: top card, colour, counts, pending stack, scores. No hands.
+- `src/games/uno/`: `UnoGame.tsx` (the screen: players strip, top line, table with the draw pile and discard, the dock with its banner, hand and action rail; colour, swap, log and player sheets; `useLive` for sounds and hit toasts), `Card.tsx` (`UnoCard`, built on the shared `playing-card` utility with the `playing-card-uno` modifier and the `--color-uno-*` statics in `style.css`), `art.tsx`, `rules.ts` (`unoRulesText`), `summary.ts`.
+- `og/games/uno.mjs` (colours under `UNO` in `og/palette.mjs`).
+
+## Rules and invariants
+
+- A card plays on the top card if it's wild, the current colour, or the same face. Off turn only a jump-in (the exact same card, not a wild, with nothing pending). `cantPlay` is the one source of truth: the server refuses with its text and the phone dims and explains with it.
+- Draw cards: with stacking on, or a Wild Draw 4 with challenges on, the draw becomes `state.pending` on the next player, who must stack (same face, or a draw worth at least `pending.level`), take it, or challenge. Otherwise the next player draws at once and is skipped (logged as their `take`).
+- Wild Draw 4 bluffing is legal; whether you held the current colour is `hidden.bluff`, never public. A challenge on the lone Draw 4 (not a stacked one) makes the bluffer draw it, or costs the challenger the amount plus `CHALLENGE_PENALTY`.
+- Drawing: one card (play it or keep it, `drew` with `hidden.drawn`), or with `drawUntil` until one fits, which must then be played. `forcePlay` refuses a draw while you hold a playable card and refuses keeping a playable draw.
+- UNO: play your second to last card with `uno: true` (the toggle on the phone). Without it you're `state.forgot`: anyone else may `catch` for `UNO_PENALTY` until the next ordinary action, or you can `uno` late. Every other move clears `forgot`.
+- 7 swaps your hand with `target`; 0 passes every hand to the next player in the direction of play. Neither happens on your last card.
+- Skip Everyone gives the same player another go; with two players Skip and Reverse do too. Wild Reverse Draw 4 turns play around, then the new next player gets the draw. Discard All drops every card of its colour with it. Color Roulette leaves `pending: roulette` on the next player, who names a colour and flips until a non-wild of it (keeping every flip); that colour is then up.
+- Mercy: reaching `rules.mercy` cards knocks you out of the hand (`out` with `reason: "mercy"` and the hand), your cards under the discards. Resigning and three timeouts in a row (`IDLE_OUT`) are out for good. The last one in a hand wins it.
+- Hands: going out scores everyone else's cards (numbers face value, actions 20, wilds 50) plus `KNOCKOUT_POINTS` per mercy knockout. A draw card played as your last card still lands first. One-hand games end there; points games deal again (who starts moves one along) until someone reaches `goal`. Standings: in one hand, the winner then fewest points left, then the knocked out; in points, by score; leavers last, latest first.
+- Cards are never lost: hands + deck + discard always equal the deck; an empty deck reshuffles the discards under the top card. The sim test checks this after every action.
+- The log keeps the last 40 actions across hands (`hand` on each), and `seq` stamps every action.
+
+## Secrets, pushes and timeouts
+
+- One game secret, the shoe (`deck`, `discard`, `drawn`, `bluff`), and one per player (`cards`, `hand`, `drawn` when it's them who just drew). `save` only rewrites hands that changed.
+- `tell` sends one push per player per action: whoever is up gets what happened (or what hit them) as the title and `askText` as the body; others get pushed when they were swapped with, caught, called on a bluff, hit by an immediate draw, knocked out, or a hand ended; everyone in the hand hears when someone forgets UNO, since anyone can catch it. The mover never gets their own.
+- Timeouts (`moveTime`, through `matches.remind`): `autoTurn` takes a pending stack, spins the roulette for your most common colour, plays a forced card, or draws (and plays or keeps it). Three in a row leaves you out.
+
+## Driving it in tests
+
+- `testing:unoDeal({ id, hands, top, color?, turn?, deck?, patch? })` sets every seat's hand (by seat index), the top card, whose turn it is and the deck (60 green 9s by default). `testing:unoMoveAs({ id, userId, action })` plays an engine `Action` for someone at the current `seq`.
+- The screen exposes `data-top`, `data-color`, `data-seq` on the table, `data-pending` on the stack badge, `data-seat`, `data-count`, `data-up` on players, `data-card` and `data-playable` on your hand's cards, `data-cards` on the hand. Groups: "Your hand", "Players". Buttons: "Draw", "Keep it", "Take N", "Challenge", "UNO!" (`aria-pressed`), "Catch <name>: no UNO", "Call UNO before they catch you", the colour names in the "Pick a color" sheet and the roulette rail.
+
+## Tests
+
+- `convex/uno/engine.test.ts`: the decks, every rule above, and a sim of 90 whole games under six mixes of settings checking cards are never lost, counts match hands and the turn is never on someone out.
+- `convex/uno/server.test.ts`: start and secrets, moves and stale or off-turn refusals, the drawn card only to its owner, UNO catches and pushes, 7 swaps, jump-ins, going out, points games, No Mercy's roulette, timeouts and idling out, resigning.
+- `e2e/uno.spec.ts`: the Games card and both mode pages, two phones playing (live plays, a wild's colour, a caught UNO, going out), stacking and a challenge, landscape, and `uno-screens` behind `SCREENS=1`.

@@ -121,6 +121,23 @@ for (const [who, words] of [
   await admin.mutation(anyApi.testing.wordlePickAs, { id: wid, userId: who.userId, item: null });
 }
 
+const uid = await a.client.mutation(anyApi.matches.queue, { mode: "uno:nomercy" });
+await c.client.mutation(anyApi.matches.queue, { mode: "uno:nomercy" });
+await s4.client.mutation(anyApi.matches.queue, { mode: "uno:nomercy" });
+await a.client.mutation(anyApi.matches.startGame, { id: uid });
+await admin.mutation(anyApi.testing.unoDeal, {
+  id: uid,
+  hands: [["wW10", "r3", "g4"], ["b1", "b2", "y5", "y6", "r9"], ["g1"]],
+  top: "rD2",
+  turn: 0,
+});
+const um = await admin.query(anyApi.testing.getMatch, { id: uid });
+await admin.mutation(anyApi.testing.unoMoveAs, {
+  id: uid,
+  userId: um.players[0].userId,
+  action: { kind: "play", card: "wW10", color: "b" },
+});
+
 const day = Date.parse("2026-10-30T08:00:00Z");
 const walk = (base, k) =>
   Array.from({ length: 16 * 60 }, (_, i) => [
@@ -223,6 +240,10 @@ try {
     "e2e/.state/og-hexhaven.png",
     Buffer.from(await (await fetch("http://127.0.0.1:8788/og/image/hexhaven.png")).arrayBuffer()),
   );
+  const htmlU = await (await fetch(`http://127.0.0.1:8788/uno/${uid}`)).text();
+  const imgU = htmlU.match(/og\/match\/[a-z0-9]+\.png\?v=[a-z0-9]+/)[0];
+  writeFileSync("e2e/.state/og-uno-match.png", Buffer.from(await (await fetch(`http://127.0.0.1:8788/${imgU}`)).arrayBuffer()));
+  writeFileSync("e2e/.state/og-uno.png", Buffer.from(await (await fetch("http://127.0.0.1:8788/og/image/uno.png")).arrayBuffer()));
   const htmlW = await (await fetch(`http://127.0.0.1:8788/wordle/${wid}`)).text();
   const imgW = htmlW.match(/og\/match\/[a-z0-9]+\.png\?v=[a-z0-9]+/)[0];
   writeFileSync("e2e/.state/og-wordle-match.png", Buffer.from(await (await fetch(`http://127.0.0.1:8788/${imgW}`)).arrayBuffer()));

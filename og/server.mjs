@@ -14,6 +14,7 @@ import { landlord } from "./games/landlord.mjs";
 import { hexhaven } from "./games/hexhaven.mjs";
 import { stonks } from "./games/stonks.mjs";
 import { wordle } from "./games/wordle.mjs";
+import { uno } from "./games/uno.mjs";
 import { daily } from "./games/daily.mjs";
 
 const SITE = process.env.SITE_URL ?? "https://group53.shlokbhakta.dev";
@@ -23,8 +24,8 @@ const CARD_CACHE_MS = 5 * 60_000;
 const convex = new ConvexHttpClient(process.env.CONVEX_URL ?? "http://convex:3210");
 convex.setAdminAuth(readFileSync(process.env.ADMIN_KEY_FILE ?? "/run/secrets/admin_key", "utf8").trim());
 
-const MATCH_GAMES = { chess, scrabble, poker, golf, landlord, hexhaven, wordle };
-const PAGE_GAMES = [wordle, chess, scrabble, poker, golf, landlord, hexhaven, stonks, daily];
+const MATCH_GAMES = { chess, scrabble, poker, golf, landlord, hexhaven, wordle, uno };
+const PAGE_GAMES = [uno, wordle, chess, scrabble, poker, golf, landlord, hexhaven, stonks, daily];
 const LIVE_PAGES = [stonks];
 
 const gameOfMode = (mode) => MATCH_GAMES[mode.split(":")[0]] ?? chess;

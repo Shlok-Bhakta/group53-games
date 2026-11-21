@@ -6,11 +6,24 @@ import { anyApi } from "convex/server";
 import { startBackend, stopBackend, waitForUrl } from "./backend.mjs";
 import { admin, createPlayer, holdsStill, phone, type Player } from "./fixtures.ts";
 
-const GAMES = [
-  { mode: "holdem", players: ["Ada", "Linus", "Grace"], hands: "5" },
-  { mode: "draw", players: ["Ken", "Barbara"], hands: "5" },
-  { mode: "omaha", players: ["Edsger", "Margaret"], hands: "5" },
-];
+type Table = { game: string; mode: string; players: string[]; settings: Record<string, string> };
+const TABLES: Record<string, Table[]> = {
+  poker: [
+    { game: "poker", mode: "holdem", players: ["Ada", "Linus", "Grace"], settings: { Hands: "5" } },
+    { game: "poker", mode: "draw", players: ["Ken", "Barbara"], settings: { Hands: "5" } },
+    { game: "poker", mode: "omaha", players: ["Edsger", "Margaret"], settings: { Hands: "5" } },
+  ],
+  uno: [
+    {
+      game: "uno",
+      mode: "classic",
+      players: ["Ada", "Linus", "Grace"],
+      settings: { "Starting hand": "5", "Stacking draws": "Same or bigger", "7 swaps, 0 passes": "On", "Jump-in": "On" },
+    },
+    { game: "uno", mode: "nomercy", players: ["Ken", "Barbara"], settings: { "Starting hand": "5" } },
+  ],
+};
+const GAMES = TABLES[process.env.PLAYTEST ?? "poker"];
 const PORT = 4600;
 const LIMIT_MS = 40 * 60 * 1000;
 const TIME_TO_LOOK_AT_RESULTS_MS = 90_000;
@@ -53,13 +66,14 @@ for (const g of GAMES) {
     seats.set(name, { player, page, errors, matchId: "" });
   }
   const host = pages[0];
-  await host.goto(`/poker/mode/${g.mode}`);
+  await host.goto(`/${g.game}/mode/${g.mode}`);
   await host.getByRole("button", { name: "Settings" }).click();
-  await host.getByRole("radiogroup", { name: "Hands" }).getByRole("radio", { name: g.hands, exact: true }).click();
+  for (const [group, option] of Object.entries(g.settings))
+    await host.getByRole("radiogroup", { name: group }).getByRole("radio", { name: option, exact: true }).click();
   await host.getByRole("button", { name: "Open a game" }).click();
   await host.getByRole("heading", { name: "Waiting for players" }).waitFor();
-  const id = host.url().split("/poker/")[1].split("?")[0];
-  for (const p of pages.slice(1)) await p.goto(`/poker/${id}?accept=1`);
+  const id = host.url().split(`/${g.game}/`)[1].split("?")[0];
+  for (const p of pages.slice(1)) await p.goto(`/${g.game}/${id}?accept=1`);
   await host.getByRole("heading", { name: `${pages.length} in` }).waitFor();
   await host.getByRole("button", { name: `Start with ${pages.length}` }).click();
   matchIds.push(id);
@@ -92,6 +106,7 @@ async function status() {
         hand: m.state?.hand,
         turn: m.status === "active" ? up : null,
         stacks: m.state?.stacks,
+        cards: m.state?.counts,
         result: m.result?.reason ?? null,
       };
     }),
@@ -128,7 +143,7 @@ const server = http.createServer(async (req, res) => {
         g.status !== "active"
           ? s.page.getByRole("region", { name: "Result" })
           : g.turn === s.player.userId
-            ? s.page.getByText(/^(Your move|Pick cards to swap)$/)
+            ? s.page.getByText(/^(Your move|Pick cards to swap|Play the card you drew\?|Pick a color to spin for|\+\d+ on you)$/)
             : null;
       await ready?.waitFor({ timeout: 25_000 }).catch(() => {});
       return send(200, await screen(name));
