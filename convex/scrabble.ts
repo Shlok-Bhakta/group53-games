@@ -182,10 +182,10 @@ export const play = mutation({
 export async function playTiles(ctx: MutationCtx, id: Id<"matches">, tiles: Placement[], as?: Id<"users">) {
   const { userId, match, seat, state } = await myTurn(ctx, id, as);
   const hand = await readHand(ctx, id, userId);
-  const rules = rulesOf(settings(match));
-  const result = evaluate(state.tiles, tiles, hand.rack, rules);
+  const s = settings(match);
+  const result = evaluate(state.tiles, tiles, hand.rack, rulesOf(s));
   if (!result.ok) throw new Error(result.error);
-  const bad = result.words.filter((w) => !isWord(w.word)).map((w) => w.word);
+  const bad = result.words.filter((w) => !isWord(w.word, s.words === 1)).map((w) => w.word);
   if (bad.length) throw new Error(bad.length === 1 ? `${bad[0]} isn't in the dictionary.` : `Not in the dictionary: ${bad.join(", ")}.`);
 
   const turnNo = state.moves.length;
@@ -264,10 +264,12 @@ export const rack = query({
 });
 
 export const check = query({
-  args: { words: v.array(v.string()) },
-  handler: async (ctx, { words }) => {
+  args: { words: v.array(v.string()), id: v.optional(v.id("matches")) },
+  handler: async (ctx, { words, id }) => {
     if ((await getAuthUserId(ctx)) === null) return [];
-    return words.slice(0, 30).filter((w) => !isWord(w));
+    const match = id ? await ctx.db.get(id) : null;
+    const wide = match?.mode.startsWith("scrabble:") === true && settings(match).words === 1;
+    return words.slice(0, 30).filter((w) => !isWord(w, wide));
   },
 });
 

@@ -259,4 +259,13 @@ describe("dictionary", () => {
     expect(isWord("zyzzyva")).toBe(true);
     expect(isWord("zorp")).toBe(false);
   });
+
+  test("the expanded list adds Wordnik's words on top of the standard one", () => {
+    expect(isWord("blog")).toBe(false);
+    expect(isWord("blog", true)).toBe(true);
+    expect(isWord("GROK", true)).toBe(true);
+    expect(isWord("ok", true)).toBe(true);
+    expect(isWord("zyzzyva", true)).toBe(true);
+    expect(isWord("zorp", true)).toBe(false);
+  });
 });

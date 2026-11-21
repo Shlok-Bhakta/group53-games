@@ -11,6 +11,9 @@ export function scrabbleRules(mode: ModeKey, s: Settings): string[] {
     s.rules === 1
       ? "Letter League rules: a bonus square stays with its tile, so every later word through that tile scores it again. Add an S to a doubled word and it doubles again."
       : "Official Scrabble rules: bonus squares count once, the turn you cover them. 2L and 3L multiply a letter, 2W and 3W the whole word.",
+    s.words === 1
+      ? "Expanded word list: the standard list plus about 26,000 newer and rarer words from Wordnik, like BLOG, GROK and SELFIE."
+      : "Standard word list: ENABLE, the classic word-game list, plus QI, ZA, OK and EW.",
     "Plan any time: lay tiles out on the board while you wait. They stay put until you play, or until someone takes the square.",
     "Swap tiles or pass instead of playing. Blank tiles play as any letter and score nothing.",
     live
