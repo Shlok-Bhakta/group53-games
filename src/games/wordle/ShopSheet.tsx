@@ -7,6 +7,7 @@ import {
   ITEMS,
   ITEM_KEYS,
   MAX_CART,
+  MAX_HAND,
   alive,
   buyOrder,
   cantPick,
@@ -28,7 +29,7 @@ import { Coins, ItemIcon } from "./parts";
 
 const GROUPS: { title: string; target: boolean }[] = [
   { title: "Throw at someone", target: true },
-  { title: "For you", target: false },
+  { title: "Cards for your hand", target: false },
 ];
 
 export function ShopSheet({
@@ -40,6 +41,7 @@ export function ShopSheet({
   saved,
   left,
   lost,
+  held,
 }: {
   open: boolean;
   onClose: () => void;
@@ -49,6 +51,7 @@ export function ShopSheet({
   saved: Cart;
   left: Record<ItemKey, number>;
   lost: ItemKey[];
+  held: number;
 }) {
   const send = useMutation(api.wordle.shop);
   const [draft, setCart] = useState<Cart>(saved);
@@ -61,7 +64,8 @@ export function ShopSheet({
   );
   const targets = alive(state).filter((i) => i !== seat);
   const cost = cartCost(cart);
-  const why = cantPick(state, seat, cart, (k) => left[k] ?? 0);
+  const why = cantPick(state, seat, cart, (k) => left[k] ?? 0, held);
+  const handFree = MAX_HAND - held - cart.filter((x) => !ITEMS[x.item].target).length;
   const place = buyOrder(state).indexOf(seat) + 1;
   const inCart = (k: ItemKey) => cart.filter((x) => x.item === k).length;
   const add = (item: ItemKey, target: number) => {
@@ -94,12 +98,12 @@ export function ShopSheet({
           {cost > 0 && <span className="text-muted-foreground">of {me.coins}</span>}
         </span>
         <span className="text-footnote text-muted-foreground">
-          You shop {ordinal(place)} of {alive(state).length}
+          Hand {MAX_HAND - handFree}/{MAX_HAND} · you shop {ordinal(place)} of {alive(state).length}
         </span>
       </div>
       {lostNames.length > 0 && !me.picked && (
         <p className="text-footnote text-destructive" data-lost={lost.join(",")}>
-          {listNames(lostNames)} dropped out of your cart. Your coins are back.
+          Someone who shops before you got the last {listNames(lostNames)}. Your coins are back.
         </p>
       )}
       {cart.length > 0 && (
@@ -152,7 +156,7 @@ export function ShopSheet({
             const free = stock - inCart(k);
             const soldOut = stock === 0;
             const short = me.coins - cost < def.price;
-            const off = free <= 0 || short || cart.length >= MAX_CART;
+            const off = free <= 0 || short || cart.length >= MAX_CART || (!def.target && handFree <= 0);
             const n = inCart(k);
             const aimed = aiming === k && !off;
             return (

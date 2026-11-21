@@ -7,34 +7,52 @@ export const MAX_ROWS = 8;
 export const START_COINS = 5;
 export const BASE_PAY = 1;
 export const SOLVE_PAY = 3;
-export const STEAL = 10;
+export const STEAL = 6;
 export const JAM_TURNS = 2;
 export const FOG_ROWS = 2;
 export const IN_STOCK_AT_LEAST = 6;
 export const MAX_CART = 6;
+export const MAX_HAND = 3;
+export const RUSH = 1.5;
 const JAMMABLE = "earotlisnc";
 
 export type ItemKey = "fog" | "fuse" | "jam" | "pickpocket" | "dark" | "tax" | "shield" | "clue" | "hint" | "extra" | "payday";
 
-export type ItemDef = { name: string; price: number; target: boolean; rare?: boolean; text: string };
+export type ItemDef = { name: string; price: number; target: boolean; rare?: boolean; play?: boolean; rush?: boolean; text: string };
 
 export const ITEMS: Record<ItemKey, ItemDef> = {
   dark: { name: "Blackout", price: 6, target: true, text: "Their keyboard shows no colors on their next word." },
-  pickpocket: { name: "Pickpocket", price: 6, target: true, text: `Take up to ${STEAL} of the coins they have left after this shop.` },
+  pickpocket: { name: "Pickpocket", price: 5, target: true, text: `Take up to ${STEAL} of what they earn from their next word.` },
   jam: { name: "Jam", price: 8, target: true, text: "Two common letters lock on their keyboard for their first two guesses." },
   tax: { name: "Tax", price: 9, target: true, text: "They earn half as much from their next word." },
   fog: { name: "Fog", price: 13, target: true, text: "Their top two rows fog over once they've guessed past them." },
   fuse: { name: "Short fuse", price: 14, target: true, rare: true, text: "One guess fewer on their next word." },
-  clue: { name: "Clue", price: 5, target: false, text: "One letter of your next word lights up yellow on your keyboard." },
-  shield: { name: "Shield", price: 7, target: false, text: "Blocks one thing thrown at you in this shop." },
-  payday: { name: "Payday", price: 8, target: false, text: "Double what you earn from your next word." },
-  extra: { name: "Extra row", price: 10, target: false, text: "One more guess on your next word." },
-  hint: { name: "Hint", price: 12, target: false, rare: true, text: "Start your next word with one letter already green." },
+  clue: {
+    name: "Clue",
+    price: 6,
+    target: false,
+    play: true,
+    rush: true,
+    text: "A card. Play it during a word to find out one more letter that's in it.",
+  },
+  shield: { name: "Shield", price: 7, target: false, text: "Stays in your hand and blocks the next thing thrown at you." },
+  payday: { name: "Payday", price: 8, target: false, play: true, text: "A card. Play it during a word to double what that word pays." },
+  extra: { name: "Extra row", price: 10, target: false, play: true, rush: true, text: "A card. Play it during a word for one more guess." },
+  hint: {
+    name: "Hint",
+    price: 12,
+    target: false,
+    rare: true,
+    play: true,
+    rush: true,
+    text: "A card. Play it during a word to turn one more letter green.",
+  },
 };
+export const rushPrice = (item: ItemKey) => Math.ceil(ITEMS[item].price * RUSH);
 export const ITEM_KEYS = Object.keys(ITEMS) as ItemKey[];
 export const isItem = (k: string): k is ItemKey => k in ITEMS;
 
-export type Effect = { item: ItemKey; by: number; letters?: string };
+export type Effect = { item: ItemKey; by: number; letters?: string; took?: number };
 
 export type Player = {
   coins: number;
@@ -48,6 +66,7 @@ export type Player = {
   picked: boolean;
   effects: Effect[];
   out?: boolean;
+  startCoins?: number;
 };
 
 export type Stock = { item: ItemKey; left: number };
@@ -84,7 +103,14 @@ export type Mine = {
   lost?: ItemKey[];
   hint?: { at: number; letter: string };
   clue?: string;
+  hand?: ItemKey[];
+  hints?: { at: number; letter: string }[];
+  clues?: string;
 };
+
+export const handOf = (mine: Mine): ItemKey[] => mine.hand ?? [];
+export const hintsOf = (mine: Mine) => [...(mine.hint ? [mine.hint] : []), ...(mine.hints ?? [])];
+export const cluesOf = (mine: Mine): string => `${mine.clue ?? ""}${mine.clues ?? ""}`;
 
 export const cartOf = (mine: Mine): Cart => mine.cart ?? (mine.pick ? [mine.pick] : []);
 
@@ -158,6 +184,7 @@ export function newGame(n: number, rules: Rules, rng: Rng): { s: WordleState; mi
       earned: 0,
       picked: false,
       effects: [],
+      startCoins: START_COINS,
     })),
     stock: rules.shop ? pickStock(n, rng) : [],
     history: [],
@@ -202,9 +229,19 @@ export function payFor(p: Player, marks: string[]) {
   return earned;
 }
 
-function pay(p: Player, mine: Mine) {
+function pay(s: WordleState, seat: number, mine: Mine) {
+  const p = s.players[seat];
   p.earned = payFor(p, mine.marks);
   p.coins += p.earned;
+  let left = p.earned;
+  for (const e of p.effects) {
+    if (e.item !== "pickpocket") continue;
+    const took = Math.min(STEAL, left, p.coins);
+    left -= took;
+    p.coins -= took;
+    s.players[e.by].coins += took;
+    e.took = took;
+  }
   p.guesses += p.won ? p.rows : ROWS + 1;
   if (p.won) p.solved++;
 }
@@ -223,8 +260,65 @@ export function guess(s0: WordleState, mine0: Mine, seat: number, word: string, 
   p.won = marks === "2".repeat(LENGTH);
   if (p.won || p.rows >= p.max) {
     p.done = true;
-    pay(p, mine);
+    pay(s, seat, mine);
     if (!s.rules.shop || lastWord(s)) p.picked = true;
+  }
+  return { s, mine };
+}
+
+export function cantPlay(s: WordleState, mine: Mine, seat: number, item: ItemKey, rush: boolean): string | null {
+  const p = s.players[seat];
+  if (s.over) return "This game is over.";
+  if (!p || p.out) return "You're out of this game.";
+  if (p.done) return "You're done with this word.";
+  if (!isItem(item) || !ITEMS[item].play) return "That's not a card you can play.";
+  if (rush) {
+    if (!s.rules.shop) return "The shop is off in this game.";
+    if (!ITEMS[item].rush) return `${ITEMS[item].name} only comes from the shop.`;
+    if (p.coins < rushPrice(item)) return "Not enough coins.";
+  } else if (!handOf(mine).includes(item)) return `You don't have ${ITEMS[item].name}.`;
+  if (item === "extra" && p.max >= MAX_ROWS) return `${MAX_ROWS} guesses is the most.`;
+  if (item === "payday" && has(p, "payday")) return "Payday's already on for this word.";
+  return null;
+}
+
+const knownGreen = (mine: Mine) => {
+  const at = new Set(hintsOf(mine).map((h) => h.at));
+  mine.marks.forEach((m) => [...m].forEach((c, i) => c === "2" && at.add(i)));
+  return at;
+};
+
+const knownLetters = (mine: Mine) => {
+  const got = new Set([...cluesOf(mine), ...hintsOf(mine).map((h) => h.letter)]);
+  mine.guesses.forEach((g, r) => [...g].forEach((ch, i) => mine.marks[r][i] !== "0" && got.add(ch)));
+  return got;
+};
+
+export function play(s0: WordleState, mine0: Mine, seat: number, item: ItemKey, answer: string, rush: boolean, rng: Rng) {
+  const why = cantPlay(s0, mine0, seat, item, rush);
+  if (why) throw new Error(why);
+  const s = structuredClone(s0);
+  const mine = structuredClone(mine0);
+  const p = s.players[seat];
+  if (item === "extra") p.max++;
+  if (item === "payday") p.effects.push({ item, by: seat });
+  if (item === "hint") {
+    const open = [...Array(LENGTH).keys()].filter((i) => !knownGreen(mine).has(i));
+    if (!open.length) throw new Error("Every letter's already green.");
+    const at = open[Math.floor(rng() * open.length)];
+    mine.hints = [...(mine.hints ?? []), { at, letter: answer[at] }];
+  }
+  if (item === "clue") {
+    const known = knownLetters(mine);
+    const pool = [...new Set(answer)].filter((ch) => !known.has(ch));
+    if (!pool.length) throw new Error("You already know every letter in it.");
+    mine.clues = `${mine.clues ?? ""}${pool[Math.floor(rng() * pool.length)]}`;
+  }
+  if (rush) p.coins -= rushPrice(item);
+  else {
+    const hand = [...handOf(mine)];
+    hand.splice(hand.indexOf(item), 1);
+    mine.hand = hand;
   }
   return { s, mine };
 }
@@ -237,7 +331,7 @@ export const cartCost = (cart: Cart) => cart.reduce((n, x) => n + ITEMS[x.item].
 
 export type LeftFor = (item: ItemKey) => number;
 
-export function cantPick(s: WordleState, seat: number, cart: Cart, leftFor: LeftFor = (k) => leftOf(s, k)): string | null {
+export function cantPick(s: WordleState, seat: number, cart: Cart, leftFor: LeftFor = (k) => leftOf(s, k), held = 0): string | null {
   const p = s.players[seat];
   if (s.over) return "This game is over.";
   if (!p || p.out) return "You're out of this game.";
@@ -257,6 +351,7 @@ export function cantPick(s: WordleState, seat: number, cart: Cart, leftFor: Left
     }
   }
   if (cartCost(cart) > p.coins) return "Not enough coins.";
+  if (held + cart.filter((x) => !ITEMS[x.item].target).length > MAX_HAND) return `Your hand holds ${MAX_HAND} cards.`;
   return null;
 }
 
@@ -316,7 +411,7 @@ export function reconcile(s: WordleState, mines: Mine[]): Bumped[] {
 }
 
 export function choose(s0: WordleState, mines0: Mine[], seat: number, cart0: Cart) {
-  const why = cantPick(s0, seat, cart0, (k) => leftForSeat(s0, mines0, seat)[k]);
+  const why = cantPick(s0, seat, cart0, (k) => leftForSeat(s0, mines0, seat)[k], handOf(mines0[seat]).length);
   if (why) throw new Error(why);
   const s = structuredClone(s0);
   const mines = structuredClone(mines0);
@@ -332,7 +427,7 @@ export const waitingOn = (s: WordleState) =>
 
 export const roundDone = (s: WordleState) => !s.over && waitingOn(s).length === 0;
 
-export const coinsGoingIn = (p: Player) => p.coins - p.earned;
+export const coinsGoingIn = (p: Player) => p.startCoins ?? p.coins - p.earned;
 const solvedGoingIn = (p: Player) => p.solved - (p.done && p.won ? 1 : 0);
 
 export const buyOrder = (s: WordleState) =>
@@ -377,13 +472,14 @@ export function finishRound(s0: WordleState, mine0: Mine[], words: string[], rng
     if (!p.done) {
       p.done = true;
       p.won = false;
-      pay(p, mines[i]);
+      pay(s, i, mines[i]);
     }
   }
   if (!force && waitingOn(s).length) throw new Error("Not everyone's done yet.");
   const ending = lastWord(s) || alive(s).length < 2;
   const buys: Buy[] = [];
   const next: Effect[][] = s.players.map(() => []);
+  const hands = mines.map((m) => [...handOf(m)]);
   if (!ending && s.rules.shop) {
     const left = new Map(s.stock.map((x) => [x.item, x.left]));
     for (const seat of buyOrder(s)) {
@@ -399,21 +495,13 @@ export function finishRound(s0: WordleState, mine0: Mine[], words: string[], rng
         buys.push({ seat, item: x.item, target, got: ok });
       }
     }
-    const shields = new Map<number, number>();
-    for (const b of buys) if (b.got && b.item === "shield") shields.set(b.seat, (shields.get(b.seat) ?? 0) + 1);
+    for (const b of buys) if (b.got && !ITEMS[b.item].target) hands[b.seat].push(b.item);
     for (const b of buys) {
-      if (!b.got || b.item === "shield") continue;
-      const shield = shields.get(b.target) ?? 0;
-      if (ITEMS[b.item].target && shield > 0) {
-        shields.set(b.target, shield - 1);
+      if (!b.got || !ITEMS[b.item].target) continue;
+      const shield = hands[b.target].indexOf("shield");
+      if (shield >= 0) {
+        hands[b.target].splice(shield, 1);
         b.blocked = true;
-        continue;
-      }
-      if (b.item === "pickpocket") {
-        const took = Math.min(STEAL, s.players[b.target].coins);
-        s.players[b.target].coins -= took;
-        s.players[b.seat].coins += took;
-        b.took = took;
         continue;
       }
       const effect: Effect = { item: b.item, by: b.seat };
@@ -432,8 +520,7 @@ export function finishRound(s0: WordleState, mine0: Mine[], words: string[], rng
     return { s, mine: mines, buys };
   }
   s.round++;
-  const nextWord = words[s.round];
-  const nextMine = s.players.map(() => freshMine(s.round));
+  const nextMine = s.players.map((_, i) => ({ ...freshMine(s.round), hand: hands[i] }));
   s.players.forEach((p, i) => {
     const fx = next[i];
     const count = (k: ItemKey) => fx.filter((e) => e.item === k).length;
@@ -443,15 +530,8 @@ export function finishRound(s0: WordleState, mine0: Mine[], words: string[], rng
     p.earned = 0;
     p.picked = false;
     p.effects = fx;
-    p.max = Math.min(MAX_ROWS, Math.max(MIN_ROWS, ROWS - count("fuse") + count("extra")));
-    if (count("hint") && nextWord) {
-      const at = Math.floor(rng() * LENGTH);
-      nextMine[i].hint = { at, letter: nextWord[at] };
-    }
-    if (count("clue") && nextWord) {
-      const pool = [...new Set(nextWord)].filter((ch) => ch !== nextMine[i].hint?.letter);
-      if (pool.length) nextMine[i].clue = pool[Math.floor(rng() * pool.length)];
-    }
+    p.max = Math.max(MIN_ROWS, ROWS - count("fuse"));
+    p.startCoins = p.coins;
     if (p.out) p.done = p.picked = true;
   });
   s.stock = s.rules.shop ? pickStock(alive(s).length, rng) : [];

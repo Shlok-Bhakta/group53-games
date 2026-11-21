@@ -18,6 +18,10 @@ import {
   alive,
   cartOf,
   choose,
+  cluesOf,
+  handOf,
+  hintsOf,
+  play as playCard,
   fogged,
   finishRound,
   guess as step,
@@ -210,6 +214,28 @@ export const pick = mutation({
   },
 });
 
+export async function playAs(ctx: MutationCtx, id: Id<"matches">, round: number, item: string, rush: boolean, as?: Id<"users">) {
+  const { userId, match, seat } = await seated(ctx, id, { game: "wordle", as });
+  const s0 = match.state as WordleState;
+  if (s0.round !== round) throw new Error("That word has closed.");
+  if (s0.deadline && Date.now() >= s0.deadline) throw new Error(TIME_UP);
+  if (!isItem(item)) throw new Error("That's not a card you can play.");
+  const { words } = await readSecret<Words>(ctx, id, undefined, { words: [] });
+  const { s, mine } = playCard(s0, await mineOf(ctx, match, userId, s0), seat, item, words[s0.round], rush, Math.random);
+  await writeSecret(ctx, id, userId, mine);
+  if (
+    s0.players[seat].max !== s.players[seat].max ||
+    s0.players[seat].coins !== s.players[seat].coins ||
+    s0.players[seat].effects.length !== s.players[seat].effects.length
+  )
+    await save(ctx, match, s);
+}
+
+export const play = mutation({
+  args: { id: v.id("matches"), round: v.number(), item: v.string(), rush: v.optional(v.boolean()) },
+  handler: async (ctx, { id, round, item, rush }) => await playAs(ctx, id, round, item, rush ?? false),
+});
+
 export const shop = mutation({
   args: { id: v.id("matches"), round: v.number(), cart: v.array(v.object({ item: v.string(), target: v.number() })) },
   handler: async (ctx, { id, round, cart }) => {
@@ -272,8 +298,11 @@ export const board = query({
       round: s.round,
       seat,
       rows,
-      hint: mine.hint ?? null,
-      clue: mine.clue ?? null,
+      hint: hintsOf(mine).at(0) ?? null,
+      hints: hintsOf(mine),
+      clue: cluesOf(mine).at(0) ?? null,
+      clues: cluesOf(mine),
+      hand: handOf(mine),
       pick: mine.pick,
       cart: cartOf(mine),
       lost: mine.lost ?? [],

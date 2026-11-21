@@ -121,7 +121,7 @@ describe("PvP Wordle on the server", () => {
       { item: "fog", left: 1 },
       { item: "shield", left: 2 },
     ];
-    const coins = (n: number) => ({ coins: n, earned: 0 });
+    const coins = (n: number) => ({ coins: n, earned: 0, startCoins: n });
     await t.mutation(internal.testing.wordlePatch, { id, stock, players: [coins(14), coins(40), coins(40)] });
     await b.as.mutation(api.wordle.shop, {
       id,
@@ -184,6 +184,27 @@ describe("PvP Wordle on the server", () => {
         ],
       }),
     ).rejects.toThrow(/Only 2/);
+  });
+
+  test("a card bought in the shop is played on a later word, and an emergency one costs coins on the spot", async () => {
+    const t = setup();
+    const { id, seats } = await game(t, 2);
+    const [a, b] = seats;
+    for (const p of seats) await solve(t, id, p);
+    await t.mutation(internal.testing.wordlePatch, { id, stock: [{ item: "extra", left: 1 }] });
+    await a.as.mutation(api.wordle.shop, { id, round: 0, cart: [{ item: "extra", target: -1 }] });
+    await pass(id, b, 0);
+    expect((await a.as.query(api.wordle.board, { id }))!.hand).toEqual(["extra"]);
+    expect((await b.as.query(api.wordle.board, { id }))!.hand, "your hand is yours alone").toEqual([]);
+    await a.as.mutation(api.wordle.play, { id, round: 1, item: "extra" });
+    expect((await stateOf(t, id)).players[0].max).toBe(7);
+    expect((await a.as.query(api.wordle.board, { id }))!.hand).toEqual([]);
+    const before = (await stateOf(t, id)).players[1].coins;
+    await b.as.mutation(api.wordle.play, { id, round: 1, item: "hint", rush: true });
+    expect((await stateOf(t, id)).players[1].coins).toBe(before - 18);
+    const view = (await b.as.query(api.wordle.board, { id }))!;
+    expect(view.hints).toHaveLength(1);
+    expect((await word(t, id))[view.hints[0].at]).toBe(view.hints[0].letter);
   });
 
   test("the deadline closes the word for whoever isn't done", async () => {

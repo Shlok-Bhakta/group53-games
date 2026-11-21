@@ -23,6 +23,8 @@ import {
   leave,
   newGame,
   pickStock,
+  play as playCard,
+  rushPrice,
   pickWords,
   roundDone,
   score,
@@ -182,7 +184,11 @@ describe("the shop", () => {
     return t;
   }
 
-  const coinsIn = (t: Table, coins: number[]) => t.s.players.forEach((p, i) => (p.coins = coins[i] + p.earned));
+  const coinsIn = (t: Table, coins: number[]) =>
+    t.s.players.forEach((p, i) => {
+      p.coins = coins[i] + p.earned;
+      p.startCoins = coins[i];
+    });
 
   test("fewer coins going into the word shop first, and what's left for you leaves out what they've claimed", () => {
     const t = round1();
@@ -218,27 +224,6 @@ describe("the shop", () => {
     expect(t.s.players[2].effects).toEqual([{ item: "fog", by: 1 }]);
   });
 
-  test("you can buy several things, for yourself and against others", () => {
-    const t = round1();
-    t.s.stock = everyItem.map((item) => ({ item, left: 3 }));
-    coinsIn(t, [100, 50, 50]);
-    shop(t, 0, [
-      { item: "fog", target: 1 },
-      { item: "jam", target: 2 },
-      { item: "extra", target: -1 },
-      { item: "payday", target: -1 },
-    ]);
-    buy(t, 1, null);
-    buy(t, 2, null);
-    const before = t.s.players[0].coins;
-    close(t);
-    expect(t.s.players[0].coins).toBe(before - ITEMS.fog.price - ITEMS.jam.price - ITEMS.extra.price - ITEMS.payday.price);
-    expect(t.s.players[0].effects.map((e) => e.item)).toEqual(["extra", "payday"]);
-    expect(t.s.players[0].max).toBe(ROWS + 1);
-    expect(t.s.players[1].effects.map((e) => e.item)).toEqual(["fog"]);
-    expect(t.s.players[2].effects.map((e) => e.item)).toEqual(["jam"]);
-  });
-
   test("a pick saved before prices went up drops out once it's too dear, instead of failing at checkout", () => {
     const t = round1();
     coinsIn(t, [40, 0, 25]);
@@ -263,33 +248,6 @@ describe("the shop", () => {
     expect(r.bumped).toEqual([{ seat: 0, lost: ["jam"] }]);
   });
 
-  test("payday doubles the next word's pay and tax halves it", () => {
-    const t = round1(2);
-    t.s.stock = everyItem.map((item) => ({ item, left: 3 }));
-    coinsIn(t, [100, 100]);
-    buy(t, 0, "payday");
-    buy(t, 1, "tax", 0);
-    close(t);
-    expect(t.s.players[0].effects.map((e) => e.item).sort()).toEqual(["payday", "tax"]);
-    play(t, 0, WORDS[1]);
-    expect(t.s.players[0].earned, "doubled, then halved").toBe(BASE_PAY + 5 + SOLVE_PAY + ROWS - 1);
-  });
-
-  test("a clue is a letter of the next word, never the hint's", () => {
-    const t = round1(2);
-    t.s.stock = everyItem.map((item) => ({ item, left: 3 }));
-    coinsIn(t, [100, 100]);
-    shop(t, 1, [
-      { item: "clue", target: -1 },
-      { item: "hint", target: -1 },
-    ]);
-    buy(t, 0, null);
-    close(t, fixed(0.3));
-    const { clue, hint } = t.mine[1];
-    expect(WORDS[1]).toContain(clue);
-    expect(clue).not.toBe(hint!.letter);
-  });
-
   test("the stock is random, never more than the table could use, and always has some things in it", () => {
     for (const n of [2, 3, 5, 8]) {
       let k = 1;
@@ -306,6 +264,140 @@ describe("the shop", () => {
     }
   });
 
+  test("you can buy several things: attacks land on the next word, cards go in your hand", () => {
+    const t = round1();
+    t.s.stock = everyItem.map((item) => ({ item, left: 3 }));
+    coinsIn(t, [100, 50, 50]);
+    shop(t, 0, [
+      { item: "fog", target: 1 },
+      { item: "jam", target: 2 },
+      { item: "extra", target: -1 },
+      { item: "payday", target: -1 },
+    ]);
+    buy(t, 1, null);
+    buy(t, 2, null);
+    const before = t.s.players[0].coins;
+    close(t);
+    expect(t.s.players[0].coins).toBe(before - ITEMS.fog.price - ITEMS.jam.price - ITEMS.extra.price - ITEMS.payday.price);
+    expect(t.mine[0].hand).toEqual(["extra", "payday"]);
+    expect(t.s.players[0].effects).toEqual([]);
+    expect(t.s.players[0].max).toBe(ROWS);
+    expect(t.s.players[1].effects.map((e) => e.item)).toEqual(["fog"]);
+    expect(t.s.players[2].effects.map((e) => e.item)).toEqual(["jam"]);
+  });
+
+  test("your hand holds three cards, kept from word to word", () => {
+    const t = round1(2);
+    t.s.stock = everyItem.map((item) => ({ item, left: 3 }));
+    coinsIn(t, [100, 100]);
+    expect(() =>
+      shop(t, 0, [
+        { item: "clue", target: -1 },
+        { item: "clue", target: -1 },
+        { item: "hint", target: -1 },
+        { item: "shield", target: -1 },
+      ]),
+    ).toThrow(/holds 3/);
+    shop(t, 0, [
+      { item: "clue", target: -1 },
+      { item: "hint", target: -1 },
+    ]);
+    buy(t, 1, null);
+    close(t);
+    expect(t.mine[0].hand).toEqual(["clue", "hint"]);
+    play(t, 0, "ghost");
+    expect(() => shop(t, 0, [])).toThrow(/Finish/);
+  });
+
+  const card = (t: Table, seat: number, item: ItemKey, rush = false, rng = fixed()) => {
+    const r = playCard(t.s, t.mine[seat], seat, item, WORDS[t.s.round], rush, rng);
+    t.s = r.s;
+    t.mine[seat] = r.mine;
+  };
+
+  test("cards are played mid-word: extra row now, a hint and a clue about this word", () => {
+    const t = table(2);
+    t.mine[0].hand = ["extra", "hint", "clue"];
+    play(t, 0, "ghost", "plait");
+    card(t, 0, "extra");
+    expect(t.s.players[0].max).toBe(ROWS + 1);
+    card(t, 0, "hint");
+    const h = t.mine[0].hints![0];
+    expect(WORDS[0][h.at]).toBe(h.letter);
+    expect(
+      t.mine[0].marks.some((m) => m[h.at] === "2"),
+      "never a letter already green",
+    ).toBe(false);
+    card(t, 0, "clue");
+    expect(WORDS[0]).toContain(t.mine[0].clues);
+    expect(t.mine[0].hand).toEqual([]);
+    expect(() => card(t, 0, "hint")).toThrow(/don't have/);
+  });
+
+  test("an emergency card costs half again and needs no stock", () => {
+    const t = table(2);
+    t.s.stock = [];
+    t.s.players[0].coins = 20;
+    card(t, 0, "hint", true);
+    expect(t.s.players[0].coins).toBe(20 - rushPrice("hint"));
+    expect(rushPrice("hint")).toBe(Math.ceil(ITEMS.hint.price * 1.5));
+    expect(() => card(t, 0, "hint", true)).toThrow(/Not enough/);
+    expect(() => card(t, 0, "payday", true)).toThrow(/only comes from the shop/);
+  });
+
+  test("payday doubles this word's pay and tax halves it", () => {
+    const t = round1(2);
+    t.s.stock = everyItem.map((item) => ({ item, left: 3 }));
+    coinsIn(t, [100, 100]);
+    buy(t, 0, "payday");
+    buy(t, 1, "tax", 0);
+    close(t);
+    card(t, 0, "payday");
+    expect(() => card(t, 0, "payday", false)).toThrow(/don't have|already/);
+    play(t, 0, WORDS[1]);
+    expect(t.s.players[0].earned, "doubled, then halved").toBe(BASE_PAY + 5 + SOLVE_PAY + ROWS - 1);
+  });
+
+  test("pickpocket takes from what they earn on their next word", () => {
+    const t = round1(2);
+    coinsIn(t, [20, 20]);
+    buy(t, 0, "pickpocket", 1);
+    buy(t, 1, null);
+    close(t);
+    const [a, b] = t.s.players.map((p) => p.coins);
+    play(t, 1, WORDS[1]);
+    const earned = t.s.players[1].earned;
+    const took = Math.min(STEAL, earned);
+    expect(t.s.players[1].coins).toBe(b + earned - took);
+    expect(t.s.players[0].coins).toBe(a + took);
+    expect(t.s.players[1].effects[0].took).toBe(took);
+  });
+
+  test("short fuse takes a row off the next word", () => {
+    const t = round1();
+    t.s.stock = everyItem.map((item) => ({ item, left: 3 }));
+    coinsIn(t, [100, 100, 100]);
+    buy(t, 0, "fuse", 2);
+    buy(t, 1, "fuse", 2);
+    buy(t, 2, null);
+    close(t);
+    expect(t.s.players[2].max).toBe(ROWS - 2);
+    expect(t.s.players[0].max).toBe(ROWS);
+  });
+
+  test("a shield in your hand blocks the next attack and is used up", () => {
+    const t = round1();
+    t.s.stock = everyItem.map((item) => ({ item, left: 3 }));
+    coinsIn(t, [100, 100, 100]);
+    t.mine[0].hand = ["shield"];
+    buy(t, 0, null);
+    buy(t, 1, "fog", 0);
+    buy(t, 2, null);
+    const buys = close(t);
+    expect(buys[0].blocked).toBe(true);
+    expect(t.mine[0].hand).toEqual([]);
+  });
+
   test("a shield blocks the first thing thrown, not the second", () => {
     const t = round1();
     t.s.stock = everyItem.map((item) => ({ item, left: 3 }));
@@ -316,32 +408,6 @@ describe("the shop", () => {
     const buys = close(t);
     expect(buys.find((b) => b.seat === 1)?.blocked).toBe(true);
     expect(t.s.players[0].effects).toEqual([{ item: "dark", by: 2 }]);
-  });
-
-  test("pickpocket takes coins at once, never more than they have", () => {
-    const t = round1(2);
-    t.s.players[0].coins = 10;
-    t.s.players[1].coins = 2;
-    const [c0, c1] = [10, 2];
-    buy(t, 0, "pickpocket", 1);
-    buy(t, 1, null);
-    const buys = close(t);
-    expect(buys[0].took).toBe(c1);
-    expect(t.s.players[0].coins).toBe(c0 - ITEMS.pickpocket.price + c1);
-    expect(t.s.players[1].coins).toBe(0);
-    expect(STEAL).toBeGreaterThan(c1);
-  });
-
-  test("short fuse and extra row change the next word's rows, within limits", () => {
-    const t = round1();
-    t.s.stock = everyItem.map((item) => ({ item, left: 3 }));
-    t.s.players.forEach((p) => (p.coins = 20));
-    buy(t, 0, "fuse", 2);
-    buy(t, 1, "fuse", 2);
-    buy(t, 2, "extra");
-    close(t);
-    expect(t.s.players[2].max).toBe(ROWS - 2 + 1);
-    expect(t.s.players[0].max).toBe(ROWS);
   });
 
   test("jam locks two letters for the first two guesses", () => {
@@ -369,17 +435,6 @@ describe("the shop", () => {
     play(t, 1, "flame", "brick", "pious");
     expect([0, 1, 2, 3, 4].map((r) => fogged(t.s.players[1], r))).toEqual([true, true, false, false, false]);
     expect(p.effects[0].item).toBe("fog");
-  });
-
-  test("a hint shows one letter of the next word", () => {
-    const t = round1(2);
-    t.s.players[0].coins = 100;
-    buy(t, 0, "hint");
-    buy(t, 1, null);
-    close(t, fixed(0.5));
-    const hint = t.mine[0].hint!;
-    expect(WORDS[1][hint.at]).toBe(hint.letter);
-    expect(t.mine[1].hint).toBeUndefined();
   });
 
   test("the next word starts fresh and the closed one goes into history with everyone's letters", () => {

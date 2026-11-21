@@ -6,7 +6,17 @@ import { CaretRightIcon, CheckIcon, StorefrontIcon, XIcon } from "@phosphor-icon
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { MatchView } from "../../../convex/matches";
-import { ITEMS, LENGTH, cantGuess, keyColors, lastWord, waitingOn, type Buy, type WordleState } from "../../../convex/wordle/engine";
+import {
+  ITEMS,
+  LENGTH,
+  cantGuess,
+  cartCost,
+  keyColors,
+  lastWord,
+  waitingOn,
+  type Buy,
+  type WordleState,
+} from "../../../convex/wordle/engine";
 import { buyLine } from "../../../convex/wordle/text";
 import { GameFrame, DockNote } from "@/components/game/GameFrame";
 import { usePhoneLandscape } from "@/components/game/landscape";
@@ -22,6 +32,7 @@ import { ThinkingDots, useHere } from "@/presence";
 import { sfx } from "@/sound";
 import { Tiles, type TileState } from "@/Tiles";
 import { Board, FLIP_S, FLIP_STAGGER_S, type Row } from "./Board";
+import { Hand } from "./Hand";
 import { KEYBOARD_HEIGHT, Keyboard } from "./Keyboard";
 import { Coins, ItemIcon, MARK_STATE, MiniBoard } from "./parts";
 import { ShopSheet } from "./ShopSheet";
@@ -69,6 +80,7 @@ export default function WordleGame({ match, meId }: { match: MatchView; meId: Id
           saved={view.cart}
           left={view.left}
           lost={view.lost}
+          held={view.hand.length}
         />
       )}
       <LogSheet open={sheet === "log"} onClose={() => setSheet(null)} match={match} state={state} name={names} />
@@ -107,7 +119,10 @@ const NO_VIEW: View = {
   seat: -1,
   rows: [],
   hint: null,
+  hints: [],
   clue: null,
+  clues: "",
+  hand: [],
   pick: null,
   cart: [],
   lost: [],
@@ -201,7 +216,7 @@ function usePlay(match: MatchView, state: WordleState, seat: number, loaded: Vie
   const colors = dark
     ? null
     : {
-        ...(view.clue ? { [view.clue]: 1 as const } : {}),
+        ...Object.fromEntries([...view.clues].map((ch) => [ch, 1 as const])),
         ...keyColors(
           visible.map((r) => r.letters),
           visible.map((r) => r.marks),
@@ -220,7 +235,7 @@ function usePlay(match: MatchView, state: WordleState, seat: number, loaded: Vie
         played={view.rows}
         typed={typed}
         typing={typing}
-        hint={view.hint}
+        hints={view.hints}
         shake={shake}
         won={!!me?.won}
         fogBy={fog ? (match.players[fog.by]?.name ?? null) : null}
@@ -236,6 +251,13 @@ function usePlay(match: MatchView, state: WordleState, seat: number, loaded: Vie
   else if (me.out) dock = <DockNote className={KEYBOARD_HEIGHT}>You&rsquo;re out of this one</DockNote>;
   else if (typing) dock = keyboard;
   else dock = <Done match={match} state={state} seat={seat} view={view} onShop={onShop} />;
+  if (dock && me && !me.out && state.rules.shop)
+    dock = (
+      <div className="flex w-full flex-col">
+        <Hand match={match} state={state} seat={seat} hand={view.hand} clues={view.clues} playing={typing} />
+        {dock}
+      </div>
+    );
   return { board, dock };
 }
 
@@ -257,6 +279,7 @@ function Done({
   const shopOpen = state.rules.shop && !lastWord(state);
   const cart = view.cart;
   const first = cart[0];
+  const pocketed = me.effects.reduce((n, e) => n + (e.took ?? 0), 0);
   const pickText = !me.picked
     ? view.lost.length
       ? "Shop again"
@@ -273,6 +296,7 @@ function Done({
         <span className="flex items-center gap-1.5 font-semibold">
           {me.won ? <CheckIcon weight="bold" className="text-[var(--tile-green)]" /> : <XIcon weight="bold" className="text-destructive" />}
           {me.won ? `Solved in ${me.rows}` : "Missed it"}
+          {pocketed > 0 && <span className="font-normal text-muted-foreground">{`, ${pocketed} pickpocketed`}</span>}
         </span>
         <motion.span
           initial={{ scale: 0.6, opacity: 0 }}
@@ -301,7 +325,7 @@ function Done({
           icon={<StorefrontIcon weight="fill" />}
         >
           <span className="min-w-0 truncate">{pickText}</span>
-          <Coins n={me.coins} className="ml-auto" />
+          <Coins n={me.coins - cartCost(view.cart)} className="ml-auto" />
         </Button>
       ) : (
         <WaitingLine match={match} waiting={waiting} last />

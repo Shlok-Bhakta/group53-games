@@ -89,7 +89,7 @@ test("two phones: guesses land live, colors show once you're done, the shop's fo
   await expect(pb.locator(`[data-board-of="${sa}"] [data-marks]`)).toHaveAttribute("data-marks", /22222$/);
   await shot(pa, "done");
 
-  const coins = (n: number) => ({ coins: n, earned: 0 });
+  const coins = (n: number) => ({ coins: n, earned: 0, startCoins: n });
   await admin().mutation(anyApi.testing.wordlePatch, {
     id,
     players: sa === 0 ? [coins(14), coins(40)] : [coins(40), coins(14)],
@@ -131,6 +131,13 @@ test("two phones: guesses land live, colors show once you're done, the shop's fo
   await guessOn(pb, id, sb, misses[1]);
   await expect(pb.locator("[data-fog]")).toHaveAttribute("data-fog", "1");
   await shot(pb, "fogged");
+
+  const coinsBefore = (await stateOf(id)).players[sb].coins;
+  await pb.getByRole("button", { name: "Cards" }).click();
+  await shot(pb, "cards");
+  await pb.getByRole("button", { name: /^Buy Hint now for / }).click();
+  await expect.poll(async () => (await stateOf(id)).players[sb].coins).toBeLessThan(coinsBefore);
+  await expect(pb.getByRole("gridcell", { name: /^Hint: [A-Z]$/ })).toBeVisible();
 
   await pa.getByRole("button", { name: "Log" }).click();
   await expect(pa.locator(`[data-log-word="${answer}"]`)).toBeVisible();

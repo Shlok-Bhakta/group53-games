@@ -16,7 +16,7 @@ export function buyLine(b: Buy, name: (seat: number) => string): string {
   if (!item.target) return `${who} bought ${item.name}`;
   const them = name(b.target);
   if (b.blocked) return `${who}'s ${item.name} bounced off ${them === "you" ? "your" : `${them}'s`} shield`;
-  if (b.item === "pickpocket") return `${who} took ${b.took ?? 0} coin${b.took === 1 ? "" : "s"} from ${them}`;
+  if (b.took !== undefined) return `${who} took ${b.took} coin${b.took === 1 ? "" : "s"} from ${them}`;
   return `${who} ${VERB[b.item]} ${them}`;
 }
 
