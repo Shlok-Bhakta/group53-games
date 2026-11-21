@@ -40,6 +40,7 @@ Invariants: `matches.ts` never names a game (hooks via `hooksFor`, looked up at 
 - `armTurn` starts whichever clock without moving; `scheduleReminder(ctx, id, moveCount, strikes)` re-arms `matches.remind`.
 - `matches.remind`: fizzles unless the game is active with the same `moveCount` and someone on turn. Strikes count reminders already sent for this move; `timeoutStrikes(match)` is the "Time to move" setting in hours / 8 (0 = no limit). At `strikes + 1 >= limit` it calls the game's `timeout` hook; on the reminder before last the push adds "Move in the next 8 hours <timeoutWarning>". Four-player chess's fixed limit is `TIMEOUT_STRIKES` (6, two days).
 - `startPushes(ctx, match, push)`: each player's opening push, or none on a rematch.
+- Simultaneous games (everyone acts at once, PvP Wordle) leave `turn` unset and keep `matches.waitingOn` (optional) at everyone they wait on. `awaits(match, userId)` (`lib/seats.ts`) is `turn` or `waitingOn`, and the badge, `attention`, `inbox` and `TurnChip` all use it. Such a game runs its own reminders, since `matches.remind` needs a `turn`; `finish` clears `waitingOn`.
 
 ## Lib helpers (`convex/lib/`)
 

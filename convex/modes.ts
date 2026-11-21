@@ -5,6 +5,7 @@ import { LANDLORD_GAME, LANDLORD_MODES } from "./landlord/modes";
 import { everyOptionOn, type GameDef, type ModeDef, type Reason, type Setting } from "./modeKit";
 import { POKER_GAME, POKER_MODES } from "./poker/modes";
 import { SCRABBLE_GAME, SCRABBLE_MODES } from "./scrabble/modes";
+import { WORDLE_GAME, WORDLE_MODES } from "./wordle/modes";
 
 export type { ModeDef, Reason, Setting } from "./modeKit";
 
@@ -22,6 +23,7 @@ export const GAMES = {
   golf: GOLF_GAME,
   landlord: LANDLORD_GAME,
   hexhaven: HEXHAVEN_GAME,
+  wordle: WORDLE_GAME,
 } as const satisfies Record<string, GameDef>;
 export type GameKey = keyof typeof GAMES;
 
@@ -35,6 +37,7 @@ export const MODES = {
   ...GOLF_MODES,
   ...LANDLORD_MODES,
   ...HEXHAVEN_MODES,
+  ...WORDLE_MODES,
 } as const satisfies Record<string, ModeDef>;
 
 export type ModeKey = keyof typeof MODES;

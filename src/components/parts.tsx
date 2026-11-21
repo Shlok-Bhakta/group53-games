@@ -115,8 +115,10 @@ export function MatchRow({ match, meId, status, vs }: { match: MatchView; meId?:
 
 export function TurnChip({ match, meId }: { match: MatchView; meId?: Id<"users"> }) {
   if (MODES[match.mode as ModeKey]?.kind === "realtime") return <Chip tone="live">Live</Chip>;
-  if (match.turn === meId) return <Chip>Your move</Chip>;
-  const who = match.players.find((p) => p.userId === match.turn);
+  if (match.turn === meId || (meId && match.waitingOn?.includes(meId))) return <Chip>Your move</Chip>;
+  const waiting = match.waitingOn ?? [];
+  if (waiting.length > 1) return <Chip tone="quiet">Waiting on {waiting.length}</Chip>;
+  const who = match.players.find((p) => p.userId === (match.turn ?? waiting[0]));
   return <Chip tone="quiet">{match.players.length > 2 && who ? `${who.name}'s move` : "Their move"}</Chip>;
 }
 

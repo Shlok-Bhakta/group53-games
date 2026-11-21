@@ -56,6 +56,7 @@ export default defineSchema({
     settings: v.optional(v.record(v.string(), v.number())),
     state: v.any(),
     turn: v.optional(v.id("users")),
+    waitingOn: v.optional(v.array(v.id("users"))),
     moveCount: v.number(),
     drawOffer: v.optional(v.id("users")),
     result: v.optional(

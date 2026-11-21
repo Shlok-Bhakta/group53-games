@@ -2,7 +2,6 @@ import { lazy, Suspense, type ComponentType, type ReactNode } from "react";
 import type { Id } from "../../convex/_generated/dataModel";
 import type { MatchView } from "../../convex/matches";
 import { GAMES, type GameKey, type ModeKey, type Settings } from "../../convex/modes";
-import { Tiles } from "../Tiles";
 import { ChessBanner } from "./chess/ChessBanner";
 import { ChessGame } from "./chess/ChessMatch";
 import { ChessModeArt } from "./chess/ModeArt";
@@ -29,6 +28,9 @@ import { landlordSummary } from "./landlord/summary";
 import { HexhavenBanner, HexhavenModeArt } from "./hexhaven/art";
 import { hexhavenRules } from "./hexhaven/rules";
 import { hexhavenSummary } from "./hexhaven/summary";
+import { WordleBanner, WordleModeArt } from "./wordle/art";
+import { wordleRules } from "./wordle/rules";
+import { wordleSummary } from "./wordle/summary";
 import { chessSummary } from "./chess/summary";
 import { scrabbleSummary } from "./scrabble/summary";
 import { pokerSummary } from "./poker/summary";
@@ -66,6 +68,7 @@ function downloadedWhenOpened(load: () => Promise<{ default: ComponentType<GameS
 const GolfGame = downloadedWhenOpened(() => import("./golf/GolfGame"));
 const LandlordGame = downloadedWhenOpened(() => import("./landlord/LandlordGame"));
 const HexhavenGame = downloadedWhenOpened(() => import("./hexhaven/HexhavenGame"));
+const WordleGame = downloadedWhenOpened(() => import("./wordle/WordleGame"));
 
 export const GAME_UI: Record<GameKey, GameUI> = {
   chess: {
@@ -142,6 +145,17 @@ export const GAME_UI: Record<GameKey, GameUI> = {
     Game: HexhavenGame,
     summary: hexhavenSummary,
   },
+  wordle: {
+    key: "wordle",
+    path: GAMES.wordle.path,
+    name: GAMES.wordle.name,
+    blurb: "Same word for everyone, 2 to 8 of you. Solve it, earn coins, then buy fog, jams and short fuses to throw at the others.",
+    banner: () => <WordleBanner />,
+    modeArt: () => <WordleModeArt />,
+    rules: wordleRules,
+    Game: WordleGame,
+    summary: wordleSummary,
+  },
 };
 
 export type GameCard = {
@@ -172,14 +186,5 @@ const DAILY: GameCard = {
   blurb: "Scrandle, Krillion, Connections and the rest. Paste what the game copied and see who beat who today.",
   banner: () => <DailyBanner />,
 };
-const SOON: GameCard[] = [
-  {
-    path: "/wordle",
-    name: "PvP Wordle",
-    blurb: "Everyone gets the same word. Solve it, then spend what you earn messing up someone else's board.",
-    banner: () => <Tiles word="WORDLE" states={["green", "yellow", "gray", "green", "hit", "green"]} flip label="PvP Wordle" />,
-    wip: true,
-  },
-];
-export const games: GameCard[] = [...Object.values(GAME_UI), STONKS, DAILY, MEREDDIA, ...SOON];
+export const games: GameCard[] = [...Object.values(GAME_UI), STONKS, DAILY, MEREDDIA];
 export { DailyStrip } from "./daily/DailyStrip";

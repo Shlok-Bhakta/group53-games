@@ -8,6 +8,8 @@ import { load as hexhavenLoad, play as hexhavenPlay } from "./hexhaven";
 import { botMove as hexhavenBot, nextBotSeat as hexhavenNext } from "./hexhaven/bot";
 import type { HexState } from "./hexhaven/engine";
 import { addPlayer } from "./matches";
+import { guessAs as wordleGuess, pickAs as wordlePick } from "./wordle";
+import { isItem, type WordleState } from "./wordle/engine";
 import { postResult } from "./daily";
 import { botMove, nextBotSeat } from "./landlord/bot";
 import type { MonoState } from "./landlord/engine";
@@ -308,6 +310,51 @@ export const hexhavenPatch = internalMutation({
     assertTestDeployment();
     const m = (await ctx.db.get(id))!;
     await ctx.db.patch(id, { state: { ...(m.state as HexState), ...state } });
+  },
+});
+
+export const wordleWord = internalQuery({
+  args: { id: v.id("matches") },
+  handler: async (ctx, { id }) => {
+    assertTestDeployment();
+    const m = (await ctx.db.get(id))!;
+    const row = await ctx.db
+      .query("secrets")
+      .withIndex("by_match_user", (q) => q.eq("matchId", id).eq("userId", undefined))
+      .unique();
+    return (row?.data.words as string[])[(m.state as WordleState).round];
+  },
+});
+
+export const wordleGuessAs = internalMutation({
+  args: { id: v.id("matches"), userId: v.id("users"), word: v.string() },
+  handler: async (ctx, { id, userId, word }) => {
+    assertTestDeployment();
+    const m = (await ctx.db.get(id))!;
+    const s = m.state as WordleState;
+    const seat = m.players.findIndex((p) => p.userId === userId);
+    return await wordleGuess(ctx, id, word, s.round, s.players[seat].rows, userId);
+  },
+});
+
+export const wordlePickAs = internalMutation({
+  args: { id: v.id("matches"), userId: v.id("users"), item: v.union(v.string(), v.null()), target: v.optional(v.number()) },
+  handler: async (ctx, { id, userId, item, target }) => {
+    assertTestDeployment();
+    const m = (await ctx.db.get(id))!;
+    const pick = item && isItem(item) ? { item, target: target ?? -1 } : null;
+    await wordlePick(ctx, id, (m.state as WordleState).round, pick, userId);
+  },
+});
+
+export const wordlePatch = internalMutation({
+  args: { id: v.id("matches"), players: v.optional(v.any()), stock: v.optional(v.any()) },
+  handler: async (ctx, { id, players, stock }) => {
+    assertTestDeployment();
+    const m = (await ctx.db.get(id))!;
+    const s = m.state as WordleState;
+    const merged = s.players.map((p, i) => ({ ...p, ...(players?.[i] ?? {}) }));
+    await ctx.db.patch(id, { state: { ...s, players: merged, stock: stock ?? s.stock } });
   },
 });
 

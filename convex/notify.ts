@@ -3,6 +3,7 @@ import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { ONLINE_WINDOW_MS } from "./presenceConfig";
 import { canonicalGamePath, matchPath, pushGamePath } from "./modes";
+import { awaits } from "./lib/seats";
 
 export type Push = { title: string; body: string; url: string; tag?: string };
 
@@ -40,7 +41,7 @@ export async function badgeCount(ctx: MutationCtx, userId: Id<"users">) {
     .query("matches")
     .withIndex("by_status", (q) => q.eq("status", "waiting"))
     .collect();
-  const myTurn = active.filter((m) => m.turn === userId).length;
+  const myTurn = active.filter((m) => awaits(m, userId)).length;
   const invites = waiting.filter((m) => m.invited.includes(userId) && !m.players.some((p) => p.userId === userId)).length;
   return myTurn + invites;
 }

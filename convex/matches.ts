@@ -24,7 +24,7 @@ import { isTestUser, notify, notifyMatch } from "./notify";
 import { placesOf, recordResult } from "./ratings";
 import { hooksFor } from "./games";
 import { DEFAULT_PROFILE } from "./profileOptions";
-import { isPlayer, loadMatch, opponentsOf, requireUser } from "./lib/seats";
+import { awaits, isPlayer, loadMatch, opponentsOf, requireUser } from "./lib/seats";
 import { displayName, namesOf } from "./lib/people";
 import { scheduleReminder } from "./lib/turns";
 
@@ -95,7 +95,15 @@ async function start(ctx: MutationCtx, match: Doc<"matches">, seating: "shuffle"
 
 export async function finish(ctx: MutationCtx, match: Doc<"matches">, result: NonNullable<Doc<"matches">["result"]>) {
   if (match.status !== "active") return;
-  const ended = { ...match, status: "finished" as const, result, endedAt: Date.now(), drawOffer: undefined, turn: undefined };
+  const ended = {
+    ...match,
+    status: "finished" as const,
+    result,
+    endedAt: Date.now(),
+    drawOffer: undefined,
+    turn: undefined,
+    waitingOn: undefined,
+  };
   const ratingChanges = await recordResult(ctx, ended);
   await ctx.db.patch(match._id, {
     status: "finished",
@@ -103,6 +111,7 @@ export async function finish(ctx: MutationCtx, match: Doc<"matches">, result: No
     endedAt: ended.endedAt,
     drawOffer: undefined,
     turn: undefined,
+    waitingOn: undefined,
     ratingChanges,
     lastActivityAt: ended.endedAt,
   });
@@ -619,7 +628,7 @@ export const attention = query({
       .withIndex("by_status", (q) => q.eq("status", "waiting"))
       .collect();
     return {
-      myTurn: active.filter((m) => m.turn === userId).length,
+      myTurn: active.filter((m) => awaits(m, userId)).length,
       invites: waiting.filter((m) => m.invited.includes(userId) && !isPlayer(m, userId)).length,
     };
   },
@@ -644,9 +653,9 @@ export const inbox = query({
     const realtime = (m: Doc<"matches">) => modeOf(m)?.kind === "realtime";
     return {
       invites: await views(waiting.filter((m) => m.invited.includes(userId) && !isPlayer(m, userId))),
-      myTurn: await views(mineActive.filter((m) => !realtime(m) && m.turn === userId)),
+      myTurn: await views(mineActive.filter((m) => !realtime(m) && awaits(m, userId))),
       live: await views(mineActive.filter(realtime)),
-      theirTurn: await views(mineActive.filter((m) => !realtime(m) && m.turn !== userId)),
+      theirTurn: await views(mineActive.filter((m) => !realtime(m) && !awaits(m, userId))),
       open: await views(waiting.filter((m) => !m.invited.includes(userId) && canJoin(m, userId))),
       waiting: await views(waiting.filter((m) => isPlayer(m, userId))),
       watch: await views(active.filter((m) => !isPlayer(m, userId))),

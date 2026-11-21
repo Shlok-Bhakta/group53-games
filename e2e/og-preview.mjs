@@ -106,6 +106,21 @@ await s4.client.mutation(anyApi.matches.queue, { mode: "hexhaven:classic" });
 await a.client.mutation(anyApi.matches.startGame, { id: hid });
 for (let i = 0; i < 8; i++) await admin.mutation(anyApi.testing.hexhavenBots, { id: hid, steps: 20 });
 
+const wid = await a.client.mutation(anyApi.matches.queue, { mode: "wordle:classic" });
+await c.client.mutation(anyApi.matches.queue, { mode: "wordle:classic" });
+await s4.client.mutation(anyApi.matches.queue, { mode: "wordle:classic" });
+await a.client.mutation(anyApi.matches.startGame, { id: wid });
+for (const [who, words] of [
+  [a, ["pious", "crane"]],
+  [c, ["ghost", "brick", "flame"]],
+  [s4, ["shard"]],
+]) {
+  const answer = await admin.query(anyApi.testing.wordleWord, { id: wid });
+  for (const w of [...words.filter((x) => x !== answer), answer])
+    await admin.mutation(anyApi.testing.wordleGuessAs, { id: wid, userId: who.userId, word: w });
+  await admin.mutation(anyApi.testing.wordlePickAs, { id: wid, userId: who.userId, item: null });
+}
+
 const day = Date.parse("2026-10-30T08:00:00Z");
 const walk = (base, k) =>
   Array.from({ length: 16 * 60 }, (_, i) => [
@@ -208,6 +223,9 @@ try {
     "e2e/.state/og-hexhaven.png",
     Buffer.from(await (await fetch("http://127.0.0.1:8788/og/image/hexhaven.png")).arrayBuffer()),
   );
+  const htmlW = await (await fetch(`http://127.0.0.1:8788/wordle/${wid}`)).text();
+  const imgW = htmlW.match(/og\/match\/[a-z0-9]+\.png\?v=[a-z0-9]+/)[0];
+  writeFileSync("e2e/.state/og-wordle-match.png", Buffer.from(await (await fetch(`http://127.0.0.1:8788/${imgW}`)).arrayBuffer()));
   writeFileSync(
     "e2e/.state/og-landlord.png",
     Buffer.from(await (await fetch("http://127.0.0.1:8788/og/image/landlord.png")).arrayBuffer()),

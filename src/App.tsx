@@ -4,7 +4,6 @@ import { Authenticated, AuthLoading, Unauthenticated, useQuery } from "convex/re
 import { AnimatePresence, MotionConfig } from "motion/react";
 import { canonicalGamePath } from "../convex/modes";
 import { api } from "../convex/_generated/api";
-import { Wordle } from "./games/wordle/Wordle";
 import { Daily, DailyHistory } from "./games/daily/Daily";
 import { GAME_UI } from "./games";
 import { HostedGame } from "./games/HostedGame";
@@ -109,7 +108,6 @@ function SignedIn() {
                 <Route path="/crew" element={<Crew />} />
                 <Route path="/you" element={<You />} />
                 <Route path="/settings" element={<Navigate to="/you" replace />} />
-                <Route path="/wordle" element={<Wordle />} />
                 <Route
                   path="/daily"
                   element={

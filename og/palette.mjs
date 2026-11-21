@@ -106,3 +106,5 @@ export const GOLF = {
 };
 
 export const STONKS = { up: "#5fae57", down: "#e5484d", previousClose: "#cfe9dd" };
+
+export const WORDLE = { board: "#123b2d", played: "#3c5a4e", empty: "#1c4a3a" };

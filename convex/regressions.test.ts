@@ -208,3 +208,12 @@ describe("per-game tables", () => {
     });
   });
 });
+
+test("one game's secret query never hands back my secret from another game", async () => {
+  const t = setup();
+  const { id, seats } = await game(t, "wordle:classic", 2);
+  await seats[0].as.mutation(api.wordle.guess, { id, word: "pious", round: 0, row: 0 });
+  expect(await seats[0].as.query(api.poker.cards, { id })).toBeNull();
+  expect(await seats[0].as.query(api.hexhaven.cards, { id })).toBeNull();
+  expect(await seats[0].as.query(api.scrabble.rack, { id })).toBeNull();
+});
