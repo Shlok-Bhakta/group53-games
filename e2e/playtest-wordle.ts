@@ -121,7 +121,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url ?? "/", `http://127.0.0.1:${PORT}`);
     if (url.pathname === "/status") return send(200, await status());
-    const m = url.pathname.match(/^\/p\/([^/]+)(?:\/(wait|tap|type|shot))?$/);
+    const m = url.pathname.match(/^\/p\/([^/]+)(?:\/(wait|tap|type|key|shot))?$/);
     const name = m && decodeURIComponent(m[1]);
     if (!name || !seats.has(name)) return send(404, { error: `No player like that. Players: ${[...seats.keys()].join(", ")}` });
     const s = seats.get(name)!;
@@ -161,6 +161,11 @@ const server = http.createServer(async (req, res) => {
       if (count === 0) return send(400, { error: `Nothing on screen with role ${role} and name "${label}".`, ...(await screen(name)) });
       await target.first().click({ timeout: 5000 });
       return send(200, await screen(name, { messages: await toasts(s.page) }));
+    }
+    if (m![2] === "key" && req.method === "POST") {
+      const { key = "Escape" } = JSON.parse((await body(req)) || "{}");
+      await s.page.keyboard.press(String(key));
+      return send(200, await screen(name));
     }
     if (m![2] === "shot") {
       const path = `/tmp/playtest-${name}-${Date.now()}.png`;

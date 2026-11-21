@@ -98,7 +98,7 @@ export function ShopSheet({
           {cost > 0 && <span className="text-muted-foreground">of {me.coins}</span>}
         </span>
         <span className="text-footnote text-muted-foreground">
-          Hand {MAX_HAND - handFree}/{MAX_HAND} · you shop {ordinal(place)} of {alive(state).length}
+          You shop {ordinal(place)} of {alive(state).length}, fewest coins first
         </span>
       </div>
       {lostNames.length > 0 && !me.picked && (
@@ -149,7 +149,10 @@ export function ShopSheet({
     <Sheet open={open} onClose={onClose} title="Shop" closable pinned={pinned} bodyClassName="pt-3">
       {GROUPS.map((g) => (
         <section key={g.title} className="flex flex-col gap-2" aria-label={g.title}>
-          <h3 className="font-display text-heading">{g.title}</h3>
+          <h3 className="font-display text-heading">
+            {g.title}
+            {!g.target && <span className="text-muted-foreground">{` ${MAX_HAND - handFree}/${MAX_HAND}`}</span>}
+          </h3>
           {ITEM_KEYS.filter((k) => ITEMS[k].target === g.target).map((k) => {
             const def = ITEMS[k];
             const stock = left[k] ?? 0;

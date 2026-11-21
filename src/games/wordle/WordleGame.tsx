@@ -60,7 +60,8 @@ export default function WordleGame({ match, meId }: { match: MatchView; meId: Id
   const names = (i: number) => (i === seat ? "you" : (match.players[i]?.name ?? "someone"));
   useLive(match, state, seat);
 
-  const top = <TopLine state={state} seat={seat} onLog={() => setSheet("log")} />;
+  const spending = me?.picked || sheet === "shop" ? cartCost(view?.cart ?? []) : 0;
+  const top = <TopLine state={state} seat={seat} spending={spending} onLog={() => setSheet("log")} />;
   const players = <Players match={match} state={state} seat={seat} view={view} onPlayer={setPlayer} />;
   const play = usePlay(match, state, seat, view, () => setSheet("shop"));
   const dock = match.status === "finished" ? <Result match={match} meId={meId} /> : play.dock;
@@ -325,7 +326,9 @@ function Done({
           icon={<StorefrontIcon weight="fill" />}
         >
           <span className="min-w-0 truncate">{pickText}</span>
-          <Coins n={me.coins - cartCost(view.cart)} className="ml-auto" />
+          <span className="ml-auto text-callout font-normal text-muted-foreground">
+            <Coins n={me.coins - cartCost(view.cart)} className="text-foreground" /> left
+          </span>
         </Button>
       ) : (
         <WaitingLine match={match} waiting={waiting} last />
@@ -403,7 +406,7 @@ function Incoming({ match, state, seat }: { match: MatchView; state: WordleState
 
 const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
 
-function TopLine({ state, seat, onLog }: { state: WordleState; seat: number; onLog: () => void }) {
+function TopLine({ state, seat, spending, onLog }: { state: WordleState; seat: number; spending: number; onLog: () => void }) {
   const me = seat >= 0 ? state.players[seat] : null;
   const word = state.over ? state.history.at(-1)?.word : null;
   return (
@@ -415,7 +418,16 @@ function TopLine({ state, seat, onLog }: { state: WordleState; seat: number; onL
         <span>First to {state.rules.goal}</span>
       </p>
       <div className="flex items-center gap-2">
-        {me && <Coins n={me.coins} className="text-callout" />}
+        {me && (
+          <span
+            className="flex items-center gap-1 text-callout"
+            data-coins={me.coins}
+            data-after-shop={spending ? me.coins - spending : undefined}
+          >
+            <Coins n={me.coins} />
+            {spending > 0 && <span className="text-footnote text-muted-foreground">{`→ ${me.coins - spending} after the shop`}</span>}
+          </span>
+        )}
         <Button variant="ghost" size="sm" className="-mr-2 gap-1 text-muted-foreground" onClick={onLog} disabled={!state.history.length}>
           Log <CaretRightIcon weight="bold" />
         </Button>
