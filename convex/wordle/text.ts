@@ -6,6 +6,7 @@ const VERB: Record<string, string> = {
   jam: "jammed",
   pickpocket: "pickpocketed",
   dark: "blacked out",
+  tax: "taxed",
 };
 
 export function buyLine(b: Buy, name: (seat: number) => string): string {
@@ -26,8 +27,8 @@ export function hitsOn(buys: Buy[], seat: number) {
 export function roundPush(s: WordleState, seat: number, buys: Buy[], names: string[]) {
   const name = (i: number) => (i === seat ? "you" : names[i]);
   const lines = hitsOn(buys, seat).map((b) => buyLine(b, name));
-  const mine = buys.find((b) => b.seat === seat && !b.got);
-  if (mine) lines.push(`${ITEMS[mine.item].name} sold out before your turn to buy`);
+  const missed = [...new Set(buys.filter((b) => b.seat === seat && !b.got).map((b) => ITEMS[b.item].name))];
+  if (missed.length) lines.push(`${missed.join(" and ")} sold out before your turn to buy`);
   const body = lines.length ? `${cap(lines.join(". "))}.` : `You've solved ${s.players[seat].solved} of ${s.rules.goal}.`;
   return { title: `Word ${s.round + 1} is up`, body };
 }
