@@ -197,7 +197,7 @@ export function ShopSheet({
                     <span className="text-caption font-normal text-muted-foreground">{soldOut ? "Sold out" : `${free} left`}</span>
                   </span>
                 </Button>
-                {aiming === k && (
+                {aiming === k && !off && (
                   <div className="grid grid-cols-4 gap-2" role="group" aria-label={`Throw ${def.name} at`}>
                     {targets.map((t) => {
                       const p = match.players[t];

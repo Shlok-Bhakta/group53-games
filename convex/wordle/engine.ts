@@ -260,7 +260,9 @@ export function cantPick(s: WordleState, seat: number, cart: Cart, leftFor: Left
   return null;
 }
 
-export function claimedAhead(s: WordleState, mines: Mine[], seat: number) {
+function claimedAhead(s: WordleState, mines0: Mine[], seat: number) {
+  const mines = structuredClone(mines0);
+  reconcile(structuredClone(s), mines);
   const claimed = new Map<ItemKey, number>();
   for (const i of buyOrder(s)) {
     if (i === seat) break;

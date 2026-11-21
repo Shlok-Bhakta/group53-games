@@ -245,8 +245,8 @@ describe("the shop", () => {
     t.s.players[1].coins = ITEMS.fog.price - 1;
     t.mine[1] = { ...t.mine[1], pick: { item: "fog", target: 2 } };
     t.s.players[1].picked = true;
-    expect(buy(t, 2, null)).toEqual([{ seat: 1, lost: ["fog"] }]);
-    expect(leftForSeat(t.s, t.mine, 0).fog).toBe(1);
+    expect(leftForSeat(t.s, t.mine, 2).fog, "a pick they can't pay for holds nothing").toBe(1);
+    expect(buy(t, 2, "fog", 0)).toEqual([{ seat: 1, lost: ["fog"] }]);
     expect(waitingOn(t.s)).toEqual([0, 1]);
   });
 
