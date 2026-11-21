@@ -55,6 +55,16 @@ const SCRABBLE: Setting[] = [
     default: 0,
   },
   {
+    key: "words",
+    label: "Word list",
+    short: "{} words",
+    options: [
+      { value: 0, label: "Standard" },
+      { value: 1, label: "Expanded" },
+    ],
+    default: 0,
+  },
+  {
     key: "rounds",
     label: "Rounds",
     short: "{} rounds",

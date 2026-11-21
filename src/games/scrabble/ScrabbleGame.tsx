@@ -83,7 +83,13 @@ export function ScrabbleGame({ match, meId }: { match: MatchView; meId: Id<"user
   });
   const [hop, setHop] = useState(0);
 
-  const { evaluation, bad, checking, tone, bubble, shake, setShake } = usePreview({ placed, rack, tiles: state.tiles, rules });
+  const { evaluation, bad, checking, tone, bubble, shake, setShake } = usePreview({
+    id: match._id,
+    placed,
+    rack,
+    tiles: state.tiles,
+    rules,
+  });
 
   const last = state.moves.at(-1);
   const fresh = useMemo(

@@ -100,10 +100,13 @@ test.describe("Scrabble", () => {
     await pa.getByRole("button", { name: "Settings" }).click();
     await pa.getByRole("radiogroup", { name: "Board" }).getByRole("radio", { name: "21×21" }).click();
     await pa.getByRole("radiogroup", { name: "Rules" }).getByRole("radio", { name: "Letter League" }).click();
-    await expect(pb.getByRole("list", { name: "Settings" })).toHaveText(/21×21 board.*Letter League rules/);
+    await pa.getByRole("radiogroup", { name: "Word list" }).getByRole("radio", { name: "Expanded" }).click();
+    await expect(pb.getByRole("list", { name: "Settings" })).toHaveText(/21×21 board.*Letter League rules.*Expanded words/);
     await pa.getByRole("button", { name: "Start with 2" }).click();
     await expect(pb.getByRole("group", { name: "Board" })).toBeVisible();
-    expect((await getMatch(id)).state.size).toBe(21);
+    const match = await getMatch(id);
+    expect(match.state.size).toBe(21);
+    expect(match.settings.words).toBe(1);
   });
 
   test("two phones play words, plans survive a reload, and the other phone sees it all live", async ({ phones }) => {

@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import { evaluate, type Placed, type Placement, type Rules, type Tile } from "../../../convex/scrabble/engine";
 import { sfx } from "@/sound";
 
 export function usePreview({
+  id,
   placed,
   rack,
   tiles,
   rules,
 }: {
+  id: Id<"matches">;
   placed: Placement[];
   rack: Tile[] | null | undefined;
   tiles: Placed[];
@@ -17,7 +20,7 @@ export function usePreview({
 }) {
   const evaluation = useMemo(() => (placed.length && rack ? evaluate(tiles, placed, rack, rules) : null), [placed, rack, tiles, rules]);
   const words = evaluation?.ok ? evaluation.words.map((w) => w.word) : [];
-  const unknown = useQuery(api.scrabble.check, words.length ? { words } : "skip");
+  const unknown = useQuery(api.scrabble.check, words.length ? { words, id } : "skip");
   const checking = words.length > 0 && unknown === undefined;
   const bad = unknown?.filter((w) => words.includes(w)) ?? [];
   const tone: "idle" | "ok" | "bad" = !evaluation ? "idle" : !evaluation.ok || bad.length ? "bad" : checking ? "idle" : "ok";

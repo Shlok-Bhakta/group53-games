@@ -196,6 +196,20 @@ describe("playing", () => {
     expect((await stateOf(t, id)).tiles).toEqual([]);
   });
 
+  test("the expanded word list takes words the standard one refuses", async () => {
+    const t = setup();
+    const standard = await game(t, 2);
+    await setRack(t, standard.id, standard.seats[0].userId, "BLOGXYZ");
+    await expect(standard.seats[0].as.mutation(api.scrabble.play, { id: standard.id, tiles: lay("BLOG", 5, 7) })).rejects.toThrow(
+      "BLOG isn't in the dictionary.",
+    );
+    const t2 = setup();
+    const { id, seats } = await game(t2, 2, "scrabble:classic", { words: 1 });
+    await setRack(t2, id, seats[0].userId, "BLOGXYZ");
+    await seats[0].as.mutation(api.scrabble.play, { id, tiles: lay("BLOG", 5, 7) });
+    expect((await stateOf(t2, id)).moves[0].words?.map((w) => w.word)).toEqual(["BLOG"]);
+  });
+
   test("a full round moves the round counter, and a round limit ends the game", async () => {
     const t = setup();
     const { id, seats } = await game(t, 2, "scrabble:classic", { rounds: 5 });
@@ -316,6 +330,16 @@ describe("plans", () => {
     const t = setup();
     const [a] = await crew(t, 1);
     expect(await a.as.query(api.scrabble.check, { words: ["CAT", "ZORP", "qi"] })).toEqual(["ZORP"]);
+  });
+
+  test("the dictionary check follows the match's word list", async () => {
+    const t = setup();
+    const standard = await game(t, 2);
+    const words = ["BLOG", "ZORP"];
+    expect(await standard.seats[0].as.query(api.scrabble.check, { words, id: standard.id })).toEqual(["BLOG", "ZORP"]);
+    const t2 = setup();
+    const expanded = await game(t2, 2, "scrabble:classic", { words: 1 });
+    expect(await expanded.seats[0].as.query(api.scrabble.check, { words, id: expanded.id })).toEqual(["ZORP"]);
   });
 });
 

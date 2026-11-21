@@ -1,13 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-src=$(mktemp)
-curl -sSL https://raw.githubusercontent.com/dolph/dictionary/master/enable1.txt -o "$src"
+enable=$(mktemp)
+wordnik=$(mktemp)
+base=$(mktemp)
+license=$(mktemp)
+curl -fsSL https://raw.githubusercontent.com/dolph/dictionary/master/enable1.txt -o "$enable"
+curl -fsSL https://raw.githubusercontent.com/wordnik/wordlist/main/wordlist-20210729.txt -o "$wordnik"
+curl -fsSL https://raw.githubusercontent.com/wordnik/wordlist/main/LICENSE -o "$license"
+(tr -d '\r' < "$enable"; printf 'qi\nza\nok\new\n') | awk 'length($0)<=21' | LC_ALL=C sort -u > "$base"
+joined() { tr '\n' '|' | sed 's/|$//' | sed 's/|/\\n/g'; }
 {
-  printf '// The word list: ENABLE (public domain, the list Words With Friends started from), plus qi, za, ok and ew.\n'
-  printf '// Lowercase, one word per line, up to 21 letters (the big board). Server-only: never import it from src/.\n'
+  printf '// The word lists, lowercase, one word per line, up to 21 letters (the big board). Server-only: never import it from src/.\n'
+  printf '// WORDS: ENABLE (public domain, the list Words With Friends started from), plus qi, za, ok and ew.\n'
+  printf '// EXPANDED: the Wordnik word list (MIT, wordlist-20210729) words not in WORDS, for the Expanded setting.\n'
+  printf '// The Wordnik list is used under its license:\n'
+  tr -d '\r' < "$license" | sed 's|^|// |; s| $||'
   printf '// Regenerate with scripts/gen-words.sh.\nexport const WORDS = "'
-  (tr -d '\r' < "$src"; printf 'qi\nza\nok\new\n') | awk 'length($0)<=21' | sort -u | tr '\n' '|' | sed 's/|$//' | sed 's/|/\\n/g'
+  joined < "$base"
+  printf '";\nexport const EXPANDED = "'
+  tr -d '"\r' < "$wordnik" | grep -E '^[a-z]+$' | awk 'length($0)<=21' | LC_ALL=C sort -u | LC_ALL=C comm -23 - "$base" | joined
   printf '";\n'
 } > convex/scrabble/words.ts
-rm "$src"
+rm "$enable" "$wordnik" "$base" "$license"
