@@ -7,7 +7,7 @@ export const MAX_ROWS = 8;
 export const START_COINS = 5;
 export const BASE_PAY = 1;
 export const SOLVE_PAY = 3;
-export const STEAL = 6;
+export const STEAL = 5;
 export const JAM_TURNS = 2;
 export const FOG_ROWS = 2;
 export const IN_STOCK_AT_LEAST = 6;
@@ -29,7 +29,7 @@ export const ITEMS: Record<ItemKey, ItemDef> = {
   fuse: { name: "Short fuse", price: 14, target: true, rare: true, text: "One guess fewer on their next word." },
   clue: {
     name: "Clue",
-    price: 6,
+    price: 5,
     target: false,
     play: true,
     rush: true,

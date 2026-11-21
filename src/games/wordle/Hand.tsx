@@ -22,6 +22,7 @@ export function Hand({
   clues,
   playing,
   lastRow,
+  payday,
 }: {
   match: MatchView;
   state: WordleState;
@@ -30,6 +31,7 @@ export function Hand({
   clues: string;
   playing: boolean;
   lastRow: boolean;
+  payday: boolean;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -51,6 +53,15 @@ export function Hand({
           {ITEMS[k].name}
         </Button>
       ))}
+      {payday && (
+        <span
+          className="flex h-8 items-center gap-1 rounded-full bg-[var(--tile-yellow)] px-2.5 text-footnote font-semibold text-[var(--tile-yellow-ink)]"
+          data-payday=""
+        >
+          <ItemIcon item="payday" size={16} />
+          Payday on
+        </span>
+      )}
       {clues && (
         <span className="ml-auto flex items-center gap-1 text-footnote text-muted-foreground" data-clues={clues}>
           In it:

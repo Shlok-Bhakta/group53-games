@@ -261,6 +261,7 @@ function usePlay(match: MatchView, state: WordleState, seat: number, loaded: Vie
           seat={seat}
           hand={view.hand}
           clues={view.clues}
+          payday={me.effects.some((e) => e.item === "payday" && e.by === seat)}
           playing={typing}
           lastRow={typing && me.rows === me.max - 1}
         />
@@ -304,10 +305,12 @@ function Done({
       <div className="flex items-center justify-between gap-2 text-callout">
         <span className="flex items-center gap-1.5 font-semibold">
           {me.won ? <CheckIcon weight="bold" className="text-[var(--tile-green)]" /> : <XIcon weight="bold" className="text-destructive" />}
-          {me.won ? `Solved in ${me.rows}` : "Missed it"}
-          {pockets.map((e, k) => (
-            <span key={k} className="font-normal text-muted-foreground">{`, ${match.players[e.by]?.name} took ${e.took}`}</span>
-          ))}
+          {`${me.won ? `Solved in ${me.rows}` : "Missed it"}`}
+          {pockets.length > 0 && (
+            <span className="font-normal text-muted-foreground">
+              {pockets.map((e) => `${match.players[e.by]?.name} took ${e.took}`).join(", ")}
+            </span>
+          )}
         </span>
         <motion.span
           initial={{ scale: 0.6, opacity: 0 }}
@@ -356,7 +359,7 @@ function WaitingLine({ match, waiting, last }: { match: MatchView; waiting: numb
     <p
       className={cn("flex items-center justify-center gap-2 text-center text-footnote text-muted-foreground", last && "h-14 text-callout")}
     >
-      {last && "Last word. "}
+      {last && "Last word: most words, then fewest guesses. "}
       {text}
       {here && <ThinkingDots />}
     </p>
@@ -425,7 +428,7 @@ function TopLine({ state, seat, spending, onLog }: { state: WordleState; seat: n
         <span className="font-semibold text-foreground" data-round={state.round}>
           {word ? `It was ${word.toUpperCase()}` : `Word ${state.round + 1}`}
         </span>
-        <span>First to {state.rules.goal}</span>
+        <span>{state.rules.goal} words to win</span>
       </p>
       <div className="flex items-center gap-2">
         {me && (
