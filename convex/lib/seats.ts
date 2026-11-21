@@ -18,6 +18,8 @@ export async function loadMatch(ctx: QueryCtx, id: Id<"matches">) {
 export const SEAT_COLORS = ["red", "blue", "yellow", "green", "purple", "orange", "teal", "pink"] as const;
 
 export const seatOf = (match: Doc<"matches">, userId: Id<"users">) => match.players.findIndex((p) => p.userId === userId);
+export const awaits = (match: Pick<Doc<"matches">, "turn" | "waitingOn">, userId: Id<"users">) =>
+  match.turn === userId || (match.waitingOn?.includes(userId) ?? false);
 export const isPlayer = (match: Doc<"matches">, userId: Id<"users">) => match.players.some((p) => p.userId === userId);
 export const opponentsOf = (match: Doc<"matches">, userId: Id<"users">) =>
   match.players.filter((p) => p.userId !== userId).map((p) => p.userId);

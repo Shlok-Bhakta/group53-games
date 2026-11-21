@@ -99,6 +99,13 @@ import type * as stonks_trade from "../stonks/trade.js";
 import type * as testing from "../testing.js";
 import type * as time from "../time.js";
 import type * as users from "../users.js";
+import type * as wordle from "../wordle.js";
+import type * as wordle_answers from "../wordle/answers.js";
+import type * as wordle_engine from "../wordle/engine.js";
+import type * as wordle_modes from "../wordle/modes.js";
+import type * as wordle_preview from "../wordle/preview.js";
+import type * as wordle_text from "../wordle/text.js";
+import type * as wordle_words from "../wordle/words.js";
 
 import type {
   ApiFromModules,
@@ -198,6 +205,13 @@ declare const fullApi: ApiFromModules<{
   testing: typeof testing;
   time: typeof time;
   users: typeof users;
+  wordle: typeof wordle;
+  "wordle/answers": typeof wordle_answers;
+  "wordle/engine": typeof wordle_engine;
+  "wordle/modes": typeof wordle_modes;
+  "wordle/preview": typeof wordle_preview;
+  "wordle/text": typeof wordle_text;
+  "wordle/words": typeof wordle_words;
 }>;
 
 /**

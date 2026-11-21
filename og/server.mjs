@@ -23,7 +23,7 @@ const CARD_CACHE_MS = 5 * 60_000;
 const convex = new ConvexHttpClient(process.env.CONVEX_URL ?? "http://convex:3210");
 convex.setAdminAuth(readFileSync(process.env.ADMIN_KEY_FILE ?? "/run/secrets/admin_key", "utf8").trim());
 
-const MATCH_GAMES = { chess, scrabble, poker, golf, landlord, hexhaven };
+const MATCH_GAMES = { chess, scrabble, poker, golf, landlord, hexhaven, wordle };
 const PAGE_GAMES = [wordle, chess, scrabble, poker, golf, landlord, hexhaven, stonks, daily];
 const LIVE_PAGES = [stonks];
 
