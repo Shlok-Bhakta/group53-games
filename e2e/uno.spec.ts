@@ -1,0 +1,178 @@
+import type { Page } from "@playwright/test";
+import { anyApi } from "convex/server";
+import {
+  admin,
+  createPlayer,
+  expect,
+  fillLobby,
+  getMatch,
+  holdsStill,
+  openLobby,
+  ready,
+  readyForShot,
+  test,
+  type Phones,
+} from "./fixtures";
+import { SAFE_LANDSCAPE, SAFE_PORTRAIT, expectFitsScreen, rotate, simulateSafeAreas } from "./landscape";
+
+type Uno = { seq: number; turn: number; top: string; color: string; counts: number[]; forgot: number | null; hand: number };
+const stateOf = async (id: string) => (await getMatch(id)).state as Uno;
+const SHOTS = !!process.env.SCREENS;
+const shot = async (page: Page, name: string) => {
+  if (!SHOTS) return;
+  await readyForShot(page);
+  await page.screenshot({ path: `e2e/.state/screens/uno-${name}.png` });
+};
+
+async function startGame(phones: Phones, settings: Record<string, string> = {}, names = ["Shlok", "Chris"], mode = "classic") {
+  const players = await Promise.all(names.map((n) => createPlayer(n)));
+  const pages = await Promise.all(players.map((p) => phones.open({ player: p, push: "on" })));
+  const id = await openLobby(pages[0], "uno", mode, settings);
+  await fillLobby(pages[0], pages.slice(1));
+  for (const p of pages) await expect(p.getByRole("group", { name: "Your hand" })).toBeVisible({ timeout: 20_000 });
+  const m = await getMatch(id);
+  const seatOf = (i: number) => m.players.findIndex((x: { userId: string }) => x.userId === players[i].userId);
+  return { id, pages, players, seatOf };
+}
+
+async function deal(id: string, bySeat: Record<number, string[]>, top: string, turn: number, deck?: string[], patch?: object) {
+  const n = (await getMatch(id)).players.length;
+  const hands = Array.from({ length: n }, (_, i) => bySeat[i] ?? ["g9", "g8", "g7"]);
+  await admin().mutation(anyApi.testing.unoDeal, { id, hands, top, turn, deck, patch });
+}
+
+const hand = (page: Page) => page.getByRole("group", { name: "Your hand" });
+const card = (page: Page, c: string) => hand(page).locator(`[data-card="${c}"]`).first();
+const table = (page: Page) => page.locator("[data-top]");
+
+test("Uno has a card on Games and both modes have their house rules", async ({ phones }) => {
+  const page = await phones.open({ player: await createPlayer("Shlok"), push: "on" });
+  await page.goto("/games");
+  await expect(page.getByRole("heading", { name: "Uno" })).toBeVisible();
+  await page.goto("/uno/mode/classic");
+  await page.getByRole("button", { name: "Settings" }).click();
+  for (const group of [
+    "Starting hand",
+    "Decks",
+    "Stacking draws",
+    "Can't play?",
+    "7 swaps, 0 passes",
+    "Jump-in",
+    "Challenge a Wild Draw 4",
+    "Play to",
+  ])
+    await expect(page.getByRole("radiogroup", { name: group })).toBeVisible();
+  await ready(page);
+  await shot(page, "mode");
+  await page.goto("/uno/mode/nomercy");
+  await page.getByRole("button", { name: "Settings" }).click();
+  await expect(page.getByRole("radiogroup", { name: "Mercy rule" })).toBeVisible();
+  await ready(page);
+});
+
+test("two phones: plays land live, a wild picks its color, a forgotten UNO gets caught, going out ends it", async ({ phones }) => {
+  test.setTimeout(180_000);
+  const { id, pages, seatOf } = await startGame(phones);
+  const [pa, pb] = pages;
+  const [sa, sb] = [seatOf(0), seatOf(1)];
+  await deal(id, { [sa]: ["r5", "wW", "b2", "y7"], [sb]: ["b9", "g1", "g2"] }, "r9", sa, Array(40).fill("y3"));
+  await expect(pa.getByText("Your move")).toBeVisible();
+  await expect(card(pa, "b2")).not.toHaveAttribute("data-playable");
+  await card(pa, "b2").click();
+  await expect(pa.getByText("That doesn't match.")).toBeVisible();
+
+  await card(pa, "r5").click();
+  await expect(table(pb)).toHaveAttribute("data-top", "r5");
+  await expect(pb.locator(`[data-seat="${sa}"]`)).toHaveAttribute("data-count", "3");
+  await expect(pb.getByText("Your move")).toBeVisible();
+  await shot(pb, "playing");
+
+  await pb.getByRole("button", { name: "Draw", exact: true }).click();
+  await expect.poll(async () => (await stateOf(id)).turn).toBe(sa);
+  await expect(pa.locator(`[data-seat="${sb}"]`)).toHaveAttribute("data-count", "4");
+
+  await card(pa, "wW").click();
+  await expect(pa.getByRole("dialog", { name: "Pick a color" })).toBeVisible();
+  await shot(pa, "color");
+  await pa.getByRole("dialog").getByRole("button", { name: "Blue" }).click();
+  await expect(table(pb)).toHaveAttribute("data-color", "b");
+
+  await deal(id, { [sa]: ["b4", "b5"], [sb]: ["g1", "g2", "b9"] }, "b3", sa, Array(40).fill("y3"));
+  await card(pa, "b4").click();
+  await expect.poll(async () => (await stateOf(id)).forgot).toBe(sa);
+  await expect(pa.getByRole("button", { name: /Call UNO/ })).toBeVisible();
+  await pb.getByRole("button", { name: /^Catch/ }).click();
+  await expect.poll(async () => (await stateOf(id)).counts[sa]).toBe(3);
+  await expect(pa.locator("[data-last=catch]")).toHaveText(/caught you without UNO/);
+
+  await deal(id, { [sa]: ["b4", "b5"], [sb]: ["g1", "g2", "b9"] }, "b3", sa);
+  await pa.getByRole("button", { name: "UNO!" }).click();
+  await expect(pa.getByRole("button", { name: "UNO!" })).toHaveAttribute("aria-pressed", "true");
+  await card(pa, "b4").click();
+  await expect(pb.locator(`[data-seat="${sa}"]`)).toHaveAttribute("data-count", "1");
+  expect((await stateOf(id)).forgot).toBeNull();
+  await card(pb, "b9").click();
+  await expect(table(pa)).toHaveAttribute("data-top", "b9");
+  await card(pa, "b5").click();
+  await expect.poll(async () => (await getMatch(id)).status).toBe("finished");
+  for (const p of pages) await expect(p.getByRole("region", { name: "Result" })).toBeVisible();
+  await shot(pa, "result");
+});
+
+test("stacking and a Wild Draw 4 challenge on two phones", async ({ phones }) => {
+  test.setTimeout(150_000);
+  const { id, pages, seatOf } = await startGame(phones, { "Stacking draws": "Same or bigger" });
+  const [pa, pb] = pages;
+  const [sa, sb] = [seatOf(0), seatOf(1)];
+  await deal(id, { [sa]: ["rD2", "r1", "wW4"], [sb]: ["bD2", "g1", "g2"] }, "r9", sa, Array(40).fill("y3"));
+  await card(pa, "rD2").click();
+  await expect(pb.locator("[data-pending]")).toHaveAttribute("data-pending", "2");
+  await card(pb, "bD2").click();
+  await expect(pa.locator("[data-pending]")).toHaveAttribute("data-pending", "4");
+  await shot(pa, "stacked");
+  await card(pa, "wW4").click();
+  await pa.getByRole("dialog").getByRole("button", { name: "Green" }).click();
+  await expect(pb.locator("[data-pending]")).toHaveAttribute("data-pending", "8");
+  await pb.getByRole("button", { name: "Take 8" }).click();
+  await expect(pa.locator(`[data-seat="${sb}"]`)).toHaveAttribute("data-count", "10");
+
+  await deal(id, { [sa]: ["wW4", "r1", "g5"], [sb]: ["g1", "g2"] }, "r9", sa, Array(40).fill("y3"));
+  await card(pa, "wW4").click();
+  await pa.getByRole("dialog").getByRole("button", { name: "Blue" }).click();
+  await pb.getByRole("button", { name: "Challenge" }).click();
+  await expect(pa.locator(`[data-seat="${sa}"]`)).toHaveAttribute("data-count", "6");
+  await expect(pa.locator("[data-last=challenge]")).toHaveText(/bluffing/);
+});
+
+test("on its side: the table on the left, the hand and players on the right, all on screen", async ({ phones }) => {
+  test.setTimeout(120_000);
+  const { id, pages, seatOf } = await startGame(phones);
+  const [pa] = pages;
+  await deal(id, { [seatOf(0)]: ["r5", "r6", "b2", "y7", "g1", "g2", "g3", "y4", "y5"] }, "r9", seatOf(0));
+  await simulateSafeAreas(pa, SAFE_LANDSCAPE);
+  await rotate(pa, "landscape");
+  await expect(hand(pa)).toBeVisible();
+  await holdsStill(pa);
+  await expectFitsScreen(pa);
+  await shot(pa, "landscape");
+  const hand9 = ["r5", "r6", "b2", "y7", "g1", "g2", "g3", "y4", "y5"];
+  await deal(id, { [seatOf(0)]: hand9 }, "wWC", seatOf(0), undefined, { color: "r", pending: { kind: "roulette", by: seatOf(1) } });
+  await expect(pa.getByRole("group", { name: "Spin for" })).toBeVisible();
+  await holdsStill(pa);
+  await expectFitsScreen(pa);
+  await rotate(pa, "portrait");
+  await holdsStill(pa);
+  await expectFitsScreen(pa, SAFE_PORTRAIT);
+});
+
+test("uno-screens", async ({ phones }) => {
+  test.skip(!SHOTS, "Screenshots only");
+  test.setTimeout(180_000);
+  const { id, pages, seatOf } = await startGame(phones, {}, ["Shlok", "Chris", "Sam", "Alex"], "nomercy");
+  const [pa] = pages;
+  await deal(id, { [seatOf(0)]: ["rD4", "wW10", "wWC", "bSA", "gDA", "y7", "r0", "wWR4", "wW6", "b5", "bR"] }, "r9", seatOf(0));
+  await expect(card(pa, "wW10")).toBeVisible();
+  await shot(pa, "nomercy");
+  await pa.emulateMedia({ colorScheme: "light" });
+  await shot(pa, "nomercy-light");
+});

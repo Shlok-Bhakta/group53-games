@@ -108,3 +108,19 @@ export const GOLF = {
 export const STONKS = { up: "#5fae57", down: "#e5484d", previousClose: "#cfe9dd" };
 
 export const WORDLE = { board: "#123b2d", played: "#3c5a4e", empty: "#1c4a3a" };
+
+export const UNO = {
+  r: "#e0473f",
+  y: "#e9a90c",
+  g: "#2a9a57",
+  b: "#2f6bd6",
+  wild: "#24222b",
+  ink: "#fffdf8",
+  edge: "#fffdf8",
+  table: "radial-gradient(ellipse at 50% 42%, #3b3550 0%, #2a2539 60%, #1d1a28 100%)",
+  tableShadow: "inset 0 0 0 10px rgba(0,0,0,0.2), 0 18px 40px rgba(0,0,0,0.4)",
+  back: "#5b4bd6",
+  cardShadow: "0 6px 14px rgba(0,0,0,0.4)",
+  pill: "rgba(0,0,0,0.3)",
+  hit: "#e0473f",
+};

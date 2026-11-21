@@ -133,6 +133,11 @@
   --color-ll-chest: #4a8fd4;
   --color-ll-card-shade: #f2ecdf;
   --color-ll-die-shade: #efe9dc;
+  --color-uno-r: #e0473f;
+  --color-uno-y: #e9a90c;
+  --color-uno-g: #2a9a57;
+  --color-uno-b: #2f6bd6;
+  --color-uno-wild: #24222b;
 }
 
 @theme inline {
@@ -1081,6 +1086,59 @@
       0 0 0 2.5px var(--primary),
       0 3px 8px rgb(0 0 0 / 0.3);
   }
+  &.playing-card-uno {
+    --uno: var(--color-uno-wild);
+    background:
+      radial-gradient(ellipse 62% 44% at 50% 50%, rgb(255 255 255 / 0.2) 0 98%, transparent 100%),
+      var(--uno);
+    color: var(--color-paper);
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.3),
+      0 3px 6px rgb(0 0 0 / 0.12),
+      inset 0 0 0 max(1.5px, calc(var(--w) * 0.055)) var(--color-paper);
+  }
+  &.playing-card-uno[data-uno="r"] {
+    --uno: var(--color-uno-r);
+  }
+  &.playing-card-uno[data-uno="y"] {
+    --uno: var(--color-uno-y);
+  }
+  &.playing-card-uno[data-uno="g"] {
+    --uno: var(--color-uno-g);
+  }
+  &.playing-card-uno[data-uno="b"] {
+    --uno: var(--color-uno-b);
+  }
+  &.playing-card-uno[data-uno="w"] {
+    background:
+      radial-gradient(ellipse 62% 44% at 50% 50%, var(--color-uno-wild) 0 98%, transparent 100%),
+      linear-gradient(
+        135deg,
+        var(--color-uno-r) 0 25%,
+        var(--color-uno-y) 25% 50%,
+        var(--color-uno-g) 50% 75%,
+        var(--color-uno-b) 75%
+      );
+  }
+  &.playing-card-uno[data-dim="true"] {
+    opacity: 0.45;
+  }
+}
+@utility playing-card-glyph {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: calc(var(--w) * 0.46);
+  letter-spacing: -0.04em;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.35);
+}
+@utility playing-card-corner {
+  position: absolute;
+  left: 11%;
+  top: 8%;
+  font-size: calc(var(--w) * 0.2);
+  letter-spacing: -0.04em;
 }
 @utility playing-card-rank {
   position: absolute;

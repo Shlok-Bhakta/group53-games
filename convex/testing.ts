@@ -10,6 +10,9 @@ import type { HexState } from "./hexhaven/engine";
 import { addPlayer } from "./matches";
 import { guessAs as wordleGuess, pickAs as wordlePick } from "./wordle";
 import { isItem, type WordleState } from "./wordle/engine";
+import { moveAs as unoMove } from "./uno";
+import type { UnoState } from "./uno/engine";
+import { writeSecret } from "./lib/secrets";
 import { postResult } from "./daily";
 import { botMove, nextBotSeat } from "./landlord/bot";
 import type { MonoState } from "./landlord/engine";
@@ -362,6 +365,50 @@ export const wordlePatch = internalMutation({
     const s = m.state as WordleState;
     const merged = s.players.map((p, i) => ({ ...p, ...(players?.[i] ?? {}) }));
     await ctx.db.patch(id, { state: { ...s, players: merged, stock: stock ?? s.stock } });
+  },
+});
+
+export const unoDeal = internalMutation({
+  args: {
+    id: v.id("matches"),
+    hands: v.array(v.array(v.string())),
+    top: v.string(),
+    color: v.optional(v.string()),
+    turn: v.optional(v.number()),
+    deck: v.optional(v.array(v.string())),
+    patch: v.optional(v.any()),
+  },
+  handler: async (ctx, { id, hands, top, color, turn, deck, patch }) => {
+    assertTestDeployment();
+    const m = (await ctx.db.get(id))!;
+    const s = m.state as UnoState;
+    const pile = deck ?? Array<string>(60).fill("g9");
+    await writeSecret(ctx, id, undefined, { deck: pile, discard: [top], drawn: null, bluff: false });
+    for (const [i, p] of m.players.entries()) await writeSecret(ctx, id, p.userId, { cards: hands[i] ?? [], hand: s.hand, drawn: null });
+    const seat = turn ?? s.turn;
+    const state: UnoState = {
+      ...s,
+      top,
+      color: (color ?? top[0]) as UnoState["color"],
+      recent: [top],
+      counts: m.players.map((_, i) => hands[i]?.length ?? 0),
+      left: pile.length,
+      turn: seat,
+      pending: null,
+      drew: false,
+      forgot: null,
+      ...(patch ?? {}),
+    };
+    await ctx.db.patch(id, { state, turn: m.players[seat].userId });
+  },
+});
+
+export const unoMoveAs = internalMutation({
+  args: { id: v.id("matches"), userId: v.id("users"), action: v.any() },
+  handler: async (ctx, { id, userId, action }) => {
+    assertTestDeployment();
+    const m = (await ctx.db.get(id))!;
+    return await unoMove(ctx, id, (m.state as UnoState).seq, action, userId);
   },
 });
 
