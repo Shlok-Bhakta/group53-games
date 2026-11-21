@@ -35,10 +35,10 @@ async function startGame(phones: Phones, settings: Record<string, string> = {}, 
   return { id, pages, players, seatOf };
 }
 
-async function deal(id: string, bySeat: Record<number, string[]>, top: string, turn: number, deck?: string[]) {
+async function deal(id: string, bySeat: Record<number, string[]>, top: string, turn: number, deck?: string[], patch?: object) {
   const n = (await getMatch(id)).players.length;
   const hands = Array.from({ length: n }, (_, i) => bySeat[i] ?? ["g9", "g8", "g7"]);
-  await admin().mutation(anyApi.testing.unoDeal, { id, hands, top, turn, deck });
+  await admin().mutation(anyApi.testing.unoDeal, { id, hands, top, turn, deck, patch });
 }
 
 const hand = (page: Page) => page.getByRole("group", { name: "Your hand" });
@@ -155,6 +155,11 @@ test("on its side: the table on the left, the hand and players on the right, all
   await holdsStill(pa);
   await expectFitsScreen(pa);
   await shot(pa, "landscape");
+  const hand9 = ["r5", "r6", "b2", "y7", "g1", "g2", "g3", "y4", "y5"];
+  await deal(id, { [seatOf(0)]: hand9 }, "wWC", seatOf(0), undefined, { color: "r", pending: { kind: "roulette", by: seatOf(1) } });
+  await expect(pa.getByRole("group", { name: "Spin for" })).toBeVisible();
+  await holdsStill(pa);
+  await expectFitsScreen(pa);
   await rotate(pa, "portrait");
   await holdsStill(pa);
   await expectFitsScreen(pa, SAFE_PORTRAIT);

@@ -136,20 +136,20 @@ export function cantPlay(s: UnoState, seat: number, card: Card, hand: Card[], dr
   if (s.over) return "The game's over.";
   if (isOutOfHand(s, seat)) return "You're out of this hand.";
   if (!hand.includes(card)) return "You don't have that card.";
+  const finish = !s.rules.powerFinish && !isNumber(card) && goesOut(hand, card) ? "You can't go out on a power card." : null;
   if (seat !== s.turn) {
     if (!s.rules.jumpIn) return "It's not your turn.";
     if (s.pending || isWild(card) || card !== s.top) return "Only the exact same card can jump in.";
-    return null;
+    return finish;
   }
   if (s.pending?.kind === "roulette") return "Pick a color for the roulette first.";
   if (s.pending?.kind === "draw") {
-    if (stackable(s, card)) return null;
+    if (stackable(s, card)) return finish;
     return s.rules.stack ? "Stack a draw card or take them." : "Take the cards first.";
   }
   if (s.drew && card !== drawn) return "You can only play the card you just drew.";
   if (!matches(s, card)) return "That doesn't match.";
-  if (!s.rules.powerFinish && !isNumber(card) && goesOut(hand, card)) return "You can't go out on a power card.";
-  return null;
+  return finish;
 }
 
 export const playable = (s: UnoState, seat: number, hand: Card[], drawn: Card | null) =>
@@ -190,6 +190,24 @@ function checkMercy(t: Table, seat: number) {
   if (!s.rules.mercy || isOutOfHand(s, seat) || t.hidden.hands[seat].length < s.rules.mercy) return;
   log(s, { seat, kind: "mercy", n: t.hidden.hands[seat].length });
   knockOut(t, seat, "mercy");
+}
+
+const full = (t: Table, seat: number) => t.state.rules.mercy > 0 && t.hidden.hands[seat].length >= t.state.rules.mercy;
+
+function spin(t: Table, seat: number, color: Color, rng: Rng) {
+  const s = t.state;
+  let n = 0;
+  while (!full(t, seat)) {
+    const c = pull(t, rng);
+    if (!c) break;
+    t.hidden.hands[seat].push(c);
+    n++;
+    if (!isWild(c) && colorOf(c) === color) break;
+  }
+  s.counts[seat] = t.hidden.hands[seat].length;
+  s.color = color;
+  log(s, { seat, kind: "roulette", color, n });
+  checkMercy(t, seat);
 }
 
 function give(t: Table, seat: number, n: number, rng: Rng) {
@@ -303,6 +321,7 @@ function settle(t: Table, rng: Rng) {
   const winner = players.find((i) => s.counts[i] === 0) ?? (players.length === 1 ? players[0] : undefined);
   if (winner !== undefined) {
     if (s.pending?.kind === "draw" && s.turn !== winner) give(t, s.turn, s.pending.amount, rng);
+    if (s.pending?.kind === "roulette" && s.turn !== winner) spin(t, s.turn, favorite(t.hidden.hands[s.turn]), rng);
     endHand(t, winner, rng);
   }
   s.left = t.hidden.deck.length;
@@ -405,7 +424,7 @@ function drawTurn(t: Table, seat: number, rng: Rng) {
     if (!last) break;
     t.hidden.hands[seat].push(last);
     n++;
-    if (!s.rules.drawUntil || cantPlay(s, seat, last, t.hidden.hands[seat], null) === null) break;
+    if (!s.rules.drawUntil || full(t, seat) || cantPlay(s, seat, last, t.hidden.hands[seat], null) === null) break;
   }
   s.counts[seat] = t.hidden.hands[seat].length;
   log(s, { seat, kind: "draw", n });
@@ -463,18 +482,7 @@ function turnAction(t: Table, seat: number, a: Exclude<Action, { kind: "play" | 
       if (p?.kind !== "roulette") throw new Error("There's no roulette to spin.");
       if (!(COLORS as readonly string[]).includes(a.color)) throw new Error("Pick a color.");
       s.pending = null;
-      let n = 0;
-      for (;;) {
-        const c = pull(t, rng);
-        if (!c) break;
-        t.hidden.hands[seat].push(c);
-        n++;
-        if (!isWild(c) && colorOf(c) === a.color) break;
-      }
-      s.counts[seat] = t.hidden.hands[seat].length;
-      s.color = a.color;
-      log(s, { seat, kind: "roulette", color: a.color, n });
-      checkMercy(t, seat);
+      spin(t, seat, a.color, rng);
       s.turn = next(s, seat);
       return;
     }
@@ -526,6 +534,7 @@ export function leave(t0: Table, seat: number, reason: "resign" | "idle", rng: R
     s.left = t.hidden.deck.length;
     return t;
   }
+  if (s.pending?.kind === "draw" && s.pending.by === seat) s.pending = { ...s.pending, challenge: false };
   if (wasTurn) {
     s.pending = null;
     s.drew = false;
@@ -556,6 +565,7 @@ export function autoAction(t: Table, seat: number): Action {
 export function autoTurn(t: Table, seat: number, rng: Rng): Table {
   let x = act(t, seat, autoAction(t, seat), rng, true);
   if (!x.state.over && x.state.turn === seat && x.state.drew) x = act(x, seat, autoAction(x, seat), rng, true);
+  x.state.idle[seat] = t.state.idle[seat] + 1;
   return x;
 }
 

@@ -6,7 +6,7 @@ import { ArrowsClockwiseIcon, CaretRightIcon, CardsIcon, MegaphoneIcon, SirenIco
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { MatchView } from "../../../convex/matches";
-import { COLORS, COLOR_NAME, cardName, faceOf, isWild, sortHand, type Card, type Color } from "../../../convex/uno/cards";
+import { COLORS, COLOR_NAME, cardName, colorOf, faceOf, isWild, sortHand, type Card, type Color } from "../../../convex/uno/cards";
 import { canPass, cantDraw, cantPlay, inHand, isGone, isOutOfHand, next, type UnoState } from "../../../convex/uno/engine";
 import { entryText } from "../../../convex/uno/text";
 import { usePending } from "@/components/AsyncButton";
@@ -27,8 +27,12 @@ type Move = {
   color?: Color;
   target?: number;
   uno?: boolean;
+  seq?: number;
 };
-type Ask = { card: Card; need: "color" | "target" };
+type Ask = { card: Card; need: "color" | "target"; seq: number };
+
+const leftAfter = (cards: Card[], card: Card) =>
+  cards.length - 1 - (faceOf(card) === "DA" ? cards.filter((c) => !isWild(c) && c !== card && colorOf(c) === colorOf(card)).length : 0);
 
 const HAND_HEIGHT = "h-[144px]";
 
@@ -53,11 +57,13 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
     setUnoFor(unoKey);
     setUno(false);
   }
+  const unoReady =
+    playing && state.rules.unoCall && cards.some((c) => leftAfter(cards, c) === 1 && cantPlay(state, seat, c, cards, drawn) === null);
   useLive(match, state, seat);
 
   const move = (m: Move) =>
     run(() =>
-      send({ id: match._id, seq: state.seq, ...m }).catch((err: unknown) => {
+      send({ id: match._id, ...m, seq: m.seq ?? state.seq }).catch((err: unknown) => {
         sfx("invalid");
         throw err;
       }),
@@ -71,17 +77,17 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
       toast.error(why, { id: "uno-play" });
       return;
     }
-    if (isWild(card) && faceOf(card) !== "WC") return setAsk({ card, need: "color" });
-    if (state.rules.sevenZero && faceOf(card) === "7" && cards.length > 1) return setAsk({ card, need: "target" });
+    if (isWild(card) && faceOf(card) !== "WC") return setAsk({ card, need: "color", seq: state.seq });
+    if (state.rules.sevenZero && faceOf(card) === "7" && cards.length > 1) return setAsk({ card, need: "target", seq: state.seq });
     sfx("play");
     void move({ kind: "play", card, uno });
   };
   const finish = (extra: { color?: Color; target?: number }) => {
     if (!ask) return;
-    const card = ask.card;
+    const { card, seq } = ask;
     setAsk(null);
     sfx("play");
-    void move({ kind: "play", card, uno, ...extra });
+    void move({ kind: "play", card, uno, seq, ...extra });
   };
 
   const seats = <Seats match={match} state={state} seat={seat} onPlayer={setPlayer} />;
@@ -111,6 +117,7 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
       loaded={mine !== undefined}
       pending={pending}
       uno={uno}
+      unoReady={unoReady}
       onUno={() => setUno((u) => !u)}
       onTap={tap}
       move={move}
@@ -315,7 +322,8 @@ function Table({
             >
               <ArrowsClockwiseIcon size={13} weight="bold" />
             </motion.span>
-            {after >= 0 && !state.over ? `then ${name(after)}` : ""}
+            <span data-up-color={state.color}>{COLOR_NAME[state.color]}</span>
+            {after >= 0 && !state.over ? ` · then ${name(after)}` : ""}
           </span>
           <div className="pointer-events-none absolute inset-x-0 bottom-8 z-10 flex justify-center">
             <AnimatePresence>
@@ -361,6 +369,7 @@ function Dock({
   loaded,
   pending,
   uno,
+  unoReady,
   onUno,
   onTap,
   move,
@@ -374,6 +383,7 @@ function Dock({
   loaded: boolean;
   pending: boolean;
   uno: boolean;
+  unoReady: boolean;
   onUno: () => void;
   onTap: (card: Card) => void;
   move: (m: Move) => Promise<void>;
@@ -435,19 +445,23 @@ function Dock({
   let actions;
   if (!myTurn) actions = null;
   else if (p?.kind === "roulette")
-    actions = COLORS.map((c) => (
-      <Button
-        key={c}
-        size="xl"
-        variant="bare"
-        className="w-full rounded-lg font-display text-body text-paper"
-        style={{ background: `var(--color-uno-${c})` }}
-        pending={pending}
-        onClick={() => void move({ kind: "roulette", color: c })}
-      >
-        {COLOR_NAME[c]}
-      </Button>
-    ));
+    actions = (
+      <div role="group" aria-label="Spin for" className="grid grid-cols-4 gap-2 phone-landscape:grid-cols-2">
+        {COLORS.map((c) => (
+          <Button
+            key={c}
+            size="xl"
+            variant="bare"
+            className="w-full rounded-lg font-display text-body text-paper phone-landscape:h-11"
+            style={{ background: `var(--color-uno-${c})` }}
+            pending={pending}
+            onClick={() => void move({ kind: "roulette", color: c })}
+          >
+            {COLOR_NAME[c]}
+          </Button>
+        ))}
+      </div>
+    );
   else if (p?.kind === "draw")
     actions = (
       <>
@@ -483,22 +497,21 @@ function Dock({
       </Button>
     );
   }
-  const unoToggle =
-    myTurn && state.rules.unoCall && cards.length === 2 && p?.kind !== "roulette" ? (
-      <Button
-        size="xl"
-        variant={uno ? "default" : "outline"}
-        className="w-full font-display"
-        aria-pressed={uno}
-        icon={<MegaphoneIcon weight={uno ? "fill" : "regular"} />}
-        onClick={() => {
-          sfx(uno ? "recall" : "knock");
-          onUno();
-        }}
-      >
-        UNO!
-      </Button>
-    ) : null;
+  const unoToggle = unoReady ? (
+    <Button
+      size="xl"
+      variant={uno ? "default" : "outline"}
+      className="w-full font-display"
+      aria-pressed={uno}
+      icon={<MegaphoneIcon weight={uno ? "fill" : "regular"} />}
+      onClick={() => {
+        sfx(uno ? "recall" : "knock");
+        onUno();
+      }}
+    >
+      UNO!
+    </Button>
+  ) : null;
 
   return (
     <div className="flex flex-col gap-2">

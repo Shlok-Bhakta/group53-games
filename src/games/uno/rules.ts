@@ -6,7 +6,7 @@ export function unoRulesText(mode: ModeKey, raw: Settings): string[] {
   const r = unoRules(mode, settingsOf(mode, raw));
   const noMercy = r.deck === "nomercy";
   const out: string[] = [
-    `Everyone gets ${r.hand} cards${r.decks > 1 ? " from two decks shuffled together" : ""}. On your turn, play a card that matches the top card's color, number or symbol, or a wild. Play whenever: you get a push when it's your turn.`,
+    `Everyone gets ${r.hand} cards${r.decks > 1 ? " from two decks shuffled together" : ""}. On your turn, play a card that matches the top card's color, number or symbol, or a wild. Turns are async: we push you when it's yours.`,
     noMercy
       ? "The No Mercy deck has 168 cards: numbers, Skip, Skip Everyone, Reverse, Draw 2, Draw 4, Discard All, and the wilds Reverse Draw 4, Draw 6, Draw 10 and Color Roulette."
       : "Skip jumps the next player, Reverse turns play around (with two of you it's a skip), Draw 2 makes the next player draw two and miss their go. A wild sets the color; a Wild Draw 4 also makes the next player draw four.",
@@ -29,7 +29,7 @@ export function unoRulesText(mode: ModeKey, raw: Settings): string[] {
     );
   if (r.challenge)
     out.push(
-      `A Wild Draw 4 is only fair when you hold nothing of the current color. Hit with one, you can challenge: caught bluffing, they draw the four; played fair, you draw ${4 + CHALLENGE_PENALTY}.`,
+      `A Wild Draw 4 is only fair when you hold nothing of the current color. Hit with one, you can challenge: if they bluffed, the player who played it draws the four instead; if it was fair, you draw ${4 + CHALLENGE_PENALTY}.`,
     );
   if (r.sevenZero) out.push("Play a 7 and you swap hands with anyone you pick. Play a 0 and every hand passes to the next player along.");
   if (r.jumpIn) out.push("Jump-in: holding the exact same card as the top one, play it any time, even off turn. Play carries on from you.");

@@ -138,7 +138,9 @@ describe("Uno on the server", () => {
     expect(turnPush.title, "the next player hears about it too").toBe(`${named[0]} forgot to call UNO`);
     await clearPushes(t);
     const moveCount = (await get(t, id))!.moveCount;
-    await c.as.mutation(api.uno.move, { id, seq: 0, kind: "catch", target: 0 });
+    const seen = (await stateOf(t, id)).seq;
+    await expect(c.as.mutation(api.uno.move, { id, seq: seen - 1, kind: "catch", target: 0 }), "a stale catch").rejects.toThrow(/changed/);
+    await c.as.mutation(api.uno.move, { id, seq: seen, kind: "catch", target: 0 });
     const s = await stateOf(t, id);
     expect(s.counts[0]).toBe(3);
     expect(s.turn).toBe(1);

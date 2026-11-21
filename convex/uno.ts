@@ -155,11 +155,11 @@ export const unoHooks: GameHooks = {
 
 const colorArg = v.optional(v.union(v.literal("r"), v.literal("y"), v.literal("g"), v.literal("b")));
 
-export async function moveAs(ctx: MutationCtx, id: Id<"matches">, seq: number | null, action: Action, as?: Id<"users">) {
+export async function moveAs(ctx: MutationCtx, id: Id<"matches">, seq: number, action: Action, as?: Id<"users">) {
   const { userId, match, seat } = await seated(ctx, id, { game: "uno", as });
   const s = match.state as UnoState;
   const offTurn = action.kind === "catch" || action.kind === "uno";
-  if (!offTurn && seq !== s.seq) throw new Error("That changed while you were looking. Have another look.");
+  if (seq !== s.seq) throw new Error("That changed while you were looking. Have another look.");
   const before = await load(ctx, match);
   const after = act(before, seat, action, Math.random);
   await commit(ctx, match, before, after, userId, offTurn);

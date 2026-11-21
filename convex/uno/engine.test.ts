@@ -375,6 +375,44 @@ describe("leaving and timeouts", () => {
   });
 });
 
+describe("review fixes", () => {
+  test("one timeout is one strike, even when it draws and then keeps", () => {
+    const t = table([["b1"], ["b2"]], "r9", {}, ["r3"]);
+    const a = autoTurn(t, 0, rng);
+    expect(a.state.idle[0]).toBe(1);
+    expect(a.state.log.slice(-2).map((e) => e.kind)).toEqual(["draw", "pass"]);
+  });
+
+  test("no power finish also holds for jump-ins and stacks", () => {
+    const jump = table([["r1", "r2"], ["rS"]], "rS", { powerFinish: false, jumpIn: true });
+    expect(cantPlay(jump.state, 1, "rS", ["rS"], null)).toMatch(/power card/);
+    const t = table([["rD2", "r1"], ["bD2"]], "r9", { powerFinish: false, stack: 1, challenge: false });
+    const a = play(t, 0, "rD2");
+    expect(cantPlay(a.state, 1, "bD2", ["bD2"], null)).toMatch(/power card/);
+  });
+
+  test("Color Roulette as the last card still spins for the next player before scoring", () => {
+    const t = table([["wWC"], ["b1"]], "r9", { ...NO_MERCY, goal: 500 }, ["y4", "r2", "b7"]);
+    const a = play(t, 0, "wWC");
+    expect(a.state.last!.cards[1]).toBeGreaterThan(1);
+    expect(a.state.log.some((e) => e.kind === "roulette" && e.seat === 1)).toBe(true);
+  });
+
+  test("drawing till you can stops at the mercy limit", () => {
+    const t = table([["b1", "b2", "b3"], ["g1"], ["g2"]], "r9", { ...NO_MERCY, mercy: 5 }, Array<Card>(20).fill("y4"));
+    const a = go(t, 0, { kind: "draw" });
+    expect(a.state.out).toEqual([{ seat: 0, hand: 1, reason: "mercy" }]);
+    expect(a.hidden.deck.length, "only two cards pulled").toBe(18);
+  });
+
+  test("a Wild Draw 4 player who leaves can't be challenged into their old hand", () => {
+    const t = table([["wW4", "r1", "b2"], ["g1", "g2"], ["y1"]], "r9");
+    const a = leave(play(t, 0, "wW4", { color: "b" }), 0, "resign", rng);
+    expect(a.state.pending).toMatchObject({ kind: "draw", amount: 4, challenge: false });
+    expect(() => go(a, 1, { kind: "challenge" })).toThrow(/nothing to challenge/);
+  });
+});
+
 describe("whole games", () => {
   const MIXES: Partial<Rules>[] = [
     {},
