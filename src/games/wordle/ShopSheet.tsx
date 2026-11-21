@@ -154,6 +154,7 @@ export function ShopSheet({
             const short = me.coins - cost < def.price;
             const off = free <= 0 || short || cart.length >= MAX_CART;
             const n = inCart(k);
+            const aimed = aiming === k && !off;
             return (
               <Fragment key={k}>
                 <Button
@@ -162,12 +163,12 @@ export function ShopSheet({
                   data-item={k}
                   data-left={stock}
                   aria-label={`${def.name}, ${def.price} coins, ${soldOut ? "sold out" : `${free} left`}`}
-                  aria-expanded={def.target && targets.length > 1 ? aiming === k : undefined}
+                  aria-expanded={def.target && targets.length > 1 ? aimed : undefined}
                   disabled={off}
                   onClick={() => tap(k)}
                   className={cn(
                     "items-center rounded-lg bg-muted/50 p-3 disabled:opacity-100",
-                    aiming === k && "bg-primary/15 ring-2 ring-primary",
+                    aimed && "bg-primary/15 ring-2 ring-primary",
                     soldOut && "bg-muted/25",
                   )}
                 >
@@ -197,7 +198,7 @@ export function ShopSheet({
                     <span className="text-caption font-normal text-muted-foreground">{soldOut ? "Sold out" : `${free} left`}</span>
                   </span>
                 </Button>
-                {aiming === k && !off && (
+                {aimed && (
                   <div className="grid grid-cols-4 gap-2" role="group" aria-label={`Throw ${def.name} at`}>
                     {targets.map((t) => {
                       const p = match.players[t];
