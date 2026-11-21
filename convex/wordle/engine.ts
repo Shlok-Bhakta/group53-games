@@ -276,17 +276,32 @@ export function leftForSeat(s: WordleState, mines: Mine[], seat: number): Record
 
 export type Bumped = { seat: number; lost: ItemKey[] };
 
+export function fitCart(cart: Cart, left: (item: ItemKey) => number, coins: number) {
+  const used = new Map<ItemKey, number>();
+  let spent = 0;
+  return cart.filter((x) => {
+    const n = used.get(x.item) ?? 0;
+    if (!isItem(x.item) || n >= left(x.item) || spent + ITEMS[x.item].price > coins) return false;
+    used.set(x.item, n + 1);
+    spent += ITEMS[x.item].price;
+    return true;
+  });
+}
+
 export function reconcile(s: WordleState, mines: Mine[]): Bumped[] {
   const claimed = new Map<ItemKey, number>();
   const bumped: Bumped[] = [];
   for (const seat of buyOrder(s)) {
     const kept: Cart = [];
     const lost: ItemKey[] = [];
+    let spent = 0;
     for (const x of cartOf(mines[seat])) {
       const n = claimed.get(x.item) ?? 0;
       const target = s.players[x.target];
-      if (isItem(x.item) && n < leftOf(s, x.item) && target && !target.out) {
+      const price = isItem(x.item) ? ITEMS[x.item].price : Infinity;
+      if (n < leftOf(s, x.item) && target && !target.out && spent + price <= s.players[seat].coins) {
         claimed.set(x.item, n + 1);
+        spent += price;
         kept.push(x);
       } else lost.push(x.item);
     }

@@ -100,12 +100,14 @@ async function nudgeLast(ctx: MutationCtx, before: Doc<"matches">, after: Doc<"m
 const minesOf = (ctx: QueryCtx, match: Doc<"matches">, s: WordleState) =>
   Promise.all(match.players.map((p) => mineOf(ctx, match, p.userId, s)));
 
-async function tellBumped(ctx: MutationCtx, match: Doc<"matches">, bumped: Bumped[]) {
+async function tellBumped(ctx: MutationCtx, match: Doc<"matches">, s: WordleState, bumped: Bumped[]) {
+  if (s.over) return;
   for (const b of bumped) {
+    if (s.players[b.seat].picked) continue;
     const names = [...new Set(b.lost)].map((k) => ITEMS[k].name);
     await notifyMatch(ctx, match.players[b.seat].userId, match, {
       title: "Shop again",
-      body: `Someone with fewer coins took ${names.join(" and ")} before you. Those coins are yours to spend again.`,
+      body: `${names.join(" and ")} dropped out of your cart, so those coins are yours to spend again.`,
     });
   }
 }
@@ -156,10 +158,9 @@ export const wordleHooks: GameHooks = {
     const mines = await minesOf(ctx, match, s);
     const bumped = reconcile(s, mines);
     for (const b of bumped) await writeSecret(ctx, match._id, match.players[b.seat].userId, mines[b.seat]);
-    await tellBumped(ctx, match, bumped);
     if (alive(s).length < 2) await resolve(ctx, match, s, true);
     else if (roundDone(s)) await resolve(ctx, match, s);
-    else await save(ctx, match, s);
+    else await tellBumped(ctx, await save(ctx, match, s), s, bumped);
   },
   timeout: async () => {},
   timeoutWarning: "",
@@ -190,9 +191,10 @@ export async function pickAs(ctx: MutationCtx, id: Id<"matches">, round: number,
   const before = await minesOf(ctx, match, s0);
   const { s, mines, bumped } = choose(s0, before, seat, cart);
   for (const i of new Set([seat, ...bumped.map((b) => b.seat)])) await writeSecret(ctx, id, match.players[i].userId, mines[i]);
-  await tellBumped(ctx, match, bumped);
-  if (roundDone(s)) await resolve(ctx, match, s);
-  else await nudgeLast(ctx, match, await save(ctx, match, s), s);
+  if (roundDone(s)) return await resolve(ctx, match, s);
+  const after = await save(ctx, match, s);
+  await tellBumped(ctx, after, s, bumped);
+  await nudgeLast(ctx, match, after, s);
 }
 
 export const guess = mutation({

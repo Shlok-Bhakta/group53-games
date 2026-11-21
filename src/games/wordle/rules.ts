@@ -14,7 +14,7 @@ export function wordleRules(mode: ModeKey, raw: Settings): string[] {
     ...(s.shop
       ? [
           `Done with your word? Fill a cart with up to ${MAX_CART} things from the shop, or pass. Each word the shop gets a random stock, and some things sell out before anyone shops.`,
-          "Whoever had the fewest coins going into the word shops first. What's left for you already leaves out what they've claimed, and if one of them takes the last of something in your cart, you get those coins back and shop again. Nobody sees who bought what, or at whom, until the next word starts.",
+          "Whoever had the fewest coins going into the word shops first. What's left for you already leaves out what they've claimed, and if one of them takes the last of something in your cart, you get those coins back and shop again. The shop never says who claimed what, and nobody's told what hit them until the next word starts.",
           ...ITEM_KEYS.map((k) => `${ITEMS[k].name} (${ITEMS[k].price}): ${ITEMS[k].text}`),
         ]
       : []),

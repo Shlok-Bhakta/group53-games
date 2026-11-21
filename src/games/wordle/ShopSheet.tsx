@@ -11,6 +11,7 @@ import {
   buyOrder,
   cantPick,
   cartCost,
+  fitCart,
   type Cart,
   type ItemKey,
   type WordleState,
@@ -50,9 +51,14 @@ export function ShopSheet({
   lost: ItemKey[];
 }) {
   const send = useMutation(api.wordle.shop);
-  const [cart, setCart] = useState<Cart>(saved);
+  const [draft, setCart] = useState<Cart>(saved);
   const [aiming, setAiming] = useState<ItemKey | null>(null);
   const me = state.players[seat];
+  const cart = fitCart(
+    draft.filter((x) => !ITEMS[x.item].target || alive(state).includes(x.target)),
+    (k) => left[k] ?? 0,
+    me.coins,
+  );
   const targets = alive(state).filter((i) => i !== seat);
   const cost = cartCost(cart);
   const why = cantPick(state, seat, cart, (k) => left[k] ?? 0);
@@ -60,12 +66,12 @@ export function ShopSheet({
   const inCart = (k: ItemKey) => cart.filter((x) => x.item === k).length;
   const add = (item: ItemKey, target: number) => {
     sfx("pick");
-    setCart((c) => [...c, { item, target }]);
+    setCart([...cart, { item, target }]);
     setAiming(null);
   };
   const remove = (i: number) => {
     sfx("recall");
-    setCart((c) => c.filter((_, k) => k !== i));
+    setCart(cart.filter((_, k) => k !== i));
   };
   const tap = (k: ItemKey) => {
     if (!ITEMS[k].target) return add(k, seat);
@@ -93,7 +99,7 @@ export function ShopSheet({
       </div>
       {lostNames.length > 0 && !me.picked && (
         <p className="text-footnote text-destructive" data-lost={lost.join(",")}>
-          Someone with fewer coins got {listNames(lostNames)} first. Your coins are back.
+          {listNames(lostNames)} dropped out of your cart. Your coins are back.
         </p>
       )}
       {cart.length > 0 && (

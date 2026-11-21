@@ -239,6 +239,17 @@ describe("the shop", () => {
     expect(t.s.players[2].effects.map((e) => e.item)).toEqual(["jam"]);
   });
 
+  test("a pick saved before prices went up drops out once it's too dear, instead of failing at checkout", () => {
+    const t = round1();
+    coinsIn(t, [40, 0, 25]);
+    t.s.players[1].coins = ITEMS.fog.price - 1;
+    t.mine[1] = { ...t.mine[1], pick: { item: "fog", target: 2 } };
+    t.s.players[1].picked = true;
+    expect(buy(t, 2, null)).toEqual([{ seat: 1, lost: ["fog"] }]);
+    expect(leftForSeat(t.s, t.mine, 0).fog).toBe(1);
+    expect(waitingOn(t.s)).toEqual([0, 1]);
+  });
+
   test("someone leaving takes back what was thrown at them", () => {
     const t = round1();
     t.s.stock = everyItem.map((item) => ({ item, left: 3 }));
