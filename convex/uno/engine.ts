@@ -525,7 +525,6 @@ export function leave(t0: Table, seat: number, reason: "resign" | "idle", rng: R
   s.seq++;
   const wasTurn = s.turn === seat;
   knockOut(t, seat, reason);
-  s.out = s.out.filter((o) => !(o.seat === seat && o.reason === "mercy"));
   log(s, { seat, kind: "leave" });
   if (alive(s).length < 2) {
     s.over = true;
@@ -586,7 +585,7 @@ export function standings(s: UnoState): number[][] {
   const last = s.last && s.last.hand === s.hand ? s.last : null;
   let groups: number[][];
   if (last && s.rules.goal === 0) {
-    const knocked = s.out.filter((o) => o.reason === "mercy" && o.hand === s.hand).map((o) => o.seat);
+    const knocked = s.out.filter((o) => o.reason === "mercy" && o.hand === s.hand && !isGone(s, o.seat)).map((o) => o.seat);
     const rest = live.filter((i) => i !== last.winner && !knocked.includes(i));
     groups = [[last.winner], ...grouped(rest, (i) => last.left[i]), ...[...knocked].reverse().map((i) => [i])];
   } else groups = grouped(live, (i) => -s.scores[i]);

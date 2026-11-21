@@ -17,7 +17,7 @@ All in `convex/uno/modes.ts`; `unoRules(mode, settingsOf(...))` turns them into 
 
 ## File map
 
-- `convex/uno.ts`: `move` (`{ id, seq, kind, card?, color?, target?, uno? }`: `seq` is the state's action counter the phone saw, refused when stale, except for `catch` and `uno`), `hand` (my secret: `{ cards, hand, drawn }`), `unoHooks`, and `load` / `moveAs` / `IDLE_OUT` for tests. Never rename these.
+- `convex/uno.ts`: `move` (`{ id, seq, kind, card?, color?, target?, uno? }`: `seq` is the state's action counter the phone saw, refused when stale, catches and late UNO calls included), `hand` (my secret: `{ cards, hand, drawn }`), `unoHooks`, and `load` / `moveAs` / `IDLE_OUT` for tests. Never rename these.
 - `convex/uno/cards.ts`: cards are strings, colour letter then face (`r7`, `bD2`, `gSA`, `wW4`, `wWC`): faces `0`-`9`, `S` skip, `R` reverse, `D2`, `D4` (No Mercy's coloured Draw 4), `SA` Skip Everyone, `DA` Discard All, wilds `W`, `W4`, `WR4`, `W6`, `W10`, `WC` Color Roulette. `deckOf(kind, decks)` (108 or 168 a deck), `shuffle`, `pointsOf`, `cardName`, `sortHand`.
 - `convex/uno/engine.ts`: pure rules over a `Table` (`state` public, `hidden` = `deck`, `discard`, `hands`, `drawn`, `bluff`). `newGame`, `act(t, seat, action, rng, auto?)`, `leave`, `autoAction`/`autoTurn` (timeouts), `cantPlay`, `cantDraw`, `canPass`, `playable`, `stackable`, `next`, `inHand`, `alive`, `isGone`, `isOutOfHand`, `standings`.
 - `convex/uno/text.ts`: `entryText` (log lines and push titles), `askText` (the push body for whoever is up).

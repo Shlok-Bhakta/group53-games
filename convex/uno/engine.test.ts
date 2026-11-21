@@ -405,6 +405,18 @@ describe("review fixes", () => {
     expect(a.hidden.deck.length, "only two cards pulled").toBe(18);
   });
 
+  test("resigning after the mercy rule keeps the knockout's points for the winner", () => {
+    const t = table([["rD2", "r3"], ["b1"], ["r1", "y2"]], "r9", { mercy: 3, goal: 500 });
+    const a = leave(play(t, 0, "rD2"), 1, "resign", rng);
+    const b = play(play(a, 2, "r1"), 0, "r3");
+    expect(b.state.scores[0]).toBeGreaterThanOrEqual(250);
+    expect(
+      standings(b.state)
+        .flat()
+        .filter((i) => i === 1),
+    ).toHaveLength(1);
+  });
+
   test("a Wild Draw 4 player who leaves can't be challenged into their old hand", () => {
     const t = table([["wW4", "r1", "b2"], ["g1", "g2"], ["y1"]], "r9");
     const a = leave(play(t, 0, "wW4", { color: "b" }), 0, "resign", rng);

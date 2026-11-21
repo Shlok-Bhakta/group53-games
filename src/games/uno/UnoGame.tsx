@@ -32,7 +32,7 @@ type Move = {
 type Ask = { card: Card; need: "color" | "target"; seq: number };
 
 const leftAfter = (cards: Card[], card: Card) =>
-  cards.length - 1 - (faceOf(card) === "DA" ? cards.filter((c) => !isWild(c) && c !== card && colorOf(c) === colorOf(card)).length : 0);
+  faceOf(card) === "DA" ? cards.filter((c) => isWild(c) || colorOf(c) !== colorOf(card)).length : cards.length - 1;
 
 const HAND_HEIGHT = "h-[144px]";
 
@@ -446,13 +446,13 @@ function Dock({
   if (!myTurn) actions = null;
   else if (p?.kind === "roulette")
     actions = (
-      <div role="group" aria-label="Spin for" className="grid grid-cols-4 gap-2 phone-landscape:grid-cols-2">
+      <div role="group" aria-label="Spin for" className="grid grid-cols-4 gap-2">
         {COLORS.map((c) => (
           <Button
             key={c}
             size="xl"
             variant="bare"
-            className="w-full rounded-lg font-display text-body text-paper phone-landscape:h-11"
+            className="w-full rounded-lg px-1 font-display text-body text-paper phone-landscape:text-footnote"
             style={{ background: `var(--color-uno-${c})` }}
             pending={pending}
             onClick={() => void move({ kind: "roulette", color: c })}
