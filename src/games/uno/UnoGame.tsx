@@ -63,10 +63,13 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
 
   const move = (m: Move) =>
     run(() =>
-      send({ id: match._id, ...m, seq: m.seq ?? state.seq }).catch((err: unknown) => {
-        sfx("invalid");
-        throw err;
-      }),
+      send({ id: match._id, ...m, seq: m.seq ?? state.seq }).then(
+        () => void toast.dismiss("uno-play"),
+        (err: unknown) => {
+          sfx("invalid");
+          throw err;
+        },
+      ),
     );
 
   const tap = (card: Card) => {
@@ -174,6 +177,9 @@ function useLive(match: MatchView, state: UnoState, seat: number) {
       const text = e.kind === "take" ? `+${e.n} from ${names(by)}` : entryText(e, names);
       toast(text[0].toUpperCase() + text.slice(1), { id: `uno-hit-${e.seq}` });
     }
+    const rotated = state.log.find((e) => e.seq > was.seq && e.kind === "rotate" && e.seat !== seat);
+    if (rotated && seat >= 0)
+      toast(`${names(rotated.seat)} passed every hand along. You have ${state.counts[seat]} now.`, { id: `uno-rotate-${rotated.seq}` });
     if (state.turn === seat && was.turn !== seat && state.hand === was.hand) sfx("turn", { live: true });
   }, [state, seat, match.players]);
   const wasOver = useRef(match.status === "finished");
@@ -301,7 +307,9 @@ function Table({
             data-pile
           >
             {state.recent.length > 1 && (
-              <UnoCard card={state.recent.at(-2)} width={84} className="absolute left-1 top-1 rotate-[-8deg] opacity-70" />
+              <span aria-hidden="true" className="absolute left-1 top-1 rotate-[-8deg] opacity-70">
+                <UnoCard card={state.recent.at(-2)} width={84} />
+              </span>
             )}
             <AnimatePresence initial={false} mode="popLayout">
               <motion.div
@@ -323,7 +331,7 @@ function Table({
               <ArrowsClockwiseIcon size={13} weight="bold" />
             </motion.span>
             <span data-up-color={state.color}>{COLOR_NAME[state.color]}</span>
-            {after >= 0 && !state.over ? ` · then ${name(after)}` : ""}
+            {after >= 0 && !state.over ? ` · next: ${name(after)}` : ""}
           </span>
           <div className="pointer-events-none absolute inset-x-0 bottom-8 z-10 flex justify-center">
             <AnimatePresence>
@@ -581,7 +589,7 @@ function Hand({
                   size="piece"
                   data-card={card}
                   data-playable={can || undefined}
-                  aria-label={`Play ${cardName(card)}`}
+                  aria-label={can ? `Play ${cardName(card)}` : cardName(card)}
                   onClick={() => onTap(card)}
                   className={cn("rounded-sm", drawn === card && myTurn && "ring-2 ring-primary ring-offset-1 ring-offset-background")}
                 >

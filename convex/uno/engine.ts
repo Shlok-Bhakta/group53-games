@@ -139,7 +139,7 @@ export function cantPlay(s: UnoState, seat: number, card: Card, hand: Card[], dr
   const finish = !s.rules.powerFinish && !isNumber(card) && goesOut(hand, card) ? "You can't go out on a power card." : null;
   if (seat !== s.turn) {
     if (!s.rules.jumpIn) return "It's not your turn.";
-    if (s.pending || isWild(card) || card !== s.top) return "Only the exact same card can jump in.";
+    if (s.pending || isWild(card) || card !== s.top) return "Not your turn: only the exact same card can jump in.";
     return finish;
   }
   if (s.pending?.kind === "roulette") return "Pick a color for the roulette first.";
