@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { finishBySeats } from "./matches";
@@ -17,6 +18,7 @@ import { askText, entryText } from "./uno/text";
 export type { UnoState } from "./uno/engine";
 
 export const IDLE_OUT = 3;
+const REPLAY_MOVES = 60;
 
 type Shoe = { deck: Card[]; discard: Card[]; drawn: Card | null; bluff: boolean };
 export type UnoHand = { cards: Card[]; hand: number; drawn: Card | null };
@@ -54,9 +56,27 @@ function reasonFor(match: Doc<"matches">, s: UnoState) {
   return last.cards[last.winner] > 0 ? "mercy" : "out";
 }
 
+async function record(ctx: MutationCtx, match: Doc<"matches">, before: Table | null, s: UnoState, by: Id<"users"> | null) {
+  const row = (state: UnoState, from: number, seat: number) =>
+    ctx.db.insert("unoLog", {
+      matchId: match._id,
+      seq: state.seq,
+      by: seat,
+      state: { ...state, log: state.log.filter((e) => e.seq > from) },
+      at: Date.now(),
+    });
+  const logged = await ctx.db
+    .query("unoLog")
+    .withIndex("by_match", (q) => q.eq("matchId", match._id))
+    .first();
+  if (before && !logged) await row({ ...before.state, log: [] }, Infinity, -1);
+  await row(s, before?.state.seq ?? -1, by ? seatOf(match, by) : -1);
+}
+
 async function commit(ctx: MutationCtx, match: Doc<"matches">, before: Table | null, after: Table, by: Id<"users"> | null, quiet: boolean) {
   await save(ctx, match, before, after);
   const s = after.state;
+  await record(ctx, match, before, s, by);
   if (s.over) {
     const moveCount = match.moveCount + 1;
     await ctx.db.patch(match._id, { state: s, moveCount, lastActivityAt: Date.now() });
@@ -200,4 +220,42 @@ export const move = mutation({
 export const hand = query({
   args: { id: v.id("matches") },
   handler: async (ctx, { id }) => await mySecret<UnoHand>(ctx, id, "uno"),
+});
+
+export const log = query({
+  args: { id: v.id("matches"), from: v.optional(v.number()) },
+  handler: async (ctx, { id, from }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return null;
+    const rows = () => ctx.db.query("unoLog");
+    let start: Doc<"unoLog"> | null = null;
+    if (from === undefined) {
+      const match = await ctx.db.get(id);
+      const seat = match && userId ? seatOf(match, userId) : -1;
+      for await (const r of rows()
+        .withIndex("by_match", (q) => q.eq("matchId", id))
+        .order("desc")) {
+        start = r;
+        if (seat >= 0 && r.by === seat) break;
+      }
+    } else
+      start =
+        (await rows()
+          .withIndex("by_match", (q) => q.eq("matchId", id).lte("seq", from))
+          .order("desc")
+          .first()) ??
+        (await rows()
+          .withIndex("by_match", (q) => q.eq("matchId", id))
+          .first());
+    if (!start) return null;
+    const after = await rows()
+      .withIndex("by_match", (q) => q.eq("matchId", id).gt("seq", start.seq))
+      .collect();
+    const kept = after.slice(-REPLAY_MOVES);
+    const first = after.length > kept.length ? after[after.length - kept.length - 1] : start;
+    return {
+      start: { seq: first.seq, state: first.state as UnoState },
+      moves: kept.map((r) => ({ seq: r.seq, by: r.by, state: r.state as UnoState })),
+    };
+  },
 });

@@ -285,6 +285,71 @@ export async function holdsStill(page: Page | Frame) {
       { message: "the screen holds still" },
     )
     .toBe(true);
+  expect(await clippedRings(page), CLIPPED_RINGS).toEqual([]);
+}
+
+const CLIPPED_RINGS = "a ring or outline is cut off by a scrolling or clipping parent: give the parent room for it";
+
+export function clippedRings(page: Page | Frame) {
+  return page.evaluate(() => {
+    const reach = (el: Element) => {
+      const s = getComputedStyle(el);
+      let out = 0;
+      if (s.boxShadow && s.boxShadow !== "none")
+        for (const shadow of s.boxShadow.split(/,(?![^(]*\))/)) {
+          if (shadow.includes("inset") || /rgba\(0, 0, 0, 0\)|transparent/.test(shadow)) continue;
+          const n = (shadow.replace(/(rgba?|oklch|oklab|color|hsla?|lab|lch)\([^)]*\)/g, "").match(/-?[\d.]+px/g) ?? []).map(parseFloat);
+          const [x = 0, y = 0, blur = 0, spread = 0] = n;
+          if (blur === 0 && spread >= 1) out = Math.max(out, spread + Math.max(Math.abs(x), Math.abs(y)));
+        }
+      if (s.outlineStyle !== "none" && parseFloat(s.outlineWidth) > 0 && el.matches(":focus-visible"))
+        out = Math.max(out, parseFloat(s.outlineWidth) + parseFloat(s.outlineOffset || "0"));
+      return out;
+    };
+    const visible = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) return false;
+      for (let e: Element | null = el; e; e = e.parentElement) {
+        const s = getComputedStyle(e);
+        if (s.display === "none" || s.visibility === "hidden" || Number(s.opacity) === 0) return false;
+      }
+      return !el.closest("[inert]");
+    };
+    const looping = (el: Element) => el.getAnimations().some((a) => a.effect?.getTiming().iterations === Infinity);
+    const named = (el: Element) => {
+      const label = el.getAttribute("aria-label") ?? (el.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 30);
+      return `<${el.tagName.toLowerCase()} class="${String(el.getAttribute("class") ?? "").slice(0, 70)}"> "${label}"`;
+    };
+    const problems: string[] = [];
+    for (const el of document.querySelectorAll("body *")) {
+      const out = reach(el);
+      if (!out || !visible(el) || looping(el)) continue;
+      const r = el.getBoundingClientRect();
+      for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+        const s = getComputedStyle(a);
+        const clipsX = s.overflowX !== "visible";
+        const clipsY = s.overflowY !== "visible";
+        if (!clipsX && !clipsY) continue;
+        const box = a.getBoundingClientRect();
+        const scrollsX = s.overflowX === "auto" || s.overflowX === "scroll";
+        const scrollsY = s.overflowY === "auto" || s.overflowY === "scroll";
+        const left = box.left + a.clientLeft - (scrollsX ? a.scrollLeft : 0);
+        const top = box.top + a.clientTop - (scrollsY ? a.scrollTop : 0);
+        const width = scrollsX ? Math.max(a.scrollWidth, a.clientWidth) : a.clientWidth;
+        const height = scrollsY ? Math.max(a.scrollHeight, a.clientHeight) : a.clientHeight;
+        const cut: string[] = [];
+        if (clipsX && r.left - out < left - 0.5) cut.push("left");
+        if (clipsX && r.right + out > left + width + 0.5) cut.push("right");
+        if (clipsY && r.top - out < top - 0.5) cut.push("top");
+        if (clipsY && r.bottom + out > top + height + 0.5) cut.push("bottom");
+        if (cut.length) {
+          problems.push(`${named(el)} loses its ${cut.join(" and ")} edge inside ${named(a)} on ${location.pathname}`);
+          break;
+        }
+      }
+    }
+    return problems;
+  });
 }
 
 export async function ready(page: Page) {

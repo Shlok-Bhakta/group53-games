@@ -1088,14 +1088,13 @@
   }
   &.playing-card-uno {
     --uno: var(--color-uno-wild);
-    background:
-      radial-gradient(ellipse 62% 44% at 50% 50%, rgb(255 255 255 / 0.2) 0 98%, transparent 100%),
-      var(--uno);
+    overflow: hidden;
+    background: var(--uno);
     color: var(--color-paper);
     box-shadow:
       0 1px 2px rgb(0 0 0 / 0.3),
-      0 3px 6px rgb(0 0 0 / 0.12),
-      inset 0 0 0 max(1.5px, calc(var(--w) * 0.055)) var(--color-paper);
+      0 3px 8px rgb(0 0 0 / 0.18),
+      inset 0 0 0 max(1.5px, calc(var(--w) * 0.06)) var(--color-paper);
   }
   &.playing-card-uno[data-uno="r"] {
     --uno: var(--color-uno-r);
@@ -1109,19 +1108,77 @@
   &.playing-card-uno[data-uno="b"] {
     --uno: var(--color-uno-b);
   }
-  &.playing-card-uno[data-uno="w"] {
-    background:
-      radial-gradient(ellipse 62% 44% at 50% 50%, var(--color-uno-wild) 0 98%, transparent 100%),
-      linear-gradient(
-        135deg,
-        var(--color-uno-r) 0 25%,
-        var(--color-uno-y) 25% 50%,
-        var(--color-uno-g) 50% 75%,
-        var(--color-uno-b) 75%
-      );
-  }
   &.playing-card-uno[data-dim="true"] {
-    opacity: 0.45;
+    filter: brightness(0.78) saturate(0.6);
+  }
+}
+@utility playing-card-oval {
+  position: absolute;
+  left: 13%;
+  right: 13%;
+  top: 12%;
+  bottom: 12%;
+  border-radius: 50%;
+  rotate: 28deg;
+  background: var(--color-paper);
+  box-shadow: inset 0 0 0 max(1px, calc(var(--w) * 0.012)) rgb(0 0 0 / 0.08);
+  [data-uno="w"] > & {
+    background: conic-gradient(
+      var(--color-uno-r) 0 25%,
+      var(--color-uno-b) 25% 50%,
+      var(--color-uno-y) 50% 75%,
+      var(--color-uno-g) 75%
+    );
+  }
+  [data-chosen="r"] > & {
+    background: var(--color-uno-r);
+  }
+  [data-chosen="y"] > & {
+    background: var(--color-uno-y);
+  }
+  [data-chosen="g"] > & {
+    background: var(--color-uno-g);
+  }
+  [data-chosen="b"] > & {
+    background: var(--color-uno-b);
+  }
+  .playing-card-uno-back > & {
+    background: var(--color-uno-r);
+  }
+}
+@utility playing-card-uno-face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--uno);
+  font-size: calc(var(--w) * 0.5);
+  letter-spacing: -0.05em;
+  text-shadow:
+    calc(var(--w) * 0.025) calc(var(--w) * 0.025) 0 rgb(0 0 0 / 0.75),
+    0 0 calc(var(--w) * 0.012) rgb(0 0 0 / 0.5);
+  [data-uno="w"] > &,
+  .playing-card-uno-back > & {
+    color: var(--color-paper);
+  }
+  .playing-card-uno-back > & {
+    font-size: calc(var(--w) * 0.34);
+    rotate: -18deg;
+  }
+}
+@utility playing-card-uno-index {
+  position: absolute;
+  left: 12%;
+  top: 7%;
+  font-size: calc(var(--w) * 0.19);
+  letter-spacing: -0.04em;
+  text-shadow: calc(var(--w) * 0.012) calc(var(--w) * 0.012) 0 rgb(0 0 0 / 0.55);
+  &[data-flip] {
+    left: auto;
+    top: auto;
+    right: 12%;
+    bottom: 7%;
+    rotate: 180deg;
   }
 }
 @utility playing-card-glyph {
@@ -1618,23 +1675,26 @@
   align-items: center;
   justify-content: center;
   gap: 3px;
-  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.25);
   @apply ll-group-colors;
   &[data-side="top"] {
     inset: 0 0 auto 0;
     height: 24px;
+    box-shadow: 0 1px 0 rgb(0 0 0 / 0.25);
   }
   &[data-side="bottom"] {
     inset: auto 0 0 0;
     height: 24px;
+    box-shadow: 0 -1px 0 rgb(0 0 0 / 0.25);
   }
   &[data-side="left"] {
     inset: 0 auto 0 0;
+    box-shadow: 1px 0 0 rgb(0 0 0 / 0.25);
     width: 24px;
     flex-direction: column;
   }
   &[data-side="right"] {
     inset: 0 0 0 auto;
+    box-shadow: -1px 0 0 rgb(0 0 0 / 0.25);
     width: 24px;
     flex-direction: column;
   }
