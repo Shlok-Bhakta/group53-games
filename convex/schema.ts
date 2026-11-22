@@ -6,6 +6,7 @@ import { dailyTables } from "./daily/schema";
 import { golfTables } from "./golf/schema";
 import { landlordTables } from "./landlord/schema";
 import { stonksTables } from "./stonks/schema";
+import { unoTables } from "./uno/schema";
 
 export default defineSchema({
   ...authTables,
@@ -14,6 +15,7 @@ export default defineSchema({
   ...golfTables,
   ...landlordTables,
   ...stonksTables,
+  ...unoTables,
   users: defineTable({
     name: v.optional(v.string()),
     image: v.optional(v.string()),

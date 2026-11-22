@@ -2,7 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import type { WebSocketRoute } from "@playwright/test";
 import { anyApi } from "convex/server";
 import { FRAME_COLOR } from "../convex/palette";
-import { admin, createPlayer, expect, getMatch, iPhone, onScreen, ready, resign, test } from "./fixtures";
+import { admin, clippedRings, createPlayer, expect, getMatch, iPhone, onScreen, ready, resign, test } from "./fixtures";
 
 const ANDROID_UA = "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36";
 
@@ -587,4 +587,26 @@ test.describe("signed in", () => {
       ).toEqual([]);
     });
   }
+});
+
+test("the clipped-ring check catches a ring its scrolling parent cuts off, and passes one with room", async ({ phones }) => {
+  const page = await phones.open({ player: await createPlayer("Shlok"), push: "on" });
+  await page.goto("/");
+  await ready(page);
+  await page.evaluate(() => {
+    const strip = (pad: string, label: string) => {
+      const el = document.createElement("div");
+      el.style.cssText = `display:flex;overflow-x:auto;padding:${pad};width:200px`;
+      const pill = document.createElement("span");
+      pill.setAttribute("aria-label", label);
+      pill.style.cssText = "display:block;width:80px;height:44px;flex-shrink:0;box-shadow:0 0 0 2px red";
+      el.append(pill);
+      document.body.append(el);
+    };
+    strip("0 12px", "Cut pill");
+    strip("4px 12px", "Roomy pill");
+  });
+  const found = await clippedRings(page);
+  expect(found).toHaveLength(1);
+  expect(found[0]).toContain('"Cut pill" loses its top and bottom edge');
 });

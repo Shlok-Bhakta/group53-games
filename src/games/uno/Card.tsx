@@ -7,7 +7,7 @@ import {
   SparkleIcon,
   SpinnerBallIcon,
 } from "@phosphor-icons/react";
-import { cardName, colorOf, drawOf, faceOf, type Card, type Face } from "../../../convex/uno/cards";
+import { cardName, colorOf, faceOf, type Card, type Face } from "../../../convex/uno/cards";
 import { cn } from "@/lib/utils";
 
 function glyph(face: Face, size: number): ReactNode {
@@ -39,7 +39,7 @@ function glyph(face: Face, size: number): ReactNode {
   }
 }
 
-const corner = (card: Card) => (/^[0-9]$/.test(faceOf(card)) ? faceOf(card) : drawOf(card) ? `+${drawOf(card)}` : null);
+const shrink = (face: Face) => (face === "W10" ? 0.72 : face.length > 1 && face !== "SA" && face !== "DA" && face !== "WC" ? 0.86 : 1);
 
 export function UnoCard({
   card,
@@ -58,14 +58,24 @@ export function UnoCard({
 }) {
   const vars = { "--w": `${width}px`, ...style } as CSSProperties;
   if (!card)
-    return <span data-slot="playing-card" className={cn("playing-card playing-card-back", className)} style={vars} aria-hidden="true" />;
+    return (
+      <span
+        data-slot="playing-card"
+        className={cn("playing-card playing-card-uno playing-card-uno-back font-display", className)}
+        style={vars}
+        aria-hidden="true"
+      >
+        {width >= 24 && <span className="playing-card-oval" />}
+        {width >= 40 && <span className="playing-card-uno-face">53</span>}
+      </span>
+    );
   const face = faceOf(card);
-  const icon = Math.round(width * 0.5);
-  const small = corner(card);
+  const big = Math.round(width * 0.5 * shrink(face));
   return (
     <span
       data-slot="playing-card"
       data-uno={colorOf(card)}
+      data-chosen={chosen}
       data-card={card}
       data-dim={dim ? "true" : undefined}
       className={cn("playing-card playing-card-uno font-display", className)}
@@ -73,19 +83,17 @@ export function UnoCard({
       role="img"
       aria-label={cardName(card)}
     >
-      {width >= 40 && small && <span className="playing-card-corner">{small}</span>}
-      <span className="playing-card-glyph">{glyph(face, icon)}</span>
-      {face === "WR4" && width >= 40 && (
-        <span className="absolute right-[9%] bottom-[7%]">
-          <ArrowsCounterClockwiseIcon size={Math.round(width * 0.22)} weight="bold" />
-        </span>
-      )}
-      {chosen && (
-        <span
-          className="absolute inset-x-[22%] bottom-[9%] h-[9%] rounded-full shadow-sm"
-          style={{ background: `var(--color-uno-${chosen})` }}
-          aria-hidden="true"
-        />
+      <span className="playing-card-oval" />
+      <span className="playing-card-uno-face" style={{ fontSize: big }}>
+        {glyph(face, big)}
+      </span>
+      {width >= 44 && (
+        <>
+          <span className="playing-card-uno-index">{glyph(face, Math.round(width * 0.17))}</span>
+          <span className="playing-card-uno-index" data-flip>
+            {glyph(face, Math.round(width * 0.17))}
+          </span>
+        </>
       )}
     </span>
   );

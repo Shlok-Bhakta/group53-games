@@ -102,6 +102,37 @@ describe("Uno on the server", () => {
     expect((await pushes(t)).some((x) => x.userId === c.userId)).toBe(false);
   });
 
+  test("the log keeps each move's public state, so a phone can replay what it missed from where it last looked", async () => {
+    const t = setup();
+    const { id, seats } = await game(t, 3);
+    const [a, b, c] = seats;
+    await deal(
+      t,
+      id,
+      [
+        ["r5", "b2", "y3"],
+        ["r6", "g1", "g2"],
+        ["r7", "y1", "y2"],
+      ],
+      "r9",
+      { turn: 0 },
+    );
+    const before = (await stateOf(t, id)).seq;
+    await play(a, id, t, "r5");
+    await play(b, id, t, "r6");
+    await play(c, id, t, "r7");
+    const fromA = (await a.as.query(api.uno.log, { id }))!;
+    expect(fromA.moves.map((m) => m.state.top)).toEqual(["r6", "r7"]);
+    expect(fromA.moves.map((m) => m.by)).toEqual([1, 2]);
+    expect(fromA.start.state.top).toBe("r5");
+    expect(fromA.moves[0].state.log.map((e) => e.kind)).toEqual(["play"]);
+    expect(fromA.moves[0].state.log.every((e) => e.seq === fromA.moves[0].seq)).toBe(true);
+    const fromSeen = (await a.as.query(api.uno.log, { id, from: before }))!;
+    expect(fromSeen.moves.map((m) => m.state.top)).toEqual(["r5", "r6", "r7"]);
+    const rows = await t.run((ctx) => ctx.db.query("unoLog").collect());
+    expect(JSON.stringify(rows)).not.toContain('"b2"');
+  });
+
   test("drawing shows the drawn card only to its owner, and keeping it passes", async () => {
     const t = setup();
     const { id, seats } = await game(t, 2);

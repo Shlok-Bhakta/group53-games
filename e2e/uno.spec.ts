@@ -140,8 +140,64 @@ test("stacking and a Wild Draw 4 challenge on two phones", async ({ phones }) =>
   await card(pa, "wW4").click();
   await pa.getByRole("dialog").getByRole("button", { name: "Blue" }).click();
   await pb.getByRole("button", { name: "Challenge" }).click();
-  await expect(pa.locator(`[data-seat="${sa}"]`)).toHaveAttribute("data-count", "6");
+  await expect(hand(pa)).toHaveAttribute("data-cards", "6");
   await expect(pa.locator("[data-last=challenge]")).toHaveText(/bluffing/);
+});
+
+test("coming back replays what the others did since you looked, and Skip jumps to now", async ({ phones }) => {
+  test.setTimeout(150_000);
+  const { id, pages, players, seatOf } = await startGame(phones, {}, ["Shlok", "Chris", "Sam"]);
+  const [pa] = pages;
+  const [sa, sb, sc] = [seatOf(0), seatOf(1), seatOf(2)];
+  const as = (i: number, action: object) => admin().mutation(anyApi.testing.unoMoveAs, { id, userId: players[i].userId, action });
+  await pa.addInitScript(() => {
+    const tops: string[] = [];
+    (window as unknown as { __tops: string[] }).__tops = tops;
+    new MutationObserver(() => {
+      const top = document.querySelector("[data-top]")?.getAttribute("data-top");
+      if (top && tops.at(-1) !== top) tops.push(top);
+    }).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-top"] });
+  });
+  const tops = () => pa.evaluate(() => (window as unknown as { __tops: string[] }).__tops);
+  const hands = { [sa]: ["r1", "b2", "y3", "y4"], [sb]: ["r5", "r6", "g1", "g3"], [sc]: ["r7", "r8", "g2", "g4"] };
+  const order = (from: number) => [from, (from + 1) % 3, (from + 2) % 3];
+  const [first, second] = order(sa).slice(1);
+  await deal(id, hands, "r9", first);
+  await expect(table(pa)).toHaveAttribute("data-top", "r9");
+
+  await pa.goto("/games");
+  await as(
+    players.findIndex((_, i) => seatOf(i) === first),
+    { kind: "play", card: first === sb ? "r5" : "r7", uno: true },
+  );
+  await as(
+    players.findIndex((_, i) => seatOf(i) === second),
+    { kind: "play", card: second === sb ? "r5" : "r7", uno: true },
+  );
+  const final = (await stateOf(id)).top;
+  await pa.goto(`/uno/${id}`);
+  await expect(pa.getByRole("button", { name: "Skip to now" })).toBeVisible();
+  await expect(table(pa)).toHaveAttribute("data-top", final, { timeout: 15_000 });
+  await expect(pa.getByRole("button", { name: "Skip to now" })).toHaveCount(0);
+  expect((await tops()).slice(-2)).toEqual([first === sb ? "r5" : "r7", final]);
+  await expect(hand(pa)).toBeVisible();
+
+  await deal(id, hands, "r9", first);
+  await pa.goto("/games");
+  await as(
+    players.findIndex((_, i) => seatOf(i) === first),
+    { kind: "play", card: first === sb ? "r6" : "r8", uno: true },
+  );
+  await as(
+    players.findIndex((_, i) => seatOf(i) === second),
+    { kind: "play", card: second === sb ? "r6" : "r8", uno: true },
+  );
+  const later = (await stateOf(id)).top;
+  await pa.goto(`/uno/${id}`);
+  await pa.getByRole("button", { name: "Skip to now" }).click();
+  await expect(table(pa)).toHaveAttribute("data-top", later);
+  await expect(card(pa, "r1")).toHaveAttribute("data-playable", "true");
+  await holdsStill(pa);
 });
 
 test("on its side: the table on the left, the hand and players on the right, all on screen", async ({ phones }) => {
