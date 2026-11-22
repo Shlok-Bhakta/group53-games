@@ -300,7 +300,7 @@ export function clippedRings(page: Page | Frame) {
           if (shadow.includes("inset") || /rgba\(0, 0, 0, 0\)|transparent/.test(shadow)) continue;
           const n = (shadow.replace(/(rgba?|oklch|oklab|color|hsla?|lab|lch)\([^)]*\)/g, "").match(/-?[\d.]+px/g) ?? []).map(parseFloat);
           const [x = 0, y = 0, blur = 0, spread = 0] = n;
-          if (blur === 0 && spread > 0) out = Math.max(out, spread + Math.max(Math.abs(x), Math.abs(y)));
+          if (blur === 0 && spread >= 1.5) out = Math.max(out, spread + Math.max(Math.abs(x), Math.abs(y)));
         }
       if (s.outlineStyle !== "none" && parseFloat(s.outlineWidth) > 0 && el.matches(":focus-visible"))
         out = Math.max(out, parseFloat(s.outlineWidth) + parseFloat(s.outlineOffset || "0"));
@@ -331,10 +331,12 @@ export function clippedRings(page: Page | Frame) {
         const clipsY = s.overflowY !== "visible";
         if (!clipsX && !clipsY) continue;
         const box = a.getBoundingClientRect();
-        const left = box.left + a.clientLeft - a.scrollLeft;
-        const top = box.top + a.clientTop - a.scrollTop;
-        const width = Math.max(a.scrollWidth, a.clientWidth);
-        const height = Math.max(a.scrollHeight, a.clientHeight);
+        const scrollsX = s.overflowX === "auto" || s.overflowX === "scroll";
+        const scrollsY = s.overflowY === "auto" || s.overflowY === "scroll";
+        const left = box.left + a.clientLeft - (scrollsX ? a.scrollLeft : 0);
+        const top = box.top + a.clientTop - (scrollsY ? a.scrollTop : 0);
+        const width = scrollsX ? Math.max(a.scrollWidth, a.clientWidth) : a.clientWidth;
+        const height = scrollsY ? Math.max(a.scrollHeight, a.clientHeight) : a.clientHeight;
         const cut: string[] = [];
         if (clipsX && r.left - out < left - 0.5) cut.push("left");
         if (clipsX && r.right + out > left + width + 0.5) cut.push("right");

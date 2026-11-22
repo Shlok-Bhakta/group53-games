@@ -29,6 +29,7 @@ export function Table({
   onPlayer,
   origin,
   corner,
+  jumped,
 }: {
   boxRef: RefObject<HTMLDivElement | null>;
   match: MatchView;
@@ -42,6 +43,7 @@ export function Table({
   onPlayer: (seat: number) => void;
   origin: (seat: number, card: Card) => P;
   corner: ReactNode;
+  jumped: boolean;
 }) {
   useLayoutEffect(() => {
     const el = ref.current;
@@ -90,7 +92,7 @@ export function Table({
           {[...geo.seats].map(([i, at]) => (
             <Seat key={i} match={match} state={state} i={i} at={at} onTap={() => onPlayer(i)} />
           ))}
-          <Piles geo={geo} state={state} canDraw={canDraw} onDraw={onDraw} origin={origin} name={name} />
+          <Piles geo={geo} state={state} canDraw={canDraw} onDraw={onDraw} origin={origin} name={name} jumped={jumped} />
           <Waves geo={geo} waves={fx.waves} />
           <Flights flights={fx.flights} />
           <Bursts bursts={fx.bursts} w={geo.w} />
@@ -274,6 +276,7 @@ function Piles({
   onDraw,
   origin,
   name,
+  jumped,
 }: {
   geo: Geo;
   state: UnoState;
@@ -281,6 +284,7 @@ function Piles({
   onDraw: () => void;
   origin: (seat: number, card: Card) => P;
   name: (i: number) => string;
+  jumped: boolean;
 }) {
   const plays = state.log.filter((e) => e.hand === state.hand && (e.kind === "play" || e.kind === "jump"));
   const pile = state.recent.slice(-4).map((card, i, arr) => {
@@ -290,7 +294,7 @@ function Piles({
   });
   const top = pile.at(-1);
   const lastPlay = plays.at(-1);
-  const came = top && lastPlay && lastPlay.card === top.card ? origin(lastPlay.seat, lastPlay.card) : null;
+  const came = !jumped && top && lastPlay && lastPlay.card === top.card ? origin(lastPlay.seat, lastPlay.card) : null;
   const entry = came ? { x: came.x - geo.pile.x, y: came.y - geo.pile.y } : null;
   const p = state.pending;
   return (

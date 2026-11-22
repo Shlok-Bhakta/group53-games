@@ -589,7 +589,7 @@ test.describe("signed in", () => {
   }
 });
 
-test("the clipped-ring check catches a ring its scrolling parent cuts off, and passes one with room", async ({ phones }) => {
+test("the clipped-ring check catches a ring its scrolling or hidden parent cuts off, and passes one with room", async ({ phones }) => {
   const page = await phones.open({ player: await createPlayer("Shlok"), push: "on" });
   await page.goto("/");
   await ready(page);
@@ -605,8 +605,16 @@ test("the clipped-ring check catches a ring its scrolling parent cuts off, and p
     };
     strip("0 12px", "Cut pill");
     strip("4px 12px", "Roomy pill");
+    const box = document.createElement("div");
+    box.style.cssText = "overflow:hidden;width:60px;padding:4px";
+    const wide = document.createElement("span");
+    wide.setAttribute("aria-label", "Hidden pill");
+    wide.style.cssText = "display:block;width:120px;height:44px;box-shadow:0 0 0 2px red";
+    box.append(wide);
+    document.body.append(box);
   });
   const found = await clippedRings(page);
-  expect(found).toHaveLength(1);
+  expect(found).toHaveLength(2);
   expect(found[0]).toContain('"Cut pill" loses its top and bottom edge');
+  expect(found[1]).toContain('"Hidden pill" loses its right edge');
 });

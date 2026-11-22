@@ -166,6 +166,7 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
         onBox={onBox}
         onPlayer={setPlayer}
         origin={origin}
+        jumped={shown.jumped}
         corner={<TopLine state={view} seat={seat} onLog={() => setSheet("log")} />}
       />
       <ColorSheet open={ask?.need === "color"} card={ask?.card} onClose={() => setAsk(null)} onPick={(color) => finish({ color })} />
