@@ -300,7 +300,7 @@ export function clippedRings(page: Page | Frame) {
           if (shadow.includes("inset") || /rgba\(0, 0, 0, 0\)|transparent/.test(shadow)) continue;
           const n = (shadow.replace(/(rgba?|oklch|oklab|color|hsla?|lab|lch)\([^)]*\)/g, "").match(/-?[\d.]+px/g) ?? []).map(parseFloat);
           const [x = 0, y = 0, blur = 0, spread = 0] = n;
-          if (blur === 0 && spread >= 1.5) out = Math.max(out, spread + Math.max(Math.abs(x), Math.abs(y)));
+          if (blur === 0 && spread >= 1) out = Math.max(out, spread + Math.max(Math.abs(x), Math.abs(y)));
         }
       if (s.outlineStyle !== "none" && parseFloat(s.outlineWidth) > 0 && el.matches(":focus-visible"))
         out = Math.max(out, parseFloat(s.outlineWidth) + parseFloat(s.outlineOffset || "0"));
