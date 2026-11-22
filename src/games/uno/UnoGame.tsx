@@ -131,7 +131,11 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
   ) : !active ? (
     <Result match={match} meId={meId} />
   ) : seat < 0 ? (
-    <DockNote>{last ?? "You’re watching"}</DockNote>
+    last ? (
+      <div className="flex h-[60px] items-center">{last}</div>
+    ) : (
+      <DockNote>You&rsquo;re watching</DockNote>
+    )
   ) : isGone(state, seat) ? (
     <DockNote>You&rsquo;re out of this one</DockNote>
   ) : (

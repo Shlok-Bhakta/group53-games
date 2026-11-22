@@ -11,7 +11,6 @@ const LIFT = 18;
 const TOP = 5;
 const ARC = 1.5;
 const ROW = 44;
-const ROW_LIFT = 6;
 
 export const handHeight = (cardW: number, arcs = true) => Math.round(cardW * 1.4 + LIFT + TOP * 2 + (arcs ? ARC * 12 : 0));
 
@@ -132,11 +131,10 @@ function layout(n: number, w: number, cardW: number, height: number) {
       }),
     };
   }
-  const scale = (height - 2 * TOP - ROW - ROW_LIFT) / cardH;
+  const scale = (height - 2 * TOP - ROW) / cardH;
   const small = cardW * scale;
   const back = Math.ceil(n / 2);
   const rows = [rowOf(back, small), rowOf(n - back, small)];
-  const step = rows[0].step;
   const scrolls = rows[0].total > avail + 0.5;
   const shiftX = (cardW * (1 - scale)) / 2;
   const shiftY = cardH * (1 - scale);
@@ -145,13 +143,13 @@ function layout(n: number, w: number, cardW: number, height: number) {
     scale,
     scrolls,
     width: rows[0].total + 2 * PAD,
-    place: (i: number, lifted: boolean) => {
+    place: (i: number) => {
       const row = i < back ? 0 : 1;
       const j = row ? i - back : i;
       const start = scrolls ? PAD : (w - rows[row].total) / 2;
       return {
-        x: start + j * step - shiftX,
-        y: TOP + row * ROW + (lifted ? 0 : ROW_LIFT) - shiftY,
+        x: start + j * rows[row].step - shiftX,
+        y: TOP + row * ROW - shiftY,
         rotate: 0,
         z: row * 100 + j,
       };

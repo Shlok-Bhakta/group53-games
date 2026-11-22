@@ -243,6 +243,11 @@ test("a big hand folds into two rows that stay on screen, and the log lives in t
     expect(box.x, c).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width, c).toBeLessThanOrEqual(width);
   }
+  const tops = await hand(pa)
+    .locator("[data-card]")
+    .evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().top)));
+  expect(new Set(tops).size).toBe(2);
+  expect(Math.max(...tops) - Math.min(...tops)).toBeGreaterThanOrEqual(44);
   await shot(pa, "two-rows");
   await card(pa, "r1").click({ position: { x: 12, y: 12 } });
   await expect(table(pa)).toHaveAttribute("data-top", "r1");
