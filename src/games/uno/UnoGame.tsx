@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
-import { CardsIcon, FastForwardIcon, ListBulletsIcon, MegaphoneIcon, SirenIcon } from "@phosphor-icons/react";
+import { CardsIcon, FastForwardIcon, MegaphoneIcon, SirenIcon } from "@phosphor-icons/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { MatchView } from "../../../convex/matches";
@@ -9,12 +9,12 @@ import { COLORS, COLOR_NAME, colorOf, deckOf, faceOf, isWild, sortHand, type Car
 import { canPass, cantDraw, cantPlay, inHand, isGone, isOutOfHand, type UnoState } from "../../../convex/uno/engine";
 import { entryText } from "../../../convex/uno/text";
 import { usePending } from "@/components/AsyncButton";
-import { ActionRail, DockNote, GameFrame } from "@/components/game/GameFrame";
+import { ActionRail, DockNote, GameFrame, InMenu } from "@/components/game/GameFrame";
 import { usePhoneLandscape } from "@/components/game/landscape";
-import { TurnText } from "@/components/game/TurnText";
 import { ResignButton, Result } from "@/components/match";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
-import { Button, IconButton } from "@/components/ui/button";
+import { SectionTitle } from "@/components/parts";
+import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
 import { seatColor } from "@/games/seats";
 import { sfx } from "@/sound";
@@ -47,7 +47,6 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
   const mine = useQuery(api.uno.hand, seat >= 0 ? { id: match._id } : "skip");
   const cards = mine && mine.hand === state.hand ? sortHand(mine.cards, state.rules.deck) : [];
   const drawn = mine?.drawn ?? null;
-  const [sheet, setSheet] = useState<"log" | null>(null);
   const [player, setPlayer] = useState<number | null>(null);
   const [ask, setAsk] = useState<Ask | null>(null);
   const [pending, run] = usePending();
@@ -77,6 +76,8 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
   const tappedRef = useRef<{ card: Card; at: P } | null>(null);
   const names = useCallback((i: number) => (i === seat ? "you" : (match.players[i]?.name ?? "Someone")), [seat, match.players]);
   const fx = useFx({ view, jumped: shown.jumped, me: seat, geo, names, tappedRef });
+  const lastEntry = view.log.at(-1);
+  const last = lastEntry ? <LastLine kind={lastEntry.kind}>{cap(entryText(lastEntry, names))}</LastLine> : null;
   useFinish(match, seat);
 
   const move = (m: Move) => {
@@ -122,7 +123,7 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
 
   const dock = shown.catching ? (
     <div className="flex h-[200px] flex-col items-center justify-center gap-3 phone-landscape:h-auto">
-      <p className="text-callout text-muted-foreground">Catching up on what you missed</p>
+      <div className="flex h-11 w-full items-center">{last}</div>
       <Button size="xl" variant="secondary" className="w-full" icon={<FastForwardIcon weight="fill" />} onClick={shown.skip}>
         Skip to now
       </Button>
@@ -130,7 +131,11 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
   ) : !active ? (
     <Result match={match} meId={meId} />
   ) : seat < 0 ? (
-    <DockNote>You&rsquo;re watching</DockNote>
+    last ? (
+      <div className="flex h-[60px] items-center">{last}</div>
+    ) : (
+      <DockNote>You&rsquo;re watching</DockNote>
+    )
   ) : isGone(state, seat) ? (
     <DockNote>You&rsquo;re out of this one</DockNote>
   ) : (
@@ -138,13 +143,13 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
       match={match}
       state={state}
       seat={seat}
-      meId={meId}
       cards={cards}
       drawn={drawn}
       loaded={mine !== undefined}
       pending={pending}
       uno={uno}
       unoReady={unoReady}
+      last={last}
       cardW={landscape ? 58 : 80}
       shake={fx.shake}
       onUno={() => setUno((u) => !u)}
@@ -167,7 +172,6 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
         onPlayer={setPlayer}
         origin={origin}
         jumped={shown.jumped}
-        corner={<TopLine state={view} seat={seat} onLog={() => setSheet("log")} />}
       />
       <ColorSheet open={ask?.need === "color"} card={ask?.card} onClose={() => setAsk(null)} onPick={(color) => finish({ color })} />
       <SwapSheet
@@ -178,7 +182,9 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
         onClose={() => setAsk(null)}
         onPick={(target) => finish({ target })}
       />
-      <LogSheet open={sheet === "log"} onClose={() => setSheet(null)} match={match} state={state} seat={seat} />
+      <InMenu>
+        <UnoMenu match={match} state={state} seat={seat} />
+      </InMenu>
       <PlayerSheet seat={player} me={seat} match={match} state={state} onClose={() => setPlayer(null)} move={move} />
     </GameFrame>
   );
@@ -193,34 +199,17 @@ function useFinish(match: MatchView, seat: number) {
   }, [match.status, match.result, match.players, seat]);
 }
 
-function TopLine({ state, seat, onLog }: { state: UnoState; seat: number; onLog: () => void }) {
-  const goal = state.rules.goal;
-  return (
-    <>
-      <p className="flex flex-col text-footnote leading-tight text-muted-foreground tabular-nums">
-        <span className="font-semibold text-foreground" data-hand={state.hand}>
-          Hand {state.hand}
-        </span>
-        <span>{goal ? (seat >= 0 ? `${state.scores[seat]} of ${goal}` : `Play to ${goal}`) : "One hand"}</span>
-      </p>
-      <IconButton label="Log" className="-mr-1 text-muted-foreground" onClick={onLog} disabled={!state.log.length}>
-        <ListBulletsIcon size={22} weight="bold" />
-      </IconButton>
-    </>
-  );
-}
-
 function Dock({
   match,
   state,
   seat,
-  meId,
   cards,
   drawn,
   loaded,
   pending,
   uno,
   unoReady,
+  last,
   cardW,
   shake,
   onUno,
@@ -230,13 +219,13 @@ function Dock({
   match: MatchView;
   state: UnoState;
   seat: number;
-  meId: Id<"users"> | undefined;
   cards: Card[];
   drawn: Card | null;
   loaded: boolean;
   pending: boolean;
   uno: boolean;
   unoReady: boolean;
+  last: ReactNode;
   cardW: number;
   shake: number;
   onUno: () => void;
@@ -246,7 +235,6 @@ function Dock({
   const myTurn = state.turn === seat && !isOutOfHand(state, seat);
   const p = state.pending;
   const forgot = state.forgot;
-  const up = match.players[state.turn];
   let banner;
   if (forgot === seat)
     banner = (
@@ -274,32 +262,11 @@ function Dock({
       </Button>
     );
   else if (isOutOfHand(state, seat)) banner = <Note>The mercy rule got you. Back next hand.</Note>;
-  else
-    banner = (
-      <Note>
-        {myTurn ? (
-          p?.kind === "draw" ? (
-            p.challenge ? (
-              "Take them or challenge"
-            ) : (
-              "Stack a draw card or take them"
-            )
-          ) : p?.kind === "roulette" ? (
-            "Name a color: you flip till you hit it"
-          ) : state.drew ? (
-            canPass(state, seat) ? (
-              "Play the card you drew, or keep it"
-            ) : (
-              "Play the card you drew"
-            )
-          ) : (
-            "Your move"
-          )
-        ) : (
-          <TurnText up={up} meId={meId} />
-        )}
-      </Note>
-    );
+  else if (myTurn && p?.kind === "draw") banner = <Note>{p.challenge ? "Take them or challenge" : "Stack a draw card or take them"}</Note>;
+  else if (myTurn && p?.kind === "roulette") banner = <Note>Name a color: you flip till you hit it</Note>;
+  else if (myTurn && state.drew)
+    banner = <Note>{canPass(state, seat) ? "Play the card you drew, or keep it" : "Play the card you drew"}</Note>;
+  else banner = last;
 
   let actions;
   if (!myTurn) actions = null;
@@ -399,6 +366,16 @@ function Note({ children }: { children: ReactNode }) {
   return <p className="flex w-full items-center justify-center gap-2 text-center text-callout text-muted-foreground">{children}</p>;
 }
 
+const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
+
+function LastLine({ kind, children }: { kind: string; children: ReactNode }) {
+  return (
+    <p className="line-clamp-2 w-full text-center text-callout text-muted-foreground" data-last={kind}>
+      {children}
+    </p>
+  );
+}
+
 function ColorSheet({ open, card, onClose, onPick }: { open: boolean; card?: Card; onClose: () => void; onPick: (c: Color) => void }) {
   return (
     <Sheet open={open} onClose={onClose} title="Pick a color" closable>
@@ -456,42 +433,50 @@ function SwapSheet({
   );
 }
 
-function LogSheet({
-  open,
-  onClose,
-  match,
-  state,
-  seat,
-}: {
-  open: boolean;
-  onClose: () => void;
-  match: MatchView;
-  state: UnoState;
-  seat: number;
-}) {
+function UnoMenu({ match, state, seat }: { match: MatchView; state: UnoState; seat: number }) {
   const name = (i: number) => (i === seat ? "you" : (match.players[i]?.name ?? "Someone"));
   const entries = [...state.log].reverse();
   const last = state.last;
   return (
-    <Sheet open={open} onClose={onClose} title="What happened" closable>
-      {last && (
-        <p className="rounded-md bg-muted/50 px-3 py-2 text-callout">
-          {`${name(last.winner)[0].toUpperCase()}${name(last.winner).slice(1)} won hand ${last.hand} for ${last.points} points`}
-        </p>
+    <>
+      {state.rules.goal > 0 && (
+        <section aria-label="Scores">
+          <SectionTitle className="pb-2">Hand {state.hand}</SectionTitle>
+          <ol className="flex flex-col gap-1.5">
+            {match.players
+              .map((pl, i) => ({ pl, i }))
+              .sort((a, b) => state.scores[b.i] - state.scores[a.i])
+              .map(({ pl, i }) => (
+                <li key={i} className="flex items-center gap-3 rounded-lg bg-muted/50 px-3 py-2">
+                  <PlayerAvatar player={pl} size={32} seat={seatColor(pl, isGone(state, i))} />
+                  <span className="min-w-0 flex-1 truncate">{i === seat ? "You" : pl.name}</span>
+                  <span className="font-display text-callout tabular-nums">
+                    {state.scores[i]}
+                    <span className="text-muted-foreground">/{state.rules.goal}</span>
+                  </span>
+                </li>
+              ))}
+          </ol>
+        </section>
       )}
-      <ul className="flex flex-col gap-1.5 text-callout">
-        {entries.map((e) => {
-          const text = entryText(e, name);
-          return (
-            <li key={`${e.seq}:${e.kind}:${e.seat}`} className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2">
-              {e.card ? <UnoCard card={e.card} width={22} chosen={e.color} /> : <span className="w-[22px]" />}
-              <span className="flex-1">{text[0].toUpperCase() + text.slice(1)}</span>
-              {e.hand !== state.hand && <span className="text-caption text-muted-foreground">Hand {e.hand}</span>}
-            </li>
-          );
-        })}
-      </ul>
-    </Sheet>
+      {(last || entries.length > 0) && (
+        <section aria-label="What happened">
+          <SectionTitle className="pb-2">What happened</SectionTitle>
+          <ol className="flex flex-col gap-1.5 text-callout">
+            {last && (
+              <li className="rounded-md bg-muted/50 px-3 py-2">{`${cap(name(last.winner))} won hand ${last.hand} for ${last.points}`}</li>
+            )}
+            {entries.map((e) => (
+              <li key={`${e.seq}:${e.kind}:${e.seat}`} className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2">
+                {e.card ? <UnoCard card={e.card} width={22} chosen={e.color} /> : <span className="w-[22px]" />}
+                <span className="flex-1">{cap(entryText(e, name))}</span>
+                {e.hand !== state.hand && <span className="text-caption text-muted-foreground">Hand {e.hand}</span>}
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+    </>
   );
 }
 

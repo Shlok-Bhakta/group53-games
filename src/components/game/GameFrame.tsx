@@ -1,9 +1,10 @@
 import { createContext, use, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { CaretLeftIcon, ListIcon } from "@phosphor-icons/react";
 import { IconButton } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-type Chrome = { title: string; onBack: () => void; onMenu: () => void };
+type Chrome = { title: string; onBack: () => void; onMenu: () => void; menuSlot?: HTMLElement | null };
 
 const ChromeContext = createContext<Chrome | null>(null);
 
@@ -57,6 +58,11 @@ function SideChrome() {
       </IconButton>
     </div>
   );
+}
+
+export function InMenu({ children }: { children: ReactNode }) {
+  const slot = use(ChromeContext)?.menuSlot;
+  return slot ? createPortal(children, slot) : null;
 }
 
 export function ActionRail({ children, className }: { children: ReactNode; className?: string }) {

@@ -25,6 +25,7 @@ export function GameMenu({
   rules,
   children,
   footer,
+  slot,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -33,6 +34,7 @@ export function GameMenu({
   rules: string[];
   children?: ReactNode;
   footer?: ReactNode;
+  slot?: (el: HTMLDivElement | null) => void;
 }) {
   const mode = MODES[match.mode as ModeKey];
   return (
@@ -43,6 +45,7 @@ export function GameMenu({
             <DrawerTitle className="font-display text-title">{title}</DrawerTitle>
           </DrawerHeader>
           {children}
+          {slot && <div ref={slot} className="flex flex-col gap-6 empty:hidden" />}
           <MatchSettings match={match} />
           <div className="pt-4">
             <Rules rules={rules} defaultOpen={false} />

@@ -1,9 +1,8 @@
-import { useLayoutEffect, useState, type ReactNode, type RefObject } from "react";
+import { useLayoutEffect, useState, type RefObject } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type { MatchView } from "../../../convex/matches";
 import { COLOR_NAME, isWild, type Card, type Color } from "../../../convex/uno/cards";
 import { isOutOfHand, type UnoState } from "../../../convex/uno/engine";
-import { entryText } from "../../../convex/uno/text";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { Button } from "@/components/ui/button";
 import { seatColor } from "@/games/seats";
@@ -28,7 +27,6 @@ export function Table({
   onBox,
   onPlayer,
   origin,
-  corner,
   jumped,
 }: {
   boxRef: RefObject<HTMLDivElement | null>;
@@ -42,7 +40,6 @@ export function Table({
   onBox: (box: { w: number; h: number }) => void;
   onPlayer: (seat: number) => void;
   origin: (seat: number, card: Card) => P;
-  corner: ReactNode;
   jumped: boolean;
 }) {
   useLayoutEffect(() => {
@@ -54,9 +51,7 @@ export function Table({
     ro.observe(el);
     return () => ro.disconnect();
   }, [onBox, ref]);
-  const last = state.log.at(-1);
   const name = (i: number) => (i === seat ? "you" : (match.players[i]?.name ?? "Someone"));
-  const lastText = last ? entryText(last, name) : "";
   return (
     <div
       ref={ref}
@@ -98,10 +93,6 @@ export function Table({
           <Bursts bursts={fx.bursts} w={geo.w} />
         </>
       )}
-      <div className="absolute inset-x-0 top-0 z-10 flex h-11 items-center justify-between px-1">{corner}</div>
-      <p className="absolute inset-x-0 bottom-0 h-5 truncate px-2 text-center text-footnote text-muted-foreground" data-last={last?.kind}>
-        {lastText ? lastText[0].toUpperCase() + lastText.slice(1) : ""}
-      </p>
     </div>
   );
 }
@@ -303,7 +294,7 @@ function Piles({
         <Button
           variant="bare"
           size="overlay"
-          aria-label={canDraw ? "Draw a card" : "Draw pile"}
+          aria-label={canDraw ? `Draw a card, ${state.left} left` : `Draw pile, ${state.left} left`}
           disabled={!canDraw}
           onClick={onDraw}
           className={cn("relative rounded-md disabled:opacity-100", canDraw && "ring-2 ring-primary ring-offset-2 ring-offset-background")}
@@ -312,7 +303,6 @@ function Piles({
           <UnoCard width={geo.deckW} className="absolute top-0.5 left-0.5" />
           <UnoCard width={geo.deckW} />
         </Button>
-        <span className="text-caption text-muted-foreground tabular-nums">{state.left} left</span>
       </div>
       <div
         className="absolute"

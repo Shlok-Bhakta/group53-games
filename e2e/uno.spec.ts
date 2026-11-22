@@ -76,7 +76,7 @@ test("two phones: plays land live, a wild picks its color, a forgotten UNO gets 
   const [pa, pb] = pages;
   const [sa, sb] = [seatOf(0), seatOf(1)];
   await deal(id, { [sa]: ["r5", "wW", "b2", "y7"], [sb]: ["b9", "g1", "g2"] }, "r9", sa, Array(40).fill("y3"));
-  await expect(pa.getByText("Your move")).toBeVisible();
+  await expect(card(pa, "r5")).toHaveAttribute("data-playable", "true");
   await expect(card(pa, "b2")).not.toHaveAttribute("data-playable");
   await card(pa, "b2").click();
   await expect(pa.getByText("That doesn't match.")).toBeVisible();
@@ -84,7 +84,8 @@ test("two phones: plays land live, a wild picks its color, a forgotten UNO gets 
   await card(pa, "r5").click();
   await expect(table(pb)).toHaveAttribute("data-top", "r5");
   await expect(pb.locator(`[data-seat="${sa}"]`)).toHaveAttribute("data-count", "3");
-  await expect(pb.getByText("Your move")).toBeVisible();
+  await expect(pb.getByRole("button", { name: "Draw", exact: true })).toBeEnabled();
+  await expect(pb.locator("[data-last=play]")).toHaveText(/Shlok played/);
   await shot(pb, "playing");
 
   await pb.getByRole("button", { name: "Draw", exact: true }).click();
@@ -125,8 +126,10 @@ test("stacking and a Wild Draw 4 challenge on two phones", async ({ phones }) =>
   const [pa, pb] = pages;
   const [sa, sb] = [seatOf(0), seatOf(1)];
   await deal(id, { [sa]: ["rD2", "r1", "wW4"], [sb]: ["bD2", "g1", "g2"] }, "r9", sa, Array(40).fill("y3"));
+  await expect(card(pa, "rD2")).toHaveAttribute("data-playable", "true");
   await card(pa, "rD2").click();
   await expect(pb.locator("[data-pending]")).toHaveAttribute("data-pending", "2");
+  await expect(card(pb, "bD2")).toHaveAttribute("data-playable", "true");
   await card(pb, "bD2").click();
   await expect(pa.locator("[data-pending]")).toHaveAttribute("data-pending", "4");
   await shot(pa, "stacked");
@@ -219,6 +222,37 @@ test("on its side: the table on the left, the hand and players on the right, all
   await rotate(pa, "portrait");
   await holdsStill(pa);
   await expectFitsScreen(pa, SAFE_PORTRAIT);
+});
+
+test("a big hand folds into two rows that stay on screen, and the log lives in the menu", async ({ phones }) => {
+  test.setTimeout(120_000);
+  const { id, pages, seatOf } = await startGame(phones);
+  const [pa] = pages;
+  const seven = ["r1", "r2", "r3", "b4", "b5", "g6", "y7"];
+  await deal(id, { [seatOf(0)]: seven }, "r9", seatOf(0));
+  await expect(hand(pa)).toHaveAttribute("data-cards", "7");
+  await expect(hand(pa)).toHaveAttribute("data-rows", "1");
+  const big = [...seven, "r4", "r5", "b6", "b7", "g8", "g9", "y1", "y2", "wW"];
+  await deal(id, { [seatOf(0)]: big }, "r9", seatOf(0));
+  await expect(hand(pa)).toHaveAttribute("data-cards", String(big.length));
+  await expect(hand(pa)).toHaveAttribute("data-rows", "2");
+  await holdsStill(pa);
+  const width = pa.viewportSize()!.width;
+  for (const c of big) {
+    const box = (await card(pa, c).boundingBox())!;
+    expect(box.x, c).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width, c).toBeLessThanOrEqual(width);
+  }
+  const tops = await hand(pa)
+    .locator("[data-card]")
+    .evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().top)));
+  expect(new Set(tops).size).toBe(2);
+  expect(Math.max(...tops) - Math.min(...tops)).toBeGreaterThanOrEqual(44);
+  await shot(pa, "two-rows");
+  await card(pa, "r1").click({ position: { x: 12, y: 12 } });
+  await expect(table(pa)).toHaveAttribute("data-top", "r1");
+  await pa.getByRole("button", { name: "Menu" }).click();
+  await expect(pa.getByRole("region", { name: "What happened" })).toContainText("You played");
 });
 
 test("uno-screens", async ({ phones }) => {
