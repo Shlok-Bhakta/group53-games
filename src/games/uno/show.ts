@@ -8,9 +8,9 @@ import type { LogEntry, UnoState } from "../../../convex/uno/engine";
 
 type LogPage = NonNullable<FunctionReturnType<typeof api.uno.log>>;
 type Row = LogPage["moves"][number];
-type Snap = { view: UnoState | null; catching: boolean };
+type Snap = { view: UnoState | null; catching: boolean; jumped: boolean };
 
-export type Shown = { state: UnoState; catching: boolean; skip: () => void };
+export type Shown = { state: UnoState; catching: boolean; jumped: boolean; skip: () => void };
 
 const CATCH_UP_MOVES = 1;
 const MINE_MS = 350;
@@ -69,7 +69,7 @@ function withLog(row: UnoState, real: UnoState): UnoState {
 }
 
 class Show {
-  snap: Snap = { view: null, catching: false };
+  snap: Snap = { view: null, catching: false, jumped: false };
   real: UnoState;
   mySeat: number;
   private queue: Row[] = [];
@@ -106,7 +106,7 @@ class Show {
     if (this.queuedTo === null) {
       this.queuedTo = page.start.seq;
       const theirs = page.moves.filter((m) => m.seq > page.start.seq && m.by !== this.mySeat).length;
-      this.patch({ view: withLog(page.start.state, this.real), catching: theirs > CATCH_UP_MOVES });
+      this.patch({ view: withLog(page.start.state, this.real), catching: theirs > CATCH_UP_MOVES, jumped: true });
     }
     for (const m of page.moves) {
       if (m.seq <= this.queuedTo) continue;
@@ -122,7 +122,7 @@ class Show {
     if (!row) return this.settle();
     const before = this.snap.view ?? row.state;
     const view = withLog(row.state, this.real);
-    this.patch({ view });
+    this.patch({ view, jumped: false });
     markSeen(this.id, row.seq);
     const mine = row.by === this.mySeat && !this.snap.catching;
     const hold = document.hidden ? 0 : mine ? MINE_MS : holdFor(before, view) * paceOf(this.queue.length);
@@ -137,7 +137,7 @@ class Show {
     const view = this.snap.view;
     if (view && view.seq > this.real.seq) return;
     this.queuedTo = Math.max(this.queuedTo ?? -1, this.real.seq);
-    this.patch({ view: this.real, catching: false });
+    this.patch({ view: this.real, catching: false, jumped: false });
     markSeen(this.id, this.real.seq);
   }
 
@@ -145,8 +145,9 @@ class Show {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.queue = [];
-    this.patch({ catching: false });
-    this.settle();
+    this.queuedTo = Math.max(this.queuedTo ?? -1, this.real.seq);
+    this.patch({ view: this.real, catching: false, jumped: true });
+    markSeen(this.id, this.real.seq);
   };
 
   use(real: UnoState, mySeat: number) {
@@ -165,9 +166,10 @@ class Show {
 
 export function useShow({ id, real, mySeat }: { id: Id<"matches">; real: UnoState; mySeat: number }): Shown {
   const [show] = useState(() => new Show(id, real, mySeat));
-  const [from] = useState(() => readSeen(id));
+  const [from, setFrom] = useState(() => readSeen(id));
   const snap = useSyncExternalStore(show.subscribe, show.getSnapshot);
   const log = useQuery(api.uno.log, { id, from });
+  if (from === undefined && log) setFrom(log.start.seq);
 
   useEffect(() => {
     show.use(real, mySeat);
@@ -184,5 +186,5 @@ export function useShow({ id, real, mySeat }: { id: Id<"matches">; real: UnoStat
   });
   useEffect(() => settleOnReal(), [real]);
 
-  return { state: snap.view ?? real, catching: snap.catching, skip: show.skip };
+  return { state: snap.view ?? real, catching: snap.catching, jumped: snap.jumped, skip: show.skip };
 }

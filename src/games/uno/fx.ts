@@ -110,12 +110,14 @@ const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
 
 export function useFx({
   view,
+  jumped,
   me,
   geo,
   names,
   tappedRef,
 }: {
   view: UnoState;
+  jumped: boolean;
   me: number;
   geo: Geo | null;
   names: (seat: number) => string;
@@ -137,7 +139,7 @@ export function useFx({
     if (was === view || (was.seq === view.seq && was.hand === view.hand)) return;
     const g = geoRef.current;
     const name = namesRef.current;
-    if (!g || view.seq < was.seq || view.seq - was.seq > TOO_FAR) return;
+    if (!g || jumped || view.seq < was.seq || view.seq - was.seq > TOO_FAR) return;
     const at = (seat: number) => (seat === me ? g.me : (g.seats.get(seat) ?? g.c));
     const atBurst = (seat: number) => (seat === me ? { x: g.c.x, y: g.h - 24 } : { x: at(seat).x, y: at(seat).y - 34 });
     const hit = (e: LogEntry, text: string) => {
@@ -241,7 +243,7 @@ export function useFx({
       if (!view.over) sfx(r.winner === me ? "win" : "flip", { live: true });
     }
     if (view.turn === me && was.turn !== me && view.hand === was.hand && !view.over) sfx("turn", { live: true });
-  }, [view, me, store, tappedRef]);
+  }, [view, jumped, me, store, tappedRef]);
 
   return snap;
 }

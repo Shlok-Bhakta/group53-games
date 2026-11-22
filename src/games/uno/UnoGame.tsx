@@ -76,7 +76,7 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
   }, [box, seat, n]);
   const tappedRef = useRef<{ card: Card; at: P } | null>(null);
   const names = useCallback((i: number) => (i === seat ? "you" : (match.players[i]?.name ?? "Someone")), [seat, match.players]);
-  const fx = useFx({ view, me: seat, geo, names, tappedRef });
+  const fx = useFx({ view, jumped: shown.jumped, me: seat, geo, names, tappedRef });
   useFinish(match, seat);
 
   const move = (m: Move) => {

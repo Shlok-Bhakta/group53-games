@@ -225,10 +225,11 @@ export const hand = query({
 export const log = query({
   args: { id: v.id("matches"), from: v.optional(v.number()) },
   handler: async (ctx, { id, from }) => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) return null;
     const rows = () => ctx.db.query("unoLog");
     let start: Doc<"unoLog"> | null = null;
     if (from === undefined) {
-      const userId = await getAuthUserId(ctx);
       const match = await ctx.db.get(id);
       const seat = match && userId ? seatOf(match, userId) : -1;
       for await (const r of rows()

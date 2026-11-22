@@ -129,6 +129,7 @@ describe("Uno on the server", () => {
     expect(fromA.moves[0].state.log.every((e) => e.seq === fromA.moves[0].seq)).toBe(true);
     const fromSeen = (await a.as.query(api.uno.log, { id, from: before }))!;
     expect(fromSeen.moves.map((m) => m.state.top)).toEqual(["r5", "r6", "r7"]);
+    expect(await t.query(api.uno.log, { id })).toBeNull();
     const rows = await t.run((ctx) => ctx.db.query("unoLog").collect());
     expect(JSON.stringify(rows)).not.toContain('"b2"');
   });
