@@ -19,6 +19,7 @@ export function MatchScreen({ game }: { game: GameUI }) {
   const me = useQuery(api.users.me);
   const navigate = useNavigate();
   const [menu, setMenu] = useState(false);
+  const [menuSlot, setMenuSlot] = useState<HTMLElement | null>(null);
   const goBack = useGoBack("/");
   useHoldUpdates(true);
 
@@ -63,11 +64,12 @@ export function MatchScreen({ game }: { game: GameUI }) {
         match={match}
         title={mode.name}
         rules={game.rules(match.mode as ModeKey, settingsOf(match.mode, match.settings))}
+        slot={setMenuSlot}
       />
       {match.status === "waiting" || match.status === "cancelled" ? (
         <Lobby match={match} meId={me?._id} onLeave={() => navigate("/", { replace: true })} setup={game.setup} />
       ) : (
-        <GameChrome title={mode.name} onBack={goBack} onMenu={() => setMenu(true)}>
+        <GameChrome title={mode.name} onBack={goBack} onMenu={() => setMenu(true)} menuSlot={menuSlot}>
           <CrashBoundary title="This screen hit a bug">
             <Game match={match} meId={me?._id} />
           </CrashBoundary>
