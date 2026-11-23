@@ -52,7 +52,7 @@ function buildingsOn(state: HexState, hex: number) {
   const per = new Map<number, number>();
   for (const v of geo(state).hexVerts[hex]) {
     const spot = state.spots[v];
-    if (spot) per.set(spot.seat, (per.get(spot.seat) ?? 0) + (spot.town ? 2 : 1));
+    if (spot && !state.players[spot.seat].out) per.set(spot.seat, (per.get(spot.seat) ?? 0) + (spot.town ? 2 : 1));
   }
   return [...per.entries()].sort((a, b) => a[0] - b[0]);
 }
@@ -248,7 +248,7 @@ function PieceInfo({ state, kind, mySeat }: { state: HexState; kind: Piece; mySe
       )}
       <Fact label="Points">{PIECE_POINTS[kind]}</Fact>
       {kind === "road" && <Fact label="Longest Road">{`${LONGEST_MIN}+ roads · ${AWARD_POINTS} pts`}</Fact>}
-      {kind === "town" && <Fact label="Pays">2 per roll</Fact>}
+      {kind === "town" && <Fact label="Pays per hex">2, not 1</Fact>}
       {of && <Fact label="Victory Points">{`${of.point} of ${Object.values(of).reduce((a, b) => a + b, 0)}`}</Fact>}
       {of && <Fact label="Knights">{`${of.knight} · Largest Army ${ARMY_MIN}+`}</Fact>}
       <Fact label={kind === "card" ? "In the deck" : "You have left"}>

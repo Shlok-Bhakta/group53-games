@@ -32,7 +32,7 @@ function viewOf(state: HexState): View {
 
 const PORT_OUT = 0.5;
 const PORT_HIT = 0.42;
-const HEX_HIT = 1;
+const HEX_HIT = 1.3;
 
 function portSpot(state: HexState, k: number) {
   const g = geometryOf(state.layout);

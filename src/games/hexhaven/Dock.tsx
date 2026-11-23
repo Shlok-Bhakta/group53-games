@@ -47,7 +47,7 @@ function BuildButton({
       {...hold}
     >
       <span className="truncate">{SHORT_NAME[kind]}</span>
-      <Cost kind={kind} hand={hand} />
+      <Cost kind={kind} hand={hand} size={12} />
     </AsyncButton>
   );
 }

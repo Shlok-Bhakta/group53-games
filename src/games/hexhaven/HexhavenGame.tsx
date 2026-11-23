@@ -389,7 +389,15 @@ function PlayerSheet({
     state.phase.k === "main" &&
     (state.current === mySeat || state.current === seat);
   const mine = seat === mySeat;
-  const secret = mine ? held.filter((h) => h.c === "point").length : 0;
+  const revealed = seat !== null && state.players[seat].points !== undefined;
+  const secret =
+    seat === null
+      ? 0
+      : revealed
+        ? state.players[seat].points! - publicPoints(state, seat)
+        : mine
+          ? held.filter((h) => h.c === "point").length
+          : 0;
   return (
     <Sheet open={seat !== null} onClose={onClose} title={pl ? (mine ? "You" : pl.name) : ""} closable>
       {p && pl && seat !== null && (
@@ -399,7 +407,7 @@ function PlayerSheet({
             <div>
               <div className="font-display text-title tabular-nums">{p.points ?? publicPoints(state, seat)} points</div>
               <div className="text-footnote text-muted-foreground tabular-nums">
-                {mine && secret > 0 ? `${p.points ?? publicPoints(state, seat) + secret} with hidden · ` : ""}
+                {!revealed && secret > 0 ? `${publicPoints(state, seat) + secret} with hidden · ` : ""}
                 {state.rules.points} to win
               </div>
             </div>
@@ -423,22 +431,22 @@ function PlayerSheet({
             <Fact
               label={
                 <>
-                  <PathIcon weight="fill" /> Longest Road · {state.lengths[seat] ?? 0} long
+                  <PathIcon weight="fill" /> Longest Road · {state.lengths[seat] ?? 0} of {LONGEST_MIN}+
                 </>
               }
               tone={state.longest === seat ? "good" : undefined}
             >
-              {state.longest === seat ? AWARD_POINTS : `${LONGEST_MIN}+`}
+              {state.longest === seat ? AWARD_POINTS : 0}
             </Fact>
             <Fact
               label={
                 <>
-                  <SwordIcon weight="fill" /> Largest Army · {p.knights} knights
+                  <SwordIcon weight="fill" /> Largest Army · {p.knights} of {ARMY_MIN}+
                 </>
               }
               tone={state.army === seat ? "good" : undefined}
             >
-              {state.army === seat ? AWARD_POINTS : `${ARMY_MIN}+`}
+              {state.army === seat ? AWARD_POINTS : 0}
             </Fact>
             {secret > 0 && <Fact label="Victory Point cards">{secret}</Fact>}
             <Fact

@@ -41,7 +41,7 @@ export function missingFor(hand: readonly number[], kind: Piece) {
 export function Cost({ kind, hand, size = 14 }: { kind: Piece; hand?: readonly number[]; size?: number }) {
   const used = [0, 0, 0, 0, 0];
   return (
-    <span className="flex items-center gap-0.5" aria-hidden="true" data-cost={kind}>
+    <span className={cn("flex items-center", size < 16 ? "gap-px" : "gap-0.5")} aria-hidden="true" data-cost={kind}>
       {costUnits(kind).map((r, k) => {
         used[r] += 1;
         const short = hand !== undefined && used[r] > (hand[r] ?? 0);

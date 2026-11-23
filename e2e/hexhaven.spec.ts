@@ -121,6 +121,7 @@ test("details: tap a hex, tap a build you can't afford, hold one you can, tap a 
   await expect(road).toBeVisible();
   await expect(up.locator('[data-build="town"] [data-short]')).toHaveCount(4);
   await expect(up.locator('[data-build="road"] [data-short]')).toHaveCount(0);
+  await shot(up, "costs");
 
   await up.locator('[data-hex="9"] polygon').click({ force: true });
   await expect(info).toHaveAttribute("data-info", "hex");
