@@ -1,9 +1,11 @@
-import { useRef } from "react";
+import { useRef, type MouseEvent } from "react";
 import { motion } from "motion/react";
 import { ANY_PORT, DESERT, TERRAIN_NAMES, geometryOf, pips } from "../../../convex/hexhaven/board";
 import type { HexState } from "../../../convex/hexhaven/engine";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useHold } from "./hold";
+import type { Topic } from "./InfoSheet";
 import { PALETTE, RESOURCE_INK, TERRAIN, TERRAIN_DEEP } from "./palette";
 
 const SQ = Math.sqrt(3) / 2;
@@ -26,6 +28,41 @@ function viewOf(state: HexState): View {
   const maxY = Math.max(...ys) + PAD;
   const side = Math.max(maxX - minX, maxY - minY);
   return { x: (minX + maxX) / 2 - side / 2, y: (minY + maxY) / 2 - side / 2, side };
+}
+
+const PORT_OUT = 0.5;
+const PORT_HIT = 0.42;
+const HEX_HIT = 1;
+
+function portSpot(state: HexState, k: number) {
+  const g = geometryOf(state.layout);
+  const edge = g.edges[state.ports[k].e];
+  const a = { x: X(g.verts[edge.a].x), y: Y(g.verts[edge.a].y) };
+  const b = { x: X(g.verts[edge.b].x), y: Y(g.verts[edge.b].y) };
+  const c = { x: X(g.hexes[edge.hexes[0]].x), y: Y(g.hexes[edge.hexes[0]].y) };
+  const mx = (a.x + b.x) / 2;
+  const my = (a.y + b.y) / 2;
+  const len = Math.hypot(mx - c.x, my - c.y);
+  return { a, b, x: mx + ((mx - c.x) / len) * PORT_OUT, y: my + ((my - c.y) / len) * PORT_OUT };
+}
+
+function topicAt(state: HexState, x: number, y: number): Topic | null {
+  const g = geometryOf(state.layout);
+  const port = state.ports.findIndex((_, k) => {
+    const p = portSpot(state, k);
+    return Math.hypot(p.x - x, p.y - y) < PORT_HIT;
+  });
+  if (port >= 0) return { k: "port", i: port };
+  let best = -1;
+  let bestD = HEX_HIT;
+  g.hexes.forEach((h, i) => {
+    const d = Math.hypot(X(h.x) - x, Y(h.y) - y);
+    if (d < bestD) {
+      best = i;
+      bestD = d;
+    }
+  });
+  return best >= 0 ? { k: "hex", i: best } : null;
 }
 
 const pct = (v: number, from: number, side: number) => `${((v - from) / side) * 100}%`;
@@ -73,6 +110,7 @@ export function Board({
   chosen,
   onChoose,
   ghostColor,
+  onInspect,
 }: {
   state: HexState;
   colors: string[];
@@ -80,9 +118,21 @@ export function Board({
   chosen?: number | null;
   onChoose?: (i: number) => void;
   ghostColor?: string;
+  onInspect?: (topic: Topic) => void;
 }) {
   const g = geometryOf(state.layout);
   const view = viewOf(state);
+  const root = useRef<HTMLDivElement>(null);
+  const inspectAt = (cx: number, cy: number) => {
+    const box = root.current?.getBoundingClientRect();
+    if (!box || !onInspect) return;
+    const topic = topicAt(state, view.x + ((cx - box.left) / box.width) * view.side, view.y + ((cy - box.top) / box.height) * view.side);
+    if (topic) onInspect(topic);
+  };
+  const hold = useHold(inspectAt);
+  const tap = (e: MouseEvent) => {
+    if (!pick) inspectAt(e.clientX, e.clientY);
+  };
   const first = useRef<Set<string> | null>(null);
   const keys = [
     ...state.roads.flatMap((s, e) => (s >= 0 ? [`r${e}`] : [])),
@@ -107,7 +157,9 @@ export function Board({
 
   return (
     <div
-      className="relative aspect-square w-full"
+      ref={root}
+      className="relative aspect-square w-full select-none [-webkit-touch-callout:none]"
+      {...(onInspect ? { ...hold, onClick: tap } : {})}
       data-pieces={keys.length}
       data-bandit-at={state.bandit}
       role="group"
@@ -128,18 +180,10 @@ export function Board({
           strokeLinejoin="round"
         />
         {state.ports.map((port, k) => {
-          const edge = g.edges[port.e];
-          const a = vert(edge.a);
-          const b = vert(edge.b);
-          const c = hexAt(edge.hexes[0]);
-          const mx = (a.x + b.x) / 2;
-          const my = (a.y + b.y) / 2;
-          const len = Math.hypot(mx - c.x, my - c.y);
-          const px = mx + ((mx - c.x) / len) * 0.5;
-          const py = my + ((my - c.y) / len) * 0.5;
+          const { a, b, x: px, y: py } = portSpot(state, k);
           const any = port.r === ANY_PORT;
           return (
-            <g key={k}>
+            <g key={k} data-port={k}>
               <line x1={a.x} y1={a.y} x2={px} y2={py} stroke={PALETTE.pier} strokeWidth={0.07} />
               <line x1={b.x} y1={b.y} x2={px} y2={py} stroke={PALETTE.pier} strokeWidth={0.07} />
               <circle cx={px} cy={py} r={0.27} fill={any ? PALETTE.port : TERRAIN[port.r]} stroke={PALETTE.pier} strokeWidth={0.04} />

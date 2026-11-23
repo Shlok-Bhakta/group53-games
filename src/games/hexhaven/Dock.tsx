@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
-import { CastleTurretIcon, DiceFiveIcon, HandshakeIcon, HouseLineIcon, PathIcon, ScrollIcon, SwordIcon } from "@phosphor-icons/react";
-import { noHand } from "../../../convex/hexhaven/board";
+import { DiceFiveIcon, HandshakeIcon, ScrollIcon, SwordIcon } from "@phosphor-icons/react";
+import { noHand, type Piece } from "../../../convex/hexhaven/board";
 import { actor, cantBuild, handSize, victimsAt, type Held, type HexState } from "../../../convex/hexhaven/engine";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { MatchView } from "../../../convex/matches";
@@ -9,16 +9,48 @@ import { ActionRail, DockNote } from "@/components/game/GameFrame";
 import { TurnText } from "@/components/game/TurnText";
 import { Result } from "@/components/match";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Sheet } from "@/components/ui/sheet";
 import type { Pick } from "./Board";
 import { cantPlay } from "./CardsSheet";
-import { Counts, HandRow, useHexMove } from "./parts";
+import { useHold } from "./hold";
+import type { Topic } from "./InfoSheet";
+import { Cost, Counts, HandRow, PIECE_NAME, useHexMove } from "./parts";
 import { offersFor } from "./TradeSheet";
 
 export type Building = "road" | "village" | "town";
 
-const PIECE_ICON = { road: PathIcon, village: HouseLineIcon, town: CastleTurretIcon } as const;
-const PIECE_NAME = { road: "Road", village: "Settlement", town: "City" } as const;
+const SHORT_NAME: Record<Piece, string> = { road: "Road", village: "Settlement", town: "City", card: "Buy card" };
+
+function BuildButton({
+  kind,
+  hand,
+  why,
+  onBuild,
+  onInfo,
+}: {
+  kind: Piece;
+  hand: number[];
+  why: string | null;
+  onBuild: () => void | Promise<void>;
+  onInfo: (kind: Piece) => void;
+}) {
+  const hold = useHold(() => onInfo(kind));
+  return (
+    <AsyncButton
+      variant="card"
+      size="dock"
+      data-build={kind}
+      className={cn("gap-1 px-1 [-webkit-touch-callout:none]", why && "opacity-50")}
+      aria-description={why ?? undefined}
+      onClick={why ? () => onInfo(kind) : onBuild}
+      {...hold}
+    >
+      <span className="truncate">{SHORT_NAME[kind]}</span>
+      <Cost kind={kind} hand={hand} />
+    </AsyncButton>
+  );
+}
 
 function Badge({ n }: { n: number }) {
   if (!n) return null;
@@ -43,6 +75,7 @@ export function Dock({
   onDone,
   onTrade,
   onCards,
+  onInfo,
 }: {
   match: MatchView;
   meId: Id<"users"> | undefined;
@@ -57,6 +90,7 @@ export function Dock({
   onDone: () => void;
   onTrade: () => void;
   onCards: () => void;
+  onInfo: (topic: Topic) => void;
 }) {
   const act = useHexMove(match._id, state.seq);
   const [discarding, setDiscarding] = useState(false);
@@ -163,33 +197,16 @@ export function Dock({
   } else if (ph.k === "main" && up === mySeat) {
     main = (
       <ActionRail className="grid-cols-4 gap-2 phone-landscape:grid phone-landscape:grid-flow-row phone-landscape:grid-cols-2">
-        {(["road", "village", "town"] as const).map((k) => {
-          const Icon = PIECE_ICON[k];
-          const why = cantBuild(state, mySeat, k);
-          return (
-            <Button
-              key={k}
-              variant="card"
-              size="dock"
-              className="px-1"
-              disabled={!!why}
-              aria-description={why ?? undefined}
-              onClick={() => setBuilding(k)}
-            >
-              <Icon weight="bold" />
-              {PIECE_NAME[k]}
-            </Button>
-          );
-        })}
-        <AsyncButton
-          variant="card"
-          size="dock"
-          disabled={!!cantBuild(state, mySeat, "card")}
-          icon={<ScrollIcon weight="bold" />}
-          onClick={() => act({ k: "buy" })}
-        >
-          Buy card
-        </AsyncButton>
+        {(["road", "village", "town", "card"] as const).map((k) => (
+          <BuildButton
+            key={k}
+            kind={k}
+            hand={me.res}
+            why={cantBuild(state, mySeat, k)}
+            onBuild={k === "card" ? () => act({ k: "buy" }) : () => setBuilding(k)}
+            onInfo={(kind) => onInfo({ k: "piece", kind })}
+          />
+        ))}
       </ActionRail>
     );
   } else {
@@ -204,7 +221,7 @@ export function Dock({
   const endTurn = ph.k === "main" && up === mySeat && !building;
   return (
     <div className="flex flex-col gap-2" data-dock data-phase={ph.k} data-mine={up === mySeat ? "" : undefined}>
-      <HandRow hand={me.res} gained={gained} />
+      <HandRow hand={me.res} gained={gained} onPick={(r) => onInfo({ k: "res", r })} />
       <div className="min-h-[60px]">{main}</div>
       <div className="grid grid-cols-3 gap-2">
         <Button variant="secondary" className="relative h-11" onClick={onTrade}>

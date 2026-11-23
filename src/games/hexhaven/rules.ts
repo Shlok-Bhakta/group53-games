@@ -12,6 +12,7 @@ export function hexhavenRules(mode: ModeKey, raw: Settings): string[] {
     "Development cards include Knight (move the robber), Road Building (two free roads), Year of Plenty (take two resources from the bank), Monopoly (take everyone's cards of one resource) and Victory Point cards, worth a point and kept secret. One a turn, and not the turn you bought it.",
     `Settlements are a point, cities two, and the Longest Road (5 or more) and the Largest Army (3 knights or more) two each. First to ${s.points} on their own turn wins.`,
     `${s.balanced ? "6s and 8s never sit side by side" : "The numbers land anywhere, 6s and 8s side by side included"}. Five or six of you play on a bigger island.`,
+    "Tap a hex or a harbor, or touch and hold anything on the board, a card in your hand or a build button, to see what it pays, costs and is worth. Building costs are in the menu too.",
     "No time limit: take your turn whenever, and we'll ping you every few hours until you do.",
   ];
 }
