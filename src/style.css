@@ -920,6 +920,13 @@
 }
 /* gen-themes.py: end */
 
+:root {
+  --ink-deepen: 35%;
+}
+.dark {
+  --ink-deepen: 0%;
+}
+
 @property --spin {
   syntax: "<angle>";
   inherits: false;

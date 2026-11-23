@@ -4,10 +4,9 @@ import { AnimatePresence, motion } from "motion/react";
 import { CaretDownIcon, CaretUpIcon } from "@phosphor-icons/react";
 import { Group } from "@/components/parts";
 import { cn } from "@/lib/utils";
-import { FRAME_COLOR } from "../../../convex/palette";
-import { CUSTOM_COLOR_FRAMES } from "../../../convex/profileOptions";
 import { INDEX } from "../../../convex/stonks/market";
 import type { Dir } from "./Chart";
+import { moveInk } from "./colors";
 import { percent, price, signed } from "./format";
 import { S } from "./skeletons";
 import { Ticker } from "./Ticker";
@@ -108,7 +107,7 @@ export function Change({
   const text = small ? `${change < 0 ? "−" : "+"}${percent(pct)}` : `${signed(change, unit)} (${percent(pct)})`;
   return (
     <span className={cn("inline-flex items-center gap-1 whitespace-nowrap font-semibold", small ? "text-footnote" : "text-callout")}>
-      <Icon weight="fill" className="shrink-0" style={{ color: ink(dir) }} aria-label={dir} />
+      <Icon weight="fill" className="shrink-0" style={{ color: moveInk((dir === "up" ? 1 : -1) * Math.abs(pct / 100)) }} aria-label={dir} />
       <Ticker value={change} text={text} instant={instant} />
       {label && <span className="font-medium text-muted-foreground">{label}</span>}
     </span>
@@ -189,48 +188,4 @@ export function Pairs({ items }: { items: [string, string | undefined][] }) {
       ))}
     </Group>
   );
-}
-
-type Colored = { color: string; dash?: string };
-const FRAME_HUES: Record<string, string> = {
-  gold: FRAME_COLOR.gold,
-  fire: FRAME_COLOR.red,
-  ice: FRAME_COLOR.cyan,
-  toxic: FRAME_COLOR.green,
-};
-const UNUSABLE_AS_A_LINE = new Set<string>([FRAME_COLOR.white]);
-export function cardColor(frame?: string, frameColor?: string) {
-  if (!frame) return undefined;
-  const own = (CUSTOM_COLOR_FRAMES as readonly string[]).includes(frame) ? frameColor : FRAME_HUES[frame];
-  return own && !UNUSABLE_AS_A_LINE.has(own) ? own : undefined;
-}
-
-export function playerColors(crew: { userId: string; joinedAt: number; frame?: string; frameColor?: string }[]) {
-  const taken = new Set<string>();
-  const out = new Map<string, Colored>();
-  const byJoin = [...crew].sort((a, b) => a.joinedAt - b.joinedAt);
-  for (const c of byJoin) {
-    const own = cardColor(c.frame, c.frameColor);
-    if (own && !taken.has(own)) {
-      taken.add(own);
-      out.set(c.userId, { color: own });
-    }
-  }
-  let slot = 0;
-  for (const c of byJoin) {
-    if (out.has(c.userId)) continue;
-    out.set(c.userId, { color: `var(--series-${(slot % 8) + 1})`, dash: slot >= 8 ? "6 4" : undefined });
-    slot++;
-  }
-  return out;
-}
-
-export function gainColor(pct: number) {
-  const size = Math.abs(pct);
-  if (size < 0.0025) return "color-mix(in oklch, var(--muted-foreground) 45%, var(--card))";
-  const hue = pct > 0 ? "var(--up)" : "var(--down)";
-  if (size < 0.02) return `color-mix(in oklch, ${hue} 45%, white)`;
-  if (size < 0.05) return `color-mix(in oklch, ${hue} 72%, white)`;
-  if (size < 0.1) return hue;
-  return `color-mix(in oklch, ${hue} var(--deep), black)`;
 }
