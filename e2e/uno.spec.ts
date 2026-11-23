@@ -83,13 +83,17 @@ test("two phones: plays land live, a wild picks its color, a forgotten UNO gets 
   await deal(id, { [sa]: ["r5", "wW", "b2", "y7"], [sb]: ["b9", "g1", "g2"] }, "r9", sa, Array(40).fill("y3"));
   await expect(card(pa, "r5")).toHaveAttribute("data-playable", "true");
   await expect(card(pa, "b2")).not.toHaveAttribute("data-playable");
+  await card(pa, "r5").click();
+  await expect(card(pa, "r5")).toHaveAttribute("aria-pressed", "true");
   await card(pa, "b2").click();
   await expect(pa.getByText("That doesn't match.")).toBeVisible();
+  await expect(card(pa, "r5")).toHaveAttribute("aria-pressed", "false");
+  await expect(pa.getByRole("button", { name: "Play", exact: true })).toHaveCount(0);
   await card(pa, "r5").click();
   await expect(card(pa, "r5")).toHaveAttribute("aria-pressed", "true");
   await shot(pa, "picked");
   await card(pa, "r5").click();
-  await expect(card(pa, "r5")).not.toHaveAttribute("aria-pressed");
+  await expect(card(pa, "r5")).toHaveAttribute("aria-pressed", "false");
   await expect(table(pa)).toHaveAttribute("data-top", "r9");
 
   await play(pa, "r5");

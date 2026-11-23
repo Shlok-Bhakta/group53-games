@@ -20,7 +20,7 @@ import { seatColor } from "@/games/seats";
 import { sfx } from "@/sound";
 import { UnoCard } from "./Card";
 import { geometry, useFx, type P } from "./fx";
-import { Hand } from "./Hand";
+import { Hand, type Pick } from "./Hand";
 import { useShow } from "./show";
 import { Table } from "./Table";
 
@@ -49,7 +49,7 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
   const drawn = mine?.drawn ?? null;
   const [player, setPlayer] = useState<number | null>(null);
   const [ask, setAsk] = useState<Ask | null>(null);
-  const [picked, setPicked] = useState<{ card: Card; seq: number; rect: DOMRect } | null>(null);
+  const [picked, setPicked] = useState<(Pick & { seq: number; rect: DOMRect }) | null>(null);
   const [pending, run] = usePending();
   const send = useMutation(api.uno.move);
   const active = match.status === "active";
@@ -64,8 +64,10 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
   }
   const unoReady =
     playing && state.rules.unoCall && cards.some((c) => leftAfter(cards, c) === 1 && cantPlay(state, seat, c, cards, drawn) === null);
-  const chosen =
-    playing && picked && picked.seq === state.seq && cantPlay(state, seat, picked.card, cards, drawn) === null ? picked.card : null;
+  const chosen: Pick | null =
+    playing && picked && picked.seq === state.seq && cantPlay(state, seat, picked.card, cards, drawn) === null
+      ? { card: picked.card, copy: picked.copy }
+      : null;
   const landscape = usePhoneLandscape();
   const boxRef = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
@@ -96,22 +98,23 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
     );
   };
 
-  const tap = (card: Card, rect: DOMRect) => {
+  const tap = (card: Card, copy: number, rect: DOMRect) => {
     if (!playing || pending) return;
-    if (chosen === card) return setPicked(null);
+    if (chosen?.card === card && chosen.copy === copy) return setPicked(null);
     const why = cantPlay(state, seat, card, cards, drawn);
     if (why) {
+      setPicked(null);
       sfx("invalid");
       toast.error(why, { id: "uno-play" });
       return;
     }
     sfx("deal");
     toast.dismiss("uno-play");
-    setPicked({ card, seq: state.seq, rect });
+    setPicked({ card, copy, seq: state.seq, rect });
   };
   const play = () => {
     if (!chosen || !picked) return;
-    const card = chosen;
+    const card = chosen.card;
     const rect = picked.rect;
     setPicked(null);
     const b = boxRef.current?.getBoundingClientRect();
@@ -238,7 +241,7 @@ function Dock({
   seat: number;
   cards: Card[];
   drawn: Card | null;
-  chosen: Card | null;
+  chosen: Pick | null;
   onPlay: () => void;
   loaded: boolean;
   pending: boolean;
@@ -248,7 +251,7 @@ function Dock({
   cardW: number;
   shake: number;
   onUno: () => void;
-  onTap: (card: Card, rect: DOMRect) => void;
+  onTap: (card: Card, copy: number, rect: DOMRect) => void;
   move: (m: Move) => Promise<void>;
 }) {
   const myTurn = state.turn === seat && !isOutOfHand(state, seat);

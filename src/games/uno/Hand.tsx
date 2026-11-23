@@ -13,6 +13,8 @@ const ARC = 1.5;
 const ROW = 44;
 const PICK = 12;
 
+export type Pick = { card: Card; copy: number };
+
 export const handHeight = (cardW: number, arcs = true) => Math.round(cardW * 1.4 + PICK + LIFT + TOP * 2 + (arcs ? ARC * 12 : 0));
 
 export function Hand({
@@ -30,11 +32,11 @@ export function Hand({
   playable: Set<Card>;
   myTurn: boolean;
   drawn: Card | null;
-  chosen: Card | null;
+  chosen: Pick | null;
   loaded: boolean;
   cardW: number;
   shake: number;
-  onTap: (card: Card, rect: DOMRect) => void;
+  onTap: (card: Card, copy: number, rect: DOMRect) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(0);
@@ -75,7 +77,7 @@ export function Hand({
             seen.set(card, k + 1);
             const can = playable.has(card);
             const lifted = can && myTurn;
-            const picked = chosen === card && k === 0;
+            const picked = chosen?.card === card && chosen.copy === k;
             const at = lay.place(i, picked ? 0 : lifted ? PICK : PICK + LIFT);
             return (
               <motion.div
@@ -92,9 +94,9 @@ export function Hand({
                   size="piece"
                   data-card={card}
                   data-playable={can || undefined}
-                  aria-pressed={picked || undefined}
-                  aria-label={can ? `Play ${cardName(card)}` : cardName(card)}
-                  onClick={(e) => onTap(card, e.currentTarget.getBoundingClientRect())}
+                  aria-pressed={can ? picked : undefined}
+                  aria-label={cardName(card)}
+                  onClick={(e) => onTap(card, k, e.currentTarget.getBoundingClientRect())}
                   className={cn(
                     "rounded-sm",
                     picked
@@ -141,7 +143,7 @@ function layout(n: number, w: number, cardW: number, height: number) {
       }),
     };
   }
-  const scale = (height - 2 * TOP - ROW - PICK) / cardH;
+  const scale = Math.min(1, (height - 2 * TOP - ROW) / cardH);
   const small = cardW * scale;
   const back = Math.ceil(n / 2);
   const rows = [rowOf(back, small), rowOf(n - back, small)];
@@ -153,13 +155,13 @@ function layout(n: number, w: number, cardW: number, height: number) {
     scale,
     scrolls,
     width: rows[0].total + 2 * PAD,
-    place: (i: number, drop: number) => {
+    place: (i: number) => {
       const row = i < back ? 0 : 1;
       const j = row ? i - back : i;
       const start = scrolls ? PAD : (w - rows[row].total) / 2;
       return {
         x: start + j * rows[row].step - shiftX,
-        y: TOP + row * ROW + Math.min(drop, PICK) - shiftY,
+        y: TOP + row * ROW - shiftY,
         rotate: 0,
         z: row * 100 + j,
       };
