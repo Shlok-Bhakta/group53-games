@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
-import { CardsIcon, FastForwardIcon, MegaphoneIcon, SirenIcon } from "@phosphor-icons/react";
+import { ArrowFatUpIcon, CardsIcon, FastForwardIcon, MegaphoneIcon, SirenIcon } from "@phosphor-icons/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { MatchView } from "../../../convex/matches";
@@ -20,7 +20,7 @@ import { seatColor } from "@/games/seats";
 import { sfx } from "@/sound";
 import { UnoCard } from "./Card";
 import { geometry, useFx, type P } from "./fx";
-import { Hand } from "./Hand";
+import { Hand, type Pick } from "./Hand";
 import { useShow } from "./show";
 import { Table } from "./Table";
 
@@ -49,6 +49,7 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
   const drawn = mine?.drawn ?? null;
   const [player, setPlayer] = useState<number | null>(null);
   const [ask, setAsk] = useState<Ask | null>(null);
+  const [picked, setPicked] = useState<(Pick & { seq: number; rect: DOMRect }) | null>(null);
   const [pending, run] = usePending();
   const send = useMutation(api.uno.move);
   const active = match.status === "active";
@@ -63,6 +64,10 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
   }
   const unoReady =
     playing && state.rules.unoCall && cards.some((c) => leftAfter(cards, c) === 1 && cantPlay(state, seat, c, cards, drawn) === null);
+  const chosen: Pick | null =
+    playing && picked && picked.seq === state.seq && cantPlay(state, seat, picked.card, cards, drawn) === null
+      ? { card: picked.card, copy: picked.copy }
+      : null;
   const landscape = usePhoneLandscape();
   const boxRef = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
@@ -93,14 +98,25 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
     );
   };
 
-  const tap = (card: Card, rect: DOMRect) => {
+  const tap = (card: Card, copy: number, rect: DOMRect) => {
     if (!playing || pending) return;
+    if (chosen?.card === card && chosen.copy === copy) return setPicked(null);
     const why = cantPlay(state, seat, card, cards, drawn);
     if (why) {
+      setPicked(null);
       sfx("invalid");
       toast.error(why, { id: "uno-play" });
       return;
     }
+    sfx("deal");
+    toast.dismiss("uno-play");
+    setPicked({ card, copy, seq: state.seq, rect });
+  };
+  const play = () => {
+    if (!chosen || !picked) return;
+    const card = chosen.card;
+    const rect = picked.rect;
+    setPicked(null);
     const b = boxRef.current?.getBoundingClientRect();
     if (b) tappedRef.current = { card, at: { x: rect.left + rect.width / 2 - b.left, y: rect.top + rect.height / 2 - b.top } };
     if (isWild(card) && faceOf(card) !== "WC") return setAsk({ card, need: "color", seq: state.seq });
@@ -145,6 +161,8 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
       seat={seat}
       cards={cards}
       drawn={drawn}
+      chosen={chosen}
+      onPlay={play}
       loaded={mine !== undefined}
       pending={pending}
       uno={uno}
@@ -205,6 +223,8 @@ function Dock({
   seat,
   cards,
   drawn,
+  chosen,
+  onPlay,
   loaded,
   pending,
   uno,
@@ -221,6 +241,8 @@ function Dock({
   seat: number;
   cards: Card[];
   drawn: Card | null;
+  chosen: Pick | null;
+  onPlay: () => void;
   loaded: boolean;
   pending: boolean;
   uno: boolean;
@@ -229,7 +251,7 @@ function Dock({
   cardW: number;
   shake: number;
   onUno: () => void;
-  onTap: (card: Card, rect: DOMRect) => void;
+  onTap: (card: Card, copy: number, rect: DOMRect) => void;
   move: (m: Move) => Promise<void>;
 }) {
   const myTurn = state.turn === seat && !isOutOfHand(state, seat);
@@ -269,7 +291,13 @@ function Dock({
   else banner = last;
 
   let actions;
-  if (!myTurn) actions = null;
+  if (chosen)
+    actions = (
+      <Button size="xl" className="w-full" icon={<ArrowFatUpIcon weight="fill" />} pending={pending} onClick={onPlay}>
+        Play
+      </Button>
+    );
+  else if (!myTurn) actions = null;
   else if (p?.kind === "roulette")
     actions = (
       <div role="group" aria-label="Spin for" className="grid grid-cols-4 gap-2">
@@ -348,6 +376,7 @@ function Dock({
         playable={new Set(cards.filter((c) => cantPlay(state, seat, c, cards, drawn) === null))}
         myTurn={myTurn}
         drawn={drawn}
+        chosen={chosen}
         loaded={loaded}
         cardW={cardW}
         shake={shake}

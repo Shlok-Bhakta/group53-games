@@ -44,6 +44,11 @@ async function deal(id: string, bySeat: Record<number, string[]>, top: string, t
 const hand = (page: Page) => page.getByRole("group", { name: "Your hand" });
 const card = (page: Page, c: string) => hand(page).locator(`[data-card="${c}"]`).first();
 const table = (page: Page) => page.locator("[data-top]");
+async function play(page: Page, c: string, at?: { x: number; y: number }) {
+  await card(page, c).click(at && { position: at });
+  await expect(card(page, c)).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Play", exact: true }).click();
+}
 
 test("Uno has a card on Games and both modes have their house rules", async ({ phones }) => {
   const page = await phones.open({ player: await createPlayer("Shlok"), push: "on" });
@@ -78,10 +83,20 @@ test("two phones: plays land live, a wild picks its color, a forgotten UNO gets 
   await deal(id, { [sa]: ["r5", "wW", "b2", "y7"], [sb]: ["b9", "g1", "g2"] }, "r9", sa, Array(40).fill("y3"));
   await expect(card(pa, "r5")).toHaveAttribute("data-playable", "true");
   await expect(card(pa, "b2")).not.toHaveAttribute("data-playable");
+  await card(pa, "r5").click();
+  await expect(card(pa, "r5")).toHaveAttribute("aria-pressed", "true");
   await card(pa, "b2").click();
   await expect(pa.getByText("That doesn't match.")).toBeVisible();
-
+  await expect(card(pa, "r5")).toHaveAttribute("aria-pressed", "false");
+  await expect(pa.getByRole("button", { name: "Play", exact: true })).toHaveCount(0);
   await card(pa, "r5").click();
+  await expect(card(pa, "r5")).toHaveAttribute("aria-pressed", "true");
+  await shot(pa, "picked");
+  await card(pa, "r5").click();
+  await expect(card(pa, "r5")).toHaveAttribute("aria-pressed", "false");
+  await expect(table(pa)).toHaveAttribute("data-top", "r9");
+
+  await play(pa, "r5");
   await expect(table(pb)).toHaveAttribute("data-top", "r5");
   await expect(pb.locator(`[data-seat="${sa}"]`)).toHaveAttribute("data-count", "3");
   await expect(pb.getByRole("button", { name: "Draw", exact: true })).toBeEnabled();
@@ -92,14 +107,14 @@ test("two phones: plays land live, a wild picks its color, a forgotten UNO gets 
   await expect.poll(async () => (await stateOf(id)).turn).toBe(sa);
   await expect(pa.locator(`[data-seat="${sb}"]`)).toHaveAttribute("data-count", "4");
 
-  await card(pa, "wW").click();
+  await play(pa, "wW");
   await expect(pa.getByRole("dialog", { name: "Pick a color" })).toBeVisible();
   await shot(pa, "color");
   await pa.getByRole("dialog").getByRole("button", { name: "Blue" }).click();
   await expect(table(pb)).toHaveAttribute("data-color", "b");
 
   await deal(id, { [sa]: ["b4", "b5"], [sb]: ["g1", "g2", "b9"] }, "b3", sa, Array(40).fill("y3"));
-  await card(pa, "b4").click();
+  await play(pa, "b4");
   await expect.poll(async () => (await stateOf(id)).forgot).toBe(sa);
   await expect(pa.getByRole("button", { name: /Call UNO/ })).toBeVisible();
   await pb.getByRole("button", { name: /^Catch/ }).click();
@@ -109,12 +124,12 @@ test("two phones: plays land live, a wild picks its color, a forgotten UNO gets 
   await deal(id, { [sa]: ["b4", "b5"], [sb]: ["g1", "g2", "b9"] }, "b3", sa);
   await pa.getByRole("button", { name: "UNO!" }).click();
   await expect(pa.getByRole("button", { name: "UNO!" })).toHaveAttribute("aria-pressed", "true");
-  await card(pa, "b4").click();
+  await play(pa, "b4");
   await expect(pb.locator(`[data-seat="${sa}"]`)).toHaveAttribute("data-count", "1");
   expect((await stateOf(id)).forgot).toBeNull();
-  await card(pb, "b9").click();
+  await play(pb, "b9");
   await expect(table(pa)).toHaveAttribute("data-top", "b9");
-  await card(pa, "b5").click();
+  await play(pa, "b5");
   await expect.poll(async () => (await getMatch(id)).status).toBe("finished");
   for (const p of pages) await expect(p.getByRole("region", { name: "Result" })).toBeVisible();
   await shot(pa, "result");
@@ -127,20 +142,20 @@ test("stacking and a Wild Draw 4 challenge on two phones", async ({ phones }) =>
   const [sa, sb] = [seatOf(0), seatOf(1)];
   await deal(id, { [sa]: ["rD2", "r1", "wW4"], [sb]: ["bD2", "g1", "g2"] }, "r9", sa, Array(40).fill("y3"));
   await expect(card(pa, "rD2")).toHaveAttribute("data-playable", "true");
-  await card(pa, "rD2").click();
+  await play(pa, "rD2");
   await expect(pb.locator("[data-pending]")).toHaveAttribute("data-pending", "2");
   await expect(card(pb, "bD2")).toHaveAttribute("data-playable", "true");
-  await card(pb, "bD2").click();
+  await play(pb, "bD2");
   await expect(pa.locator("[data-pending]")).toHaveAttribute("data-pending", "4");
   await shot(pa, "stacked");
-  await card(pa, "wW4").click();
+  await play(pa, "wW4");
   await pa.getByRole("dialog").getByRole("button", { name: "Green" }).click();
   await expect(pb.locator("[data-pending]")).toHaveAttribute("data-pending", "8");
   await pb.getByRole("button", { name: "Take 8" }).click();
   await expect(pa.locator(`[data-seat="${sb}"]`)).toHaveAttribute("data-count", "10");
 
   await deal(id, { [sa]: ["wW4", "r1", "g5"], [sb]: ["g1", "g2"] }, "r9", sa, Array(40).fill("y3"));
-  await card(pa, "wW4").click();
+  await play(pa, "wW4");
   await pa.getByRole("dialog").getByRole("button", { name: "Blue" }).click();
   await pb.getByRole("button", { name: "Challenge" }).click();
   await expect(hand(pa)).toHaveAttribute("data-cards", "6");
@@ -249,7 +264,7 @@ test("a big hand folds into two rows that stay on screen, and the log lives in t
   expect(new Set(tops).size).toBe(2);
   expect(Math.max(...tops) - Math.min(...tops)).toBeGreaterThanOrEqual(44);
   await shot(pa, "two-rows");
-  await card(pa, "r1").click({ position: { x: 12, y: 12 } });
+  await play(pa, "r1", { x: 12, y: 12 });
   await expect(table(pa)).toHaveAttribute("data-top", "r1");
   await pa.getByRole("button", { name: "Menu" }).click();
   await expect(pa.getByRole("region", { name: "What happened" })).toContainText("You played");

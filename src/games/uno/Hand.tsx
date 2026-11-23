@@ -11,14 +11,18 @@ const LIFT = 18;
 const TOP = 5;
 const ARC = 1.5;
 const ROW = 44;
+const PICK = 12;
 
-export const handHeight = (cardW: number, arcs = true) => Math.round(cardW * 1.4 + LIFT + TOP * 2 + (arcs ? ARC * 12 : 0));
+export type Pick = { card: Card; copy: number };
+
+export const handHeight = (cardW: number, arcs = true) => Math.round(cardW * 1.4 + PICK + LIFT + TOP * 2 + (arcs ? ARC * 12 : 0));
 
 export function Hand({
   cards,
   playable,
   myTurn,
   drawn,
+  chosen,
   loaded,
   cardW,
   shake,
@@ -28,10 +32,11 @@ export function Hand({
   playable: Set<Card>;
   myTurn: boolean;
   drawn: Card | null;
+  chosen: Pick | null;
   loaded: boolean;
   cardW: number;
   shake: number;
-  onTap: (card: Card, rect: DOMRect) => void;
+  onTap: (card: Card, copy: number, rect: DOMRect) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(0);
@@ -72,12 +77,13 @@ export function Hand({
             seen.set(card, k + 1);
             const can = playable.has(card);
             const lifted = can && myTurn;
-            const at = lay.place(i, lifted);
+            const picked = chosen?.card === card && chosen.copy === k;
+            const at = lay.place(i, picked ? 0 : lifted ? PICK : PICK + LIFT);
             return (
               <motion.div
                 key={`${card}:${k}`}
                 className="absolute top-0 left-0"
-                style={{ zIndex: at.z, transformOrigin: "50% 100%" }}
+                style={{ zIndex: picked ? 1000 : at.z, transformOrigin: "50% 100%" }}
                 initial={{ x: at.x, y: -90, opacity: 0, scale: lay.scale * 0.8 }}
                 animate={{ x: at.x, y: at.y, rotate: at.rotate, opacity: 1, scale: lay.scale }}
                 exit={{ y: -140, opacity: 0, scale: 1.1, transition: { duration: 0.2 } }}
@@ -88,9 +94,15 @@ export function Hand({
                   size="piece"
                   data-card={card}
                   data-playable={can || undefined}
-                  aria-label={can ? `Play ${cardName(card)}` : cardName(card)}
-                  onClick={(e) => onTap(card, e.currentTarget.getBoundingClientRect())}
-                  className={cn("rounded-sm", drawn === card && myTurn && "ring-3 ring-primary ring-offset-1 ring-offset-background")}
+                  aria-pressed={can ? picked : undefined}
+                  aria-label={cardName(card)}
+                  onClick={(e) => onTap(card, k, e.currentTarget.getBoundingClientRect())}
+                  className={cn(
+                    "rounded-sm",
+                    picked
+                      ? "ring-3 ring-foreground ring-offset-1 ring-offset-background"
+                      : drawn === card && myTurn && "ring-3 ring-primary ring-offset-1 ring-offset-background",
+                  )}
                 >
                   <UnoCard card={card} width={cardW} dim={myTurn && !can} />
                 </Button>
@@ -123,15 +135,15 @@ function layout(n: number, w: number, cardW: number, height: number) {
       scale: 1,
       scrolls: false,
       width: w,
-      place: (i: number, lifted: boolean) => ({
+      place: (i: number, drop: number) => ({
         x: start + i * step,
-        y: (lifted ? TOP : TOP + LIFT) + (i - mid) * (i - mid) * ARC,
+        y: TOP + drop + (i - mid) * (i - mid) * ARC,
         rotate: (i - mid) * spread,
         z: i,
       }),
     };
   }
-  const scale = (height - 2 * TOP - ROW) / cardH;
+  const scale = Math.min(1, (height - 2 * TOP - ROW) / cardH);
   const small = cardW * scale;
   const back = Math.ceil(n / 2);
   const rows = [rowOf(back, small), rowOf(n - back, small)];
