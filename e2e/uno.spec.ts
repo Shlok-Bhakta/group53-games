@@ -50,6 +50,19 @@ async function play(page: Page, c: string, at?: { x: number; y: number }) {
   await page.getByRole("button", { name: "Play", exact: true }).click();
 }
 
+async function drag(page: Page, c: string, to: "table" | "hand", held?: () => Promise<void>) {
+  const from = (await card(page, c).boundingBox())!;
+  const box = (await (to === "table" ? table(page) : hand(page)).boundingBox())!;
+  const start = { x: from.x + from.width / 2, y: from.y + from.height / 2 };
+  const end = to === "table" ? { x: box.x + box.width / 2, y: box.y + box.height / 2 } : { x: start.x + 30, y: start.y };
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  for (let i = 1; i <= 8; i++) await page.mouse.move(start.x + ((end.x - start.x) * i) / 8, start.y + ((end.y - start.y) * i) / 8);
+  if (to === "table") await expect(page.locator("[data-pile]")).toHaveAttribute("data-aim", /ok|no/);
+  await held?.();
+  await page.mouse.up();
+}
+
 test("Uno has a card on Games and both modes have their house rules", async ({ phones }) => {
   const page = await phones.open({ player: await createPlayer("Shlok"), push: "on" });
   await page.goto("/games");
@@ -133,6 +146,37 @@ test("two phones: plays land live, a wild picks its color, a forgotten UNO gets 
   await expect.poll(async () => (await getMatch(id)).status).toBe("finished");
   for (const p of pages) await expect(p.getByRole("region", { name: "Result" })).toBeVisible();
   await shot(pa, "result");
+});
+
+test("a card dragged onto the table plays it, without tapping Play", async ({ phones }) => {
+  test.setTimeout(150_000);
+  const { id, pages, seatOf } = await startGame(phones);
+  const [pa, pb] = pages;
+  const [sa, sb] = [seatOf(0), seatOf(1)];
+  await deal(id, { [sa]: ["r5", "wW", "b2", "y7"], [sb]: ["b9", "g1", "g2"] }, "r9", sa, Array(40).fill("y3"));
+  await expect(card(pa, "r5")).toHaveAttribute("data-playable", "true");
+
+  await drag(pa, "b2", "table", () => shot(pa, "dragging-wrong"));
+  await expect(pa.getByText("That doesn't match.")).toBeVisible();
+  await expect(card(pa, "b2")).toBeVisible();
+  await expect(table(pa)).toHaveAttribute("data-top", "r9");
+
+  await drag(pa, "r5", "hand");
+  await expect(card(pa, "r5")).toHaveAttribute("aria-pressed", "false");
+  await expect(table(pa)).toHaveAttribute("data-top", "r9");
+  await expect(pa.locator("[data-pile]")).not.toHaveAttribute("data-aim");
+
+  await drag(pa, "r5", "table", () => shot(pa, "dragging"));
+  await expect(table(pb)).toHaveAttribute("data-top", "r5");
+  await expect(card(pa, "r5")).toHaveCount(0);
+  await pb.getByRole("button", { name: "Draw", exact: true }).click();
+  await expect.poll(async () => (await stateOf(id)).turn).toBe(sa);
+
+  await drag(pa, "wW", "table");
+  await expect(pa.getByRole("dialog", { name: "Pick a color" })).toBeVisible();
+  await pa.getByRole("dialog").getByRole("button", { name: "Green" }).click();
+  await expect(table(pb)).toHaveAttribute("data-color", "g");
+  await expect(table(pb)).toHaveAttribute("data-top", "wW");
 });
 
 test("stacking and a Wild Draw 4 challenge on two phones", async ({ phones }) => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { ArrowFatUpIcon, CardsIcon, FastForwardIcon, MegaphoneIcon, SirenIcon } from "@phosphor-icons/react";
@@ -21,8 +21,10 @@ import { sfx } from "@/sound";
 import { UnoCard } from "./Card";
 import { geometry, useFx, type P } from "./fx";
 import { Hand, type Pick } from "./Hand";
+import { DragGhost } from "./DragGhost";
 import { useShow } from "./show";
 import { Table } from "./Table";
+import { useCardDrag } from "./useCardDrag";
 
 type Move = {
   kind: "play" | "draw" | "pass" | "take" | "challenge" | "roulette" | "catch" | "uno";
@@ -32,7 +34,7 @@ type Move = {
   uno?: boolean;
   seq?: number;
 };
-type Ask = { card: Card; need: "color" | "target"; seq: number };
+type Ask = { card: Card; copy: number; need: "color" | "target"; seq: number };
 
 const drawable = (s: UnoState) => deckOf(s.rules.deck, s.rules.decks).length - s.counts.reduce((a, b) => a + b, 0) - 1;
 
@@ -50,6 +52,7 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
   const [player, setPlayer] = useState<number | null>(null);
   const [ask, setAsk] = useState<Ask | null>(null);
   const [picked, setPicked] = useState<(Pick & { seq: number; rect: DOMRect }) | null>(null);
+  const [thrown, setThrown] = useState<Pick | null>(null);
   const [pending, run] = usePending();
   const send = useMutation(api.uno.move);
   const active = match.status === "active";
@@ -89,8 +92,12 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
     if (shown.catching) shown.skip();
     return run(() =>
       send({ id: match._id, ...m, seq: m.seq ?? state.seq }).then(
-        () => void toast.dismiss("uno-play"),
+        () => {
+          setThrown(null);
+          toast.dismiss("uno-play");
+        },
         (err: unknown) => {
+          setThrown(null);
           sfx("invalid");
           throw err;
         },
@@ -99,7 +106,7 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
   };
 
   const tap = (card: Card, copy: number, rect: DOMRect) => {
-    if (!playing || pending) return;
+    if (!playing || pending || drag.justDragged()) return;
     if (chosen?.card === card && chosen.copy === copy) return setPicked(null);
     const why = cantPlay(state, seat, card, cards, drawn);
     if (why) {
@@ -112,23 +119,44 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
     toast.dismiss("uno-play");
     setPicked({ card, copy, seq: state.seq, rect });
   };
-  const play = () => {
-    if (!chosen || !picked) return;
-    const card = chosen.card;
-    const rect = picked.rect;
+  const launch = (card: Card, copy: number, at: P) => {
     setPicked(null);
     const b = boxRef.current?.getBoundingClientRect();
-    if (b) tappedRef.current = { card, at: { x: rect.left + rect.width / 2 - b.left, y: rect.top + rect.height / 2 - b.top } };
-    if (isWild(card) && faceOf(card) !== "WC") return setAsk({ card, need: "color", seq: state.seq });
-    if (state.rules.sevenZero && faceOf(card) === "7" && cards.length > 1) return setAsk({ card, need: "target", seq: state.seq });
+    if (b) tappedRef.current = { card, at: { x: at.x - b.left, y: at.y - b.top } };
+    if (isWild(card) && faceOf(card) !== "WC") return setAsk({ card, copy, need: "color", seq: state.seq });
+    if (state.rules.sevenZero && faceOf(card) === "7" && cards.length > 1) return setAsk({ card, copy, need: "target", seq: state.seq });
     sfx("play");
+    setThrown({ card, copy });
     void move({ kind: "play", card, uno });
   };
+  const play = () => {
+    if (!chosen || !picked) return;
+    const rect = picked.rect;
+    launch(chosen.card, chosen.copy, { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+  };
+  const drop = (card: Card, copy: number, at: P) => {
+    if (!playing || pending) return;
+    const why = cantPlay(state, seat, card, cards, drawn);
+    if (why) {
+      sfx("invalid");
+      toast.error(why, { id: "uno-play" });
+      return;
+    }
+    toast.dismiss("uno-play");
+    launch(card, copy, at);
+  };
+  const drag = useCardDrag({
+    enabled: playing && !pending,
+    target: boxRef,
+    canPlay: (card) => cantPlay(state, seat, card, cards, drawn) === null,
+    onDrop: drop,
+  });
   const finish = (extra: { color?: Color; target?: number }) => {
     if (!ask) return;
-    const { card, seq } = ask;
+    const { card, copy, seq } = ask;
     setAsk(null);
     sfx("play");
+    setThrown({ card, copy });
     void move({ kind: "play", card, uno, seq, ...extra });
   };
   const origin = (from: number, card: Card): P => {
@@ -162,6 +190,7 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
       cards={cards}
       drawn={drawn}
       chosen={chosen}
+      held={drag.held ?? thrown}
       onPlay={play}
       loaded={mine !== undefined}
       pending={pending}
@@ -172,6 +201,7 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
       shake={fx.shake}
       onUno={() => setUno((u) => !u)}
       onTap={tap}
+      onDown={drag.start}
       move={move}
     />
   );
@@ -190,7 +220,9 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
         onPlayer={setPlayer}
         origin={origin}
         jumped={shown.jumped}
+        aim={drag.aim}
       />
+      {drag.held && <DragGhost ref={drag.ghost} card={drag.held.card} width={landscape ? 58 : 80} />}
       <ColorSheet open={ask?.need === "color"} card={ask?.card} onClose={() => setAsk(null)} onPick={(color) => finish({ color })} />
       <SwapSheet
         open={ask?.need === "target"}
@@ -224,6 +256,7 @@ function Dock({
   cards,
   drawn,
   chosen,
+  held,
   onPlay,
   loaded,
   pending,
@@ -234,6 +267,7 @@ function Dock({
   shake,
   onUno,
   onTap,
+  onDown,
   move,
 }: {
   match: MatchView;
@@ -242,6 +276,7 @@ function Dock({
   cards: Card[];
   drawn: Card | null;
   chosen: Pick | null;
+  held: Pick | null;
   onPlay: () => void;
   loaded: boolean;
   pending: boolean;
@@ -252,6 +287,7 @@ function Dock({
   shake: number;
   onUno: () => void;
   onTap: (card: Card, copy: number, rect: DOMRect) => void;
+  onDown: (card: Card, copy: number, e: ReactPointerEvent) => void;
   move: (m: Move) => Promise<void>;
 }) {
   const myTurn = state.turn === seat && !isOutOfHand(state, seat);
@@ -377,10 +413,12 @@ function Dock({
         myTurn={myTurn}
         drawn={drawn}
         chosen={chosen}
+        held={held}
         loaded={loaded}
         cardW={cardW}
         shake={shake}
         onTap={onTap}
+        onDown={onDown}
       />
       <ActionRail className="h-14 phone-landscape:h-auto">
         {unoToggle}

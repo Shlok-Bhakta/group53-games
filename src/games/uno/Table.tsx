@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { seatColor } from "@/games/seats";
 import { cn } from "@/lib/utils";
 import { UnoCard } from "./Card";
+import type { Aim } from "./useCardDrag";
 import { angleTo, type Burst, type Flight, type Geo, type P, type Tone, type Wave } from "./fx";
 
 type Fx = { flights: Flight[]; bursts: Burst[]; waves: Wave[] };
@@ -28,6 +29,7 @@ export function Table({
   onPlayer,
   origin,
   jumped,
+  aim,
 }: {
   boxRef: RefObject<HTMLDivElement | null>;
   match: MatchView;
@@ -41,6 +43,7 @@ export function Table({
   onPlayer: (seat: number) => void;
   origin: (seat: number, card: Card) => P;
   jumped: boolean;
+  aim: Aim;
 }) {
   useLayoutEffect(() => {
     const el = ref.current;
@@ -87,7 +90,7 @@ export function Table({
           {[...geo.seats].map(([i, at]) => (
             <Seat key={i} match={match} state={state} i={i} at={at} onTap={() => onPlayer(i)} />
           ))}
-          <Piles geo={geo} state={state} canDraw={canDraw} onDraw={onDraw} origin={origin} name={name} jumped={jumped} />
+          <Piles geo={geo} state={state} canDraw={canDraw} onDraw={onDraw} origin={origin} name={name} jumped={jumped} aim={aim} />
           <Waves geo={geo} waves={fx.waves} />
           <Flights flights={fx.flights} />
           <Bursts bursts={fx.bursts} w={geo.w} />
@@ -268,6 +271,7 @@ function Piles({
   origin,
   name,
   jumped,
+  aim,
 }: {
   geo: Geo;
   state: UnoState;
@@ -276,6 +280,7 @@ function Piles({
   origin: (seat: number, card: Card) => P;
   name: (i: number) => string;
   jumped: boolean;
+  aim: Aim;
 }) {
   const plays = state.log.filter((e) => e.hand === state.hand && (e.kind === "play" || e.kind === "jump"));
   const pile = state.recent.slice(-4).map((card, i, arr) => {
@@ -310,7 +315,24 @@ function Piles({
         aria-label={`${COLOR_NAME[state.color]} is up`}
         role="img"
         data-pile
+        data-aim={aim ?? undefined}
       >
+        <AnimatePresence>
+          {aim && (
+            <motion.span
+              key={aim}
+              aria-hidden="true"
+              className={cn(
+                "pointer-events-none absolute -inset-3 rounded-lg border-4 border-dashed",
+                aim === "ok" ? "border-primary bg-primary/15" : "border-destructive bg-destructive/15",
+              )}
+              initial={{ opacity: 0, scale: 0.85 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.1 }}
+              transition={{ type: "spring", bounce: 0.4, duration: 0.3 }}
+            />
+          )}
+        </AnimatePresence>
         <AnimatePresence initial={false}>
           {pile.map(({ card, key }) => {
             const t = tilt(key);
