@@ -1,11 +1,11 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { useQuery } from "convex/react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence } from "motion/react";
 import { GameControllerIcon } from "@phosphor-icons/react";
 import { api } from "../../convex/_generated/api";
-import { MODES, MODE_KEYS, modeBySlug, modePath } from "../../convex/modes";
-import { Chip, InviteCard, MatchRow, Section, TurnChip, fullModeLabel } from "@/components/parts";
+import { MODES, modeBySlug, modePath } from "../../convex/modes";
+import { Chip, InviteCard, MatchRow, Section, TurnChip } from "@/components/parts";
 import { Tiles } from "@/Tiles";
 import { DailyStrip } from "@/games";
 import { Button } from "@/components/ui/button";
@@ -62,7 +62,6 @@ export function Home() {
           )}
           {nothing && <AllClear />}
           <DailyStrip meId={meId} />
-          <Stats />
           {waiting.length > 0 && (
             <Section title="Waiting">
               {waiting.map((m) => (
@@ -121,48 +120,5 @@ function AllClear() {
         </Link>
       </Button>
     </section>
-  );
-}
-
-function Stats() {
-  const ratings = useQuery(api.ratings.mine);
-  const played = MODE_KEYS.filter((m) => (ratings?.[m]?.games ?? 0) > 0);
-  if (!ratings || played.length === 0) return null;
-  return (
-    <Section title="Your ratings" bare>
-      <div className="grid grid-cols-2 gap-3">
-        {played.map((m, i) => {
-          const r = ratings[m]!;
-          return (
-            <StatCard key={m} to={modePath(m)} delay={i * 0.04} label={fullModeLabel(m)} value={r.rating}>
-              {r.wins}–{r.losses}
-              {r.draws ? `–${r.draws}` : ""}
-            </StatCard>
-          );
-        })}
-      </div>
-    </Section>
-  );
-}
-
-function StatCard({ to, label, value, delay, children }: { to: string; label: string; value: number; delay: number; children: ReactNode }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ type: "spring", bounce: 0, duration: 0.4, delay }}
-    >
-      <Link
-        to={to}
-        data-slot="card"
-        className="flex min-h-[88px] flex-col justify-between rounded-lg bg-card p-3.5 transition-[transform,background-color] duration-100 ease-out active:scale-[0.97] active:bg-muted"
-      >
-        <span className="truncate text-footnote font-semibold text-muted-foreground">{label}</span>
-        <span className="flex items-end justify-between gap-2">
-          <span className="font-display text-title tabular-nums">{value}</span>
-          <span className="pb-1 text-footnote tabular-nums text-muted-foreground">{children}</span>
-        </span>
-      </Link>
-    </motion.div>
   );
 }

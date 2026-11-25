@@ -108,7 +108,7 @@ function MaskField({ setting, value, onChange }: { setting: Setting; value: numb
     if (next > 0) onChange(next);
   };
   return (
-    <div className="flex flex-wrap gap-1.5" role="group" aria-label={setting.label}>
+    <div className="flex flex-wrap gap-1.5 p-px" role="group" aria-label={setting.label}>
       <Toggle variant="solid" pressed={value === all} onPressedChange={() => onChange(all)}>
         All
       </Toggle>

@@ -110,3 +110,15 @@ export const mine = query({
     );
   },
 });
+
+export const crew = query({
+  args: {},
+  handler: async (ctx) => {
+    if ((await getAuthUserId(ctx)) === null) return [];
+    const rows = await ctx.db.query("ratings").collect();
+    return rows
+      .filter((r) => r.games > 0)
+      .map(({ mode, userId, rating, games, wins, losses, draws }) => ({ mode, userId, rating, games, wins, losses, draws }))
+      .sort((a, b) => b.rating - a.rating || b.wins - a.wins);
+  },
+});

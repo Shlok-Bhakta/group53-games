@@ -56,14 +56,13 @@ export function ModePicker({ game, art, badge, rating }: Props) {
               {KINDS[kind].icon}
               {KINDS[kind].title}
             </h2>
-            <div className="bleed-x flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-page [scrollbar-width:none]">
+            <div className="grid grid-cols-2 gap-3">
               {modes.map((mode, i) => (
                 <motion.div
                   key={mode}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ type: "spring", bounce: 0, duration: 0.45, delay: (gi * 2 + i) * 0.05 }}
-                  className="w-[calc(50%-6px)] shrink-0 snap-start"
                 >
                   <ModeCard mode={mode} art={art(mode)} badge={badge?.(mode) ?? null} rating={rating?.(mode) ?? null} titled={titled} />
                 </motion.div>
@@ -142,10 +141,10 @@ function ModeCard({
         </span>
       ) : (
         <span className="mt-auto flex items-end justify-between gap-2">
-          <span className="font-display text-heading">{seatLabel(mode)}</span>
+          <span className="whitespace-nowrap font-display text-heading">{seatLabel(mode)}</span>
           {rating && (
             <span
-              className={cn("font-display text-heading tabular-nums", rating.games === 0 && "text-muted-foreground")}
+              className={cn("pb-0.5 font-display text-body tabular-nums", rating.games === 0 && "text-muted-foreground")}
               aria-label={`Your rating ${rating.rating}`}
             >
               {rating.rating}

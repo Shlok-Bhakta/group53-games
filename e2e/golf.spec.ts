@@ -1,7 +1,20 @@
 import type { Page } from "@playwright/test";
 import { anyApi } from "convex/server";
 import { SOLUTIONS } from "../convex/golf/solutions";
-import { admin, createPlayer, expect, fillLobby, getMatch, holdsStill, matchIdOf, openLobby, resign, test, type Phones } from "./fixtures";
+import {
+  admin,
+  clippedRings,
+  createPlayer,
+  expect,
+  fillLobby,
+  getMatch,
+  holdsStill,
+  matchIdOf,
+  openLobby,
+  resign,
+  test,
+  type Phones,
+} from "./fixtures";
 import { LANDSCAPE, PORTRAIT, SAFE_LANDSCAPE, SAFE_PORTRAIT, expectFitsScreen, simulateSafeAreas } from "./landscape";
 
 type BallView = { id: string; x: number; y: number; mode: string; holes: number; strokes: number; t: number };
@@ -375,6 +388,8 @@ test("a generated course shows its seed, and the same seed plays the same holes"
   const [pa, pb] = await twoPhones(phones);
   await pa.goto("/golf/mode/turns");
   await pa.getByRole("button", { name: "Settings" }).click();
+  await expect(pa.getByRole("group", { name: "Items" }).getByRole("button", { name: "Magnet" })).toBeVisible();
+  await expect.poll(() => clippedRings(pa), { message: "the item chips' rings have room inside the settings" }).toEqual([]);
   await pa.getByRole("radiogroup", { name: "Holes" }).getByRole("radio", { name: "3", exact: true }).click();
   await pa.getByRole("textbox", { name: "Seed" }).fill("4242");
   await pa.getByRole("textbox", { name: "Seed" }).press("Enter");

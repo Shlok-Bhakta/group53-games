@@ -3,6 +3,8 @@ import { SignOutIcon } from "@phosphor-icons/react";
 import { ConfirmButton } from "@/components/ConfirmButton";
 import { ListRow } from "@/components/ListRow";
 import { Section } from "@/components/parts";
+import { SettingsIcon } from "./SettingsRow";
+import { TINT } from "./palette";
 
 export function AccountGroup() {
   const { signOut } = useAuthActions();
@@ -12,9 +14,8 @@ export function AccountGroup() {
         trigger={
           <ListRow
             size="sm"
-            className="text-destructive"
-            leading={<SignOutIcon size={22} weight="bold" />}
-            title="Sign out"
+            leading={<SettingsIcon icon={SignOutIcon} tint={TINT.red} />}
+            title={<span className="font-medium text-destructive">Sign out</span>}
             onClick={() => {}}
           />
         }
