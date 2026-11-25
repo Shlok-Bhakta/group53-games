@@ -127,12 +127,17 @@ test("coming back plays what you missed, then it's live", async ({ phones }) => 
   test.setTimeout(120_000);
   const { id, a, b, pb } = await startGame(phones);
   await settledOn(pb);
+  await expect
+    .poll(() => pb.evaluate((key) => localStorage.getItem(key), `landlord-seen:${id}`), { message: "the phone has saved what it's seen" })
+    .not.toBeNull();
   const url = pb.url();
   await pb.goto("/");
-  for (let i = 0; i < 4; i++) {
+  let theirs = 0;
+  for (let i = 0; i < 8; i++) {
+    const before = (await stateOf(id)).seq;
     await admin().mutation(anyApi.testing.landlordBots, { id, human: b.userId, steps: 40 });
-    const s = await stateOf(id);
-    if ((await getMatch(id)).turn === b.userId && s.seq > 6) break;
+    theirs += (await stateOf(id)).seq - before;
+    if ((await getMatch(id)).turn === b.userId && theirs > 6) break;
     await admin().mutation(anyApi.testing.landlordBots, { id, human: a.userId, steps: 40 });
   }
   await pb.goto(url);
