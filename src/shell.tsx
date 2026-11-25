@@ -243,3 +243,12 @@ export function useViewportGap() {
     };
   }, []);
 }
+
+// platform: iOS ignores user-scalable=no, so a pinch that lands partly off a board zooms the whole app and every screen after it stays zoomed.
+export function useNoPageZoom() {
+  useEffect(() => {
+    const stop = (e: Event) => e.preventDefault();
+    document.addEventListener("gesturestart", stop);
+    return () => document.removeEventListener("gesturestart", stop);
+  }, []);
+}

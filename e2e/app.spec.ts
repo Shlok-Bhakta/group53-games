@@ -347,6 +347,16 @@ test.describe("signed in", () => {
     await expect(page.getByRole("heading", { name: "Real-time", level: 1 })).toBeVisible();
   });
 
+  test("a mistyped or cut-off game link says the game doesn't exist", async ({ phones }) => {
+    const me = await createPlayer("Shlok");
+    const page = await phones.open({ player: me, push: "on" });
+    for (const path of ["/chess/abc", `/catan/${me.userId}`]) {
+      await page.goto(path);
+      await expect(page.getByText("This game doesn't exist.")).toBeVisible();
+      await expect(page.getByText("hit a bug")).toHaveCount(0);
+    }
+  });
+
   test("a swipe from the left edge goes back", async ({ phones }) => {
     const me = await createPlayer("Shlok");
     const chris = await createPlayer("Chris");
