@@ -49,6 +49,7 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
   const drawn = mine?.drawn ?? null;
   const [player, setPlayer] = useState<number | null>(null);
   const [ask, setAsk] = useState<Ask | null>(null);
+  const asking = ask?.seq === state.seq ? ask : null;
   const [picked, setPicked] = useState<(Pick & { seq: number; rect: DOMRect }) | null>(null);
   const [pending, run] = usePending();
   const send = useMutation(api.uno.move);
@@ -125,8 +126,8 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
     void move({ kind: "play", card, uno });
   };
   const finish = (extra: { color?: Color; target?: number }) => {
-    if (!ask) return;
-    const { card, seq } = ask;
+    if (!asking) return;
+    const { card, seq } = asking;
     setAsk(null);
     sfx("play");
     void move({ kind: "play", card, uno, seq, ...extra });
@@ -191,9 +192,9 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
         origin={origin}
         jumped={shown.jumped}
       />
-      <ColorSheet open={ask?.need === "color"} card={ask?.card} onClose={() => setAsk(null)} onPick={(color) => finish({ color })} />
+      <ColorSheet open={asking?.need === "color"} card={asking?.card} onClose={() => setAsk(null)} onPick={(color) => finish({ color })} />
       <SwapSheet
-        open={ask?.need === "target"}
+        open={asking?.need === "target"}
         match={match}
         state={state}
         seat={seat}

@@ -23,7 +23,7 @@ import { Home } from "@/pages/Home";
 import { SignIn } from "@/pages/SignIn";
 import { You } from "@/pages/You";
 import { ArrivalPills, TapLayer, usePresenceReporter } from "@/presence";
-import { Page, TAB_ROUTES, useAppBadge, useNavDirection, useScrollMemory, useViewportGap } from "@/shell";
+import { Page, TAB_ROUTES, useAppBadge, useNavDirection, useNoPageZoom, useScrollMemory, useViewportGap } from "@/shell";
 import { HoldUpdates, recover, UpdateOverlay, useVersionCheck } from "@/version";
 import { CrashBoundary } from "@/components/CrashBoundary";
 import { ConnectionLost } from "@/connection";
@@ -47,6 +47,7 @@ const golfRoute = (path: string, element: ReactNode) => (
 
 export function App() {
   useViewportGap();
+  useNoPageZoom();
   useVersionCheck();
   return (
     <MotionConfig reducedMotion="user">

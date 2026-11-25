@@ -241,6 +241,14 @@ export default function GolfWorld({ course: COURSE, hole, round }: { course: Cou
       bx.panned = performance.now();
     }
   };
+  const release = (e: RPointerEvent) => {
+    pointers.current.delete(e.pointerId);
+    const g = gesture.current;
+    if (g?.kind === "aim") aim.current = null;
+    if (g?.kind === "target") targetAt.current = null;
+    if (pointers.current.size === 0) gesture.current = null;
+    else if (g?.kind === "pinch") gesture.current = { kind: "pan" };
+  };
   const up = (e: RPointerEvent) => {
     pointers.current.delete(e.pointerId);
     const g = gesture.current;
@@ -297,7 +305,7 @@ export default function GolfWorld({ course: COURSE, hole, round }: { course: Cou
         onPointerDown={down}
         onPointerMove={move}
         onPointerUp={up}
-        onPointerCancel={up}
+        onPointerCancel={release}
         aria-label={
           round
             ? `${COURSE.name}, hole ${round.number} of ${round.total}`

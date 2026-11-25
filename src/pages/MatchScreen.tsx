@@ -3,7 +3,6 @@ import { useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import type { Id } from "../../convex/_generated/dataModel";
 import { MODES, gameOf, matchPath, settingsOf, type ModeKey } from "../../convex/modes";
 import { NavBar, useGoBack } from "@/components/AppHeader";
 import { GameChrome } from "@/components/game/GameFrame";
@@ -15,7 +14,7 @@ import type { GameUI } from "@/games";
 
 export function MatchScreen({ game }: { game: GameUI }) {
   const { id } = useParams<{ id: string }>();
-  const match = useQuery(api.matches.get, { id: id as Id<"matches"> });
+  const match = useQuery(api.matches.get, { id: id ?? "" });
   const me = useQuery(api.users.me);
   const navigate = useNavigate();
   const [menu, setMenu] = useState(false);
