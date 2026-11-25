@@ -1,26 +1,33 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "convex/react";
 import { AnimatePresence, motion } from "motion/react";
-import { CaretRightIcon, CastleTurretIcon, PathIcon, ScrollIcon, StackIcon, SwordIcon } from "@phosphor-icons/react";
+import { CaretRightIcon, PathIcon, ScrollIcon, StackIcon, SwordIcon } from "@phosphor-icons/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { MatchView } from "../../../convex/matches";
-import { RESOURCE_NAMES } from "../../../convex/hexhaven/board";
+import { PIECES, RESOURCE_NAMES, type Piece } from "../../../convex/hexhaven/board";
 import {
+  ARMY_MIN,
+  AWARD_POINTS,
+  LONGEST_MIN,
   actor,
   banditHexes,
   handSize,
   publicPoints,
   roadSpots,
+  roadsOf,
   townSpots,
+  townsOf,
   villageSpots,
+  villagesOf,
   waitingOn,
   type Ev,
   type Held,
   type HexState,
 } from "../../../convex/hexhaven/engine";
 import { say } from "../../../convex/hexhaven/text";
-import { GameFrame } from "@/components/game/GameFrame";
+import { GameFrame, InMenu } from "@/components/game/GameFrame";
+import { SectionTitle } from "@/components/parts";
 import { usePhoneLandscape } from "@/components/game/landscape";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { Button } from "@/components/ui/button";
@@ -32,7 +39,8 @@ import { Board, type Pick } from "./Board";
 import { CardsSheet } from "./CardsSheet";
 import { Dock, type Building } from "./Dock";
 import { PALETTE } from "./palette";
-import { ResIcon } from "./parts";
+import { InfoSheet, type Topic } from "./InfoSheet";
+import { Cost, Fact, Facts, PIECE_NAME, ResIcon } from "./parts";
 import { TradeSheet } from "./TradeSheet";
 
 const GAIN_SHOWN_MS = 1600;
@@ -90,6 +98,7 @@ export default function HexhavenGame({ match, meId }: { match: MatchView; meId: 
   const [sheet, setSheet] = useState<"trade" | "cards" | "log" | null>(null);
   const [player, setPlayer] = useState<number | null>(null);
   const [tradeWith, setTradeWith] = useState<number | undefined>(undefined);
+  const [topic, setTopic] = useState<Topic | null>(null);
   const gained = useLive(state, mySeat);
   const active = match.status === "active";
   const pick = active ? pickFor(state, mySeat, building) : null;
@@ -140,13 +149,22 @@ export default function HexhavenGame({ match, meId }: { match: MatchView; meId: 
             setSheet("trade");
           }}
           onCards={() => setSheet("cards")}
+          onInfo={setTopic}
         />
       }
     >
       {!landscape && top}
       {!landscape && players}
       <div className="relative phone-landscape:square-fit" data-seq={state.seq}>
-        <Board state={state} colors={colors} pick={pick} chosen={live} onChoose={setChosen} ghostColor={colors[mySeat]} />
+        <Board
+          state={state}
+          colors={colors}
+          pick={pick}
+          chosen={live}
+          onChoose={setChosen}
+          ghostColor={colors[mySeat]}
+          onInspect={setTopic}
+        />
       </div>
       {playing && (
         <>
@@ -161,6 +179,10 @@ export default function HexhavenGame({ match, meId }: { match: MatchView; meId: 
           <CardsSheet open={sheet === "cards"} onClose={() => setSheet(null)} match={match} state={state} seat={mySeat} held={held} />
         </>
       )}
+      <InfoSheet topic={topic} onClose={() => setTopic(null)} match={match} state={state} mySeat={mySeat} />
+      <InMenu>
+        <CostsMenu state={state} mySeat={mySeat} />
+      </InMenu>
       <LogSheet open={sheet === "log"} onClose={() => setSheet(null)} match={match} state={state} mySeat={mySeat} />
       <PlayerSheet
         seat={player}
@@ -270,7 +292,7 @@ function Players({
 }) {
   const waiting = new Set(waitingOn(state));
   return (
-    <div className="-mx-3 flex gap-1.5 overflow-x-auto px-3 pb-1 phone-landscape:flex-wrap" aria-label="Players">
+    <div className="-mx-3 -mt-1 flex gap-1.5 overflow-x-auto px-3 py-1 phone-landscape:flex-wrap" aria-label="Players">
       {state.players.map((p, seat) => {
         const pl = match.players[seat];
         const pts = p.points ?? publicPoints(state, seat);
@@ -367,7 +389,15 @@ function PlayerSheet({
     state.phase.k === "main" &&
     (state.current === mySeat || state.current === seat);
   const mine = seat === mySeat;
-  const secret = mine ? held.filter((h) => h.c === "point").length : 0;
+  const revealed = seat !== null && state.players[seat].points !== undefined;
+  const secret =
+    seat === null
+      ? 0
+      : revealed
+        ? state.players[seat].points! - publicPoints(state, seat)
+        : mine
+          ? held.filter((h) => h.c === "point").length
+          : 0;
   return (
     <Sheet open={seat !== null} onClose={onClose} title={pl ? (mine ? "You" : pl.name) : ""} closable>
       {p && pl && seat !== null && (
@@ -376,9 +406,9 @@ function PlayerSheet({
             <PlayerAvatar player={pl} size={56} seat={seatColor(pl, p.out)} />
             <div>
               <div className="font-display text-title tabular-nums">{p.points ?? publicPoints(state, seat)} points</div>
-              <div className="text-footnote text-muted-foreground">
-                {secret > 0 && `+${secret} hidden · `}
-                {p.knights} knights · road of {state.lengths[seat] ?? 0}
+              <div className="text-footnote text-muted-foreground tabular-nums">
+                {!revealed && secret > 0 ? `${publicPoints(state, seat) + secret} with hidden · ` : ""}
+                {state.rules.points} to win
               </div>
             </div>
           </div>
@@ -395,24 +425,43 @@ function PlayerSheet({
               </div>
             ))}
           </div>
-          <div className="flex flex-wrap gap-2 text-callout">
-            <span className="flex items-center gap-1.5 rounded-full bg-muted/60 px-3 py-1.5">
-              <ScrollIcon weight="fill" /> {p.devs} cards held
-            </span>
-            {state.longest === seat && (
-              <span className="flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1.5">
-                <PathIcon weight="fill" /> Longest road
-              </span>
-            )}
-            {state.army === seat && (
-              <span className="flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1.5">
-                <SwordIcon weight="fill" /> Largest Army
-              </span>
-            )}
-            <span className="flex items-center gap-1.5 rounded-full bg-muted/60 px-3 py-1.5">
-              <CastleTurretIcon weight="fill" /> {state.spots.filter((x) => x?.seat === seat && x.town).length} cities
-            </span>
-          </div>
+          <Facts label="Points">
+            <Fact label={`${villagesOf(state, seat)} settlements ×1`}>{villagesOf(state, seat)}</Fact>
+            <Fact label={`${townsOf(state, seat)} cities ×2`}>{2 * townsOf(state, seat)}</Fact>
+            <Fact
+              label={
+                <>
+                  <PathIcon weight="fill" /> Longest Road · {state.lengths[seat] ?? 0} of {LONGEST_MIN}+
+                </>
+              }
+              tone={state.longest === seat ? "good" : undefined}
+            >
+              {state.longest === seat ? AWARD_POINTS : 0}
+            </Fact>
+            <Fact
+              label={
+                <>
+                  <SwordIcon weight="fill" /> Largest Army · {p.knights} of {ARMY_MIN}+
+                </>
+              }
+              tone={state.army === seat ? "good" : undefined}
+            >
+              {state.army === seat ? AWARD_POINTS : 0}
+            </Fact>
+            {secret > 0 && <Fact label="Victory Point cards">{secret}</Fact>}
+            <Fact
+              label={
+                <>
+                  <ScrollIcon weight="fill" /> Development cards
+                </>
+              }
+            >
+              {p.devs}
+            </Fact>
+            <Fact label="Roads · settlements · cities left">
+              {`${PIECES.road - roadsOf(state, seat)} · ${PIECES.village - villagesOf(state, seat)} · ${PIECES.town - townsOf(state, seat)}`}
+            </Fact>
+          </Facts>
           {canTrade && (
             <Button size="xl" variant="secondary" className="w-full" onClick={onTrade}>
               Trade with {pl.name}
@@ -423,3 +472,22 @@ function PlayerSheet({
     </Sheet>
   );
 }
+
+function CostsMenu({ state, mySeat }: { state: HexState; mySeat: number }) {
+  const hand = mySeat >= 0 ? state.players[mySeat].res : undefined;
+  return (
+    <section aria-label="Building costs">
+      <SectionTitle className="pb-2">Building costs</SectionTitle>
+      <Facts label="Building costs">
+        {(["road", "village", "town", "card"] as Piece[]).map((k) => (
+          <Fact key={k} label={PIECE_NAME[k]}>
+            <Cost kind={k} hand={hand} size={20} />
+            <span className="w-12 text-muted-foreground">{POINTS_OF[k]}</span>
+          </Fact>
+        ))}
+      </Facts>
+    </section>
+  );
+}
+
+const POINTS_OF: Record<Piece, string> = { road: "0 pts", village: "1 pt", town: "2 pts", card: "?" };

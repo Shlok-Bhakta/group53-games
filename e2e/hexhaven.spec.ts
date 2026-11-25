@@ -108,6 +108,51 @@ test("building a road: pick it, place it, and the other phone sees it", async ({
   await expect(other.getByRole("button", { name: "Roll" })).toBeVisible();
 });
 
+test("details: tap a hex, tap a build you can't afford, hold one you can, tap a card in your hand", async ({ phones }) => {
+  test.setTimeout(120_000);
+  const { id, up, upPlayer } = await startGame(phones);
+  await pastSetup(id);
+  const seat = (await getMatch(id)).players.findIndex((p: { userId: string }) => p.userId === upPlayer.userId);
+  const s = await stateOf(id);
+  const players = s.players.map((p, i) => (i === seat ? { ...p, res: [1, 1, 1, 1, 0] } : p));
+  await admin().mutation(anyApi.testing.hexhavenPatch, { id, state: { phase: { k: "main" }, current: seat, players } });
+  const info = up.locator("[data-info]");
+  const road = up.getByRole("button", { name: "Road", exact: true });
+  await expect(road).toBeVisible();
+  await expect(up.locator('[data-build="town"] [data-short]')).toHaveCount(4);
+  await expect(up.locator('[data-build="road"] [data-short]')).toHaveCount(0);
+  await shot(up, "costs");
+
+  await up.locator('[data-hex="9"] polygon').click({ force: true });
+  await expect(info).toHaveAttribute("data-info", "hex");
+  await expect(info.getByRole("list", { name: "This hex" })).toContainText("Pays");
+  await shot(up, "info-hex");
+  await up.keyboard.press("Escape");
+  await expect(info).toHaveCount(0);
+
+  await up.getByRole("button", { name: "City", exact: true }).click();
+  await expect(info).toHaveAttribute("data-info", "piece");
+  await expect(info).toContainText("1 grain and 3 ore");
+  await shot(up, "info-piece");
+  await up.keyboard.press("Escape");
+  await expect(info).toHaveCount(0);
+
+  const box = (await road.boundingBox())!;
+  await up.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await up.mouse.down();
+  await expect(info).toHaveAttribute("data-info", "piece");
+  await up.mouse.up();
+  await expect(info).toContainText("Ready");
+  await expect(up.locator('[data-pick="road"]')).toHaveCount(0);
+  await up.keyboard.press("Escape");
+  await expect(info).toHaveCount(0);
+
+  await up.getByRole("button", { name: "About ore" }).click();
+  await expect(info).toHaveAttribute("data-info", "res");
+  await expect(info).toContainText("Bank has");
+  await shot(up, "info-res");
+});
+
 test("a trade: offered on one phone, accepted on the other", async ({ phones }) => {
   test.setTimeout(120_000);
   const { id, up, other, upPlayer } = await startGame(phones);

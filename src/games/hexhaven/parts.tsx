@@ -3,11 +3,13 @@ import { MinusIcon, PlusIcon } from "@phosphor-icons/react";
 import { AnimatePresence, motion } from "motion/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { RESOURCE_NAMES } from "../../../convex/hexhaven/board";
+import { COSTS, RESOURCE_NAMES, type Piece } from "../../../convex/hexhaven/board";
 import type { Action } from "../../../convex/hexhaven/engine";
 import { Button, IconButton } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { ReactNode } from "react";
 import { Glyph } from "./Board";
+import { useHold } from "./hold";
 import { TERRAIN } from "./palette";
 
 export function useHexMove(id: Id<"matches">, seq: number) {
@@ -19,7 +21,7 @@ export function useHexMove(id: Id<"matches">, seq: number) {
 
 export function ResIcon({ r, size = 28 }: { r: number; size?: number }) {
   return (
-    <svg viewBox="-.5 -.5 1 1" width={size} height={size} aria-hidden="true" className="shrink-0">
+    <svg viewBox="-.5 -.5 1 1" width={size} height={size} style={{ width: size, height: size }} aria-hidden="true" className="shrink-0">
       <rect x="-.5" y="-.5" width="1" height="1" rx=".24" fill={TERRAIN[r]} />
       <g transform="scale(1.05)">
         <Glyph r={r} />
@@ -28,7 +30,87 @@ export function ResIcon({ r, size = 28 }: { r: number; size?: number }) {
   );
 }
 
-export function HandRow({ hand, gained, className }: { hand: number[]; gained?: number[]; className?: string }) {
+export const PIECE_NAME: Record<Piece, string> = { road: "Road", village: "Settlement", town: "City", card: "Development card" };
+
+export const costUnits = (kind: Piece) => COSTS[kind].flatMap((n, r) => Array<number>(n).fill(r));
+
+export function missingFor(hand: readonly number[], kind: Piece) {
+  return COSTS[kind].map((n, r) => Math.max(0, n - (hand[r] ?? 0)));
+}
+
+export function Cost({ kind, hand, size = 14 }: { kind: Piece; hand?: readonly number[]; size?: number }) {
+  const used = [0, 0, 0, 0, 0];
+  return (
+    <span className={cn("flex items-center", size < 16 ? "gap-px" : "gap-0.5")} aria-hidden="true" data-cost={kind}>
+      {costUnits(kind).map((r, k) => {
+        used[r] += 1;
+        const short = hand !== undefined && used[r] > (hand[r] ?? 0);
+        return (
+          <span
+            key={k}
+            data-short={short ? "" : undefined}
+            className={cn("transition-opacity duration-150", short && "opacity-35 grayscale")}
+          >
+            <ResIcon r={r} size={size} />
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+export function Fact({ label, children, tone }: { label: ReactNode; children?: ReactNode; tone?: "good" | "bad" }) {
+  return (
+    <li
+      className={cn(
+        "flex min-h-11 items-center justify-between gap-3 rounded-md px-3 py-2 text-callout",
+        tone === "good" ? "bg-primary/15" : tone === "bad" ? "bg-destructive/10" : "bg-muted/50",
+      )}
+    >
+      <span className="flex min-w-0 items-center gap-2">{label}</span>
+      {children !== undefined && (
+        <span className="flex shrink-0 items-center gap-1.5 text-right font-display tabular-nums">{children}</span>
+      )}
+    </li>
+  );
+}
+
+export function Facts({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <ul className="flex flex-col gap-1.5" aria-label={label}>
+      {children}
+    </ul>
+  );
+}
+
+function HandTile({ r, onPick, children }: { r: number; onPick?: (r: number) => void; children: ReactNode }) {
+  const hold = useHold(() => onPick?.(r));
+  if (!onPick) return <>{children}</>;
+  return (
+    <Button
+      variant="bare"
+      size="overlay"
+      aria-label={`About ${RESOURCE_NAMES[r].toLowerCase()}`}
+      className="absolute inset-0 rounded-md [-webkit-touch-callout:none] after:absolute after:-inset-x-0.5 after:inset-y-0"
+      onClick={() => onPick(r)}
+      {...hold}
+    >
+      {children}
+    </Button>
+  );
+}
+
+export function HandRow({
+  hand,
+  gained,
+  className,
+  onPick,
+}: {
+  hand: number[];
+  gained?: number[];
+  className?: string;
+  onPick?: (r: number) => void;
+}) {
   return (
     <div className={cn("grid grid-cols-5 gap-1.5", className)} aria-label="Your cards" role="list">
       {hand.map((n, r) => (
@@ -40,8 +122,12 @@ export function HandRow({ hand, gained, className }: { hand: number[]; gained?: 
           data-count={n}
           className={cn("relative flex h-11 items-center justify-center gap-1.5 rounded-md bg-muted/60", n === 0 && "opacity-55")}
         >
-          <ResIcon r={r} size={26} />
-          <span className="font-display text-body tabular-nums">{n}</span>
+          <HandTile r={r} onPick={onPick}>
+            <span className="flex size-full items-center justify-center gap-1.5">
+              <ResIcon r={r} size={26} />
+              <span className="font-display text-body tabular-nums">{n}</span>
+            </span>
+          </HandTile>
           <AnimatePresence>
             {gained && gained[r] !== 0 && (
               <motion.span
