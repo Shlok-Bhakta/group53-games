@@ -140,7 +140,7 @@ function ModeCard({
           </span>
         </span>
       ) : (
-        <span className="mt-auto flex items-end justify-between gap-2">
+        <span className="mt-auto flex flex-wrap items-end justify-between gap-x-2">
           <span className="whitespace-nowrap font-display text-heading">{seatLabel(mode)}</span>
           {rating && (
             <span

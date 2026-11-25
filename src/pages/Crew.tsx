@@ -111,9 +111,14 @@ function Ratings({ rated, crew, meId }: { rated: Rated[]; crew: { _id: Id<"users
             leading={<PlayerAvatar player={face} name={face?.name ?? "Player"} size={34} />}
             title={fullModeLabel(mode)}
             detail={
-              <span className="tabular-nums">
-                {leader.userId === meId ? "You lead" : `${face?.name ?? "Player"} leads, ${leader.rating}`}
-              </span>
+              leader.userId === meId ? (
+                "You lead"
+              ) : (
+                <span className="flex min-w-0 tabular-nums">
+                  <span className="truncate">{face?.name ?? "Player"}</span>
+                  <span className="shrink-0">&nbsp;leads, {leader.rating}</span>
+                </span>
+              )
             }
             trailing={
               mine ? (

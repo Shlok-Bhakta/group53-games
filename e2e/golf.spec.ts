@@ -388,7 +388,7 @@ test("a generated course shows its seed, and the same seed plays the same holes"
   const [pa, pb] = await twoPhones(phones);
   await pa.goto("/golf/mode/turns");
   await pa.getByRole("button", { name: "Settings" }).click();
-  await expect(pa.getByRole("group", { name: "Items" }).getByRole("button", { name: "Magnet" })).toBeVisible();
+  await expect(pa.getByRole("group", { name: "Items" }).getByRole("button", { name: "Magnet", exact: true })).toBeVisible();
   await expect.poll(() => clippedRings(pa), { message: "the item chips' rings have room inside the settings" }).toEqual([]);
   await pa.getByRole("radiogroup", { name: "Holes" }).getByRole("radio", { name: "3", exact: true }).click();
   await pa.getByRole("textbox", { name: "Seed" }).fill("4242");

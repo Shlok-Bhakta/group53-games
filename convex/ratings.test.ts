@@ -69,6 +69,20 @@ describe("the crew's ratings", () => {
     ]);
   });
 
+  test("a tie on rating and wins goes the same way as the mode's leaderboard", async () => {
+    const t = setup();
+    const { as, userId: first } = await signedIn(t, "First");
+    const { userId: second } = await signedIn(t, "Second");
+    const rating = (userId: typeof first) =>
+      t.run((ctx) => ctx.db.insert("ratings", { userId, mode: "chess:classic", rating: 1216, games: 1, wins: 1, losses: 0, draws: 0 }));
+    await rating(second);
+    await rating(first);
+    const board = await as.query(api.ratings.leaderboard, { mode: "chess:classic" });
+    const crew = await as.query(api.ratings.crew, {});
+    expect(crew.map((r) => r.userId)).toEqual([first, second]);
+    expect(crew.map((r) => r.userId)).toEqual(board.map((r) => r.userId));
+  });
+
   test("signed out sees nothing", async () => {
     const t = setup();
     expect(await t.query(api.ratings.crew, {})).toEqual([]);

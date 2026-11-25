@@ -116,9 +116,10 @@ export const crew = query({
   handler: async (ctx) => {
     if ((await getAuthUserId(ctx)) === null) return [];
     const rows = await ctx.db.query("ratings").collect();
+    const joined = new Map((await ctx.db.query("users").collect()).map((u, i) => [u._id, i]));
     return rows
       .filter((r) => r.games > 0)
       .map(({ mode, userId, rating, games, wins, losses, draws }) => ({ mode, userId, rating, games, wins, losses, draws }))
-      .sort((a, b) => b.rating - a.rating || b.wins - a.wins);
+      .sort((a, b) => b.rating - a.rating || b.wins - a.wins || (joined.get(a.userId) ?? 0) - (joined.get(b.userId) ?? 0));
   },
 });
