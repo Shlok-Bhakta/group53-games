@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { anyApi } from "convex/server";
 import { admin, createPlayer, expect, getMatch, holdsStill, matchIdOf, resign, test, type Phones, type Player } from "./fixtures";
 
-const FRAME_BUDGET_MS = 34;
+const FRAME_BUDGET_MS = 17;
 
 async function tapMove(page: Page, from: string, to: string) {
   await page.locator(`[data-square=${from}]`).click();
