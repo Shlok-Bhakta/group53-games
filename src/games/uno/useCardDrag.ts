@@ -7,26 +7,23 @@ import type { Pick } from "./Hand";
 export type Aim = "ok" | "no" | null;
 
 const SLOP = 8;
-const SWALLOW_MS = 400;
 
 export function useCardDrag({
   enabled,
   target,
-  canPlay,
   onDrop,
 }: {
   enabled: boolean;
   target: RefObject<HTMLElement | null>;
-  canPlay: (card: Card) => boolean;
   onDrop: (card: Card, copy: number, at: P) => void;
 }) {
   const ghost = useRef<HTMLDivElement>(null);
   const [held, setHeld] = useState<Pick | null>(null);
-  const [aim, setAim] = useState<Aim>(null);
-  const endedAt = useRef(0);
-  const latest = useRef({ canPlay, onDrop });
+  const [over, setOver] = useState(false);
+  const swallow = useRef(false);
+  const latest = useRef(onDrop);
   useLayoutEffect(() => {
-    latest.current = { canPlay, onDrop };
+    latest.current = onDrop;
   });
 
   const inside = (x: number, y: number) => {
@@ -35,11 +32,12 @@ export function useCardDrag({
   };
 
   const start = (card: Card, copy: number, e: ReactPointerEvent) => {
+    swallow.current = false;
     if (!enabled || e.button !== 0) return;
+    const id = e.pointerId;
     const x0 = e.clientX;
     const y0 = e.clientY;
     let moved = false;
-    let over = false;
     let lastX = x0;
     let tilt = 0;
     const place = (cx: number, cy: number) => {
@@ -48,6 +46,7 @@ export function useCardDrag({
       if (ghost.current) ghost.current.style.transform = `translate3d(${cx}px, ${cy}px, 0) translate(-50%, -60%) rotate(${tilt}deg)`;
     };
     const move = (ev: PointerEvent) => {
+      if (ev.pointerId !== id) return;
       if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < SLOP) return;
       if (!moved) {
         moved = true;
@@ -56,22 +55,19 @@ export function useCardDrag({
         requestAnimationFrame(() => place(ev.clientX, ev.clientY));
       }
       place(ev.clientX, ev.clientY);
-      const now = inside(ev.clientX, ev.clientY);
-      if (now !== over) {
-        over = now;
-        setAim(now ? (latest.current.canPlay(card) ? "ok" : "no") : null);
-      }
+      setOver(inside(ev.clientX, ev.clientY));
     };
     const up = (ev: PointerEvent) => {
+      if (ev.pointerId !== id) return;
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
       if (!moved) return;
-      endedAt.current = performance.now();
+      swallow.current = true;
       setHeld(null);
-      setAim(null);
+      setOver(false);
       if (ev.type === "pointercancel") return;
-      if (over) latest.current.onDrop(card, copy, { x: ev.clientX, y: ev.clientY });
+      if (inside(ev.clientX, ev.clientY)) latest.current(card, copy, { x: ev.clientX, y: ev.clientY });
       else sfx("place");
     };
     window.addEventListener("pointermove", move);
@@ -79,7 +75,11 @@ export function useCardDrag({
     window.addEventListener("pointercancel", up);
   };
 
-  const justDragged = () => performance.now() - endedAt.current < SWALLOW_MS;
+  const justDragged = () => {
+    const was = swallow.current;
+    swallow.current = false;
+    return was;
+  };
 
-  return { ghost, held, aim, start, justDragged };
+  return { ghost, held, over: held !== null && over, start, justDragged };
 }

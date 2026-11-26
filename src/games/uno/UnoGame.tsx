@@ -24,7 +24,7 @@ import { Hand, type Pick } from "./Hand";
 import { DragGhost } from "./DragGhost";
 import { useShow } from "./show";
 import { Table } from "./Table";
-import { useCardDrag } from "./useCardDrag";
+import { useCardDrag, type Aim } from "./useCardDrag";
 
 type Move = {
   kind: "play" | "draw" | "pass" | "take" | "challenge" | "roulette" | "catch" | "uno";
@@ -148,9 +148,9 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
   const drag = useCardDrag({
     enabled: playing && !pending,
     target: boxRef,
-    canPlay: (card) => cantPlay(state, seat, card, cards, drawn) === null,
     onDrop: drop,
   });
+  const aim: Aim = drag.held && drag.over ? (cantPlay(state, seat, drag.held.card, cards, drawn) === null ? "ok" : "no") : null;
   const finish = (extra: { color?: Color; target?: number }) => {
     if (!ask) return;
     const { card, copy, seq } = ask;
@@ -220,7 +220,7 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
         onPlayer={setPlayer}
         origin={origin}
         jumped={shown.jumped}
-        aim={drag.aim}
+        aim={aim}
       />
       {drag.held && <DragGhost ref={drag.ghost} card={drag.held.card} width={landscape ? 58 : 80} />}
       <ColorSheet open={ask?.need === "color"} card={ask?.card} onClose={() => setAsk(null)} onPick={(color) => finish({ color })} />

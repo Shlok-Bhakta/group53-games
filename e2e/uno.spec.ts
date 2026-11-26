@@ -50,7 +50,7 @@ async function play(page: Page, c: string, at?: { x: number; y: number }) {
   await page.getByRole("button", { name: "Play", exact: true }).click();
 }
 
-async function drag(page: Page, c: string, to: "table" | "hand", held?: () => Promise<void>) {
+async function drag(page: Page, c: string, to: "table" | "hand", aim?: "ok" | "no", held?: () => Promise<void>) {
   const from = (await card(page, c).boundingBox())!;
   const box = (await (to === "table" ? table(page) : hand(page)).boundingBox())!;
   const start = { x: from.x + from.width / 2, y: from.y + from.height / 2 };
@@ -58,7 +58,7 @@ async function drag(page: Page, c: string, to: "table" | "hand", held?: () => Pr
   await page.mouse.move(start.x, start.y);
   await page.mouse.down();
   for (let i = 1; i <= 8; i++) await page.mouse.move(start.x + ((end.x - start.x) * i) / 8, start.y + ((end.y - start.y) * i) / 8);
-  if (to === "table") await expect(page.locator("[data-pile]")).toHaveAttribute("data-aim", /ok|no/);
+  if (aim) await expect(page.locator("[data-pile]")).toHaveAttribute("data-aim", aim);
   await held?.();
   await page.mouse.up();
 }
@@ -156,7 +156,7 @@ test("a card dragged onto the table plays it, without tapping Play", async ({ ph
   await deal(id, { [sa]: ["r5", "wW", "b2", "y7"], [sb]: ["b9", "g1", "g2"] }, "r9", sa, Array(40).fill("y3"));
   await expect(card(pa, "r5")).toHaveAttribute("data-playable", "true");
 
-  await drag(pa, "b2", "table", () => shot(pa, "dragging-wrong"));
+  await drag(pa, "b2", "table", "no", () => shot(pa, "dragging-wrong"));
   await expect(pa.getByText("That doesn't match.")).toBeVisible();
   await expect(card(pa, "b2")).toBeVisible();
   await expect(table(pa)).toHaveAttribute("data-top", "r9");
@@ -166,13 +166,14 @@ test("a card dragged onto the table plays it, without tapping Play", async ({ ph
   await expect(table(pa)).toHaveAttribute("data-top", "r9");
   await expect(pa.locator("[data-pile]")).not.toHaveAttribute("data-aim");
 
-  await drag(pa, "r5", "table", () => shot(pa, "dragging"));
+  await drag(pa, "r5", "table", "ok", () => shot(pa, "dragging"));
   await expect(table(pb)).toHaveAttribute("data-top", "r5");
   await expect(card(pa, "r5")).toHaveCount(0);
   await pb.getByRole("button", { name: "Draw", exact: true }).click();
   await expect.poll(async () => (await stateOf(id)).turn).toBe(sa);
 
-  await drag(pa, "wW", "table");
+  await expect(card(pa, "wW")).toHaveAttribute("data-playable", "true");
+  await drag(pa, "wW", "table", "ok");
   await expect(pa.getByRole("dialog", { name: "Pick a color" })).toBeVisible();
   await pa.getByRole("dialog").getByRole("button", { name: "Green" }).click();
   await expect(table(pb)).toHaveAttribute("data-color", "g");
