@@ -421,7 +421,8 @@ export const leave = mutation({
   handler: async (ctx, { id }) => {
     const userId = await requireUser(ctx);
     const match = await loadMatch(ctx, id);
-    if (match.status !== "waiting" || !isPlayer(match, userId)) return;
+    if (match.status !== "waiting") return !isPlayer(match, userId);
+    if (!isPlayer(match, userId)) return true;
     if (match.createdBy === userId) throw new Error("Cancel the game instead.");
     const invited = match.invited.filter((x) => x !== userId);
     await ctx.db.patch(id, {
@@ -430,6 +431,7 @@ export const leave = mutation({
       openSeats: match.invited.length > 0 ? true : match.openSeats,
       lastActivityAt: Date.now(),
     });
+    return true;
   },
 });
 
@@ -492,6 +494,7 @@ export const offerDraw = mutation({
     const match = await loadMatch(ctx, id);
     if (match.status !== "active" || !isPlayer(match, userId)) throw new Error("You're not in an active game here.");
     if (!allowsDraws(match.mode)) throw new Error("There are no draws in this game.");
+    if (match.drawOffer === userId) return;
     if (match.drawOffer && match.drawOffer !== userId) {
       await finish(ctx, match, { winners: [], draw: true, reason: "agreement" });
       return;
@@ -570,10 +573,11 @@ export const answerRematch = mutation({
 });
 
 export const get = query({
-  args: { id: v.id("matches") },
-  handler: async (ctx, { id }) => {
+  args: { id: v.string() },
+  handler: async (ctx, args) => {
     if ((await getAuthUserId(ctx)) === null) return null;
-    const match = await ctx.db.get(id);
+    const id = ctx.db.normalizeId("matches", args.id);
+    const match = id && (await ctx.db.get(id));
     return match ? await withPeople(ctx, match) : null;
   },
 });

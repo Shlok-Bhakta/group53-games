@@ -8,6 +8,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { DAILY_GAMES, dailyPath, findDailyGame } from "../../../convex/daily/games";
 import { Section } from "@/components/parts";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { PasteButton } from "./Paste";
 import { useFaces } from "./Standings";
@@ -25,10 +26,11 @@ export function DailyStrip({ meId }: { meId: Id<"users"> | undefined }) {
   useEffect(() => {
     if (newest) strip.current?.scrollTo({ left: 0, behavior: reduced ? "auto" : "smooth" });
   }, [newest, reduced]);
-  if (rounds === undefined) return null;
   return (
     <Section title="Dailies" bare action={<PasteButton size="sm" variant="secondary" className="-mb-1" />}>
-      {rounds.length === 0 ? (
+      {rounds === undefined ? (
+        <Skeleton className="h-[116px] rounded-lg" />
+      ) : rounds.length === 0 ? (
         <Link
           to="/daily"
           data-slot="card"

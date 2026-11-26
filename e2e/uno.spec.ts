@@ -63,6 +63,19 @@ async function drag(page: Page, c: string, to: "table" | "hand", aim?: "ok" | "n
   await page.mouse.up();
 }
 
+test("the colour sheet closes when the game moves on under it", async ({ phones }) => {
+  const { id, pages, seatOf } = await startGame(phones);
+  const [pa] = pages;
+  const [sa, sb] = [seatOf(0), seatOf(1)];
+  await deal(id, { [sa]: ["wW", "r6"], [sb]: ["b9", "g1", "g2"] }, "r9", sa, Array(40).fill("y3"));
+  await card(pa, "wW").click();
+  await pa.getByRole("button", { name: "Play", exact: true }).click();
+  const sheet = pa.getByRole("dialog", { name: "Pick a color" });
+  await expect(sheet).toBeVisible();
+  await deal(id, { [sa]: ["wW", "r6"], [sb]: ["b9", "g1", "g2"] }, "r9", sb, Array(40).fill("y3"), { seq: (await stateOf(id)).seq + 1 });
+  await expect(sheet).toHaveCount(0);
+});
+
 test("Uno has a card on Games and both modes have their house rules", async ({ phones }) => {
   const page = await phones.open({ player: await createPlayer("Shlok"), push: "on" });
   await page.goto("/games");

@@ -351,6 +351,25 @@ test.describe("chess", () => {
     expect((await getMatch(id)).result.reason).toBe("king");
   });
 
+  test("real-time: a drag the phone cancels leaves the piece where it was", async ({ phones }) => {
+    const { id, white } = await realtimePair(phones);
+    const box = async (sq: string) => (await white.locator(`[data-square=${sq}]`).boundingBox())!;
+    const [e2, e4] = [await box("e2"), await box("e4")];
+    await white.mouse.move(e2.x + 10, e2.y + 10);
+    await white.mouse.down();
+    await white.mouse.move(e4.x + 10, e4.y + 10, { steps: 6 });
+    await white
+      .getByRole("grid", { name: "Real-time chess board" })
+      .evaluate(
+        (el, [x, y]) => el.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, pointerId: 1, clientX: x, clientY: y })),
+        [e4.x + 10, e4.y + 10],
+      );
+    await white.mouse.up();
+    await tapMove(white, "d2", "d4");
+    await expect.poll(async () => (await rtCommands(id)).length, { message: "only the tapped move is sent" }).toBe(1);
+    expect(await pieceOn(white, "wP", "e2")).toBe(true);
+  });
+
   test("real-time: your own move never jumps backwards on your screen", async ({ phones }) => {
     const { white } = await realtimePair(phones);
     const index = await white.locator('[data-piece="wP"]').evaluateAll((els) => {

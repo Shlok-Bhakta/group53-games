@@ -151,7 +151,12 @@ export function Lobby({
           />
         </div>
       ) : joined ? (
-        <AsyncButton size="xl" variant="ghost" className="w-full" onClick={() => leave({ id: match._id }).then(onLeave)}>
+        <AsyncButton
+          size="xl"
+          variant="ghost"
+          className="w-full"
+          onClick={() => leave({ id: match._id }).then((left) => left && onLeave())}
+        >
           Leave
         </AsyncButton>
       ) : canJoin ? (

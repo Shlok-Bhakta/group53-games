@@ -51,6 +51,7 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
   const drawn = mine?.drawn ?? null;
   const [player, setPlayer] = useState<number | null>(null);
   const [ask, setAsk] = useState<Ask | null>(null);
+  const asking = ask?.seq === state.seq ? ask : null;
   const [picked, setPicked] = useState<(Pick & { seq: number; rect: DOMRect }) | null>(null);
   const [thrown, setThrown] = useState<Pick | null>(null);
   const [pending, run] = usePending();
@@ -152,8 +153,8 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
   });
   const aim: Aim = drag.held && drag.over ? (cantPlay(state, seat, drag.held.card, cards, drawn) === null ? "ok" : "no") : null;
   const finish = (extra: { color?: Color; target?: number }) => {
-    if (!ask) return;
-    const { card, copy, seq } = ask;
+    if (!asking) return;
+    const { card, copy, seq } = asking;
     setAsk(null);
     sfx("play");
     setThrown({ card, copy });
@@ -223,9 +224,9 @@ export default function UnoGame({ match, meId }: { match: MatchView; meId: Id<"u
         aim={aim}
       />
       {drag.held && <DragGhost ref={drag.ghost} card={drag.held.card} width={landscape ? 58 : 80} />}
-      <ColorSheet open={ask?.need === "color"} card={ask?.card} onClose={() => setAsk(null)} onPick={(color) => finish({ color })} />
+      <ColorSheet open={asking?.need === "color"} card={asking?.card} onClose={() => setAsk(null)} onPick={(color) => finish({ color })} />
       <SwapSheet
-        open={ask?.need === "target"}
+        open={asking?.need === "target"}
         match={match}
         state={state}
         seat={seat}

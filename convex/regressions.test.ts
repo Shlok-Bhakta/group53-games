@@ -217,3 +217,31 @@ test("one game's secret query never hands back my secret from another game", asy
   expect(await seats[0].as.query(api.hexhaven.cards, { id })).toBeNull();
   expect(await seats[0].as.query(api.scrabble.rack, { id })).toBeNull();
 });
+
+test("a mistyped or foreign game link reads as no game instead of throwing", async () => {
+  const t = setup();
+  const { id, seats } = await game(t, "chess:classic", 2);
+  const get = (raw: string) => seats[0].as.query(api.matches.get, { id: raw });
+  expect(await get("abc")).toBeNull();
+  expect(await get("")).toBeNull();
+  expect(await get(seats[0].userId)).toBeNull();
+  expect(await get(id)).toMatchObject({ _id: id });
+});
+
+test("offering a draw twice pushes the other player once", async () => {
+  const t = setup();
+  const { id, seats } = await game(t, "chess:classic", 2);
+  await clearPushes(t);
+  await seats[0].as.mutation(api.matches.offerDraw, { id });
+  await seats[0].as.mutation(api.matches.offerDraw, { id });
+  expect(await pending(t, "push:sendToUser")).toHaveLength(1);
+  expect((await get(t, id))!.status).toBe("active");
+});
+
+test("leaving a lobby that just started says so, so the guest stays in the game", async () => {
+  const t = setup();
+  const { id, seats, match } = await game(t, "chess:classic", 2);
+  const guest = seats.find((s) => s.userId !== match.createdBy)!;
+  expect(await guest.as.mutation(api.matches.leave, { id })).toBe(false);
+  expect((await get(t, id))!.players.some((p) => p.userId === guest.userId)).toBe(true);
+});

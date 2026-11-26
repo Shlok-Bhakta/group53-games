@@ -121,14 +121,17 @@ export function RtBoard({
     const over = targetNear(e.clientX, e.clientY);
     if (!same(over, drag.over)) setDrag({ ...drag, over });
   };
+  const endDrag = () => {
+    if (ghost.current) ghost.current.style.opacity = "0";
+    startPt.current = null;
+    setDrag(null);
+  };
   const onPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (drag && startPt.current?.moved) {
       const sq = targetNear(e.clientX, e.clientY);
       if (sq && isTarget(sq)) onMove(drag.piece, sq);
     }
-    if (ghost.current) ghost.current.style.opacity = "0";
-    startPt.current = null;
-    setDrag(null);
+    endDrag();
   };
 
   const moving = sim.pieces.filter((p) => p.status === "moving");
@@ -150,7 +153,7 @@ export function RtBoard({
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
+      onPointerCancel={endDrag}
     >
       <Squares view={view} />
 
