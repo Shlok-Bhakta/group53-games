@@ -54,7 +54,7 @@ async function step(page: Page) {
   for (const name of [/^Roll/, /^Buy for/, /^Pay /, /^Drop out/, /^Auction it/, /^Move \d+$/]) {
     const b = dock.getByRole("button", { name }).first();
     if (await b.isVisible().catch(() => false)) {
-      if (await b.isEnabled())
+      if (await b.isEnabled({ timeout: 1000 }).catch(() => false))
         return await b.click({ timeout: 5000 }).then(
           () => true,
           () => false,
