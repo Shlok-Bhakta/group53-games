@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { AnimatePresence, motion, useAnimate } from "motion/react";
 import { cardName, type Card } from "../../../convex/uno/cards";
 import { Button } from "@/components/ui/button";
@@ -23,20 +23,24 @@ export function Hand({
   myTurn,
   drawn,
   chosen,
+  held,
   loaded,
   cardW,
   shake,
   onTap,
+  onDown,
 }: {
   cards: Card[];
   playable: Set<Card>;
   myTurn: boolean;
   drawn: Card | null;
   chosen: Pick | null;
+  held: Pick | null;
   loaded: boolean;
   cardW: number;
   shake: number;
   onTap: (card: Card, copy: number, rect: DOMRect) => void;
+  onDown: (card: Card, copy: number, e: ReactPointerEvent) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(0);
@@ -78,6 +82,7 @@ export function Hand({
             const can = playable.has(card);
             const lifted = can && myTurn;
             const picked = chosen?.card === card && chosen.copy === k;
+            const lifting = held?.card === card && held.copy === k;
             const at = lay.place(i, picked ? 0 : lifted ? PICK : PICK + LIFT);
             return (
               <motion.div
@@ -85,7 +90,7 @@ export function Hand({
                 className="absolute top-0 left-0"
                 style={{ zIndex: picked ? 1000 : at.z, transformOrigin: "50% 100%" }}
                 initial={{ x: at.x, y: -90, opacity: 0, scale: lay.scale * 0.8 }}
-                animate={{ x: at.x, y: at.y, rotate: at.rotate, opacity: 1, scale: lay.scale }}
+                animate={{ x: at.x, y: at.y, rotate: at.rotate, opacity: lifting ? 0 : 1, scale: lay.scale }}
                 exit={{ y: -140, opacity: 0, scale: 1.1, transition: { duration: 0.2 } }}
                 transition={{ type: "spring", bounce: 0.22, duration: 0.42 }}
               >
@@ -97,8 +102,10 @@ export function Hand({
                   aria-pressed={can ? picked : undefined}
                   aria-label={cardName(card)}
                   onClick={(e) => onTap(card, k, e.currentTarget.getBoundingClientRect())}
+                  onPointerDown={(e) => onDown(card, k, e)}
                   className={cn(
-                    "rounded-sm",
+                    "rounded-sm select-none",
+                    lay.scrolls ? "touch-pan-x" : "touch-none",
                     picked
                       ? "ring-3 ring-foreground ring-offset-1 ring-offset-background"
                       : drawn === card && myTurn && "ring-3 ring-primary ring-offset-1 ring-offset-background",

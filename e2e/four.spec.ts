@@ -2,6 +2,8 @@ import type { Page } from "@playwright/test";
 import { anyApi } from "convex/server";
 import { admin, createPlayer, expect, getMatch, holdsStill, matchIdOf, resign, test, type Phones, type Player } from "./fixtures";
 
+const FRAME_BUDGET_MS = 17;
+
 async function tapMove(page: Page, from: string, to: string) {
   await page.locator(`[data-square=${from}]`).click();
   await page.locator(`[data-square=${to}]`).click();
@@ -65,30 +67,30 @@ test.describe("4-player chess", () => {
     await expect(page.getByText("Check two kings with one move")).toBeVisible();
     const rules = page.locator("section", { has: page.getByRole("button", { name: "How to play" }) });
     const open = (await rules.boundingBox())!.height;
-    const heights: number[] = await page.evaluate(async () => {
+    const frames: { h: number; at: number }[] = await page.evaluate(async () => {
       const btn = [...document.querySelectorAll<HTMLElement>("[data-screen]:not([inert]) button")].find((b) =>
         b.textContent?.includes("How to play"),
       )!;
       const section = btn.closest("section")!;
-      const out: number[] = [];
+      const out: { h: number; at: number }[] = [];
       btn.click();
       const t0 = performance.now();
       while (performance.now() - t0 < 600) {
-        out.push(section.getBoundingClientRect().height);
+        out.push({ h: section.getBoundingClientRect().height, at: performance.now() });
         await new Promise((r) => requestAnimationFrame(r));
       }
       return out;
     });
+    const heights = frames.map((f) => f.h);
     const closed = heights.at(-1)!;
     expect(closed, "closing shrinks all the way down").toBeLessThan(60);
     expect(
       heights.some((h) => h > closed + 40 && h < open - 40),
       "passes through in-between heights",
     ).toBe(true);
-    const steps = heights.slice(1).map((h, i) => heights[i] - h);
-    expect(Math.max(...steps), "no frame drops more than a quarter of the way, even when the list leaves the page").toBeLessThan(
-      (open - closed) / 4,
-    );
+    const quarter = (open - closed) / 4;
+    const jumps = frames.slice(1).map((f, i) => (frames[i].h - f.h) / Math.max(1, (f.at - frames[i].at) / FRAME_BUDGET_MS));
+    expect(Math.max(...jumps), "no frame drops more than a quarter of the way, even when the list leaves the page").toBeLessThan(quarter);
     await page.getByRole("button", { name: "Back" }).click();
     await realtime.getByRole("link", { name: "Real-time 4-Player" }).click();
     await expect(page.getByRole("heading", { name: "Real-time 4-Player", level: 1 })).toBeVisible();

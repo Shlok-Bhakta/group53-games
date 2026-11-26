@@ -38,14 +38,14 @@ const pushes = (t: T) =>
       .map((s) => s.args[0] as { userId: Id<"users">; title: string; body: string }),
   );
 
-async function game(t: T, n: number, mode: "golf:turns" | "golf:live", settings: Record<string, number>) {
+async function game(t: T, n: number, mode: "golf:turns" | "golf:live", settings: Record<string, number>, build = true) {
   const names = ["Shlok", "Chris", "Sam", "Alex"];
   const players: Player[] = [];
   for (let i = 0; i < n; i++) players.push(await signedIn(t, names[i]));
   const id = await players[0].as.mutation(api.matches.queue, { mode, settings });
   for (const p of players.slice(1)) await p.as.mutation(api.matches.queue, { mode });
   await players[0].as.mutation(api.matches.startGame, { id });
-  await t.action(internal.golf.build, { id });
+  if (build) await t.action(internal.golf.build, { id });
   const m = await get(t, id);
   const seats = m.players.map((s) => players.find((p) => p.userId === s.userId)!);
   return { id, players, seats };
@@ -326,12 +326,12 @@ describe("a live round", () => {
 describe("seeds", () => {
   test("a game's seed is rolled when it's made, shown, and a rematch rolls a new one", async () => {
     const t = setup();
-    const { id } = await game(t, 2, "golf:turns", { holes: 3 });
+    const { id } = await game(t, 2, "golf:turns", { holes: 3 }, false);
     const m = await get(t, id);
     expect(m.settings?.seed).toBeGreaterThan(0);
     const again = await get(t, id);
     expect((again as Doc<"matches">).settings?.seed).toBe(m.settings?.seed);
-  }, 120_000);
+  });
 
   test("the same seed builds the same holes", async () => {
     const t = setup();

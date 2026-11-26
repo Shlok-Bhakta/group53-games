@@ -12,6 +12,14 @@ const cameraOn = (page: Page) =>
   page.evaluate(() =>
     (window as unknown as { __golf: { camera(): { x: number; y: number; s: number; ox: number; oy: number } } }).__golf.camera(),
   );
+async function teedUp(page: Page) {
+  await expect
+    .poll(async () => {
+      const me = await meOn(page);
+      return (await balls(page)).find((b) => b.id === me)?.mode;
+    })
+    .toBe("aim");
+}
 const meOn = (page: Page) => page.evaluate(() => (window as unknown as { __golf?: { me(): string } }).__golf?.me());
 
 async function twoPhones(phones: Phones) {
@@ -440,6 +448,7 @@ test.describe("landscape", () => {
     const reset = (await page.getByRole("button", { name: "Start the hole again" }).boundingBox())!;
     expect(reset.x, "the dock sits beside the rail").toBeGreaterThan(rail.x + rail.width);
     const [angle, power] = SOLUTIONS["plains-1"][0];
+    await teedUp(page);
     await shoot(page, angle, power);
     const sheet = page.getByRole("dialog", { name: "Hole finished" });
     await expect(sheet.getByRole("heading", { name: "Hole in one" })).toBeVisible({ timeout: 15_000 });
