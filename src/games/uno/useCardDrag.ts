@@ -21,6 +21,7 @@ export function useCardDrag({
   const [held, setHeld] = useState<Pick | null>(null);
   const [over, setOver] = useState(false);
   const swallow = useRef(false);
+  const active = useRef(false);
   const latest = useRef(onDrop);
   useLayoutEffect(() => {
     latest.current = onDrop;
@@ -32,8 +33,10 @@ export function useCardDrag({
   };
 
   const start = (card: Card, copy: number, e: ReactPointerEvent) => {
+    if (active.current) return;
     swallow.current = false;
     if (!enabled || e.button !== 0) return;
+    active.current = true;
     const id = e.pointerId;
     const x0 = e.clientX;
     const y0 = e.clientY;
@@ -62,6 +65,7 @@ export function useCardDrag({
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
+      active.current = false;
       if (!moved) return;
       swallow.current = true;
       setHeld(null);
