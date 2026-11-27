@@ -9,7 +9,17 @@ import { sum } from "./format";
 import { finalHands, handAt, missedHands, stacksAfter, streetFor } from "./replay";
 
 export const PACE = 1.2;
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms * PACE));
+const visibleAgain = () =>
+  new Promise<void>((done) => {
+    const check = () => {
+      if (document.visibilityState !== "visible") return;
+      document.removeEventListener("visibilitychange", check);
+      done();
+    };
+    document.addEventListener("visibilitychange", check);
+    check();
+  });
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms * PACE)).then(visibleAgain);
 
 export type Spell = { word: string; tone: "green" | "hit" };
 export type Show = {
