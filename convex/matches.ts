@@ -638,6 +638,21 @@ export const attention = query({
   },
 });
 
+const FINISHED_SHOWS_MS = 3 * 24 * 60 * 60 * 1000;
+const endUnseen = (m: Doc<"matches">, userId: Id<"users">, now: number) =>
+  isPlayer(m, userId) && !m.endSeen?.includes(userId) && (m.endedAt ?? 0) > now - FINISHED_SHOWS_MS;
+
+export const sawEnd = mutation({
+  args: { id: v.id("matches") },
+  handler: async (ctx, { id }) => {
+    const userId = await requireUser(ctx);
+    const match = await ctx.db.get(id);
+    if (!match || match.status !== "finished" || !isPlayer(match, userId) || match.endSeen?.includes(userId)) return null;
+    await ctx.db.patch(id, { endSeen: [...(match.endSeen ?? []), userId] });
+    return null;
+  },
+});
+
 export const inbox = query({
   args: {},
   handler: async (ctx) => {
@@ -651,6 +666,11 @@ export const inbox = query({
       .query("matches")
       .withIndex("by_status", (q) => q.eq("status", "waiting"))
       .collect();
+    const finished = await ctx.db
+      .query("matches")
+      .withIndex("by_status", (q) => q.eq("status", "finished"))
+      .collect();
+    const now = Date.now();
     const views = async (ms: Doc<"matches">[]) =>
       Promise.all(ms.sort((a, b) => b.lastActivityAt - a.lastActivityAt).map((m) => withPeople(ctx, m)));
     const mineActive = active.filter((m) => isPlayer(m, userId));
@@ -663,6 +683,7 @@ export const inbox = query({
       open: await views(waiting.filter((m) => !m.invited.includes(userId) && canJoin(m, userId))),
       waiting: await views(waiting.filter((m) => isPlayer(m, userId))),
       watch: await views(active.filter((m) => !isPlayer(m, userId))),
+      ended: (await views(finished.filter((m) => endUnseen(m, userId, now)))).sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0)),
     };
   },
 });

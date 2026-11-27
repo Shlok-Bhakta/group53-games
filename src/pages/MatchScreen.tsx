@@ -1,7 +1,8 @@
 import { useHoldUpdates } from "@/version";
-import { useState } from "react";
+import { usePageVisible } from "@/lib/visible";
+import { useEffect, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { MODES, gameOf, matchPath, settingsOf, type ModeKey } from "../../convex/modes";
 import { NavBar, useGoBack } from "@/components/AppHeader";
@@ -21,6 +22,15 @@ export function MatchScreen({ game }: { game: GameUI }) {
   const [menuSlot, setMenuSlot] = useState<HTMLElement | null>(null);
   const goBack = useGoBack("/");
   useHoldUpdates(true);
+  const sawEnd = useMutation(api.matches.sawEnd);
+  const visible = usePageVisible();
+  const meId = me?._id;
+  const unseenEnd =
+    !!match && !!meId && match.status === "finished" && match.players.some((p) => p.userId === meId) && !match.endSeen?.includes(meId);
+  const matchId = match?._id;
+  useEffect(() => {
+    if (unseenEnd && matchId && visible) void sawEnd({ id: matchId });
+  }, [unseenEnd, matchId, visible, sawEnd]);
 
   if (match === undefined) {
     return (

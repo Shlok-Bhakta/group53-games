@@ -47,6 +47,7 @@ export function Table({
       aria-label="Poker table"
       data-table
       data-busy={show.busy || behind}
+      data-hand={s.hand}
       className="relative flex flex-col tabular-nums phone-landscape:w-full phone-landscape:flex-row phone-landscape:items-start phone-landscape:gap-3"
     >
       <div className="relative flex min-w-0 flex-col phone-landscape:flex-1">

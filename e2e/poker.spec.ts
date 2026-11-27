@@ -1,6 +1,8 @@
 import type { Page } from "@playwright/test";
+import { anyApi } from "convex/server";
 import { FRAME_COLOR } from "../convex/palette";
 import {
+  admin,
   createPlayer,
   expect as plain,
   fillLobby,
@@ -47,6 +49,31 @@ async function twoPlayerGame(phones: Phones, mode = "holdem", opts: { reducedMot
   const second = firstIsA ? { player: b, page: pb } : { player: a, page: pa };
   return { id, first, second };
 }
+
+type Frame = { hand: number; board: number; banner: string; result: boolean };
+function film(page: Page, ms: number) {
+  return page.evaluate(
+    (ms) =>
+      new Promise<Frame[]>((done) => {
+        const frames: Frame[] = [];
+        const t0 = performance.now();
+        const frame = () => {
+          const table = document.querySelector("[data-table]");
+          frames.push({
+            hand: Number(table?.getAttribute("data-hand") ?? 0),
+            board: table?.querySelectorAll('[aria-label="Board"] [data-card]').length ?? 0,
+            banner: table?.querySelector("p[data-pile]")?.textContent ?? "",
+            result: !!document.querySelector('section[aria-label="Result"]'),
+          });
+          if (frames.at(-1)!.result || performance.now() - t0 > ms) done(frames);
+          else requestAnimationFrame(frame);
+        };
+        frame();
+      }),
+    ms,
+  );
+}
+const patch = (id: string, state: Record<string, unknown>) => admin().mutation(anyApi.testing.pokerPatch, { id, state });
 
 test.describe("Poker", () => {
   test("the game card opens the Poker page with its four games", async ({ phones }) => {
@@ -167,7 +194,7 @@ test.describe("Poker", () => {
     expect(m.state.stacks.reduce((x: number, y: number) => x + y, 0) + m.state.bets.reduce((x: number, y: number) => x + y, 0)).toBe(2000);
     await second.page.getByRole("button", { name: "Last hand" }).click();
     await expect(second.page.getByRole("heading", { name: "Hand 1" })).toBeVisible();
-    await expect(second.page.getByRole("dialog").getByText(/took the pot of 80/)).toBeVisible();
+    await expect(second.page.getByRole("dialog").getByText(/took the pot of 1040/)).toBeVisible();
   });
 
   test("the last hand ends the game with the result on both phones", async ({ phones }) => {
@@ -223,6 +250,58 @@ test.describe("Poker", () => {
       expect(Math.max(sounds.lastIndexOf("win"), sounds.lastIndexOf("lose"))).toBeGreaterThan(sounds.lastIndexOf("payout"));
     }
     expect(errors).toEqual([]);
+  });
+
+  test("a bust whose next hand plays itself on the blinds plays both hands, board and all", async ({ phones }) => {
+    const { id, first, second } = await twoPlayerGame(phones);
+    const errors = watchErrors([first.page, second.page]);
+    const m = await getMatch(id);
+    const short = m.state.turn;
+    await patch(id, {
+      stacks: m.state.stacks.map((x: number, i: number) => (i === short ? 5 : x)),
+      start: m.state.start.map((x: number, i: number) => (i === short ? 15 : x)),
+    });
+    await expect(second.page.locator("[data-table][data-busy=false]")).toBeVisible();
+    const filming = film(second.page, 40_000);
+    await first.page.getByRole("button", { name: "Fold", exact: true }).click();
+    const frames = await filming;
+    const after = await getMatch(id);
+    expect(after.state.hand).toBeGreaterThan(1);
+    expect(frames.some((f) => f.hand === 1 && /took the pot of 30/.test(f.banner))).toBe(true);
+    const two = frames.filter((f) => f.hand === 2);
+    expect(two.some((f) => f.board === 3 || f.board === 4)).toBe(true);
+    expect(two.some((f) => f.board === 5 && f.banner !== "")).toBe(true);
+    if (after.status === "finished") expect(frames.at(-1)!.result).toBe(true);
+    expect(errors).toEqual([]);
+  });
+
+  test("a game that ended while you were away waits on Home and plays its last hand when you open it", async ({ phones }) => {
+    const t = await table(phones, ["Shlok", "Chris"]);
+    const [pa, pb] = t.pages;
+    const id = await openLobby(pa, "poker", "holdem", { Hands: "5" });
+    await fillLobby(pa, [pb]);
+    await expect.poll(async () => (await getMatch(id)).state?.hand).toBe(1);
+    const m = await getMatch(id);
+    const mover = t.pageOf(m.players[m.state.turn].userId);
+    const away = mover === pa ? pb : pa;
+    await patch(id, { hand: 5 });
+    await away.goto("/");
+    await expect(away.getByRole("heading", { name: "Home" })).toBeVisible();
+    await expect(mover.getByText("Hand 5 of 5", { exact: true })).toBeVisible();
+    await mover.getByRole("button", { name: "Fold", exact: true }).click();
+    await expect(mover.getByRole("region", { name: "Result" })).toBeVisible();
+    const row = away.getByRole("region", { name: "Game over" }).getByRole("link");
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText("See the end");
+    await row.click();
+    const frames = await film(away, 30_000);
+    expect(frames[0].result).toBe(false);
+    expect(frames.some((f) => f.hand === 5 && /took the pot of 30/.test(f.banner))).toBe(true);
+    expect(frames.at(-1)!.result).toBe(true);
+    await expect.poll(async () => (await getMatch(id)).endSeen?.length).toBe(2);
+    await away.goto("/");
+    await expect(away.getByRole("heading", { name: "Home" })).toBeVisible();
+    await expect(away.getByRole("region", { name: "Game over" })).toHaveCount(0);
   });
 
   const visibleBacks = (page: Page) =>

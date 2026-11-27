@@ -82,6 +82,7 @@ export default defineSchema({
     ),
     startedAt: v.optional(v.number()),
     endedAt: v.optional(v.number()),
+    endSeen: v.optional(v.array(v.id("users"))),
     lastActivityAt: v.number(),
   })
     .index("by_status", ["status"])
