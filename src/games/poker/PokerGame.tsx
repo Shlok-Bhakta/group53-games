@@ -22,19 +22,29 @@ import { WaitDock } from "./WaitDock";
 const FRESH_MS = 4000;
 
 export function PokerGame({ match, meId }: { match: MatchView; meId: Id<"users"> | undefined }) {
+  if (meId === undefined && match.status === "finished") return null;
+  return <PokerTable match={match} meId={meId} />;
+}
+
+function PokerTable({ match, meId }: { match: MatchView; meId: Id<"users"> | undefined }) {
   const real = match.state as PokerState;
   const mySeat = match.players.findIndex((p) => p.userId === meId);
   const playing = mySeat >= 0;
   const active = match.status === "active";
   const nameOf = (seat: number) => (match.players[seat].userId === meId ? "You" : match.players[seat].name);
   const [fresh] = useState(() => active && real.hand === 1 && real.log.length <= 2 && Date.now() - (match.startedAt ?? 0) < FRESH_MS);
-  const show = useShow(real, { mySeat, nameOf, fresh });
+  const [replay] = useState(() => match.status === "finished" && playing && !!meId && !match.endSeen?.includes(meId));
+  const show = useShow(real, { mySeat, nameOf, fresh, replay });
   const landscape = usePhoneLandscape();
   const state = show.state;
   const myTurn = active && playing && !show.busy && show.turn === mySeat;
   const hand = useQuery(api.poker.cards, playing ? { id: match._id } : "skip");
   const held = useRef<Record<number, string[]>>({});
   if (hand) held.current[hand.hand] = hand.cards;
+  for (const r of real.recent ?? []) {
+    const shown = playing ? r.shown[mySeat] : null;
+    if (shown && !held.current[r.hand]) held.current[r.hand] = shown;
+  }
   const myCards = held.current[state.hand] ?? null;
   const draw = streetOf(state).kind === "draw";
   const spot = `${state.hand}:${state.street}`;
@@ -51,7 +61,7 @@ export function PokerGame({ match, meId }: { match: MatchView; meId: Id<"users">
   };
 
   const over = match.status === "finished" && !show.busy && !show.behind;
-  const wasOver = useRef(match.status === "finished");
+  const wasOver = useRef(match.status === "finished" && !replay);
   useEffect(() => {
     if (!over || wasOver.current) return;
     wasOver.current = true;
@@ -100,6 +110,7 @@ function TopLine({ match, state }: { match: MatchView; state: PokerState }) {
   const hands = settingsOf(match.mode, match.settings).hands;
   const [open, setOpen] = useState(false);
   const last = state.last;
+  const results = state.recent?.length ? state.recent : last ? [last] : [];
   return (
     <div className="flex h-11 items-center justify-between gap-2 px-1">
       <p className="flex items-center gap-2 text-footnote text-muted-foreground tabular-nums">
@@ -113,7 +124,7 @@ function TopLine({ match, state }: { match: MatchView; state: PokerState }) {
           <Button variant="ghost" size="sm" className="-mr-2 gap-1 text-muted-foreground" onClick={() => setOpen(true)}>
             Last hand <CaretRightIcon weight="bold" />
           </Button>
-          <LastHand match={match} result={last} open={open} onClose={() => setOpen(false)} />
+          <LastHand match={match} results={results} open={open} onClose={() => setOpen(false)} />
         </>
       )}
     </div>

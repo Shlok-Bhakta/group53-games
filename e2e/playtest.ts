@@ -12,6 +12,12 @@ const TABLES: Record<string, Table[]> = {
     { game: "poker", mode: "holdem", players: ["Ada", "Linus", "Grace"], settings: { Hands: "5" } },
     { game: "poker", mode: "draw", players: ["Ken", "Barbara"], settings: { Hands: "5" } },
     { game: "poker", mode: "omaha", players: ["Edsger", "Margaret"], settings: { Hands: "5" } },
+    {
+      game: "poker",
+      mode: "holdem",
+      players: ["Alan", "Hedy"],
+      settings: { Chips: "500", Hands: "No limit", "Blinds go up every": "2 hands", "Blinds multiply by": "×3" },
+    },
   ],
   uno: [
     {

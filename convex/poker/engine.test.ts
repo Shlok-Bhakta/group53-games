@@ -8,6 +8,7 @@ import {
   leave,
   newGame,
   potOf,
+  RECENT_HANDS,
   raiseBounds,
   sidePots,
   standings,
@@ -86,6 +87,33 @@ describe("hand rankings", () => {
   });
 });
 
+describe("recent hands", () => {
+  test("every result keeps where its hand started, the last five at most", () => {
+    let t = deal(newGame("holdem", "nl", 2, 1000), { sb: 10, bb: 20 }, deckOf(false), noRandom);
+    for (let hand = 1; hand <= 7; hand++) {
+      t = act(t, t.state.turn, { kind: "fold" });
+      expect(t.state.last).toMatchObject({ hand, blinds: hand % 2 ? [10, 20] : [20, 10], button: (hand + 1) % 2 });
+      if (hand < 7) t = deal(t.state, { sb: 10, bb: 20 }, deckOf(false), noRandom);
+    }
+    expect(t.state.recent!.map((r) => r.hand)).toEqual([3, 4, 5, 6, 7]);
+    expect(RECENT_HANDS).toBe(5);
+    expect(t.state.recent![0]).toMatchObject({ start: [1000, 1000], dealt: [true, true], sb: 10, bb: 20 });
+    expect(t.state.recent!.at(-1)).toBe(t.state.last);
+  });
+
+  test("a hand that plays itself out on the blinds keeps the hand before it", () => {
+    const fresh = newGame("holdem", "nl", 2, 1000);
+    fresh.stacks = [15, 1000];
+    let t = deal(fresh, { sb: 10, bb: 20 }, deckOf(false), noRandom);
+    t = act(t, 0, { kind: "fold" });
+    t = deal(t.state, { sb: 10, bb: 20 }, stacked("2c 7d 3h As Kd Qh 8c 5s 4h"), noRandom);
+    expect(t.state.turn).toBe(-1);
+    expect(t.state.recent!.map((r) => r.hand)).toEqual([1, 2]);
+    expect(t.state.recent![1]).toMatchObject({ start: [5, 1010], blinds: [5, 10], button: 1, showdown: true, won: [0, 10] });
+    expect(alive(t.state)).toEqual([1]);
+  });
+});
+
 describe("a hand of Hold'em", () => {
   test("blinds double on schedule", () => {
     expect(blindsFor(1, 3)).toEqual({ sb: 10, bb: 20 });
@@ -132,7 +160,7 @@ describe("a hand of Hold'em", () => {
     ]);
   });
 
-  test("everyone folding hands the pot over without a showdown", () => {
+  test("everyone folding hands the whole pot over without a showdown, the raise nobody called included", () => {
     let t = deal(newGame("holdem", "nl", 3, 1000), { sb: 10, bb: 20 }, deckOf(false));
     expect(t.state.turn).toBe(0);
     t = act(t, 0, { kind: "raise", to: 60 });
@@ -140,7 +168,8 @@ describe("a hand of Hold'em", () => {
     t = act(t, 2, { kind: "fold" });
     expect(t.state.turn).toBe(-1);
     expect(t.state.stacks).toEqual([1030, 990, 980]);
-    expect(t.state.last).toMatchObject({ showdown: false, shown: [null, null, null], won: [50, 0, 0], net: [30, -10, -20] });
+    expect(t.state.last).toMatchObject({ showdown: false, shown: [null, null, null], won: [90, 0, 0], net: [30, -10, -20] });
+    expect(t.state.last!.pots).toEqual([{ amount: 90, eligible: [0], winners: [0] }]);
   });
 
   test("raises: at least the last raise again, all-in for less allowed, and a short all-in doesn't reopen", () => {

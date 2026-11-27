@@ -5,6 +5,7 @@ import { VARIANTS, isOut, type HandResult, type LogEntry, type PokerState } from
 import { resultText } from "../../../convex/poker/text";
 import { sfx } from "@/sound";
 import { sum } from "./format";
+import { finalHands, handAt, missedHands, stacksAfter, streetFor } from "./replay";
 
 export const PACE = 1.2;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms * PACE));
@@ -95,15 +96,21 @@ function moveSound(e: LogEntry, bb: number, play: typeof sfx) {
   else play("chips", { count: 1 + Math.floor((e.amount ?? 0) / (bb * 3)) });
 }
 
-export function useShow(state: PokerState, opts: { mySeat: number; nameOf: (seat: number) => string; fresh: boolean }) {
+export function useShow(state: PokerState, opts: { mySeat: number; nameOf: (seat: number) => string; fresh: boolean; replay?: boolean }) {
   const still = useReducedMotion();
   const o = useRef(opts);
   o.current = opts;
-  const [show, setShow] = useState<Show>(() => (opts.fresh && !still ? undealt(state) : settled(state, opts.nameOf)));
+  const [replay] = useState(() => (opts.replay && !still ? finalHands(state) : []));
+  const firstReplayed = replay[0] && handAt(state, replay[0]);
+  const animateFirst = (opts.fresh && !still) || !!firstReplayed;
+  const [show, setShow] = useState<Show>(() =>
+    firstReplayed ? undealt(firstReplayed) : animateFirst ? undealt(state) : settled(state, opts.nameOf),
+  );
   const latest = useRef(state);
   latest.current = state;
   const content = JSON.stringify(state);
-  const drawn = useRef<PokerState | null>(opts.fresh && !still ? null : state);
+  const drawn = useRef<PokerState | null>(animateFirst ? null : state);
+  const replaying = useRef(replay);
   const running = useRef(false);
   const alive = useRef(true);
 
@@ -165,7 +172,8 @@ export function useShow(state: PokerState, opts: { mySeat: number; nameOf: (seat
     };
     const reveal = async (board: Card[], from: number, gap: number) => {
       for (let i = from; i < board.length && alive.current; i++) {
-        patch({ board: board.slice(0, i + 1) });
+        const street = streetFor(i + 1);
+        setShow((d) => ({ ...d, board: board.slice(0, i + 1), state: { ...d.state, street: Math.max(d.state.street, street) } }));
         play("flip", { count: i + 1 });
         await sleep(400 + gap);
       }
@@ -181,7 +189,7 @@ export function useShow(state: PokerState, opts: { mySeat: number; nameOf: (seat
       turnChime(null, to);
     };
 
-    const endHand = async (from: PokerState, to: PokerState, r: HandResult) => {
+    const endHand = async (from: PokerState, to: PokerState, r: HandResult, final: number[]) => {
       const paid = r.won.map((w, i) => w - r.net[i]);
       const stacks = from.start.map((st, i) => (isOut(to, i) && to.out.find((x) => x.seat === i)?.reason === "resign" ? 0 : st - paid[i]));
       const folded = from.dealt.map((dealt, i) => !dealt || (r.showdown ? !r.shown[i] : r.won[i] === 0));
@@ -206,7 +214,6 @@ export function useShow(state: PokerState, opts: { mySeat: number; nameOf: (seat
         }
       }
       if (!alive.current) return;
-      const final = to.hand === from.hand ? to.stacks : to.start;
       patch({
         banner: resultText(r, o.current.nameOf),
         paying: r.won.flatMap((w, seat) => (w > 0 ? [{ seat, net: r.net[seat] }] : [])),
@@ -215,6 +222,15 @@ export function useShow(state: PokerState, opts: { mySeat: number; nameOf: (seat
       await sleep(420);
       patch({ stacks: final });
       await sleep(1500);
+    };
+
+    const playHands = async (from: PokerState | null, to: PokerState, hands: HandResult[]) => {
+      for (const r of hands) {
+        const start = from && r.hand === from.hand ? from : handAt(to, r);
+        if (!start || !alive.current) continue;
+        if (start !== from) await deal(start);
+        if (alive.current) await endHand(start, to, r, stacksAfter(to, r));
+      }
     };
 
     const run = async () => {
@@ -226,14 +242,16 @@ export function useShow(state: PokerState, opts: { mySeat: number; nameOf: (seat
         if (from && JSON.stringify(from) === JSON.stringify(to)) break;
         drawn.current = to;
         const nameOf = o.current.nameOf;
+        const replayed = replaying.current;
+        replaying.current = [];
         if (still || document.visibilityState !== "visible") setShow(settled(to, nameOf));
-        else if (!from) await deal(to);
-        else if (to.last && to.last.hand === from.hand && (to.hand !== from.hand || to.turn === -1)) {
-          await endHand(from, to, to.last);
+        else if (!from && replayed.length) {
+          await playHands(null, to, replayed);
+          if (alive.current) setShow(settled(to, nameOf));
+        } else if (!from) await deal(to);
+        else if (to.hand !== from.hand || (to.turn === -1 && from.turn !== -1)) {
+          await playHands(from, to, missedHands(from, to));
           if (!alive.current) break;
-          if (to.turn === -1) setShow(settled(to, nameOf));
-          else await deal(to);
-        } else if (to.hand !== from.hand) {
           if (to.turn === -1) setShow(settled(to, nameOf));
           else await deal(to);
         } else if (to.street !== from.street) await nextStreet(from, to);

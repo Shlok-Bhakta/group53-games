@@ -36,6 +36,12 @@ export type HandResult = {
   won: number[];
   net: number[];
   showdown: boolean;
+  start?: number[];
+  button?: number;
+  dealt?: boolean[];
+  blinds?: number[];
+  sb?: number;
+  bb?: number;
 };
 export type Exit = { seat: number; hand: number; reason: "bust" | "resign"; stack: number };
 
@@ -63,6 +69,7 @@ export type PokerState = {
   idle: number[];
   log: LogEntry[];
   last: HandResult | null;
+  recent?: HandResult[];
   out: Exit[];
 };
 
@@ -85,6 +92,8 @@ export const streetOf = (s: PokerState) => {
 };
 export const potOf = (s: PokerState) => sum(s.paid) - sum(s.bets);
 const canAct = (s: PokerState, seat: number) => inHand(s, seat) && s.stacks[seat] > 0;
+
+export const RECENT_HANDS = 5;
 
 const FIRST_SB = 10;
 const BLIND_STEP = 5;
@@ -353,7 +362,6 @@ function refundUncalled(s: PokerState) {
 
 function award(t: Table): Table {
   const s = t.state;
-  refundUncalled(s);
   const winner = seatsOf(s).find((i) => inHand(s, i))!;
   const total = sum(s.paid);
   s.stacks[winner] += total;
@@ -402,9 +410,13 @@ function showdown(t: Table): Table {
   });
 }
 
-function endHand(t: Table, result: HandResult): Table {
+function endHand(t: Table, outcome: HandResult): Table {
   const s = t.state;
+  const blinds = s.stacks.map(() => 0);
+  for (const e of s.log) if (e.kind === "blind") blinds[e.seat] += e.amount ?? 0;
+  const result: HandResult = { ...outcome, start: [...s.start], button: s.button, dealt: [...s.dealt], blinds, sb: s.sb, bb: s.bb };
   s.last = result;
+  s.recent = [...(s.recent ?? []), result].slice(-RECENT_HANDS);
   s.turn = -1;
   s.bets = s.bets.map(() => 0);
   s.current = 0;

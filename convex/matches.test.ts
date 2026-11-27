@@ -374,6 +374,32 @@ describe("classic chess", () => {
     expect(await first.white.as.query(api.matches.recent, { game: "wordle" })).toEqual([]);
   });
 
+  test("a finished game stays on its players' Home until they've opened it, for three days", async () => {
+    const t = setup();
+    const { id, white, black } = await classicGame(t);
+    const boiler = await signedIn(t, "Boiler");
+    expect((await white.as.query(api.matches.inbox, {}))!.ended).toEqual([]);
+    await white.as.mutation(api.matches.resign, { id });
+    expect((await white.as.query(api.matches.inbox, {}))!.ended.map((m) => m._id)).toEqual([id]);
+    expect((await black.as.query(api.matches.inbox, {}))!.ended.map((m) => m._id)).toEqual([id]);
+    await boiler.as.mutation(api.matches.sawEnd, { id });
+    expect((await match(t, id))!.endSeen).toBeUndefined();
+    await black.as.mutation(api.matches.sawEnd, { id });
+    await black.as.mutation(api.matches.sawEnd, { id });
+    expect((await match(t, id))!.endSeen).toEqual([black.userId]);
+    expect((await black.as.query(api.matches.inbox, {}))!.ended).toEqual([]);
+    expect((await white.as.query(api.matches.inbox, {}))!.ended.map((m) => m._id)).toEqual([id]);
+    vi.advanceTimersByTime(3 * 24 * 60 * 60 * 1000 + 1);
+    expect((await white.as.query(api.matches.inbox, {}))!.ended).toEqual([]);
+  });
+
+  test("an unfinished game can't be marked as seen to the end", async () => {
+    const t = setup();
+    const { id, white } = await classicGame(t);
+    await white.as.mutation(api.matches.sawEnd, { id });
+    expect((await match(t, id))!.endSeen).toBeUndefined();
+  });
+
   test("the inbox lists other people's games to watch", async () => {
     const t = setup();
     const { id, white } = await classicGame(t);

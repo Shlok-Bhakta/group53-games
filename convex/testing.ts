@@ -12,6 +12,7 @@ import { guessAs as wordleGuess, pickAs as wordlePick } from "./wordle";
 import { isItem, type WordleState } from "./wordle/engine";
 import { moveAs as unoMove } from "./uno";
 import type { UnoState } from "./uno/engine";
+import type { PokerState } from "./poker/engine";
 import { writeSecret } from "./lib/secrets";
 import { postResult } from "./daily";
 import { botMove, nextBotSeat } from "./landlord/bot";
@@ -304,6 +305,15 @@ export const hexhavenBots = internalMutation({
       await hexhavenPlay(ctx, id, a, m.players[seat].userId);
     }
     return made;
+  },
+});
+
+export const pokerPatch = internalMutation({
+  args: { id: v.id("matches"), state: v.any() },
+  handler: async (ctx, { id, state }) => {
+    assertTestDeployment();
+    const m = (await ctx.db.get(id))!;
+    await ctx.db.patch(id, { state: { ...(m.state as PokerState), ...state } });
   },
 });
 

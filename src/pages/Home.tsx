@@ -24,7 +24,13 @@ export function Home() {
 
   const yourTurn = inbox ? [...inbox.myTurn, ...inbox.live] : [];
   const waiting = inbox ? [...inbox.theirTurn, ...inbox.waiting] : [];
-  const nothing = inbox && inbox.invites.length === 0 && yourTurn.length === 0 && inbox.open.length === 0 && waiting.length === 0;
+  const nothing =
+    inbox &&
+    inbox.invites.length === 0 &&
+    yourTurn.length === 0 &&
+    inbox.open.length === 0 &&
+    waiting.length === 0 &&
+    inbox.ended.length === 0;
 
   return (
     <div className="flex flex-col gap-7">
@@ -50,6 +56,13 @@ export function Home() {
             <Section title="Your turn">
               {yourTurn.map((m) => (
                 <MatchRow key={m._id} match={m} meId={meId} status={<TurnChip match={m} meId={meId} />} />
+              ))}
+            </Section>
+          )}
+          {inbox.ended.length > 0 && (
+            <Section title="Game over">
+              {inbox.ended.map((m) => (
+                <MatchRow key={m._id} match={m} meId={meId} status={<Chip>See the end</Chip>} />
               ))}
             </Section>
           )}

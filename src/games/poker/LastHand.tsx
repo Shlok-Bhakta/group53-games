@@ -1,20 +1,52 @@
+import { useState } from "react";
+import { CaretLeftIcon, CaretRightIcon } from "@phosphor-icons/react";
 import type { MatchView } from "../../../convex/matches";
 import type { HandResult } from "../../../convex/poker/engine";
 import { resultText } from "../../../convex/poker/text";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
+import { IconButton } from "@/components/ui/button";
 import { PlayingCard } from "@/components/ui/playing-card";
 import { Sheet } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { chips } from "./format";
 
-export function LastHand({ match, result, open, onClose }: { match: MatchView; result: HandResult; open: boolean; onClose: () => void }) {
+export function LastHand({
+  match,
+  results,
+  open,
+  onClose,
+}: {
+  match: MatchView;
+  results: HandResult[];
+  open: boolean;
+  onClose: () => void;
+}) {
+  const [back, setBack] = useState(0);
+  const at = Math.max(0, results.length - 1 - back);
+  const result = results[at];
+  const close = () => {
+    setBack(0);
+    onClose();
+  };
   const rows = match.players
     .map((p, seat) => ({ p, seat, net: result.net[seat], shown: result.shown[seat], name: result.names[seat] }))
     .filter((r) => r.net !== 0 || r.shown)
     .sort((a, b) => b.net - a.net);
   return (
-    <Sheet open={open} onClose={onClose} title={`Hand ${result.hand}`} closable>
-      <p className="text-center text-callout text-muted-foreground">{resultText(result, (s) => match.players[s].name)}</p>
+    <Sheet open={open} onClose={close} title={`Hand ${result.hand}`} closable>
+      <div className="flex items-center gap-1">
+        {results.length > 1 && (
+          <IconButton label="Earlier hand" disabled={at === 0} onClick={() => setBack(back + 1)}>
+            <CaretLeftIcon weight="bold" />
+          </IconButton>
+        )}
+        <p className="min-w-0 flex-1 text-center text-callout text-muted-foreground">{resultText(result, (s) => match.players[s].name)}</p>
+        {results.length > 1 && (
+          <IconButton label="Later hand" disabled={back === 0} onClick={() => setBack(back - 1)}>
+            <CaretRightIcon weight="bold" />
+          </IconButton>
+        )}
+      </div>
       {result.board.length > 0 && (
         <div role="group" className="poker-felt flex justify-center gap-1.5 rounded-lg py-3" aria-label="Board">
           {result.board.map((c) => (

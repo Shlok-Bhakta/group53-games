@@ -284,6 +284,26 @@ describe("ending", () => {
     expect(m.ratingChanges).toHaveLength(2);
   });
 
+  test("a hand that plays itself on the blinds after a bust keeps the hand before it for phones to show", async () => {
+    const t = setup();
+    const { id, seats } = await game(t, 2);
+    const s = await stateOf(t, id);
+    const short = s.button;
+    await t.run((ctx) =>
+      ctx.db.patch(id, {
+        state: { ...s, stacks: s.stacks.map((x, i) => (i === short ? 5 : x)), start: s.start.map((x, i) => (i === short ? 15 : x)) },
+      }),
+    );
+    await seats[short].as.mutation(api.poker.move, { id, hand: 1, street: 0, kind: "fold" });
+    const after = await stateOf(t, id);
+    expect(after.hand).toBeGreaterThan(1);
+    const hands = after.recent!.map((r) => r.hand);
+    expect(hands[0]).toBe(1);
+    expect(hands).toEqual(hands.map((_, i) => i + 1));
+    expect(after.recent![1]).toMatchObject({ hand: 2, start: after.recent![0].start!.map((x, i) => x + after.recent![0].net[i]) });
+    expect(after.recent![1].blinds![short]).toBe(5);
+  });
+
   test("resigning in a three-way game folds you out and the rest play on", async () => {
     const t = setup();
     const { id, seats } = await game(t, 3);
