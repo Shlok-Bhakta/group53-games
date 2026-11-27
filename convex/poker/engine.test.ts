@@ -110,6 +110,7 @@ describe("recent hands", () => {
     expect(t.state.turn).toBe(-1);
     expect(t.state.recent!.map((r) => r.hand)).toEqual([1, 2]);
     expect(t.state.recent![1]).toMatchObject({ start: [5, 1010], blinds: [5, 10], button: 1, showdown: true, won: [0, 10] });
+    expect(t.state.recent!.map((x) => x.forced)).toEqual([false, true]);
     expect(alive(t.state)).toEqual([1]);
   });
 });

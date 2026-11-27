@@ -62,8 +62,24 @@ describe("replaying the end of a game", () => {
 
   test("a last hand someone played is replayed alone", () => {
     const { end } = bustOnTheBlinds();
-    const played: PokerState = { ...end, log: [...end.log, { seat: 1, kind: "call", amount: 5, street: 0 }] };
+    const played: PokerState = { ...end, recent: end.recent!.map((r) => ({ ...r, forced: false })) };
     expect(finalHands(played).map((r) => r.hand)).toEqual([2]);
+  });
+
+  test("a run of hands played out on the blinds goes back to the hand that made the short stack", () => {
+    const { end } = bustOnTheBlinds();
+    const [one, two] = end.recent!;
+    const chain: PokerState = {
+      ...end,
+      hand: 4,
+      recent: [
+        { ...one, hand: 1, forced: false },
+        { ...one, hand: 2, forced: false },
+        { ...two, hand: 3, forced: true },
+        { ...two, hand: 4, forced: true },
+      ],
+    };
+    expect(finalHands(chain).map((r) => r.hand)).toEqual([2, 3, 4]);
   });
 
   test("a game still going has no ending to replay", () => {

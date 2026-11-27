@@ -269,7 +269,7 @@ test.describe("Poker", () => {
     expect(after.state.hand).toBeGreaterThan(1);
     expect(frames.some((f) => f.hand === 1 && /took the pot of 30/.test(f.banner))).toBe(true);
     const two = frames.filter((f) => f.hand === 2);
-    expect(two.some((f) => f.board < 5)).toBe(true);
+    expect(two.some((f) => f.board === 3 || f.board === 4)).toBe(true);
     expect(two.some((f) => f.board === 5 && f.banner !== "")).toBe(true);
     if (after.status === "finished") expect(frames.at(-1)!.result).toBe(true);
     expect(errors).toEqual([]);

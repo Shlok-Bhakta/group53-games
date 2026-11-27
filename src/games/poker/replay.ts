@@ -13,9 +13,9 @@ export function finalHands(s: PokerState): HandResult[] {
   const results = resultsOf(s).filter((r) => r.hand <= s.hand && handAt(s, r));
   const last = results.at(-1);
   if (!last || last.hand !== s.hand || s.turn !== -1) return [];
-  const before = results.at(-2);
-  const nobodyChose = s.log.every((e) => e.kind === "blind" || e.auto);
-  return nobodyChose && before?.hand === last.hand - 1 ? [before, last] : [last];
+  let from = results.length - 1;
+  while (from > 0 && results[from].forced && results[from - 1].hand === results[from].hand - 1) from--;
+  return results.slice(from);
 }
 
 export function handAt(to: PokerState, r: HandResult): PokerState | null {

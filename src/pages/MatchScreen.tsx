@@ -1,4 +1,5 @@
 import { useHoldUpdates } from "@/version";
+import { usePageVisible } from "@/lib/visible";
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { useMutation, useQuery } from "convex/react";
@@ -22,13 +23,14 @@ export function MatchScreen({ game }: { game: GameUI }) {
   const goBack = useGoBack("/");
   useHoldUpdates(true);
   const sawEnd = useMutation(api.matches.sawEnd);
+  const visible = usePageVisible();
   const meId = me?._id;
   const unseenEnd =
     !!match && !!meId && match.status === "finished" && match.players.some((p) => p.userId === meId) && !match.endSeen?.includes(meId);
   const matchId = match?._id;
   useEffect(() => {
-    if (unseenEnd && matchId) void sawEnd({ id: matchId });
-  }, [unseenEnd, matchId, sawEnd]);
+    if (unseenEnd && matchId && visible) void sawEnd({ id: matchId });
+  }, [unseenEnd, matchId, visible, sawEnd]);
 
   if (match === undefined) {
     return (

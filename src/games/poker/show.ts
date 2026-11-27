@@ -4,6 +4,7 @@ import { CATEGORY, bestHand, type Card } from "../../../convex/poker/cards";
 import { VARIANTS, isOut, type HandResult, type LogEntry, type PokerState } from "../../../convex/poker/engine";
 import { resultText } from "../../../convex/poker/text";
 import { sfx } from "@/sound";
+import { usePageVisible } from "@/lib/visible";
 import { sum } from "./format";
 import { finalHands, handAt, missedHands, stacksAfter, streetFor } from "./replay";
 
@@ -98,6 +99,7 @@ function moveSound(e: LogEntry, bb: number, play: typeof sfx) {
 
 export function useShow(state: PokerState, opts: { mySeat: number; nameOf: (seat: number) => string; fresh: boolean; replay?: boolean }) {
   const still = useReducedMotion();
+  const visible = usePageVisible();
   const o = useRef(opts);
   o.current = opts;
   const [replay] = useState(() => (opts.replay && !still ? finalHands(state) : []));
@@ -195,6 +197,8 @@ export function useShow(state: PokerState, opts: { mySeat: number; nameOf: (seat
       const folded = from.dealt.map((dealt, i) => !dealt || (r.showdown ? !r.shown[i] : r.won[i] === 0));
       await sweep(from, paid, stacks, folded);
       if (!alive.current) return;
+      if (!r.showdown) await reveal(r.board, from.board.length, 0);
+      if (!alive.current) return;
       if (r.showdown) {
         patch({ shown: r.shown });
         play("flip", { count: 3 });
@@ -237,6 +241,7 @@ export function useShow(state: PokerState, opts: { mySeat: number; nameOf: (seat
       if (running.current) return;
       running.current = true;
       for (let guard = 0; guard < 200 && alive.current; guard++) {
+        if (!still && document.visibilityState !== "visible") break;
         const to = latest.current;
         const from = drawn.current;
         if (from && JSON.stringify(from) === JSON.stringify(to)) break;
@@ -244,7 +249,7 @@ export function useShow(state: PokerState, opts: { mySeat: number; nameOf: (seat
         const nameOf = o.current.nameOf;
         const replayed = replaying.current;
         replaying.current = [];
-        if (still || document.visibilityState !== "visible") setShow(settled(to, nameOf));
+        if (still) setShow(settled(to, nameOf));
         else if (!from && replayed.length) {
           await playHands(null, to, replayed);
           if (alive.current) setShow(settled(to, nameOf));
@@ -271,7 +276,7 @@ export function useShow(state: PokerState, opts: { mySeat: number; nameOf: (seat
       running.current = false;
     };
     void run();
-  }, [content, still]);
+  }, [content, still, visible]);
 
   return { ...show, behind: !drawn.current || JSON.stringify(drawn.current) !== content };
 }

@@ -42,6 +42,7 @@ export type HandResult = {
   blinds?: number[];
   sb?: number;
   bb?: number;
+  forced?: boolean;
 };
 export type Exit = { seat: number; hand: number; reason: "bust" | "resign"; stack: number };
 
@@ -414,7 +415,8 @@ function endHand(t: Table, outcome: HandResult): Table {
   const s = t.state;
   const blinds = s.stacks.map(() => 0);
   for (const e of s.log) if (e.kind === "blind") blinds[e.seat] += e.amount ?? 0;
-  const result: HandResult = { ...outcome, start: [...s.start], button: s.button, dealt: [...s.dealt], blinds, sb: s.sb, bb: s.bb };
+  const forced = s.log.every((e) => e.kind === "blind" || e.auto);
+  const result: HandResult = { ...outcome, start: [...s.start], button: s.button, dealt: [...s.dealt], blinds, sb: s.sb, bb: s.bb, forced };
   s.last = result;
   s.recent = [...(s.recent ?? []), result].slice(-RECENT_HANDS);
   s.turn = -1;
