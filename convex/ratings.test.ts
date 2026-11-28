@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
+import { api } from "./_generated/api";
 import { elo, multiElo } from "./ratings";
+import { setup, signedIn } from "./test.setup";
 
 const K = 32;
 const FAVOURITE_1400_VS_1200_EXPECTS = 0.759747;
@@ -47,5 +49,42 @@ describe("Elo with unequal ratings, against numbers worked out by hand", () => {
     expect([firstAt1300, secondAt1200, secondAt1250, lastAt1100]).toEqual([11, 1, -2, -10]);
     expect(multiElo([1300, 1200, 1250, 1100], [0, 1, 1, 2])).toEqual([11, 1, -2, -10]);
     expect(multiElo([1300, 1200, 1250, 1100], [0, 1, 1, 3]), "only the order of places matters").toEqual([11, 1, -2, -10]);
+  });
+});
+
+describe("the crew's ratings", () => {
+  test("every mode someone has played, highest first, without unplayed rows", async () => {
+    const t = setup();
+    const { as, userId: shlok } = await signedIn(t);
+    const { userId: chris } = await signedIn(t, "Chris");
+    const rating = (userId: typeof shlok, mode: string, value: number, games: number) =>
+      t.run((ctx) => ctx.db.insert("ratings", { userId, mode, rating: value, games, wins: games, losses: 0, draws: 0 }));
+    await rating(shlok, "chess:classic", 1216, 1);
+    await rating(chris, "chess:classic", 1232, 2);
+    await rating(chris, "uno:classic", 1200, 0);
+    const rows = await as.query(api.ratings.crew, {});
+    expect(rows.map((r) => [r.mode, r.userId, r.rating])).toEqual([
+      ["chess:classic", chris, 1232],
+      ["chess:classic", shlok, 1216],
+    ]);
+  });
+
+  test("a tie on rating and wins goes the same way as the mode's leaderboard", async () => {
+    const t = setup();
+    const { as, userId: first } = await signedIn(t, "First");
+    const { userId: second } = await signedIn(t, "Second");
+    const rating = (userId: typeof first) =>
+      t.run((ctx) => ctx.db.insert("ratings", { userId, mode: "chess:classic", rating: 1216, games: 1, wins: 1, losses: 0, draws: 0 }));
+    await rating(second);
+    await rating(first);
+    const board = await as.query(api.ratings.leaderboard, { mode: "chess:classic" });
+    const crew = await as.query(api.ratings.crew, {});
+    expect(crew.map((r) => r.userId)).toEqual([first, second]);
+    expect(crew.map((r) => r.userId)).toEqual(board.map((r) => r.userId));
+  });
+
+  test("signed out sees nothing", async () => {
+    const t = setup();
+    expect(await t.query(api.ratings.crew, {})).toEqual([]);
   });
 });

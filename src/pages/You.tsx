@@ -22,7 +22,7 @@ export function You() {
       <div>
         <LargeTitle title="You" />
         {mine ? <PlayerCard player={mine} online size="hero" /> : <Skeleton className="aspect-[5/6] rounded-lg" />}
-        <Button size="xl" variant="secondary" className="mt-3 w-full" onClick={() => setEditing(true)} disabled={!mine}>
+        <Button size="xl" variant="secondary" className="mt-2.5 w-full" onClick={() => setEditing(true)} disabled={!mine}>
           <PencilSimpleIcon weight="bold" /> Edit card
         </Button>
         {mine && (

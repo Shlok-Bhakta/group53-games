@@ -164,6 +164,16 @@ test.describe("chess", () => {
     await expect(board.getByRole("listitem").first()).toContainText("You");
     await expect(board.getByRole("listitem").first()).toContainText("1216");
     await expect(board).toContainText("1184");
+
+    await g.black.goto("/crew");
+    const ratings = g.black.getByRole("region", { name: "Ratings" });
+    await expect(ratings.getByRole("link", { name: /Chess Classic/ })).toContainText("You lead");
+    await expect(ratings).toContainText("1216");
+    await g.black.getByRole("button", { name: new RegExp(g.whitePlayer.name) }).click();
+    const sheet = g.black.getByRole("dialog");
+    await expect(sheet).toContainText("Chess Classic");
+    await expect(sheet).toContainText("0 won, 1 lost");
+    await expect(sheet).toContainText("1184");
   });
 
   test("a game opened from a push goes back to Home, and back again from there leaves nothing stuck", async ({ phones }) => {

@@ -36,6 +36,7 @@ export function Standings({
 }) {
   const faces = useFaces();
   const remove = useMutation(api.daily.remove);
+  const trashColumn = removable && entries.some((e) => e.userId === meId);
   return (
     <ol data-slot="card" aria-label={label} className="divide-y divide-border overflow-hidden rounded-lg bg-card">
       {entries.map((e) => {
@@ -52,10 +53,11 @@ export function Standings({
                 </>
               }
               title={mine ? "You" : (face?.name ?? "Player")}
-              detail={e.grid && <span className="tracking-tight">{e.grid}</span>}
+              detail={e.grid && <span className="whitespace-normal tracking-tight">{e.grid}</span>}
               trailing={
                 <span className="flex items-center gap-1">
                   <span className={cn("font-display text-heading tabular-nums", !e.solved && "text-muted-foreground")}>{e.display}</span>
+                  {trashColumn && !mine && <span aria-hidden className="-mr-2 size-11" />}
                   {mine && removable && (
                     <ConfirmButton
                       trigger={

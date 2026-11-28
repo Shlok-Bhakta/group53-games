@@ -66,7 +66,7 @@ function OnlineBadge({ count }: { count: number }) {
           animate={{ scale: 1 }}
           exit={{ scale: 0 }}
           transition={{ type: "spring", stiffness: 600, damping: 22 }}
-          className="absolute -bottom-1 -right-2.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-online px-1 text-caption font-bold leading-none text-[var(--online-ink)] ring-2 ring-background"
+          className="absolute -right-2.5 -top-1 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-online px-1 text-caption font-bold leading-none text-[var(--online-ink)] ring-2 ring-background"
           aria-label={`${count} online`}
         >
           <motion.span
